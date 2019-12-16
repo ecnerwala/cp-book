@@ -34,11 +34,13 @@ public:
 		res.v = minv(v, MOD);
 		return res;
 	}
+	friend modnum inv(const modnum& m) { return m.inv(); }
 	modnum neg() const {
 		modnum res;
 		res.v = v ? MOD-v : 0;
 		return res;
 	}
+	friend modnum neg(const modnum& m) { return m.neg(); }
 
 	modnum operator- () const {
 		return neg();
