@@ -117,6 +117,15 @@ template <typename U, typename V> struct pairnum {
 		return pairnum(+u, +v);
 	}
 
+	pairnum& operator ++ () {
+		++u, ++v;
+		return *this;
+	}
+	pairnum& operator -- () {
+		--u, --v;
+		return *this;
+	}
+
 	pairnum& operator += (const pairnum& o) {
 		u += o.u;
 		v += o.v;
@@ -138,6 +147,8 @@ template <typename U, typename V> struct pairnum {
 		return *this;
 	}
 
+	friend pairnum operator ++ (pairnum& a, int) { pairnum r = a; ++a; return r; }
+	friend pairnum operator -- (pairnum& a, int) { pairnum r = a; --a; return r; }
 	friend pairnum operator + (const pairnum& a, const pairnum& b) { return pairnum(a) += b; }
 	friend pairnum operator - (const pairnum& a, const pairnum& b) { return pairnum(a) -= b; }
 	friend pairnum operator * (const pairnum& a, const pairnum& b) { return pairnum(a) *= b; }
