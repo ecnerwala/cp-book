@@ -57,6 +57,7 @@ struct node {
 	// postcondition: always propogated
 	void splay() {
 		if(r()) {
+			update();
 			propogate();
 			return;
 		}
