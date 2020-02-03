@@ -56,15 +56,23 @@ long long mod_count(long long a, long long m, long long c, long long n) {
 	if (c < 0) extraC--, c += m;
 	assert(0 <= c && c < m);
 
-	if (n > 0) {
+	long long ans = extraC * n;
+
+	long long extraN = n / m; n %= m;
+	if (n < 0) extraN--, n += m;
+	assert(0 <= n && n < m);
+
+	if (extraN) {
+		ans += extraN * (lattice_cnt(m, a+m, (a+m) * (m-1)) - lattice_cnt(m, a+m, (a+m) * (m-1) - c));
+	}
+
+	if (n) {
 		// we want solutions to 0 <= a(N-1-x) - my < c with 0 <= x <= N-1
 		// a * (N-1) >= ax + my > a * (N-1) - c
-		return extraC * n + lattice_cnt(m, a+m, (a+m) * (n-1)) - lattice_cnt(m, a+m, (a+m) * (n-1) - c);
-	} else {
-		// we want -(# solutions to 0 <= -(a+m)x + my < c with 1 <= x <= -N)
-		// -(# solutions to (a+m) * (-N) <= (a+m) x' + my < (a+m) * (-N) + c with 0 <= x' <= -N-1)
-		return extraC * n - (lattice_cnt(m, a+m, (a+m) * (-n) + c - 1) - lattice_cnt(m, a+m, (a+m) * (-n) - 1) - (c > 0));
+		ans += lattice_cnt(m, a+m, (a+m) * (n-1)) - lattice_cnt(m, a+m, (a+m) * (n-1) - c);
 	}
+
+	return ans;
 }
 
 long long mod_count_range(long long a, long long m, long long clo, long long chi, long long nlo, long long nhi) {
