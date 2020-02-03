@@ -47,15 +47,26 @@ long long lattice_cnt(long long A, long long B, long long C) {
 
 // count the number of 0 <= (a * x % m) < c for 0 <= x < n
 long long mod_count(long long a, long long m, long long c, long long n) {
-	assert(a >= 0 && m > 0 && n >= 0 && c >= 0);
-	if (c >= m) return n;
-	assert(c < m);
-
+	assert(m > 0);
 	if (n == 0) return 0;
 
-	a %= m;
+	a %= m; if (a < 0) a += m;
 
-	// we want solutions to 0 <= (a+m)x - my < c with 0 <= x <= N-1
-	// iff 0 <= (a+m)x - my < c with 0 <= x and y <= (a+m) * (n-1) / m
-	return lattice_cnt(m, a+m, (a+m) * (n-1) / m * m + c - 1) - lattice_cnt(m, a+m, (a+m) * (n-1) / m * m - 1);
+	long long extraC = c / m; c %= m;
+	if (c < 0) extraC--, c += m;
+	assert(0 <= c && c < m);
+
+	if (n > 0) {
+		// we want solutions to 0 <= a(N-1-x) - my < c with 0 <= x <= N-1
+		// a * (N-1) >= ax + my > a * (N-1) - c
+		return extraC * n + lattice_cnt(m, a+m, (a+m) * (n-1)) - lattice_cnt(m, a+m, (a+m) * (n-1) - c);
+	} else {
+		// we want -(# solutions to 0 <= -(a+m)x + my < c with 1 <= x <= -N)
+		// -(# solutions to (a+m) * (-N) <= (a+m) x' + my < (a+m) * (-N) + c with 0 <= x' <= -N-1)
+		return extraC * n - (lattice_cnt(m, a+m, (a+m) * (-n) + c - 1) - lattice_cnt(m, a+m, (a+m) * (-n) - 1) - (c > 0));
+	}
+}
+
+long long mod_count_range(long long a, long long m, long long clo, long long chi, long long nlo, long long nhi) {
+	return mod_count(a, m, chi, nhi) - mod_count(a, m, chi, nlo) - mod_count(a, m, clo, nhi) + mod_count(a, m, clo, nlo);
 }
