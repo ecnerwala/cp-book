@@ -1,10 +1,10 @@
 #pragma once
 #include<bits/stdc++.h>
 #include<bits/extc++.h>
+using namespace std;
 
 template <typename flow_t = int, typename cost_t = long long>
 struct MCMF_SSPA {
-	using namespace std;
 	int N;
 	vector<vector<int>> adj;
 	struct edge_t {
