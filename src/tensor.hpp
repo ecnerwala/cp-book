@@ -68,7 +68,7 @@ protected:
 	T* data;
 
 public:
-	tensor() : shape{0}, strides{0}, len(0) {}
+	tensor() : shape{0}, strides{0}, len(0), data(nullptr) {}
 
 	explicit tensor(std::array<int, NDIMS> shape_, const T& t = T()) {
 		shape = shape_;
