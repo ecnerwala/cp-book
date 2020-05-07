@@ -14,7 +14,7 @@ using std::vector;
 using std::min;
 using std::max;
 
-template <typename T> int sz(const T& t) { return int(t.size()); }
+template<class T> int sz(T&& arg) { using std::size; return int(size(std::forward<T>(arg))); }
 int nextPow2(int s) { return 1 << (s > 1 ? 32 - __builtin_clz(s-1) : 0); }
 
 // Complex
