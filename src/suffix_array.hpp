@@ -1,21 +1,26 @@
 #pragma once
 
-/**
+/*
  * This is mostly inspired by https://golang.org/src/index/suffixarray/sais.go.
  */
 
 #include <vector>
 #include <string>
 #include <cassert>
+#include <cstring>
+
+#include "rmq.hpp"
 
 template<class T> int sz(T&& arg) { using std::size; return int(size(std::forward<T>(arg))); }
 
-struct SuffixArray {
+class SuffixArray {
+public:
 	using index_t = int;
 	int N;
 	std::vector<index_t> sa;
 	std::vector<index_t> rank;
 	std::vector<index_t> lcp;
+	RangeMinQuery<index_t> rmq;
 
 	SuffixArray() {}
 
@@ -26,6 +31,7 @@ struct SuffixArray {
 		sa.build_sa(S);
 		sa.build_rank();
 		sa.build_lcp(S);
+		sa.build_rmq();
 
 		return sa;
 	}
@@ -57,6 +63,13 @@ struct SuffixArray {
 
 	static SuffixArray construct_upper_alpha(const std::string& s) {
 		return SuffixArray::map_and_compress(s, [](char c) -> char { return char(c - 'A'); });
+	}
+
+	index_t get_lcp(index_t a, index_t b) const {
+		if (a == b) return N-a;
+		a = rank[a], b = rank[b];
+		if (a > b) std::swap(a, b);
+		return rmq.query(a, b-1);
 	}
 
 private:
@@ -321,5 +334,23 @@ private:
 			lcp[rank[i]-1] = k;
 			if (k) --k;
 		}
+	}
+
+	void build_rmq() {
+		rmq = RangeMinQuery<index_t>(lcp);
+	}
+};
+
+class PrefixArray : private SuffixArray {
+	PrefixArray(const SuffixArray& sa_) : SuffixArray(sa_) {}
+	PrefixArray(SuffixArray&& sa_) : SuffixArray(std::move(sa_)) {}
+public:
+	PrefixArray() {}
+	template <typename String> static PrefixArray construct(const String& S) {
+		return PrefixArray(SuffixArray::construct(String(S.rbegin(), S.rend())));
+	}
+
+	int get_lcs(int a, int b) const {
+		return SuffixArray::get_lcp(SuffixArray::N - a, SuffixArray::N - b);
 	}
 };
