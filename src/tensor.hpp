@@ -77,7 +77,8 @@ public:
 			strides[i-1] = strides[i] * shape[i];
 		}
 		len = strides[0] * shape[0];
-		data = new T[len]{t};
+		data = new T[len];
+		std::fill(data, data + len, t);
 	}
 
 	tensor(const tensor& o) : shape(o.shape), strides(o.strides), len(o.len), data(new T[len]) {
