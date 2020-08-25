@@ -3,7 +3,7 @@
 #include <array>
 
 template <typename T, int NDIMS> struct tensor_view {
-	static_assert(NDIMS >= 0);
+	static_assert(NDIMS >= 0, "NDIMS must be nonnegative");
 
 protected:
 	std::array<int, NDIMS> shape;
@@ -61,6 +61,8 @@ public:
 };
 
 template <typename T, int NDIMS> struct tensor {
+	static_assert(NDIMS >= 0, "NDIMS must be nonnegative");
+
 protected:
 	std::array<int, NDIMS> shape;
 	std::array<int, NDIMS> strides;
