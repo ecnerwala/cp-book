@@ -3,17 +3,19 @@
 #include <functional>
 #include <vector>
 #include <cassert>
+#include <cstdint>
 
 template <typename T, class Compare = std::less<T>> class RangeMinQuery : private Compare {
-	static const int BUCKET_SIZE = 16;
-	static const int BUCKET_SIZE_LOG = 4;
-	static_assert((BUCKET_SIZE & (BUCKET_SIZE-1)) == 0);
+	static const int BUCKET_SIZE = 32;
+	static const int BUCKET_SIZE_LOG = 5;
+	static_assert(BUCKET_SIZE == (1 << BUCKET_SIZE_LOG), "BUCKET_SIZE should be a power of 2");
 	static const int CACHE_LINE_ALIGNMENT = 64;
 	int n = 0;
 	std::vector<T> data;
 	std::vector<T> pref_data;
 	std::vector<T> suff_data;
 	std::vector<T> sparse_table;
+	std::vector<uint32_t> range_mask;
 
 private:
 	int num_buckets() const {
@@ -44,8 +46,21 @@ public:
 		, pref_data(n)
 		, suff_data(n)
 		, sparse_table(sparse_table_size())
+		, range_mask(n)
 	{
 		for (int i = 0; i < n; i++) data[i] = data_[i];
+		for (int i = 0; i < n; i++) {
+			if (i & (BUCKET_SIZE-1)) {
+				uint32_t m = range_mask[i-1];
+				while (m && !Compare::operator()(data[(i | (BUCKET_SIZE-1)) - __builtin_clz(m)], data[i])) {
+					m -= uint32_t(1) << (BUCKET_SIZE - 1 - __builtin_clz(m));
+				}
+				m |= uint32_t(1) << (i & (BUCKET_SIZE - 1));
+				range_mask[i] = m;
+			} else {
+				range_mask[i] = 1;
+			}
+		}
 		for (int i = 0; i < n; i++) {
 			pref_data[i] = data[i];
 			if (i & (BUCKET_SIZE-1)) {
@@ -76,9 +91,9 @@ public:
 		int bucket_l = (l >> BUCKET_SIZE_LOG);
 		int bucket_r = (r >> BUCKET_SIZE_LOG);
 		if (bucket_l == bucket_r) {
-			T ans = data[l];
-			for (int i = l+1; i <= r; i++) setmin(ans, data[i]);
-			return ans;
+			uint32_t msk = range_mask[r] & ~((uint32_t(1) << (l & (BUCKET_SIZE-1))) - 1);
+			int ind = (l & ~(BUCKET_SIZE-1)) + __builtin_ctz(msk);
+			return data[ind];
 		} else {
 			T ans = min(suff_data[l], pref_data[r]);
 			bucket_l++;
