@@ -19,10 +19,10 @@ public:
 	friend bool operator == (const Point& a, const Point& b) { return a.x == b.x && a.y == b.y; }
 	friend bool operator != (const Point& a, const Point& b) { return !(a==b); }
 
-	Point& operator += (const Point& p) { x += p.x, y += p.y; }
-	Point& operator -= (const Point& p) { x -= p.x, y -= p.y; }
-	Point& operator *= (const T& t) { x *= t, y *= t; }
-	Point& operator /= (const T& t) { x /= t, y /= t; }
+	Point& operator += (const Point& p) { x += p.x, y += p.y; return *this; }
+	Point& operator -= (const Point& p) { x -= p.x, y -= p.y; return *this; }
+	Point& operator *= (const T& t) { x *= t, y *= t; return *this; }
+	Point& operator /= (const T& t) { x /= t, y /= t; return *this; }
 
 	friend Point operator + (const Point& a, const Point& b) { return Point(a.x+b.x, a.y+b.y); }
 	friend Point operator - (const Point& a, const Point& b) { return Point(a.x-b.x, a.y-b.y); }
@@ -31,7 +31,7 @@ public:
 	friend Point operator / (const Point& a, const T& t) { return Point(a.x/t, a.y/t); }
 
 	friend T norm(const Point& a) { return a.x * a.x + a.y * a.y; }
-	template <typename U=T> friend U abs(const Point& p) { return sqrt(U(norm(p))); }
+	friend auto abs(const Point& p) { return std::hypot(p.x, p.y); }
 	friend T unit(const Point& a) { if (a == Point()) return a; return a / abs(a); }
 
 	friend T int_norm(const Point& a) { return __gcd(a.x,a.y); }
@@ -62,9 +62,9 @@ public:
 		return [center, dir](const Point& s, const Point& t) -> bool { return angle_less(dir, s-center, t-center); };
 	}
 
-	// is x in [s,t] taken ccw? 1/0/-1 for in/border/out
-	friend int angle_between(const Point& s, const Point& t, const Point& x) {
-		if (same_dir(x, s) || same_dir(x, t)) return 0;
-		return angle_less(s, x, t) ? 1 : -1;
+	// is p in [s,t] taken ccw? 1/0/-1 for in/border/out
+	friend int angle_between(const Point& s, const Point& t, const Point& p) {
+		if (same_dir(p, s) || same_dir(p, t)) return 0;
+		return angle_less(s, p, t) ? 1 : -1;
 	}
 };
