@@ -1,22 +1,21 @@
 #pragma once
 #include<bits/stdc++.h>
 #include<bits/extc++.h>
-using namespace std;
 
 template <typename flow_t = int, typename cost_t = long long>
 struct MCMF_SSPA {
 	int N;
-	vector<vector<int>> adj;
+	std::vector<std::vector<int>> adj;
 	struct edge_t {
 		int dest;
 		flow_t cap;
 		cost_t cost;
 	};
-	vector<edge_t> edges;
+	std::vector<edge_t> edges;
 
-	vector<char> seen;
-	vector<cost_t> pi;
-	vector<int> prv;
+	std::vector<char> seen;
+	std::vector<cost_t> pi;
+	std::vector<int> prv;
 
 	explicit MCMF_SSPA(int N_) : N(N_), adj(N), pi(N, 0), prv(N) {}
 
@@ -29,11 +28,11 @@ struct MCMF_SSPA {
 		adj[to].push_back(e+1);
 	}
 
-	const cost_t INF_COST = numeric_limits<cost_t>::max() / 4;
-	const flow_t INF_FLOW = numeric_limits<flow_t>::max() / 4;
-	vector<cost_t> dist;
-	__gnu_pbds::priority_queue<pair<cost_t, int>> q;
-	vector<typename decltype(q)::point_iterator> its;
+	const cost_t INF_COST = std::numeric_limits<cost_t>::max() / 4;
+	const flow_t INF_FLOW = std::numeric_limits<flow_t>::max() / 4;
+	std::vector<cost_t> dist;
+	__gnu_pbds::priority_queue<std::pair<cost_t, int>> q;
+	std::vector<typename decltype(q)::point_iterator> its;
 	void path(int s) {
 		dist.assign(N, INF_COST);
 		dist[s] = 0;
@@ -64,15 +63,15 @@ struct MCMF_SSPA {
 		swap(pi, dist);
 	}
 
-	pair<flow_t, cost_t> maxflow(int s, int t) {
+	std::pair<flow_t, cost_t> maxflow(int s, int t) {
 		assert(s != t);
 		flow_t totFlow = 0; cost_t totCost = 0;
 		while (path(s), pi[t] < INF_COST) {
-			flow_t curFlow = numeric_limits<flow_t>::max();
+			flow_t curFlow = std::numeric_limits<flow_t>::max();
 			for (int cur = t; cur != s; ) {
 				int e = prv[cur];
 				int nxt = edges[e^1].dest;
-				curFlow = min(curFlow, edges[e].cap);
+				curFlow = std::min(curFlow, edges[e].cap);
 				cur = nxt;
 			}
 			totFlow += curFlow;
