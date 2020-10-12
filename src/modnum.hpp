@@ -60,13 +60,13 @@ public:
 		return *this;
 	}
 	modnum& operator += (const modnum& o) {
-		v += o.v;
-		if (v >= MOD) v -= MOD;
+		v -= MOD-o.v;
+		v = (v < 0) ? v + MOD : v;
 		return *this;
 	}
 	modnum& operator -= (const modnum& o) {
 		v -= o.v;
-		if (v < 0) v += MOD;
+		v = (v < 0) ? v + MOD : v;
 		return *this;
 	}
 	modnum& operator *= (const modnum& o) {
