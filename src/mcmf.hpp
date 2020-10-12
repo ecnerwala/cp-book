@@ -2,6 +2,9 @@
 #include<bits/stdc++.h>
 #include<bits/extc++.h>
 
+// NOTE: This doesn't support negative-cost edges; you can adjust edge weights
+// (e.g. by precomputing a potential function) to make them positive.
+
 template <typename flow_t = int, typename cost_t = long long>
 struct MCMF_SSPA {
 	int N;
@@ -21,6 +24,7 @@ struct MCMF_SSPA {
 
 	void addEdge(int from, int to, flow_t cap, cost_t cost) {
 		assert(cap >= 0);
+		assert(cost >= 0); // TODO: Remove this restriction
 		int e = int(edges.size());
 		edges.emplace_back(edge_t{to, cap, cost});
 		edges.emplace_back(edge_t{from, 0, -cost});
