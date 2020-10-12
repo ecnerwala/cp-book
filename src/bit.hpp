@@ -25,13 +25,13 @@
  *   * For prefix update/query, no change.
  *   * For suffix update/query, use for_prefix(point + 1); 1-index the data.
  */
-template <typename T> struct bit {
+template <typename T> struct binary_indexed_tree {
 private:
 	std::vector<T> dat;
 public:
-	bit() {}
-	explicit bit(size_t N) : dat(N) {}
-	bit(size_t N, const T& t) : dat(N, t) {}
+	binary_indexed_tree() {}
+	explicit binary_indexed_tree(size_t N) : dat(N) {}
+	binary_indexed_tree(size_t N, const T& t) : dat(N, t) {}
 
 	template <typename F> void for_prefix(int i, F f) const {
 		assert(0 <= i && i <= int(dat.size()));
