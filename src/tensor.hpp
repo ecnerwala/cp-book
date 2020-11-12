@@ -95,6 +95,7 @@ public:
 		swap(strides, o.strides);
 		swap(len, o.len);
 		swap(data, o.data);
+		return *this;
 	}
 	tensor(tensor&& o) : tensor() {
 		*this = std::move(o);
