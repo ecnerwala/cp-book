@@ -39,20 +39,20 @@ public:
 	}
 
 	template <int D = NDIMS>
-	std::enable_if_t<(0 < D), tensor_view<T, NDIMS-1>> operator[] (int idx) const {
+	typename std::enable_if<(0 < D), tensor_view<T, NDIMS-1>>::type operator[] (int idx) const {
 		std::array<int, NDIMS-1> nshape; std::copy(shape.begin()+1, shape.end(), nshape.begin());
 		std::array<int, NDIMS-1> nstrides; std::copy(strides.begin()+1, strides.end(), nstrides.begin());
 		T* ndata = data + (strides[0] * idx);
 		return tensor_view<T, NDIMS-1>(nshape, nstrides, ndata);
 	}
 	template <int D = NDIMS>
-	std::enable_if_t<(0 < D), tensor_view<T, NDIMS-1>> at(int idx) const {
+	typename std::enable_if<(0 < D), tensor_view<T, NDIMS-1>>::type at(int idx) const {
 		assert(0 <= idx && idx < shape[0]);
 		return operator[](idx);
 	}
 
 	template <int D = NDIMS>
-	std::enable_if_t<(0 == D), T&> operator * () const {
+	typename std::enable_if<(0 == D), T&>::type operator * () const {
 		return *data;
 	}
 
@@ -127,29 +127,29 @@ public:
 	const T& at(std::array<int, NDIMS> idx) const { return view().at(idx); }
 
 	template <int D = NDIMS>
-	std::enable_if_t<(0 < D), tensor_view<T, NDIMS-1>> operator[] (int idx) {
+	typename std::enable_if<(0 < D), tensor_view<T, NDIMS-1>>::type operator[] (int idx) {
 		return view()[idx];
 	}
 	template <int D = NDIMS>
-	std::enable_if_t<(0 < D), tensor_view<T, NDIMS-1>> at(int idx) {
+	typename std::enable_if<(0 < D), tensor_view<T, NDIMS-1>>::type at(int idx) {
 		return view().at(idx);
 	}
 
 	template <int D = NDIMS>
-	std::enable_if_t<(0 < D), tensor_view<const T, NDIMS-1>> operator[] (int idx) const {
+	typename std::enable_if<(0 < D), tensor_view<const T, NDIMS-1>>::type operator[] (int idx) const {
 		return view()[idx];
 	}
 	template <int D = NDIMS>
-	std::enable_if_t<(0 < D), tensor_view<const T, NDIMS-1>> at(int idx) const {
+	typename std::enable_if<(0 < D), tensor_view<const T, NDIMS-1>>::type at(int idx) const {
 		return view().at(idx);
 	}
 
 	template <int D = NDIMS>
-	std::enable_if_t<(0 == D), T&> operator * () {
+	typename std::enable_if<(0 == D), T&>::type operator * () {
 		return *view();
 	}
 	template <int D = NDIMS>
-	std::enable_if_t<(0 == D), const T&> operator * () const {
+	typename std::enable_if<(0 == D), const T&>::type operator * () const {
 		return *view();
 	}
 };
