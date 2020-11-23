@@ -109,9 +109,8 @@ template <typename num> struct fft_multiplier {
 		vector<num>& fa = fft<num>::scratch_a;
 		vector<num>& fb = fft<num>::scratch_b;
 
+		if (sza == 0 || szb == 0) return;
 		int s = sza + szb - 1;
-		if (s <= 0) return;
-
 		int n = nextPow2(s);
 		fft<num>::init(n);
 		if (sz(fa) < n) fa.resize(n);
@@ -166,8 +165,8 @@ struct fft_double_multiplier {
 		vector<cplx<dbl>>& fa = fft<cplx<dbl>>::scratch_a;
 		vector<cplx<dbl>>& fb = fft<cplx<dbl>>::scratch_b;
 
+		if (sza == 0 || szb == 0) return;
 		int s = sza + szb - 1;
-		if (s <= 0) return;
 		int n = nextPow2(s);
 		fft<cplx<dbl>>::init(n);
 		if (sz(fa) < n) fa.resize(n);
@@ -192,8 +191,8 @@ struct fft_mod_multiplier {
 		vector<cnum>& fa = fft<cnum>::scratch_a;
 		vector<cnum>& fb = fft<cnum>::scratch_b;
 
+		if (sza == 0 || szb == 0) return;
 		int s = sza + szb - 1;
-		if (s <= 0) return;
 		int n = nextPow2(s);
 		fft<cnum>::init(n);
 		if (sz(fa) < n) fa.resize(n);
@@ -235,6 +234,7 @@ struct fft_mod_multiplier {
 };
 
 template <template <typename> class multiplier, typename T> vector<T> multiply(const vector<T>& a, const vector<T>& b) {
+	if (sz(a) == 0 || sz(b) == 0) return {};
 	vector<T> r(max(0, sz(a) + sz(b) - 1));
 	multiplier<T>::multiply(begin(a), sz(a), begin(b), sz(b), begin(r));
 	return r;
