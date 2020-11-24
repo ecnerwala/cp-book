@@ -15,7 +15,7 @@ using std::min;
 using std::max;
 
 template<class T> int sz(T&& arg) { using std::size; return int(size(std::forward<T>(arg))); }
-int nextPow2(int s) { return 1 << (s > 1 ? 32 - __builtin_clz(s-1) : 0); }
+inline int nextPow2(int s) { return 1 << (s > 1 ? 32 - __builtin_clz(s-1) : 0); }
 
 // Complex
 template <typename dbl> struct cplx { /// start-hash
@@ -46,6 +46,7 @@ template <> struct primitive_root<998244353> {
 };
 template <int MOD> struct getRoot<modnum<MOD>> {
 	static modnum<MOD> f(int k) {
+		assert((MOD-1)%k == 0);
 		return pow(modnum<MOD>(primitive_root<MOD>::value), (MOD-1)/k);
 	}
 };
