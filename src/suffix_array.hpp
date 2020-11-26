@@ -19,8 +19,9 @@ public:
 	int N;
 	std::vector<index_t> sa;
 	std::vector<index_t> rank;
+	// lcp[i] = get_lcp(sa[i], sa[i+1])
 	std::vector<index_t> lcp;
-	RangeMinQuery<index_t> rmq;
+	RangeMinQuery<std::pair<index_t, index_t>> rmq;
 
 	SuffixArray() {}
 
@@ -69,7 +70,14 @@ public:
 		if (a == b) return N-a;
 		a = rank[a], b = rank[b];
 		if (a > b) std::swap(a, b);
-		return rmq.query(a, b-1);
+		return rmq.query(a, b-1).first;
+	}
+
+	// Get the split in the suffix tree, using half-open intervals
+	// Returns len, idx
+	std::pair<index_t, index_t> get_split(index_t l, index_t r) const {
+		assert(r - l > 1);
+		return rmq.query(l, r-2);
 	}
 
 private:
@@ -337,7 +345,11 @@ private:
 	}
 
 	void build_rmq() {
-		rmq = RangeMinQuery<index_t>(lcp);
+		std::vector<std::pair<index_t, index_t>> lcp_idx(N);
+		for (int i = 0; i < N; i++) {
+			lcp_idx[i] = {lcp[i], i+1};
+		}
+		rmq = RangeMinQuery<std::pair<index_t, index_t>>(std::move(lcp_idx));
 	}
 };
 
