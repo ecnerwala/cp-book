@@ -1,141 +1,192 @@
 #include <cassert>
 #include <array>
+#include <ostream>
 
 namespace seg_tree {
 
 // Floor of log_2(a); index of highest 1-bit
-int log_2(int a) {
+inline int log_2(int a) {
 	return a ? (8 * sizeof(a)) - 1 - __builtin_clz(a) : -1;
 }
 
-int next_pow_2(int a) {
+inline int next_pow_2(int a) {
 	assert(a > 0);
 	return 1 << log_2(2*a-1);
 }
 
-template <typename F> void for_parents_up(int a, F f) {
-	a >>= 1;
-	for (; a > 0; a >>= 1) {
-		f(a);
+struct point {
+	int a;
+	point() : a(0) {}
+	explicit point(int a_) : a(a_) { assert(a >= 0); }
+
+	explicit operator bool () { return bool(a); }
+
+	// This is useful so you can directly do array indices
+	/* implicit */ operator int() const { return a; }
+
+	point c(bool z) const {
+		return point((a<<1)|z);
 	}
-}
 
-template <typename F> void for_parents_down(int a, F f) {
-	a >>= 1;
-	for (int L = log_2(a); L >= 0; L--) {
-		f(a >> L);
+	point p() const {
+		return point(a>>1);
 	}
-}
 
-template <typename F> void for_range_parents_up(std::array<int, 2> r, F f) {
-	auto [a, b] = r;
-	assert(a && b);
-	a >>= __builtin_ctz(a);
-	b >>= __builtin_ctz(b);
+	friend std::ostream& operator << (std::ostream& o, const point& p) { return o << int(p); }
 
-	// TODO: dedup
-	for_parents_up(a, f);
-	for_parents_up(b, f);
-}
-
-template <typename F> void for_range_parents_down(std::array<int, 2> r, F f) {
-	auto [a, b] = r;
-	assert(a && b);
-	a >>= __builtin_ctz(a);
-	b >>= __builtin_ctz(b);
-
-	// TODO: dedup
-	for_parents_down(a, f);
-	for_parents_down(b, f);
-}
-
-template <typename F> void for_point(int a, F f) {
-	for (; a > 0; a >>= 1) {
-		f(a);
+	template <typename F> void for_each(F f) const {
+		for (int v = a; v > 0; v >>= 1) {
+			f(point(v));
+		}
 	}
-}
 
-template <typename F> void for_range(std::array<int, 2> r, F f) {
-	auto [a, b] = r;
-	assert(a <= b && b <= 2*a);
-	for (; a < b; a >>= 1, b >>= 1) {
-		if (a & 1) f(a++, false);
-		if (b & 1) f(--b, true);
+	template <typename F> void for_parents_down(F f) const {
+		// strictly greater than 0
+		for (int L = log_2(a); L > 0; L--) {
+			f(point(a >> L));
+		}
 	}
-}
 
-namespace in_order {
+	template <typename F> void for_parents_up(F f) const {
+		for (int v = a >> 1; v > 0; v >>= 1) {
+			f(point(v));
+		}
+	}
+};
 
-int get_point(int N, int a) {
-	assert(0 <= a && a < N);
-	int S = next_pow_2(N);
-	a += S;
-	return a >= 2 * N ? a - N : a;
-}
+struct range {
+	int a, b;
+	range() : a(0), b(0) {}
+	range(int a_, int b_) : a(a_), b(b_) {
+		assert(1 <= a && a <= b && b <= 2 * a);
+	}
+	explicit range(std::array<int, 2> r) : range(r[0], r[1]) {}
 
-std::array<int, 2> get_range(int N, std::array<int, 2> p) {
-	auto [a, b] = p;
-	assert(0 <= a && a <= b && b <= N);
-	int S = next_pow_2(N);
-	a += S, b += S;
-	return { (a >= 2 * N ? 2*(a-N) : a), (b >= 2 * N ? 2*(b-N) : b) };
-}
+	explicit operator std::array<int, 2>() const {
+		return {a,b};
+	}
 
-int get_node_index(int N, int a) {
-	assert(N <= a && a < 2 * N);
-	int S = next_pow_2(N);
-	return (a < S ? a + N : a) - S;
-}
+	const int& operator[] (bool z) const {
+		return z ? b : a;
+	}
 
-std::array<int, 2> get_node_bounds(int N, int a) {
-	assert(1 <= a && a < 2 * N);
-	int l = __builtin_clz(a) - __builtin_clz(2*N-1);
-	int S = next_pow_2(N);
-	int x = a << l, y = (a+1) << l;
-	assert(S <= x && x < y && y <= 2*S);
-	return {(x >= 2 * N ? (x>>1) + N : x) - S, (y >= 2 * N ? (y>>1) + N : y) - S};
-}
+	friend std::ostream& operator << (std::ostream& o, const range& r) { return o << "[" << r.a << ".." << r.b << ")"; }
 
-int get_node_size(int N, int a) {
-	assert(1 <= a && a < 2 * N);
-	auto [x, y] = get_node_bounds(N, a);
-	return y - x;
-}
+	template <typename F> void for_each(F f) const {
+		for (int x = a, y = b; x < y; x >>= 1, y >>= 1) {
+			if (x & 1) f(point(x++), false);
+			if (y & 1) f(point(--y), true);
+		}
+	}
 
-} // namespace in_order
+	template <typename F> void for_parents_down(F f) const {
+		int x = a >> __builtin_ctz(a);
+		int y = b >> __builtin_ctz(b);
 
-namespace circular {
+		// TODO: dedup
+		point(x).for_parents_down(f);
+		point(y).for_parents_down(f);
+	}
 
-int get_point(int N, int a) {
-	assert(0 <= a && a < N);
-	return N + a;
-}
+	template <typename F> void for_parents_up(F f) const {
+		int x = a >> __builtin_ctz(a);
+		int y = b >> __builtin_ctz(b);
 
-std::array<int, 2> get_range(int N, std::array<int, 2> p) {
-	auto [a, b] = p;
-	assert(0 <= a && a <= b && b <= N);
-	return { N + a, N + b };
-}
+		// TODO: dedup
+		point(x).for_parents_up(f);
+		point(y).for_parents_up(f);
+	}
+};
 
-int get_node_index(int N, int a) {
-	assert(N <= a && a < 2 * N);
-	return a - N;
-}
+struct in_order_layout {
+	// Alias them in for convenience
+	using point = seg_tree::point;
+	using range = seg_tree::range;
 
-std::array<int, 2> get_node_bounds(int N, int a) {
-	assert(1 <= a && a < 2 * N);
-	int l = __builtin_clz(a) - __builtin_clz(2*N-1);
-	int S = next_pow_2(N);
-	int x = a << l, y = (a+1) << l;
-	assert(S <= x && x < y && y <= 2*S);
-	return {(x >= 2 * N ? x >> 1 : x) - N, (y >= 2 * N ? y >> 1 : y) - N};
-}
+	int N, S;
+	in_order_layout() : N(0), S(0) {}
+	in_order_layout(int N_) : N(N_), S(N ? next_pow_2(N) : 0) {}
 
-int get_node_size(int N, int a) {
-	assert(1 <= a && a < 2 * N);
-	return in_order::get_node_size(N, a);
-}
+	point get_point(int a) const {
+		assert(0 <= a && a < N);
+		a += S;
+		return point(a >= 2 * N ? a - N : a);
+	}
 
-} // namespace circular
+	range get_range(int a, int b) const {
+		assert(0 <= a && a <= b && b <= N);
+		a += S, b += S;
+		return range((a >= 2 * N ? 2*(a-N) : a), (b >= 2 * N ? 2*(b-N) : b));
+	}
+
+	range get_range(std::array<int, 2> p) const {
+		return get_range(p[0], p[1]);
+	}
+
+	int get_leaf_index(point pt) const {
+		int a = int(pt);
+		assert(N <= a && a < 2 * N);
+		return (a < S ? a + N : a) - S;
+	}
+
+	std::array<int, 2> get_node_bounds(point pt) const {
+		int a = int(pt);
+		assert(1 <= a && a < 2 * N);
+		int l = __builtin_clz(a) - __builtin_clz(2*N-1);
+		int x = a << l, y = (a+1) << l;
+		assert(S <= x && x < y && y <= 2*S);
+		return {(x >= 2 * N ? (x>>1) + N : x) - S, (y >= 2 * N ? (y>>1) + N : y) - S};
+	}
+
+	int get_node_size(point pt) const {
+		auto [x, y] = get_node_bounds(pt);
+		return y - x;
+	}
+};
+
+struct circular_layout {
+	// Alias them in for convenience
+	using point = seg_tree::point;
+	using range = seg_tree::range;
+
+	int N;
+	circular_layout() : N(0) {}
+	circular_layout(int N_) : N(N_) {}
+
+	point get_point(int a) const {
+		assert(0 <= a && a < N);
+		return point(N + a);
+	}
+
+	range get_range(int a, int b) const {
+		assert(0 <= a && a <= b && b <= N);
+		return range(N + a, N + b);
+	}
+
+	range get_range(std::array<int, 2> p) const {
+		return get_range(p[0], p[1]);
+	}
+
+	int get_leaf_index(point pt) const {
+		int a = int(pt);
+		assert(N <= a && a < 2 * N);
+		return a - N;
+	}
+
+	std::array<int, 2> get_node_bounds(point pt) const {
+		int a = int(pt);
+		assert(1 <= a && a < 2 * N);
+		int l = __builtin_clz(a) - __builtin_clz(2*N-1);
+		int S = next_pow_2(N);
+		int x = a << l, y = (a+1) << l;
+		assert(S <= x && x < y && y <= 2*S);
+		return {(x >= 2 * N ? x >> 1 : x) - N, (y >= 2 * N ? y >> 1 : y) - N};
+	}
+
+	int get_node_size(point pt) const {
+		// delegate to in order
+		return in_order_layout(N).get_node_size(pt);
+	}
+};
 
 } // namespace seg_tree
