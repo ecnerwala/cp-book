@@ -173,6 +173,8 @@ struct circular_layout {
 		return a - N;
 	}
 
+	// Returns {x,y} so that 0 <= x < N and 1 <= y <= N
+	// If the point is non-wrapping, then 0 <= x < y <= N
 	std::array<int, 2> get_node_bounds(point pt) const {
 		int a = int(pt);
 		assert(1 <= a && a < 2 * N);
@@ -180,12 +182,13 @@ struct circular_layout {
 		int S = next_pow_2(N);
 		int x = a << l, y = (a+1) << l;
 		assert(S <= x && x < y && y <= 2*S);
-		return {(x >= 2 * N ? x >> 1 : x) - N, (y >= 2 * N ? y >> 1 : y) - N};
+		return {(x >= 2 * N ? x >> 1 : x) - N, (y > 2 * N ? y >> 1 : y) - N};
 	}
 
 	int get_node_size(point pt) const {
-		// delegate to in order
-		return in_order_layout(N).get_node_size(pt);
+		auto [x, y] = get_node_bounds(pt);
+		int r = y - x;
+		return r > 0 ? r : r + N;
 	}
 };
 

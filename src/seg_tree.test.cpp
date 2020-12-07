@@ -10,11 +10,7 @@ TEMPLATE_TEST_CASE("Segment Tree Layouts", "[seg_tree][template]", seg_tree::in_
 		for (int i = 0; i < N; i++) {
 			auto pt = seg.get_point(i);
 			REQUIRE(seg.get_leaf_index(pt) == i);
-			if constexpr (std::is_same_v<TestType, seg_tree::in_order_layout>) {
-				REQUIRE(seg.get_node_bounds(pt) == std::array<int, 2>({i,i+1}));
-			} else {
-				REQUIRE(seg.get_node_bounds(pt) == std::array<int, 2>({i,(i+1)%N}));
-			}
+			REQUIRE(seg.get_node_bounds(pt) == std::array<int, 2>({i,i+1}));
 			REQUIRE(seg.get_node_size(pt) == 1);
 		}
 		for (int a = N-1; a >= 1; a--) {
@@ -22,7 +18,11 @@ TEMPLATE_TEST_CASE("Segment Tree Layouts", "[seg_tree][template]", seg_tree::in_
 			REQUIRE(seg.get_node_size(pt) == seg.get_node_size(pt.c(0)) + seg.get_node_size(pt.c(1)));
 			REQUIRE(seg.get_node_bounds(pt)[0] == seg.get_node_bounds(pt.c(0))[0]);
 			REQUIRE(seg.get_node_bounds(pt)[1] == seg.get_node_bounds(pt.c(1))[1]);
-			REQUIRE(seg.get_node_bounds(pt.c(0))[1] == seg.get_node_bounds(pt.c(1))[0]);
+			if constexpr (std::is_same_v<TestType, seg_tree::in_order_layout>) {
+				REQUIRE(seg.get_node_bounds(pt.c(0))[1] == seg.get_node_bounds(pt.c(1))[0]);
+			} else {
+				REQUIRE(seg.get_node_bounds(pt.c(0))[1] % N == seg.get_node_bounds(pt.c(1))[0]);
+			}
 		}
 
 		for (int l = 0; l <= N; l++) {
@@ -30,10 +30,6 @@ TEMPLATE_TEST_CASE("Segment Tree Layouts", "[seg_tree][template]", seg_tree::in_
 				auto rng = seg.get_range(l, r);
 
 				int x = l, y = r;
-				if constexpr (std::is_same_v<TestType, seg_tree::circular_layout>) {
-					x %= N;
-					y %= N;
-				}
 				rng.for_each([&](auto a, bool d) {
 					auto bounds = seg.get_node_bounds(a);
 					if (d == 0) {
