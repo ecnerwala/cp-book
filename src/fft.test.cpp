@@ -26,7 +26,7 @@ TEST_CASE("FFT Multiply Mod", "[fft]") {
 	vector<num> b(168);
 	for (num& x : a) { x = num(mt()); }
 	for (num& x : b) { x = num(mt()); }
-	REQUIRE(multiply<fft_mod_multiplier>(a,b) == multiply_slow(a, b));
+	REQUIRE(multiply<fft_mod_multiplier<num>>(a,b) == multiply_slow(a, b));
 }
 
 TEST_CASE("FFT Inverse", "[fft]") {
@@ -34,8 +34,8 @@ TEST_CASE("FFT Inverse", "[fft]") {
 	mt19937 mt(48);
 	vector<num> a(298);
 	for (num& x : a) { x = num(mt()); }
-	auto i = inverse<fft_inverser>(a);
-	auto r = multiply<fft_multiplier>(a, i);
+	auto i = inverse<multiply_inverser<fft_multiplier<num>, num>>(a);
+	auto r = multiply<fft_multiplier<num>>(a, i);
 	REQUIRE(r == multiply_slow(a, i));
 
 	r.resize(a.size());

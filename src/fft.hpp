@@ -234,16 +234,36 @@ struct fft_mod_multiplier {
 	}
 };
 
-template <template <typename> class multiplier, typename T> vector<T> multiply(const vector<T>& a, const vector<T>& b) {
+template <class multiplier, typename num>
+struct multiply_inverser {
+	template <typename IterA, typename IterOut>
+	static void inverse(IterA ia, int sza, IterOut io) {
+		if (sza == 0) return;
+		int s = nextPow2(sza);
+		vector<num> b(s,num(0));
+		vector<num> tmp(2*s);
+		b[0] = inv(*ia);
+		for (int n = 1; n < sza; ) {
+			// TODO: could be square instead of multiply
+			multiplier::multiply(b.begin(),n,b.begin(),n,tmp.begin());
+			n = min(sza,2*n);
+			multiplier::multiply(tmp.begin(),n,ia,n,tmp.begin());
+			for (int i = 0; i < n; i++) b[i] = 2 * b[i] - tmp[i];
+		}
+		copy(b.begin(), b.begin()+sza, io);
+	}
+};
+
+template <class multiplier, typename T> vector<T> multiply(const vector<T>& a, const vector<T>& b) {
 	if (sz(a) == 0 || sz(b) == 0) return {};
 	vector<T> r(max(0, sz(a) + sz(b) - 1));
-	multiplier<T>::multiply(begin(a), sz(a), begin(b), sz(b), begin(r));
+	multiplier::multiply(begin(a), sz(a), begin(b), sz(b), begin(r));
 	return r;
 }
 
-template <template <typename> class inverser, typename T> vector<T> inverse(const vector<T>& a) {
+template <class inverser, typename T> vector<T> inverse(const vector<T>& a) {
 	vector<T> r(sz(a));
-	inverser<T>::inverse(begin(a), sz(a), begin(r));
+	inverser::inverse(begin(a), sz(a), begin(r));
 	return r;
 }
 
