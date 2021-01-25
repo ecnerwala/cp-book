@@ -6,6 +6,13 @@
 
 #include "modnum.hpp"
 
+/**
+ * Author: Andrew He
+ * Source: http://neerc.ifmo.ru/trains/toulouse/2017/fft2.pdf
+ * Papers about accuracy: http://www.daemonology.net/papers/fft.pdf, http://www.cs.berkeley.edu/~fateman/papers/fftvsothers.pdf
+ * For integers rounding works if $(|a| + |b|)\max(a, b) < \mathtt{\sim} 10^9$, or in theory maybe $10^6$.
+ */
+
 namespace ecnerwala {
 namespace fft {
 
@@ -118,7 +125,7 @@ template <typename num> struct fft_multiplier {
 		if (sz(fb) < n) fb.resize(n);
 		copy(ia, ia+sza, fa.begin());
 		fill(fa.begin()+sza, fa.begin()+n, num(0));
-		copy(ib, ib + szb, fb.begin());
+		copy(ib, ib+szb, fb.begin());
 		fill(fb.begin()+szb, fb.begin()+n, num(0));
 		fft<num>::go(fa.begin(), n);
 		fft<num>::go(fb.begin(), n);
@@ -246,9 +253,10 @@ struct multiply_inverser {
 		for (int n = 1; n < sza; ) {
 			// TODO: could be square instead of multiply
 			multiplier::multiply(b.begin(),n,b.begin(),n,tmp.begin());
-			n = min(sza,2*n);
-			multiplier::multiply(tmp.begin(),n,ia,n,tmp.begin());
-			for (int i = 0; i < n; i++) b[i] = 2 * b[i] - tmp[i];
+			int nn = min(sza,2*n);
+			multiplier::multiply(tmp.begin(),nn,ia,nn,tmp.begin());
+			for (int i = n; i < nn; i++) b[i] = -tmp[i];
+			n = nn;
 		}
 		copy(b.begin(), b.begin()+sza, io);
 	}
