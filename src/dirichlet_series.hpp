@@ -354,7 +354,7 @@ public:
 		dirichlet_series_prefix log_a;
 		std::array<T, 6> invs{T{}, T(1), inv(T(2)), inv(T(3)), inv(T(4)), inv(T(5))};
 		for (int i = 1; i < layout.len; i++) {
-			log_a.st[i] = (a.st[i] - T(1)) * invs[5] - invs[4];
+			log_a.st[i] = a.st[i] * invs[5] - invs[4];
 		}
 		log_a *= a;
 		for (int i = 1; i < layout.len; i++) {
