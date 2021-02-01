@@ -326,6 +326,20 @@ public:
 		return r;
 	}
 
+	// This computes a pseudo-Euler transform of the sequence.
+	//
+	// Formally, given a Dirichlet series
+	//   A = sum a_i / i^s,
+	// we output the Dirichlet series corresponding to
+	//   B = prod 1 / (1 - a_i i^{-s})
+	//
+	// Note: strictly speaking, the standard Euler transform over a generating function should be
+	//   A = sum a_i / i^s -> B = prod 1 / (1 - i^{-s})^a_i
+	// but our defintion is better suited for totally multiplicative functions,
+	// and always works over general rings. Also, the two definitions match
+	// when the a_i are always 0/1.
+	//
+	// This runs in $O(n^{2/3})$ time, but requires small inverses (up to 1/120).
 	friend dirichlet_series_prefix euler_transform(dirichlet_series_prefix a_pref) {
 		dirichlet_series_values<layout, T> a(std::move(a_pref));
 		// assert(a.st[1] == 0);
@@ -387,6 +401,8 @@ public:
 		return r;
 	}
 
+	// This computes the inverse of the pseudo-Euler transformation. See the
+	// comment on euler_transform() for more details.
 	friend dirichlet_series_prefix inverse_euler_transform(dirichlet_series_prefix a) {
 		dirichlet_series_values<layout, T> r;
 
