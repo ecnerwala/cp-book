@@ -415,12 +415,16 @@ public:
 			T v = a.st[x] - T(1);
 			if (v == 0) continue; // Small optimization, good for prime counting in particular
 			r.st[x] = v;
-			for (int i = layout.len - 1; i >= x; i--) {
+			for (int i = layout.len - 1; i > x; i--) {
 				a.st[i] -= a.st[layout.get_value_bucket(layout.get_bucket_bound(i) / x)] * v;
 			}
+			a.st[x] = T(1);
 		}
 
-		for (int i = 1; i < layout.len; i++) {
+		for (int i = 1; i < x; i++) {
+			a.st[i] = T();
+		}
+		for (int i = x; i < layout.len; i++) {
 			a.st[i] -= T(1);
 		}
 
