@@ -178,6 +178,8 @@ public:
 	friend Derived operator / (Derived const& a, T const& t) { return Derived(a) / t; }
 };
 
+template <div_vector_layout const& layout, typename T> class dirichlet_series_prefix;
+
 template <div_vector_layout const& layout, typename T> class dirichlet_series_values : public div_vector<layout, T>, public vectorspace_mixin<layout, T, dirichlet_series_values<layout, T>> {
 public:
 	using div_vector<layout, T>::div_vector;
@@ -186,6 +188,18 @@ public:
 		for (int i = 1; i < layout.len; i++) {
 			this->st[i] = T(o.st[i]);
 		}
+	}
+
+	explicit dirichlet_series_values(dirichlet_series_prefix<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
+		for (int i = layout.len - 1; i > 1; i--) {
+			this->st[i] -= this->st[i-1];
+		}
+	}
+	explicit dirichlet_series_values(dirichlet_series_prefix<layout, T> const& o) {
+		for (int i = layout.len - 1; i > 1; i--) {
+			this->st[i] = o.st[i] - o.st[i-1];
+		}
+		this->st[1] = o.st[1];
 	}
 };
 
@@ -209,23 +223,6 @@ public:
 		for (int i = 2; i < layout.len; i++) {
 			this->st[i] = (pref += o.st[i]);
 		}
-	}
-
-	explicit operator dirichlet_series_values<layout, T> () && {
-		dirichlet_series_values<layout, T> r(static_cast<div_vector<layout, T>&&>(std::move(*this)));
-		for (int i = layout.len - 1; i > 1; i--) {
-			r.st[i] -= r.st[i-1];
-		}
-		return r;
-	}
-
-	explicit operator dirichlet_series_values<layout, T> () const& {
-		dirichlet_series_values<layout, T> r;
-		for (int i = layout.len - 1; i > 1; i--) {
-			r.st[i] = this->st[i] - this->st[i-1];
-		}
-		r.st[1] = this->st[1];
-		return r;
 	}
 
 private:
@@ -329,17 +326,79 @@ public:
 		return r;
 	}
 
-	friend dirichlet_series_values<layout, T> inverse_euler_transform(dirichlet_series_prefix a) {
+	friend dirichlet_series_prefix euler_transform(dirichlet_series_prefix a_pref) {
+		dirichlet_series_values<layout, T> a(std::move(a_pref));
+		// assert(a.st[1] == 0);
+
+		// Phase 0: stash away values up to the 6th root of N
+		int x;
+		for (x = 2; layout.rt / x / x / x > 0; x++) { }
+
+		// Phase 1: adjust the values and insert the necessary extra powers
+		std::array<T, 6> invs{T{}, T(1), inv(T(2)), inv(T(3)), inv(T(4)), inv(T(5))};
+		for (int i = int(layout.rt); i >= x; i--) {
+			T v = a.st[i];
+			int e = 1;
+			T pv = v;
+			int64_t pi = i;
+			while (pi <= layout.N/i) {
+				e++;
+				pi *= i;
+				pv *= v;
+				a.st[layout.get_value_bucket(pi)] += pv * invs[e];
+			}
+		}
+
+		// Phase 2: now we take exp of the adjusted version
+		// In particular, we take e^a = 1 + a + a^2 / 2 + a^3 / 6 + a^4 / 24 + a^5 / 120
+		dirichlet_series_prefix v;
+		for (int i = x; i < layout.len; i++) {
+			v.st[i] = v.st[i-1] + a.st[i];
+		}
+
+		dirichlet_series_prefix r;
+		for (int i = 1; i < layout.len; i++) {
+			r.st[i] = v.st[i] * invs[5] + T(1);
+		}
+		r *= v;
+		for (int i = 1; i < layout.len; i++) {
+			r.st[i] = r.st[i] * invs[4] + T(1);
+		}
+		r *= v;
+		for (int i = 1; i < layout.len; i++) {
+			r.st[i] = r.st[i] * invs[3] + T(1);
+		}
+		r *= v;
+		for (int i = 1; i < layout.len; i++) {
+			r.st[i] = r.st[i] * invs[2] + T(1);
+		}
+		r *= v;
+		for (int i = 1; i < layout.len; i++) {
+			r.st[i] = r.st[i] * invs[1] + T(1);
+		}
+
+		// Phase 3: apply the extra below x
+		for (x--; x >= 2; x--) {
+			for (int i = x; i < layout.len; i++) {
+				r.st[i] += r.st[layout.get_value_bucket(layout.get_bucket_bound(i) / x)] * a.st[x];
+			}
+		}
+
+		return r;
+	}
+
+	friend dirichlet_series_prefix inverse_euler_transform(dirichlet_series_prefix a) {
+		dirichlet_series_values<layout, T> r;
+
 		// assert(a.st[1] == 1);
 
 		// Phase 1: manually eliminate values up to the 6th root of a
-		dirichlet_series_values<layout, T> small_values;
 
-		int64_t x;
+		int x;
 		for (x = 2; layout.rt / x / x / x > 0; x++) {
 			T v = a.st[x] - T(1);
 			if (v == 0) continue; // Small optimization, good for prime counting in particular
-			small_values.st[x] = v;
+			r.st[x] = v;
 			for (int i = layout.len - 1; i >= x; i--) {
 				a.st[i] -= a.st[layout.get_value_bucket(layout.get_bucket_bound(i) / x)] * v;
 			}
@@ -371,7 +430,9 @@ public:
 		log_a *= a;
 
 		// Phase 3: correct log_a; we need to get rid of the extra powers.
-		dirichlet_series_values<layout, T> r = dirichlet_series_values<layout, T>(log_a);
+		for (int i = x; i < layout.len; i++) {
+			r.st[i] = log_a.st[i] - log_a.st[i-1];
+		}
 		for (; x <= layout.rt; x++) {
 			T v = r.st[x];
 			int e = 1;
@@ -384,7 +445,8 @@ public:
 				r.st[layout.get_value_bucket(px)] -= pv * invs[e];
 			}
 		}
-		return r += small_values;
+
+		return dirichlet_series_prefix(std::move(r));
 	}
 };
 
