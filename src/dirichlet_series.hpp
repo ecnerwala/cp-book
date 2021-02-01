@@ -8,6 +8,11 @@
 
 namespace dirichlet_series {
 
+inline int64_t inv(int64_t v) {
+	assert(v == 1);
+	return 1;
+}
+
 constexpr int64_t floor_sqrt(int64_t N) {
 	int64_t a = N;
 	while (true) {
@@ -38,7 +43,7 @@ public:
 template <const div_vector_layout& layout, typename T> class div_vector {
 public:
 	// Let's just make everything public, getters and setters are too much work
-	T* st = new T[layout.len]{};
+	T* st = new T[layout.len+1]{}; // Allocate one extra on each side
 	T* en = st + layout.len;
 
 	div_vector() {}
@@ -70,6 +75,9 @@ public:
 		return *this;
 	}
 	~div_vector() { delete[] st; }
+
+	T& operator [] (int64_t v) { return st[layout.get_value_bucket(v)]; }
+	T& operator [] (int64_t v) const { return st[layout.get_value_bucket(v)]; }
 };
 
 template <div_vector_layout const& layout, typename T, typename Derived> class vectorspace_mixin {
@@ -173,16 +181,23 @@ public:
 template <div_vector_layout const& layout, typename T> class dirichlet_series_values : public div_vector<layout, T>, public vectorspace_mixin<layout, T, dirichlet_series_values<layout, T>> {
 public:
 	using div_vector<layout, T>::div_vector;
-};
 
-inline int64_t inv(int64_t v) {
-	assert(v == 1);
-	return 1;
-}
+	template <typename U> explicit dirichlet_series_values(dirichlet_series_values<layout, U> const& o) {
+		for (int i = 1; i < layout.len; i++) {
+			this->st[i] = T(o.st[i]);
+		}
+	}
+};
 
 template <div_vector_layout const& layout, typename T> class dirichlet_series_prefix : public div_vector<layout, T>, public vectorspace_mixin<layout, T, dirichlet_series_prefix<layout, T>> {
 public:
 	using div_vector<layout, T>::div_vector;
+
+	template <typename U> explicit dirichlet_series_prefix(dirichlet_series_prefix<layout, U> const& o) {
+		for (int i = 1; i < layout.len; i++) {
+			this->st[i] = T(o.st[i]);
+		}
+	}
 
 	explicit dirichlet_series_prefix(dirichlet_series_values<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
 		for (int i = 2; i < layout.len; i++) {
@@ -312,6 +327,20 @@ public:
 			return (a.st[i] - cur_sum) * inv_2 + r.st[i-1];
 		});
 		return r;
+	}
+
+	friend dirichlet_series_prefix inverse_euler_transform(dirichlet_series_prefix a) {
+		dirichlet_series_prefix r;
+
+		// assert(a.st[1] == 1);
+
+		// Phase 1: manually eliminate values up to the 6th root of a
+		for (int64_t x = 2; layout.rt / x / x / x > 0; x++) {
+			T v = a.st[x];
+			if (v == 0) continue; // Small optimization, good for prime counting in particular
+			for (int i = layout.len - 1; i >= x; i--) {
+			}
+		}
 	}
 };
 
