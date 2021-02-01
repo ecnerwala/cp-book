@@ -66,6 +66,31 @@ TEMPLATE_TEST_CASE("Dirichlet series multiplication and inverse", "[dirichlet]",
 	}
 }
 
+TEMPLATE_TEST_CASE("Dirichlet series euler transform", "[dirichlet]", modnum<int(1e9)+7>) {
+	using num = TestType;
+	for (int N : {1, 2, 3, 4, 5, 24, 25, 26, 99, 100, 101}) {
+		INFO("N = " << N);
+		std::mt19937 mt(48);
+		layout = div_vector_layout(N);
+		dv_prefix<num> a([&](int64_t x) { return num(x); });
+		dv_values<num> primes = inverse_euler_transform(a);
+		dv_values<num> primes_slow;
+		for (int v = 2; v <= N; v++) {
+			bool is_prime = true;
+			for (int p = 2; p * p <= v; p++) {
+				if (v % p == 0) {
+					is_prime = false;
+					break;
+				}
+			}
+			primes_slow[v] += is_prime;
+		}
+		for (int i = 1; i < layout.len; i++) {
+			REQUIRE(primes_slow[i] == primes[i]);
+		}
+	}
+}
+
 }
 
 }

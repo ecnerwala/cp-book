@@ -109,7 +109,7 @@ public:
 		for (int64_t i = 1; i < layout.len; i++) {
 			underlying().st[i] += o.st[i];
 		}
-		return *this;
+		return underlying();
 	}
 	friend Derived operator + (Derived && a, Derived const& b) { return a += b; }
 	friend Derived operator + (Derived const& a, Derived && b) {
@@ -125,14 +125,14 @@ public:
 		for (int64_t i = 1; i < layout.len; i++) {
 			underlying().st[i] += f(layout.get_bucket_bound(i));
 		}
-		return *this;
+		return underlying();
 	}
 
 	Derived& operator -= (Derived const& o) {
 		for (int64_t i = 1; i < layout.len; i++) {
 			underlying().st[i] -= o.st[i];
 		}
-		return *this;
+		return underlying();
 	}
 	friend Derived operator - (Derived && a, Derived const& b) { return a -= b; }
 	friend Derived operator - (Derived const& a, Derived && b) {
@@ -148,14 +148,14 @@ public:
 		for (int64_t i = 1; i < layout.len; i++) {
 			underlying().st[i] -= f(layout.get_bucket_bound(i));
 		}
-		return *this;
+		return underlying();
 	}
 
 	Derived& operator *= (T const& t) {
 		for (int64_t i = 1; i < layout.len; i++) {
 			underlying().st[i] *= t;
 		}
-		return *this;
+		return underlying();
 	}
 	friend Derived operator * (Derived && a, T const& t) { return a *= t; }
 	friend Derived operator * (Derived const& a, T const& t) { return Derived(a) * t; }
@@ -172,7 +172,7 @@ public:
 		for (int64_t i = 1; i < layout.len; i++) {
 			underlying().st[i] /= t;
 		}
-		return *this;
+		return underlying();
 	}
 	friend Derived operator / (Derived && a, T const& t) { return a /= t; }
 	friend Derived operator / (Derived const& a, T const& t) { return Derived(a) / t; }
@@ -329,18 +329,62 @@ public:
 		return r;
 	}
 
-	friend dirichlet_series_prefix inverse_euler_transform(dirichlet_series_prefix a) {
-		dirichlet_series_prefix r;
-
+	friend dirichlet_series_values<layout, T> inverse_euler_transform(dirichlet_series_prefix a) {
 		// assert(a.st[1] == 1);
 
 		// Phase 1: manually eliminate values up to the 6th root of a
-		for (int64_t x = 2; layout.rt / x / x / x > 0; x++) {
-			T v = a.st[x];
+		dirichlet_series_values<layout, T> small_values;
+
+		int64_t x;
+		for (x = 2; layout.rt / x / x / x > 0; x++) {
+			T v = a.st[x] - T(1);
 			if (v == 0) continue; // Small optimization, good for prime counting in particular
+			small_values.st[x] = v;
 			for (int i = layout.len - 1; i >= x; i--) {
+				a.st[i] -= a.st[layout.get_value_bucket(layout.get_bucket_bound(i) / x)] * v;
 			}
 		}
+
+		for (int i = 1; i < layout.len; i++) {
+			a.st[i] -= T(1);
+		}
+
+		// Phase 2: now we take log of the remaining thing, using just the first few terms.
+		// In particular, we take log_a = a^5 / 5 - a^4 / 4 + a^3 / 3 - a^2 / 2 + a
+		dirichlet_series_prefix log_a;
+		std::array<T, 6> invs{T{}, T(1), inv(T(2)), inv(T(3)), inv(T(4)), inv(T(5))};
+		for (int i = 1; i < layout.len; i++) {
+			log_a.st[i] = (a.st[i] - T(1)) * invs[5] - invs[4];
+		}
+		log_a *= a;
+		for (int i = 1; i < layout.len; i++) {
+			log_a.st[i] += invs[3];
+		}
+		log_a *= a;
+		for (int i = 1; i < layout.len; i++) {
+			log_a.st[i] -= invs[2];
+		}
+		log_a *= a;
+		for (int i = 1; i < layout.len; i++) {
+			log_a.st[i] += invs[1];
+		}
+		log_a *= a;
+
+		// Phase 3: correct log_a; we need to get rid of the extra powers.
+		dirichlet_series_values<layout, T> r = dirichlet_series_values<layout, T>(log_a);
+		for (; x <= layout.rt; x++) {
+			T v = r.st[x];
+			int e = 1;
+			T pv = v;
+			int64_t px = x;
+			while (px <= layout.N/x) {
+				e++;
+				px *= x;
+				pv *= v;
+				r.st[layout.get_value_bucket(px)] -= pv * invs[e];
+			}
+		}
+		return r += small_values;
 	}
 };
 
