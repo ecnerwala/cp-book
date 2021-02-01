@@ -68,7 +68,7 @@ TEMPLATE_TEST_CASE("Dirichlet series multiplication and inverse", "[dirichlet]",
 
 TEMPLATE_TEST_CASE("Dirichlet series euler transform", "[dirichlet]", modnum<int(1e9)+7>) {
 	using num = TestType;
-	for (int N : {1, 2, 3, 4, 5, 24, 25, 26, 99, 100, 101}) {
+	for (int N : {1, 2, 3, 4, 5, 24, 25, 26, 99, 100, 101, 1000}) {
 		INFO("N = " << N);
 		layout = div_vector_layout(N);
 		dv_prefix<num> a([&](int64_t x) { return num(x); });
