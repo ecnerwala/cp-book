@@ -370,25 +370,25 @@ public:
 			v.st[i] = v.st[i-1] + a.st[i];
 		}
 
-		dirichlet_series_prefix r;
-		for (int i = 1; i < layout.len; i++) {
-			r.st[i] = v.st[i] * invs[5] + T(1);
+		dirichlet_series_prefix r = v * v;
+		for (int i = x; i < layout.len; i++) {
+			r.st[i] = r.st[i] * invs[5] + v.st[i];
 		}
 		r *= v;
-		for (int i = 1; i < layout.len; i++) {
-			r.st[i] = r.st[i] * invs[4] + T(1);
+		for (int i = x; i < layout.len; i++) {
+			r.st[i] = r.st[i] * invs[4] + v.st[i];
 		}
 		r *= v;
-		for (int i = 1; i < layout.len; i++) {
-			r.st[i] = r.st[i] * invs[3] + T(1);
+		for (int i = x; i < layout.len; i++) {
+			r.st[i] = r.st[i] * invs[3] + v.st[i];
 		}
 		r *= v;
-		for (int i = 1; i < layout.len; i++) {
-			r.st[i] = r.st[i] * invs[2] + T(1);
+		for (int i = x; i < layout.len; i++) {
+			r.st[i] = r.st[i] * invs[2] + v.st[i];
 		}
-		r *= v;
+
 		for (int i = 1; i < layout.len; i++) {
-			r.st[i] = r.st[i] * invs[1] + T(1);
+			r.st[i] += T(1);
 		}
 
 		// Phase 3: apply the extra below x
@@ -424,26 +424,30 @@ public:
 			a.st[i] -= T(1);
 		}
 
+		std::array<T, 6> invs{T{}, T(1), inv(T(2)), inv(T(3)), inv(T(4)), inv(T(5))};
+
 		// Phase 2: now we take log of the remaining thing, using just the first few terms.
 		// In particular, we take log_a = a^5 / 5 - a^4 / 4 + a^3 / 3 - a^2 / 2 + a
 		dirichlet_series_prefix log_a;
-		std::array<T, 6> invs{T{}, T(1), inv(T(2)), inv(T(3)), inv(T(4)), inv(T(5))};
-		for (int i = 1; i < layout.len; i++) {
-			log_a.st[i] = a.st[i] * invs[5] - invs[4];
+		for (int i = x; i < layout.len; i++) {
+			log_a.st[i] = a.st[i] * invs[5];
 		}
 		log_a *= a;
-		for (int i = 1; i < layout.len; i++) {
-			log_a.st[i] += invs[3];
+		for (int i = x; i < layout.len; i++) {
+			log_a.st[i] -= a.st[i] * invs[4];
 		}
 		log_a *= a;
-		for (int i = 1; i < layout.len; i++) {
-			log_a.st[i] -= invs[2];
+		for (int i = x; i < layout.len; i++) {
+			log_a.st[i] += a.st[i] * invs[3];
 		}
 		log_a *= a;
-		for (int i = 1; i < layout.len; i++) {
-			log_a.st[i] += invs[1];
+		for (int i = x; i < layout.len; i++) {
+			log_a.st[i] -= a.st[i] * invs[2];
 		}
 		log_a *= a;
+		for (int i = x; i < layout.len; i++) {
+			log_a.st[i] += a.st[i] * invs[1];
+		}
 
 		// Phase 3: correct log_a; we need to get rid of the extra powers.
 		for (int i = x; i < layout.len; i++) {
