@@ -28,6 +28,10 @@ struct point {
 		return point((a<<1)|z);
 	}
 
+	point operator [] (bool z) const {
+		return c(z);
+	}
+
 	point p() const {
 		return point(a>>1);
 	}
@@ -138,6 +142,15 @@ struct in_order_layout {
 		return {(x >= 2 * N ? (x>>1) + N : x) - S, (y >= 2 * N ? (y>>1) + N : y) - S};
 	}
 
+	int get_node_split(point pt) const {
+		int a = int(pt);
+		assert(1 <= a && a < N);
+		int l = __builtin_clz(2*a+1) - __builtin_clz(2*N-1);
+		int x = (2*a+1) << l;
+		assert(S <= x && x < 2*S);
+		return (x >= 2 * N ? (x>>1) + N : x) - S;
+	}
+
 	int get_node_size(point pt) const {
 		auto [x, y] = get_node_bounds(pt);
 		return y - x;
@@ -183,6 +196,13 @@ struct circular_layout {
 		int x = a << l, y = (a+1) << l;
 		assert(S <= x && x < y && y <= 2*S);
 		return {(x >= 2 * N ? x >> 1 : x) - N, (y > 2 * N ? y >> 1 : y) - N};
+	}
+
+	// Returns the split point of the node, such that 1 <= s <= N.
+	int get_node_split(point pt) const {
+		int a = int(pt);
+		assert(1 <= a && a < N);
+		return get_node_bounds(pt.c(0))[1];
 	}
 
 	int get_node_size(point pt) const {
