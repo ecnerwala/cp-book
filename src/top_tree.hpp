@@ -24,17 +24,17 @@
  *     cur->update_all();
  *
  * Node types:
- *   path edges:
+ *   path edges: compress(c[0], self, c[1])
  *     assert(is_path && !is_vert);
  *     assert(c[0] && c[1]);
  *     assert(c[0]->is_path && c[1]->is_path);
  *     assert(!c[2]);
- *   (path) vertices:
+ *   (path) vertices: self + rake(c[0], c[1])
  *     assert(is_path && is_vert);
  *     assert(!c[2]);
  *     if (c[0]) assert(!c[0]->is_path);
  *     if (c[1]) assert(!c[1]->is_path);
- *   non-path edges:
+ *   non-path edges: rake(c[0], self + c[2], c[1])
  *     assert(!is_path && !is_vert);
  *     assert(c[2])
  *     assert(c[2]->is_path);
