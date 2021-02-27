@@ -29,18 +29,38 @@ TEMPLATE_TEST_CASE("Segment Tree Layouts", "[seg_tree][template]", seg_tree::in_
 			for (int r = l; r <= N; r++) {
 				auto rng = seg.get_range(l, r);
 
-				int x = l, y = r;
-				rng.for_each([&](auto a, bool d) {
-					auto bounds = seg.get_node_bounds(a);
-					if (d == 0) {
+				{
+					int x = l, y = r;
+					rng.for_each([&](auto a, bool d) {
+						auto bounds = seg.get_node_bounds(a);
+						if (d == 0) {
+							REQUIRE(x == bounds[0]);
+							x = bounds[1];
+						} else if (d == 1) {
+							REQUIRE(y == bounds[1]);
+							y = bounds[0];
+						} else assert(false);
+					});
+					REQUIRE(x == y);
+				}
+				{
+					int x = l;
+					rng.for_each_l_to_r([&](auto a) {
+						auto bounds = seg.get_node_bounds(a);
 						REQUIRE(x == bounds[0]);
 						x = bounds[1];
-					} else if (d == 1) {
+					});
+					REQUIRE(x == r);
+				}
+				{
+					int y = r;
+					rng.for_each_r_to_l([&](auto a) {
+						auto bounds = seg.get_node_bounds(a);
 						REQUIRE(y == bounds[1]);
 						y = bounds[0];
-					} else assert(false);
-				});
-				REQUIRE(x == y);
+					});
+					REQUIRE(y == l);
+				}
 			}
 		}
 	}

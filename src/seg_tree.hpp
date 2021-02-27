@@ -81,10 +81,44 @@ struct range {
 
 	friend std::ostream& operator << (std::ostream& o, const range& r) { return o << "[" << r.a << ".." << r.b << ")"; }
 
+	// Iterate over the range from outside-in.
+	//   Calls f(point a, bool is_right)
 	template <typename F> void for_each(F f) const {
 		for (int x = a, y = b; x < y; x >>= 1, y >>= 1) {
 			if (x & 1) f(point(x++), false);
 			if (y & 1) f(point(--y), true);
+		}
+	}
+
+	// Iterate over the range from left to right.
+	//    Calls f(point)
+	template <typename F> void for_each_l_to_r(F f) const {
+		int anc_depth = log_2((a-1) ^ b);
+		int anc_msk = (1 << anc_depth) - 1;
+		for (int v = (-a) & anc_msk; v; v &= v-1) {
+			int i = __builtin_ctz(v);
+			f(point(((a-1) >> i) + 1));
+		}
+		for (int v = b & anc_msk; v; ) {
+			int i = log_2(v);
+			f(point((b >> i) - 1));
+			v ^= (1 << i);
+		}
+	}
+
+	// Iterate over the range from right to left.
+	//    Calls f(point)
+	template <typename F> void for_each_r_to_l(F f) const {
+		int anc_depth = log_2((a-1) ^ b);
+		int anc_msk = (1 << anc_depth) - 1;
+		for (int v = b & anc_msk; v; v &= v-1) {
+			int i = __builtin_ctz(v);
+			f(point((b >> i) - 1));
+		}
+		for (int v = (-a) & anc_msk; v; ) {
+			int i = log_2(v);
+			f(point(((a-1) >> i) + 1));
+			v ^= (1 << i);
 		}
 	}
 
