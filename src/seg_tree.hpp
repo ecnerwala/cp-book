@@ -56,6 +56,11 @@ struct point {
 			f(point(v));
 		}
 	}
+
+	point& operator ++ () { ++a; return *this; }
+	point operator ++ (int) { return point(a++); }
+	point& operator -- () { --a; return *this; }
+	point operator -- (int) { return point(a--); }
 };
 
 struct range {
