@@ -84,21 +84,31 @@ struct range {
 	}
 
 	template <typename F> void for_parents_down(F f) const {
-		int x = a >> __builtin_ctz(a);
-		int y = b >> __builtin_ctz(b);
-
-		// TODO: dedup
-		point(x).for_parents_down(f);
-		point(y).for_parents_down(f);
+		int x = a, y = b;
+		if ((x ^ y) > x) { x <<= 1, std::swap(x, y); }
+		int dx = __builtin_ctz(x);
+		int dy = __builtin_ctz(y);
+		int anc_depth = log_2((x-1) ^ y);
+		for (int i = log_2(x); i > dx; i--) {
+			f(point(x >> i));
+		}
+		for (int i = anc_depth; i > dy; i--) {
+			f(point(y >> i));
+		}
 	}
 
 	template <typename F> void for_parents_up(F f) const {
-		int x = a >> __builtin_ctz(a);
-		int y = b >> __builtin_ctz(b);
-
-		// TODO: dedup
-		point(x).for_parents_up(f);
-		point(y).for_parents_up(f);
+		int x = a, y = b;
+		if ((x ^ y) > x) { x <<= 1, std::swap(x, y); }
+		int dx = __builtin_ctz(x);
+		int dy = __builtin_ctz(y);
+		int anc_depth = log_2((x-1) ^ y);
+		for (int i = dx+1; i <= anc_depth; i++) {
+			f(point(x >> i));
+		}
+		for (int v = y >> (dy+1); v; v >>= 1) {
+			f(point(v));
+		}
 	}
 };
 
