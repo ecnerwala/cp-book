@@ -84,6 +84,23 @@ struct level_ancestor {
 			if (b == -1) return -1;
 		}
 	}
+
+	int dist(int a, int b) const {
+		a = idx[a], b = idx[b];
+		int res = 0;
+		while (true) {
+			if (a > b) swap(a, b);
+			assert(a <= b);
+			if (a > b - heavyPar[b].second) {
+				res += b - a;
+				break;
+			}
+			res += heavyPar[b].second;
+			b = heavyPar[b].first;
+			if (b == -1) return -1;
+		}
+		return res;
+	}
 };
 
 } // namespace ecnerwala
