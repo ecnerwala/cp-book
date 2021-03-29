@@ -114,6 +114,52 @@ template <typename num> template <typename Iterator> void fft<num>::go(Iterator 
 	}
 }
 
+// Policies should implement logic within a template member type called "apply"
+// which is templated with the CRTP "Derived" parameter.
+template<typename... Policies>
+class PolicyContainer : public Policies::template apply<PolicyContainer<Policies...>>... { };
+
+// Concepts/policies:
+//
+// EmbeddingPolicy
+//  -> type num
+//  -> type packed_num
+//  -> void pack_and_fft(ia, sza, io, szo)
+//  -> void ifft_and_unpack(ia, sza, io, szo)
+//  -> void reserve(szo)
+// DownsamplePolicy
+//  -> void downsample(ia, sza, szb)
+// UpsamplePolicy
+//  -> void upsample(ia, sza, szb)
+// MultiplyPolicy
+//  -> void multiply_ffted_and_unpack(ia, ib, io, sz) <- may need buffer?
+//  -> void multiply_ffted_and_unpack_destructive(ia, ib, io, sz) <- allowed to be destructive, for fftmod
+// MultiplyFrequencyPolicy
+//  -> void multiply_frequency(ia, ib, io, sz) <- not supported by fftmod
+// DownsampleFrequencyPolicy
+// InversePolicy
+//  -> void grow_inverse(ia, sza, io, nszo)
+//  -> void inverse(ia, sz, io)
+// DerivXPolicy
+// IntegXPolicy
+// ExpPolicy
+// LogPolicy
+// PowPolicy
+
+template <typename num_> class FFTMultiplyPolicy {
+	template <class Derived> class apply {
+		using num = num_;
+		using packed_num = num;
+	};
+};
+
+template <typename num_, typename dbl_> class FFTDoubleMultiplyPolicy {
+	template <class Derived> class apply {
+		using num = num_;
+		using packed_num = cplx<dbl_>;
+	};
+};
+
 template <typename num> struct fft_multiplier {
 	template <typename IterA, typename IterB, typename IterOut>
 	static void multiply(IterA ia, int sza, IterB ib, int szb, IterOut io) {
@@ -262,6 +308,91 @@ struct multiply_inverser {
 			n = nn;
 		}
 		copy(b.begin(), b.begin()+sza, io);
+	}
+};
+
+template <typename num>
+struct deriv_xer {
+	template <typename IterA>
+	static void deriv_x_inplace(IterA ia, int sza) {
+		for (int i = 0; i < sza; ++i, ++ia) {
+			*ia = *ia * num(i);
+		}
+	}
+};
+
+template <typename num>
+struct integ_xer {
+	template <typename IterA>
+	static void integ_x_inplace(IterA ia, int sza) {
+		// assert(*ia == num(0))
+		++ia;
+		for (int i = 1; i < sza; ++i, ++ia) {
+			*ia = *ia * inv(num(i));
+		}
+	}
+};
+
+template <typename num>
+struct fact_integ_xer {
+	template <typename IterA>
+	static void integ_x_inplace(IterA ia, int sza) {
+		if (sza <= 1) return;
+		// assert(*ia == num(0))
+		++ia;
+		num fact = 1;
+		for (int i = 1; i <= sza-1; ++i) {
+			*ia = *ia * fact;
+			++ia;
+			fact = fact * num(i);
+		}
+		fact = inv(fact);
+		for (int i = sza-1; i >= 1; --i) {
+			--ia;
+			*ia = *ia * fact;
+			fact = fact * num(i);
+		}
+	}
+};
+
+template <class multiplier, class inverser, class deriv_xer, class integ_xer, typename num>
+struct logger {
+	template <typename IterA, typename IterOut>
+	static void log(IterA ia, int sza, IterOut io) {
+		if (sza == 0) return;
+		// assert(*ia == num(1));
+
+		std::vector<num> v(2*sza);
+
+		copy(ia, ia+sza, v.begin());
+		deriv_xer::deriv_x_inplace(v.begin(), sza);
+
+		inverser::inverse(ia, sza, v.begin()+sza);
+
+		multiplier::multiply(v.begin(), sza, v.begin()+sza, sza, v.begin());
+
+		integ_xer::integ_x_inplace(v.begin(), sza);
+		copy(v.begin(), v.begin()+sza, io);
+	}
+};
+
+template <typename num>
+struct exper {
+	// In FFTmod, input ffts of a particular size can be reused, but the result is useless.
+	//  You want to take deriv_x(B[0..N]) * 2 * IB[0..N] - 1/2 deriv_x(B[0..N]^2) * IB[0..N]^2
+	//  binary-multiplying gives f(2n) + f(2n) + f(2n) + b(2n) + b(2n) + b(2n) + f(4n) + f(4n) + b(4n) + f(4n) + b(4n) -> 32n
+	// In NTT, everything can be reused and multiplied in frequency domain; downsampling is tricky but doable if it's actually band limited.
+	//   f(4n) + f(4n) + f(4n) + b(4n) + f(2n) + b(2n) + f(4n) + b(4n)
+	//   f(4n) + f(4n) + f(4n) + b(4n) + f(4n) + b(4n) + b(4n)
+	// B[N..2N] = B[0..N] * (A[N..2N] - integ_x(deriv_x(B[0..N]) * (2*IB[0..N]-B[0..N]*IB[0..N]^2))[N..2N])
+	// IB[N..2N] = (-B[0..2N]*IB[0..N]^2)[N..2N]
+	template <typename IterA, typename IterOut>
+	static void exp(IterA ia, int sza, IterOut io) {
+		if (sza == 0) return;
+		// assert(*ia == num(0));
+		int s = nextPow2(sza);
+		std::vector<num> b(s);
+		std::vector<num> ib(s);
 	}
 };
 
