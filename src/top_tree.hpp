@@ -308,6 +308,29 @@ public:
 		return res;
 	}
 
+	top_tree_node* expose_edge() {
+		assert(!is_vert);
+		downdate_all();
+
+		top_tree_node* v = is_path ? c[1] : c[2];
+		v->downdate();
+
+		while (!v->is_vert) {
+			v = v->c[0];
+			v->downdate();
+		}
+
+		top_tree_node* res = nullptr;
+		v->splice_all(res);
+		v->cut_right();
+		v->update_all();
+
+		assert(!p);
+		assert(v == c[1]);
+
+		return res;
+	}
+
 	void meld_path_end() {
 		assert(!p);
 		top_tree_node* rt = this;
@@ -377,11 +400,12 @@ public:
 	}
 
 	friend std::pair<top_tree_node*, top_tree_node*> cut(top_tree_node* e) {
+		assert(!e->is_vert);
+		e->expose_edge();
+
 		assert(!e->p);
 		assert(e->is_path);
-		assert(!e->is_vert);
-
-		e->downdate();
+		assert(!e->flip_path);
 
 		top_tree_node* l = e->c[0];
 		top_tree_node* r = e->c[1];
