@@ -269,10 +269,29 @@ template <class multiplier, typename T> vector<T> multiply(const vector<T>& a, c
 	return r;
 }
 
+template <typename T> vector<T> fft_multiply(const vector<T>& a, const vector<T>& b) {
+	return multiply<fft_multiplier<T>, T>(a, b);
+}
+template <typename T> vector<T> fft_double_multiply(const vector<T>& a, const vector<T>& b) {
+	return multiply<fft_double_multiplier<T>, T>(a, b);
+}
+template <typename T> vector<T> fft_mod_multiply(const vector<T>& a, const vector<T>& b) {
+	return multiply<fft_mod_multiplier<T>, T>(a, b);
+}
+
 template <class inverser, typename T> vector<T> inverse(const vector<T>& a) {
 	vector<T> r(sz(a));
 	inverser::inverse(begin(a), sz(a), begin(r));
 	return r;
+}
+template <typename T> vector<T> fft_inverse(const vector<T>& a) {
+	return inverse<fft_inverser<T>, T>(a);
+}
+template <typename T> vector<T> fft_double_inverse(const vector<T>& a) {
+	return inverse<multiply_inverser<fft_double_multiplier<T>, T>, T>(a);
+}
+template <typename T> vector<T> fft_mod_inverse(const vector<T>& a) {
+	return inverse<multiply_inverser<fft_mod_multiplier<T>, T>, T>(a);
 }
 
 }} // namespace ecnerwala::fft
