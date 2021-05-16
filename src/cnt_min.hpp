@@ -1,13 +1,6 @@
 #pragma once
 
-#include <functional>
-#include <utility>
-
-template <typename F> struct reverse_comparator : private F {
-	template <typename Arg1, typename Arg2> inline bool operator() (Arg1&& arg1, Arg2&& arg2) {
-		return F::operator()(std::forward<Arg2>(arg2), std::forward<Arg1>(arg1));
-	}
-};
+#include "reverse_comparator.hpp"
 
 template <typename T, typename C = int, typename Comp = std::less<T>> struct cnt_min {
 	T v;
@@ -30,4 +23,4 @@ template <typename T, typename C = int, typename Comp = std::less<T>> struct cnt
 	}
 };
 
-template <typename T, typename C = int, typename Comp = std::less<T>> using cnt_max = cnt_min<T, C, reverse_comparator<Comp>>;
+template <typename T, typename C = int, typename Comp = std::less<T>> using cnt_max = cnt_min<T, C, reverse_comparator_t<Comp>>;
