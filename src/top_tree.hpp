@@ -2,13 +2,24 @@
 
 #include <utility>
 #include <cassert>
+#include <array>
 
 /**
  * Top tree!
  *
  * Usage:
- *   Fill in update()/downdate()/do_flip_path()/do_stuff()
- *     update() can always assume downdate() has been called (no lazy to do)
+ *   Make a `struct T : public top_tree_node_base<T>` (CRTP), which implements
+ *     void update()
+ *     void downdate()
+ *     void do_flip_path()
+ *     void do_other_operation() ...
+ *   When update() is called, you can assume downdate() has already been called.
+ *
+ *   In general, do_op() should eagerly apply the operation but not touch the
+ *   children. In downdate(), you can push down to the children with ch->do_op().
+ *   WARNING: if different operations do not trivially commute, you *must*
+ *   implement a way to swap/alter them to compose in a consistent order, and you
+ *   must use that order when implementing downdate(). This can be nontrivial!
  *
  *   Creating vertices:
  *     n->is_path = n->is_vert = true;
@@ -42,9 +53,17 @@
  *     if (c[1]) assert(!c[1]->is_path);
  */
 
-struct top_tree_node {
+template <typename top_tree_node> struct top_tree_node_base {
+private:
+	top_tree_node* derived_this() {
+		return static_cast<top_tree_node*>(this);
+	}
+	const top_tree_node* derived_this() const {
+		return static_cast<const top_tree_node*>(this);
+	}
+public:
 	mutable top_tree_node* p = nullptr;
-	top_tree_node* c[3] = {nullptr, nullptr, nullptr};
+	std::array<top_tree_node*, 3> c{nullptr, nullptr, nullptr};
 
 	int d() const {
 		assert(p);
@@ -64,32 +83,19 @@ struct top_tree_node {
 
 	bool r() const { return !p || p->is_path != is_path; }
 
-	bool flip_path = false;
-
+private:
+	// Convenience wrappers for the derived functions.
 	void do_flip_path() {
-		assert(is_path);
-		flip_path ^= 1;
+		derived_this()->do_flip_path();
 	}
-
 	void downdate() {
-		// fortunately, this doesn't interact with our ops
-		if (flip_path) {
-			assert(is_path);
-			if (!is_vert) {
-				if (c[0]) c[0]->do_flip_path();
-				if (c[1]) c[1]->do_flip_path();
-			}
-			std::swap(c[0], c[1]);
-			flip_path = false;
-		}
+		derived_this()->downdate();
 	}
-
 	void update() {
-		if (is_path) {
-		} else {
-		}
+		derived_this()->update();
 	}
 
+public:
 	void downdate_all() {
 		if (p) p->downdate_all();
 		downdate();
@@ -97,7 +103,7 @@ struct top_tree_node {
 
 	// Returns the root
 	top_tree_node* update_all() {
-		top_tree_node* cur = this;
+		top_tree_node* cur = derived_this();
 		cur->update();
 		while (cur->p) {
 			cur = cur->p;
@@ -115,14 +121,14 @@ private:
 		int x = d(); assert(x == 0 || x == 1);
 		top_tree_node* ch = c[!x];
 
-		if (pa->p) pa->p_c() = this;
+		if (pa->p) pa->p_c() = derived_this();
 		this->p = pa->p;
 
 		pa->c[x] = ch;
 		if (ch) ch->p = pa;
 
 		this->c[!x] = pa;
-		pa->p = this;
+		pa->p = derived_this();
 
 		pa->update();
 	}
@@ -143,7 +149,7 @@ private:
 		assert(c_d == !x);
 		top_tree_node* ch = c[c_d]->c[!x];
 
-		if (pa->p) pa->p_c() = this;
+		if (pa->p) pa->p_c() = derived_this();
 		this->p = pa->p;
 
 		pa->c[x] = ch;
@@ -239,7 +245,7 @@ private:
 		assert(pa->c[0] == this);
 		assert(pa->c[2] == nullptr);
 
-		if (pa->p) pa->p_c() = this;
+		if (pa->p) pa->p_c() = derived_this();
 		this->p = pa->p;
 
 		pa->is_path = false;
@@ -249,7 +255,7 @@ private:
 		pa->c[1] = c[1]; if (c[1]) c[1]->p = pa;
 
 		c[0] = nullptr;
-		c[1] = pa; pa->p = this;
+		c[1] = pa; pa->p = derived_this();
 		assert(c[2] == nullptr);
 
 		assert(c[0] == nullptr);
@@ -273,7 +279,7 @@ private:
 
 		top_tree_node* pa = p;
 
-		if (pa->p) pa->p_c() = this;
+		if (pa->p) pa->p_c() = derived_this();
 		this->p = pa->p;
 
 		pa->c[0] = c[0]; if (c[0]) c[0]->p = pa;
@@ -281,7 +287,7 @@ private:
 
 		assert(c[2] && c[2]->is_path);
 		c[1] = c[2]; // don't need to change parent
-		c[0] = pa; pa->p = this;
+		c[0] = pa; pa->p = derived_this();
 		c[2] = nullptr;
 
 		is_path = true;
@@ -293,7 +299,7 @@ private:
 	// Return the topmost vertex which was spliced into
 	top_tree_node* splice_all() {
 		top_tree_node* res = nullptr;
-		for (top_tree_node* cur = this; cur; cur = cur->p) {
+		for (top_tree_node* cur = derived_this(); cur; cur = cur->p) {
 			if (!cur->is_path) {
 				res = cur->splice_non_path();
 			}
@@ -343,7 +349,7 @@ public:
 	// Return the new root
 	top_tree_node* meld_path_end() {
 		assert(!p);
-		top_tree_node* rt = this;
+		top_tree_node* rt = derived_this();
 		while (true) {
 			rt->downdate();
 			if (rt->is_vert) break;
@@ -378,7 +384,7 @@ public:
 	void make_root() {
 		expose();
 
-		top_tree_node* rt = this;
+		top_tree_node* rt = derived_this();
 		while (rt->p) {
 			assert(rt->d() == 1);
 			rt = rt->p;
@@ -417,7 +423,6 @@ public:
 
 		assert(!e->p);
 		assert(e->is_path);
-		assert(!e->flip_path);
 
 		top_tree_node* l = e->c[0];
 		top_tree_node* r = e->c[1];
@@ -449,5 +454,32 @@ public:
 		rt->make_root();
 		n->expose();
 		return n;
+	}
+};
+
+struct sample_top_tree_node : public top_tree_node_base<sample_top_tree_node> {
+	bool flip_path = false;
+
+	void do_flip_path() {
+		assert(is_path);
+		flip_path ^= 1;
+	}
+
+	void downdate() {
+		if (flip_path) {
+			assert(is_path);
+			if (!is_vert) {
+				if (c[0]) c[0]->do_flip_path();
+				if (c[1]) c[1]->do_flip_path();
+			}
+			std::swap(c[0], c[1]);
+			flip_path = false;
+		}
+	}
+
+	void update() {
+		if (is_path) {
+		} else {
+		}
 	}
 };
