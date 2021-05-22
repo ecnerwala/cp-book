@@ -95,9 +95,15 @@ struct top_tree_node {
 		downdate();
 	}
 
-	void update_all() {
-		update();
-		if (p) p->update_all();
+	// Returns the root
+	top_tree_node* update_all() {
+		top_tree_node* cur = this;
+		cur->update();
+		while (cur->p) {
+			cur = cur->p;
+			cur->update();
+		}
+		return cur;
 	}
 
 private:
@@ -284,22 +290,25 @@ private:
 		return pa;
 	}
 
-	void splice_all(top_tree_node*& res) {
-		if (!is_path) {
-			res = splice_non_path();
+	// Return the topmost vertex which was spliced into
+	top_tree_node* splice_all() {
+		top_tree_node* res = nullptr;
+		for (top_tree_node* cur = this; cur; cur = cur->p) {
+			if (!cur->is_path) {
+				res = cur->splice_non_path();
+			}
+			assert(cur->is_path);
 		}
-		assert(is_path);
-		if (!p) return;
-		p->splice_all(res);
+		return res;
 	}
 
 public:
+	// Return the topmost vertex which was spliced into
 	top_tree_node* expose() {
 		assert(is_vert);
 		downdate_all();
 
-		top_tree_node* res = nullptr;
-		splice_all(res);
+		top_tree_node* res = splice_all();
 
 		cut_right();
 
@@ -308,6 +317,7 @@ public:
 		return res;
 	}
 
+	// Return the topmost vertex which was spliced into
 	top_tree_node* expose_edge() {
 		assert(!is_vert);
 		downdate_all();
@@ -320,8 +330,7 @@ public:
 			v->downdate();
 		}
 
-		top_tree_node* res = nullptr;
-		v->splice_all(res);
+		top_tree_node* res = v->splice_all();
 		v->cut_right();
 		v->update_all();
 
@@ -331,7 +340,8 @@ public:
 		return res;
 	}
 
-	void meld_path_end() {
+	// Return the new root
+	top_tree_node* meld_path_end() {
 		assert(!p);
 		top_tree_node* rt = this;
 		while (true) {
@@ -362,7 +372,7 @@ public:
 			rt->c[0] = nullptr;
 		}
 		assert(rt->c[0] == nullptr);
-		rt->update_all();
+		return rt->update_all();
 	}
 
 	void make_root() {
@@ -399,6 +409,8 @@ public:
 		e->update();
 	}
 
+	// Cuts the edge e
+	// Returns the top-tree-root of the two halves; they are not necessarily the split vertices.
 	friend std::pair<top_tree_node*, top_tree_node*> cut(top_tree_node* e) {
 		assert(!e->is_vert);
 		e->expose_edge();
@@ -416,7 +428,7 @@ public:
 
 		assert(e->c[2] == nullptr);
 
-		l->meld_path_end();
+		l = l->meld_path_end();
 
 		return {l, r};
 	}
