@@ -201,8 +201,8 @@ struct in_order_layout {
 	}
 
 	int get_node_size(point pt) const {
-		auto [x, y] = get_node_bounds(pt);
-		return y - x;
+		auto bounds = get_node_bounds(pt);
+		return bounds[1] - bounds[0];
 	}
 };
 
@@ -255,8 +255,8 @@ struct circular_layout {
 	}
 
 	int get_node_size(point pt) const {
-		auto [x, y] = get_node_bounds(pt);
-		int r = y - x;
+		auto bounds = get_node_bounds(pt);
+		int r = bounds[1] - bounds[0];
 		return r > 0 ? r : r + N;
 	}
 };
