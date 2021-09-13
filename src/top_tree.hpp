@@ -458,22 +458,22 @@ public:
 };
 
 struct sample_top_tree_node : public top_tree_node_base<sample_top_tree_node> {
-	bool flip_path = false;
+	bool lazy_flip_path = false;
 
 	void do_flip_path() {
 		assert(is_path);
-		flip_path ^= 1;
+		std::swap(c[0], c[1]);
+		lazy_flip_path ^= 1;
 	}
 
 	void downdate() {
-		if (flip_path) {
+		if (lazy_flip_path) {
 			assert(is_path);
 			if (!is_vert) {
 				if (c[0]) c[0]->do_flip_path();
 				if (c[1]) c[1]->do_flip_path();
 			}
-			std::swap(c[0], c[1]);
-			flip_path = false;
+			lazy_flip_path = false;
 		}
 	}
 
