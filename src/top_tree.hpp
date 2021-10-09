@@ -397,7 +397,7 @@ public:
 		assert(!p);
 	}
 
-	// link v2 as a child of v1 with edge e
+	// Link v2 as a child of v1 with edge e
 	friend void link(top_tree_node* e, top_tree_node* v1, top_tree_node* v2) {
 		assert(e && v1 && v2);
 		assert(!e->c[0] && !e->c[1] && !e->c[2]);
@@ -413,6 +413,31 @@ public:
 		e->c[1] = v2;
 		v2->p = e;
 		e->update();
+	}
+
+	// Link v2's root as a child of v1 with edge e
+	// Returns false if they're already in the same subtree
+	friend bool link_root(top_tree_node* e, top_tree_node* v1, top_tree_node* v2) {
+		assert(e && v1 && v2);
+		assert(!e->c[0] && !e->c[1] && !e->c[2]);
+		v1->expose();
+		v2->expose();
+
+		while (v1->p) v1 = v1->p;
+		while (v2->p) v2 = v2->p;
+		if (v1 == v2) return false;
+
+		assert(!v1->p);
+		assert(!v2->p);
+
+		e->is_path = true, e->is_vert = false;
+		e->c[0] = v1;
+		v1->p = e;
+		e->c[1] = v2;
+		v2->p = e;
+		e->update();
+
+		return true;
 	}
 
 	// Cuts the edge e
