@@ -31,7 +31,19 @@ TEMPLATE_TEST_CASE("Segment Tree Layouts", "[seg_tree][template]", seg_tree::in_
 
 				{
 					int x = l, y = r;
-					rng.for_each([&](auto a, bool d) {
+					rng.for_each([&](auto a) {
+						auto bounds = seg.get_node_bounds(a);
+						if (x == bounds[0]) {
+							x = bounds[1];
+						} else if (y == bounds[1]) {
+							y = bounds[0];
+						} else assert(false);
+					});
+					REQUIRE(x == y);
+				}
+				{
+					int x = l, y = r;
+					rng.for_each_with_side([&](auto a, bool d) {
 						auto bounds = seg.get_node_bounds(a);
 						if (d == 0) {
 							REQUIRE(x == bounds[0]);

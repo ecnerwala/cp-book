@@ -82,8 +82,17 @@ struct range {
 	friend std::ostream& operator << (std::ostream& o, const range& r) { return o << "[" << r.a << ".." << r.b << ")"; }
 
 	// Iterate over the range from outside-in.
-	//   Calls f(point a, bool is_right)
+	//   Calls f(point a)
 	template <typename F> void for_each(F f) const {
+		for (int x = a, y = b; x < y; x >>= 1, y >>= 1) {
+			if (x & 1) f(point(x++));
+			if (y & 1) f(point(--y));
+		}
+	}
+
+	// Iterate over the range from outside-in.
+	//   Calls f(point a, bool is_right)
+	template <typename F> void for_each_with_side(F f) const {
 		for (int x = a, y = b; x < y; x >>= 1, y >>= 1) {
 			if (x & 1) f(point(x++), false);
 			if (y & 1) f(point(--y), true);
