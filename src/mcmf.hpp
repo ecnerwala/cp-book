@@ -24,7 +24,7 @@ struct MCMF_SSPA {
 
 	void addEdge(int from, int to, flow_t cap, cost_t cost) {
 		assert(cap >= 0);
-		assert(cost >= 0); // TODO: Remove this restriction
+		assert(cost + pi[from] - pi[to] >= 0); // TODO: Remove this restriction
 		int e = int(edges.size());
 		edges.emplace_back(edge_t{to, cap, cost});
 		edges.emplace_back(edge_t{from, 0, -cost});
