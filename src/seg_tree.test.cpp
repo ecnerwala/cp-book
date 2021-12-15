@@ -5,7 +5,7 @@
 #include <type_traits>
 
 TEMPLATE_TEST_CASE("Segment Tree Layouts", "[seg_tree][template]", seg_tree::in_order_layout, seg_tree::circular_layout) {
-	for (int N : {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100, 101, 127, 128, 129}) {
+	for (int N : {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100, 101, 127, 128, 129}) {
 		auto seg = TestType(N);
 		for (int i = 0; i < N; i++) {
 			auto pt = seg.get_point(i);
@@ -13,7 +13,7 @@ TEMPLATE_TEST_CASE("Segment Tree Layouts", "[seg_tree][template]", seg_tree::in_
 			REQUIRE(seg.get_node_bounds(pt) == std::array<int, 2>({i,i+1}));
 			REQUIRE(seg.get_node_size(pt) == 1);
 		}
-		for (int a = N-1; a >= 1; a--) {
+		for (seg_tree::point a(N-1); a >= 1; a--) {
 			auto pt = seg_tree::point(a);
 			REQUIRE(seg.get_node_size(pt) == seg.get_node_size(pt.c(0)) + seg.get_node_size(pt.c(1)));
 			REQUIRE(seg.get_node_bounds(pt)[0] == seg.get_node_bounds(pt.c(0))[0]);

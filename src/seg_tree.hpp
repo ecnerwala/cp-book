@@ -17,7 +17,7 @@ inline int next_pow_2(int a) {
 struct point {
 	int a;
 	point() : a(0) {}
-	explicit point(int a_) : a(a_) { assert(a >= 0); }
+	explicit point(int a_) : a(a_) { assert(a >= -1); }
 
 	explicit operator bool () { return bool(a); }
 
@@ -65,7 +65,7 @@ struct point {
 
 struct range {
 	int a, b;
-	range() : a(0), b(0) {}
+	range() : a(1), b(1) {}
 	range(int a_, int b_) : a(a_), b(b_) {
 		assert(1 <= a && a <= b && b <= 2 * a);
 	}
@@ -177,6 +177,7 @@ struct in_order_layout {
 
 	range get_range(int a, int b) const {
 		assert(0 <= a && a <= b && b <= N);
+		if (N == 0) return range();
 		a += S, b += S;
 		return range((a >= 2 * N ? 2*(a-N) : a), (b >= 2 * N ? 2*(b-N) : b));
 	}
@@ -231,6 +232,7 @@ struct circular_layout {
 
 	range get_range(int a, int b) const {
 		assert(0 <= a && a <= b && b <= N);
+		if (N == 0) return range();
 		return range(N + a, N + b);
 	}
 
