@@ -46,7 +46,7 @@ template <typename T> struct Point3D {
 		return g ? p / g : p;
 	}
 
-	friend T abs(const P& a) { return sqrt(max(T(0), norm(a))); }
+	friend T abs(const P& a) { return sqrt(std::max(T(0), norm(a))); }
 	friend P unit(const P& a) { return a / abs(a); }
 
 	friend T vol(const P& a, const P& b, const P& c, const P& d) { return dot(cross(b-a, c-a), d-a); }
