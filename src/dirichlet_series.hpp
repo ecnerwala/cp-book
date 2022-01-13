@@ -8,12 +8,19 @@
 
 namespace dirichlet_series {
 
+inline int inv(int v) {
+	assert(v == 1);
+	return 1;
+}
+
 inline int64_t inv(int64_t v) {
 	assert(v == 1);
 	return 1;
 }
 
 constexpr int64_t floor_sqrt(int64_t N) {
+	assert(N >= 0);
+	if (N == 0) return 0;
 	int64_t a = N;
 	while (true) {
 		int64_t b = N/a;
