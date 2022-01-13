@@ -11,38 +11,36 @@ TEST_CASE("Cartesian Tree", "[cartesian_tree]") {
 		shuffle(v.begin(), v.end(), mt);
 		{
 			CartesianTree t = CartesianTree::build_min_tree(v);
-			for (int i = 1; i < int(t.nodes.size()); i += 2) {
-				auto cur = &t.nodes[i];
-				REQUIRE(cur->m == i/2);
-				REQUIRE(cur->l <= cur->m);
-				REQUIRE(cur->m <= cur->r);
+			for (int i = 1; i < int(t.size()); i += 2) {
+				REQUIRE(t[i].m == i/2);
+				REQUIRE(t[i].l <= t[i].m);
+				REQUIRE(t[i].m <= t[i].r);
 
-				REQUIRE(cur->c[0]->l == cur->l);
-				REQUIRE(cur->c[0]->r == cur->m-1);
+				REQUIRE(t[t[i].c[0]].l == t[i].l);
+				REQUIRE(t[t[i].c[0]].r == t[i].m-1);
 
-				REQUIRE(cur->c[1]->l == cur->m+1);
-				REQUIRE(cur->c[1]->r == cur->r);
+				REQUIRE(t[t[i].c[1]].l == t[i].m+1);
+				REQUIRE(t[t[i].c[1]].r == t[i].r);
 
-				REQUIRE((cur->c[0]->l > cur->c[0]->r || v[cur->m] < v[cur->c[0]->m]));
-				REQUIRE((cur->c[1]->l > cur->c[1]->r || v[cur->m] < v[cur->c[1]->m]));
+				REQUIRE((t[t[i].c[0]].l > t[t[i].c[0]].r || v[t[i].m] < v[t[t[i].c[0]].m]));
+				REQUIRE((t[t[i].c[1]].l > t[t[i].c[1]].r || v[t[i].m] < v[t[t[i].c[1]].m]));
 			}
 		}
 		{
 			CartesianTree t = CartesianTree::build_max_tree(v);
-			for (int i = 1; i < int(t.nodes.size()); i += 2) {
-				auto cur = &t.nodes[i];
-				REQUIRE(cur->m == i/2);
-				REQUIRE(cur->l <= cur->m);
-				REQUIRE(cur->m <= cur->r);
+			for (int i = 1; i < int(t.size()); i += 2) {
+				REQUIRE(t[i].m == i/2);
+				REQUIRE(t[i].l <= t[i].m);
+				REQUIRE(t[i].m <= t[i].r);
 
-				REQUIRE(cur->c[0]->l == cur->l);
-				REQUIRE(cur->c[0]->r == cur->m-1);
+				REQUIRE(t[t[i].c[0]].l == t[i].l);
+				REQUIRE(t[t[i].c[0]].r == t[i].m-1);
 
-				REQUIRE(cur->c[1]->l == cur->m+1);
-				REQUIRE(cur->c[1]->r == cur->r);
+				REQUIRE(t[t[i].c[1]].l == t[i].m+1);
+				REQUIRE(t[t[i].c[1]].r == t[i].r);
 
-				REQUIRE((cur->c[0]->l > cur->c[0]->r || v[cur->m] > v[cur->c[0]->m]));
-				REQUIRE((cur->c[1]->l > cur->c[1]->r || v[cur->m] > v[cur->c[1]->m]));
+				REQUIRE((t[t[i].c[0]].l > t[t[i].c[0]].r || v[t[i].m] > v[t[t[i].c[0]].m]));
+				REQUIRE((t[t[i].c[1]].l > t[t[i].c[1]].r || v[t[i].m] > v[t[t[i].c[1]].m]));
 			}
 		}
 	}

@@ -9,23 +9,20 @@ class CartesianTree {
 public:
 	struct Node {
 		int l, m, r; // inclusive ranges
-		std::array<Node*, 2> c;
+		std::array<int, 2> c;
 	};
 	std::vector<Node> nodes;
-	Node* root = nullptr;
+	int root = -1;
 
 	CartesianTree() {}
 
-	// We prohibit copies because naively copying would invalidate pointers.
-	CartesianTree(const CartesianTree& o) = delete;
-	CartesianTree& operator= (const CartesianTree& o) = delete;
+	Node& operator [] (int idx) { return nodes[idx]; }
+	const Node& operator [] (int idx) const { return nodes[idx]; }
 
-	// Note that the moved-from tree may have an invalid root.
-	CartesianTree(CartesianTree&& o) noexcept = default;
-	CartesianTree& operator= (CartesianTree&& o) noexcept = default;
+	int size() const { return int(nodes.size()); }
 
 private:
-	CartesianTree(std::vector<Node>&& nodes_, Node* root_) : nodes(std::move(nodes_)), root(root_) {}
+	CartesianTree(std::vector<Node>&& nodes_, int root_) : nodes(std::move(nodes_)), root(root_) {}
 
 public:
 
@@ -33,28 +30,28 @@ public:
 	template <typename T, typename Comp = std::less<T>>
 	static CartesianTree build_min_tree(const std::vector<T>& v, Comp comp = Comp()) {
 		std::vector<Node> nodes(v.size()*2+1);
-		std::vector<Node*> stk; stk.reserve(v.size());
-		Node* root = nullptr;
+		std::vector<int> stk; stk.reserve(v.size());
+		int root = -1;
 		for (int i = 0; i <= int(v.size()); i++) {
-			nodes[2*i].l = i;
-			nodes[2*i].r = i-1;
-			nodes[2*i].m = i-1;
-			nodes[2*i].c = {nullptr, nullptr};
-			Node* cur = &nodes[2*i];
-			while (!stk.empty() && (i == int(v.size()) || comp(v[i], v[stk.back()->m]))) {
-				Node* nxt = stk.back(); stk.pop_back();
-				nxt->c[1] = cur;
-				nxt->r = cur->r;
+			int cur = 2*i;
+			nodes[cur].l = i;
+			nodes[cur].r = i-1;
+			nodes[cur].m = i-1;
+			nodes[cur].c = {-1, -1};
+			while (!stk.empty() && (i == int(v.size()) || comp(v[i], v[nodes[stk.back()].m]))) {
+				int nxt = stk.back(); stk.pop_back();
+				nodes[nxt].c[1] = cur;
+				nodes[nxt].r = nodes[cur].r;
 				cur = nxt;
 			}
 			if (i == int(v.size())) {
 				root = cur;
 				break;
 			}
-			nodes[2*i+1].l = cur->l;
+			nodes[2*i+1].l = nodes[cur].l;
 			nodes[2*i+1].m = i;
 			nodes[2*i+1].c[0] = cur;
-			stk.push_back(&nodes[2*i+1]);
+			stk.push_back(2*i+1);
 		}
 		return {std::move(nodes), root};
 	}
