@@ -42,7 +42,7 @@ struct MCMF_SSPA {
 		dist[s] = 0;
 
 		its.assign(N, q.end());
-		its[s] = q.push({0, s});
+		its[s] = q.push({-(dist[s] - pi[s]), s});
 
 		while (!q.empty()) {
 			int i = q.top().second; q.pop();
