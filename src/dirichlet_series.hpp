@@ -34,8 +34,7 @@ class div_vector_layout {
 public:
 	int64_t N;
 	int64_t rt = floor_sqrt(N);
-	int64_t rt2 = rt - (rt * (rt + 1) > N);
-	int len = int(1 + rt + rt2);
+	int len = int(2 * rt + (rt * (rt+1) <= N));
 
 	constexpr div_vector_layout(int64_t N_ = 1) : N(N_) {}
 
@@ -53,14 +52,7 @@ public:
 	T* st = new T[layout.len+1]{}; // Allocate one extra on each side
 	T* en = st + layout.len;
 
-	div_vector() {}
-
-	template <typename F, std::enable_if_t<std::is_invocable_r_v<T, F, int64_t>, bool> = true>
-	div_vector(F f) {
-		for (int i = 1; i < layout.len; i++) {
-			st[i] = f(layout.get_bucket_bound(i));
-		}
-	}
+	div_vector() = default;
 
 	/* Rule of 5 declarations */
 	div_vector(div_vector const& o) {
@@ -185,11 +177,20 @@ public:
 	friend Derived operator / (Derived const& a, T const& t) { return Derived(a) / t; }
 };
 
+template <div_vector_layout const& layout, typename T> class dirichlet_series_values;
 template <div_vector_layout const& layout, typename T> class dirichlet_series_prefix;
+template <div_vector_layout const& layout, typename T> class dirichlet_series_binary_indexed_tree;
 
 template <div_vector_layout const& layout, typename T> class dirichlet_series_values : public div_vector<layout, T>, public vectorspace_mixin<layout, T, dirichlet_series_values<layout, T>> {
 public:
-	using div_vector<layout, T>::div_vector;
+	dirichlet_series_values() = default;
+
+	template <typename F, std::enable_if_t<std::is_invocable_r_v<T, F, int64_t, int64_t>, bool> = true>
+	dirichlet_series_values(F f) {
+		for (int i = 1; i < layout.len; i++) {
+			this->st[i] = f(layout.get_bucket_bound(i-1), layout.get_bucket_bound(i));
+		}
+	}
 
 	template <typename U> explicit dirichlet_series_values(dirichlet_series_values<layout, U> const& o) {
 		for (int i = 1; i < layout.len; i++) {
@@ -212,7 +213,14 @@ public:
 
 template <div_vector_layout const& layout, typename T> class dirichlet_series_prefix : public div_vector<layout, T>, public vectorspace_mixin<layout, T, dirichlet_series_prefix<layout, T>> {
 public:
-	using div_vector<layout, T>::div_vector;
+	dirichlet_series_prefix() = default;
+
+	template <typename F, std::enable_if_t<std::is_invocable_r_v<T, F, int64_t>, bool> = true>
+	dirichlet_series_prefix(F f) {
+		for (int i = 1; i < layout.len; i++) {
+			this->st[i] = f(layout.get_bucket_bound(i));
+		}
+	}
 
 	template <typename U> explicit dirichlet_series_prefix(dirichlet_series_prefix<layout, U> const& o) {
 		for (int i = 1; i < layout.len; i++) {
@@ -347,7 +355,7 @@ public:
 	// when the a_i are always 0/1.
 	//
 	// This runs in $O(n^{2/3})$ time, but requires small inverses (up to 1/120).
-	friend dirichlet_series_prefix euler_transform(dirichlet_series_prefix a_pref) {
+	friend dirichlet_series_prefix euler_transform_fraction(dirichlet_series_prefix a_pref) {
 		dirichlet_series_values<layout, T> a(std::move(a_pref));
 		// assert(a.st[1] == 0);
 
@@ -410,7 +418,7 @@ public:
 
 	// This computes the inverse of the pseudo-Euler transformation. See the
 	// comment on euler_transform() for more details.
-	friend dirichlet_series_prefix inverse_euler_transform(dirichlet_series_prefix a) {
+	friend dirichlet_series_prefix inverse_euler_transform_fraction(dirichlet_series_prefix a) {
 		dirichlet_series_values<layout, T> r;
 
 		// assert(a.st[1] == 1);
@@ -479,12 +487,125 @@ public:
 
 		return dirichlet_series_prefix(std::move(r));
 	}
+
+	friend dirichlet_series_prefix euler_transform_binary_indexed_tree(dirichlet_series_prefix a_pref) {
+		// TODO
+		dirichlet_series_binary_indexed_tree<layout, T> a(std::move(a_pref));
+		return dirichlet_series_prefix(std::move(a));
+	}
+
+	friend dirichlet_series_prefix inverse_euler_transform_binary_indexed_tree(dirichlet_series_prefix a_pref) {
+		// TODO
+		dirichlet_series_binary_indexed_tree<layout, T> a(std::move(a_pref));
+		int x;
+		for (x = 2; layout.N / x / x / x > 0; x++) {
+		}
+		return dirichlet_series_prefix(std::move(a));
+	}
 };
 
 // TODO: This will be useful for sparse convolution, which is nice for e.g. exp/log/prime counting
-template <div_vector_layout const& layout, typename T> class dirichlet_series_seg : public div_vector<layout, T>, public vectorspace_mixin<layout, T, dirichlet_series_seg<layout, T>> {
+template <div_vector_layout const& layout, typename T> class dirichlet_series_binary_indexed_tree : public div_vector<layout, T>, public vectorspace_mixin<layout, T, dirichlet_series_binary_indexed_tree<layout, T>> {
 public:
-	using div_vector<layout, T>::div_vector;
+	dirichlet_series_binary_indexed_tree() = default;
+
+	template <typename U> explicit dirichlet_series_binary_indexed_tree(dirichlet_series_binary_indexed_tree<layout, U> const& o) {
+		for (int i = 1; i < layout.len; i++) {
+			this->st[i] = T(o.st[i]);
+		}
+	}
+
+	explicit dirichlet_series_binary_indexed_tree(dirichlet_series_prefix<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
+		for (int i = layout.len - 1; i >= 1; i--) {
+			this->st[i] -= this->st[i & (i-1)];
+		}
+	}
+	explicit dirichlet_series_binary_indexed_tree(dirichlet_series_prefix<layout, T> const& o) {
+		for (int i = layout.len - 1; i >= 1; i--) {
+			this->st[i] = o.st[i] - o.st[i & (i-1)];
+		}
+	}
+	explicit operator dirichlet_series_prefix<layout, T> () && {
+		dirichlet_series_prefix<layout, T> r;
+		swap(static_cast<div_vector<layout, T>&>(r), static_cast<div_vector<layout, T>&>(*this));
+		for (int i = 1; i < layout.len; i++) {
+			r.st[i] += r.st[i & (i-1)];
+		}
+		return r;
+	}
+	explicit operator dirichlet_series_prefix<layout, T> () const& {
+		dirichlet_series_prefix<layout, T> r;
+		for (int i = 1; i < layout.len; i++) {
+			r.st[i] = this->st[i] + r.st[i & (i-1)];
+		}
+		return r;
+	}
+
+	T get_bucket_prefix(int a) const {
+		T r = T();
+		for (; a > 0; a -= a & -a) {
+			r += this->st[a];
+		}
+		return r;
+	}
+	T get_prefix(int64_t v) const {
+		return get_bucket_prefix(layout.get_value_bucket(v));
+	}
+	void increment_bucket_suffix(int a, T d) {
+		for (; a < layout.len; a += a & -a) {
+			this->st[a] += d;
+		}
+	}
+	void increment_suffix(int64_t v, T d) const {
+		return increment_bucket_suffix(layout.get_value_bucket(v), d);
+	}
+
+	// These 4 functions facilitate some simple sparse convolution.
+	// They each take O(sqrt(N/x) log(N)) time.
+
+	// multiply by (1 + w x^s)
+	void sparse_mul_at_most_one(int64_t x, T w) {
+		assert(x > 1);
+		int64_t j = 1;
+		T cur = get_bucket_prefix(int(j <= layout.rt / x ? layout.len - j * x : layout.N / x / j));
+		for (; (j+1) <= layout.N / x / (j+1); j++) {
+			T nxt = get_bucket_prefix(int(j + 1 <= layout.rt / x ? layout.len - (j+1) * x : layout.N / x / (j+1)));
+			increment_bucket_suffix(int(layout.len - j), w * (cur - nxt));
+			cur = nxt;
+		}
+		for (int64_t i = layout.N / x / j; i > 0; i--) {
+			T nxt = get_bucket_prefix(int(i-1));
+			increment_bucket_suffix(int(i <= layout.rt / x ? i * x : layout.len - layout.N / x / i), w * (cur - nxt));
+			cur = nxt;
+		}
+	}
+
+	// multiply by 1/(1 - w x^s) = 1 + wx^s + w^2 (x^2)^s + ...
+	void sparse_mul_unlimited(int64_t x, T w) {
+		assert(x > 1);
+		T prv = T();
+		int64_t i;
+		for (i = 1; i <= layout.N / x / i; i++) {
+			T cur = get_bucket_prefix(int(i));
+			increment_bucket_suffix(int(i <= layout.rt / x ? i * x : layout.len - layout.N / x / i), w * (cur - prv));
+			prv = cur;
+		}
+		for (int64_t j = layout.N / x / i; j >= 1; j--) {
+			T cur = get_bucket_prefix(int(j <= layout.rt / x ? layout.len - j * x : layout.N / x / j));
+			increment_bucket_suffix(int(layout.len - j), w * (cur - prv));
+			prv = cur;
+		}
+	}
+
+	// divide by (1 + w x^s)
+	void sparse_div_at_most_one(int64_t x, T w) {
+		return sparse_mul_unlimited(x, -w);
+	}
+
+	// divide by 1/(1 - w x^s) = 1 + wx^s + w^2 (x^2)^s + ...
+	void sparse_div_unlimited(int64_t x, T w) {
+		return sparse_mul_at_most_one(x, -w);
+	}
 };
 
 }
