@@ -248,33 +248,47 @@ private:
 	// are allowed to be equal to this.)
 	template <typename F>
 	void convolve_helper(dirichlet_series_prefix const& a, dirichlet_series_prefix const& b, F f) {
+		// We roughly want to apply this[N/z] += a_val[x] * b_val[y] for all xyz <= N
+		//
+		// We'll split into the following cases (WLOG x <= y):
+		// 0a. x = 1 or y = 1
+		// 0b. x = y > 1
+		// 1. x < y <= z <= N/x/y
+		// 2. max(x, z) < y <= N/x/z
+
 		T cur_sum = a.st[1] * b.st[1];
 		for (int i = 2; i < layout.len; i++) {
 			cur_sum += this->st[i];
 
-			// Handle cases with N/(z+1) < x * y <= N/z with max(x,y) > z, where z = layout.len - i
-			if (i > layout.rt) {
+			// Case 2: max(x, z) < y <= N/x/z
+			// x^2 <= N / z
+			// x <= N / z / z
+			if (i >= layout.len - layout.rt) {
 				int z = int(layout.len - i);
-				int64_t lo = layout.N/(z+1), hi = layout.N/z;
-				int64_t rt_over_z = layout.rt / z;
-				int64_t rt_over_z1 = layout.rt / (z+1);
-				int64_t x_max = layout.N / z / (z+1);
+				assert(z <= layout.rt);
+				int64_t rt_over_z = layout.rt/z;
+				int64_t N_over_z = layout.N/z;
+				int64_t x_max = layout.N / z / z;
 
-				for (int64_t x = 2; x * x <= hi && x <= x_max; x++) {
-					int yhi_idx = (x <= rt_over_z) ? layout.len - int(x*z) : int(hi / x);
-
-					bool is_small = x * x <= lo;
-					int ylo_idx = is_small
-						? ((x <= rt_over_z1) ? layout.len - int(x*(z+1)) : int(lo / x))
-						: int(x - 1);
+				T tot_val = T();
+				for (int64_t x = 2; x * x <= N_over_z && x <= x_max; x++) {
+					// ylo = std::max(x, z)
+					int ylo_idx = std::max(int(x), z);
+					// yhi = N / x / z
+					int yhi_idx = int(x <= rt_over_z ? layout.len - x * z : N_over_z / x);
+					assert(ylo_idx <= yhi_idx);
 
 					T ax = a.st[x] - a.st[x-1];
 					T bx = b.st[x] - b.st[x-1];
+					T ay = a.st[yhi_idx] - a.st[ylo_idx];
+					T by = b.st[yhi_idx] - b.st[ylo_idx];
 
-					cur_sum += ax * (b.st[yhi_idx] - b.st[ylo_idx]) + (a.st[yhi_idx] - a.st[ylo_idx]) * bx;
-					if (!is_small) {
-						cur_sum -= ax * bx;
-					}
+					T v = ax * by + ay * bx;
+					tot_val += v;
+				}
+				cur_sum += tot_val;
+				if (i+1 < layout.len) {
+					this->st[i+1] -= tot_val;
 				}
 			}
 
@@ -283,26 +297,30 @@ private:
 			T ai = a.st[i] - a.st[i-1];
 			T bi = b.st[i] - b.st[i-1];
 
+			// Case 0a: x = 1
 			cur_sum += ai * b.st[1] + a.st[1] * bi;
 
-			// Handle cases with x * i with 2 <= x <= i <= N/x/i
 			if (i <= layout.rt) {
+				// Case 1: x < y <= z <= N/x/y (y = i)
+				// xy <= z <= N/y
 				int64_t rt_over_i = layout.rt / i;
 				int64_t N_over_i = layout.N / i;
-				int x_max = int(std::min<int64_t>(N_over_i / i, i));
+				int x_max = int(std::min<int64_t>(N_over_i / i, i-1));
+				T tot_sub = T();
 				for (int x = 2; x <= x_max; x++) {
 					T v;
-					if (x == i) {
-						v = ai * bi;
-					} else {
-						v = ai * (b.st[x] - b.st[x-1]) + (a.st[x] - a.st[x-1]) * bi;
-					}
+					v = ai * (b.st[x] - b.st[x-1]) + (a.st[x] - a.st[x-1]) * bi;
 
-					if (x <= rt_over_i) {
-						this->st[x*i] += v;
-					} else {
-						this->en[-(N_over_i/x)] += v;
-					}
+					int zlo_idx = int(x <= rt_over_i ? x * i : layout.len - (N_over_i / x));
+					this->st[zlo_idx] += v;
+					tot_sub += v;
+				}
+				this->en[-(i-1)] -= tot_sub;
+
+				// Case 0b: x = y > 1
+				{
+					int zlo_idx = int(i <= rt_over_i ? i * i : layout.len - (N_over_i / i));
+					this->st[zlo_idx] += ai * bi;
 				}
 			}
 		}
