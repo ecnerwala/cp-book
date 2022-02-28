@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
@@ -507,9 +508,38 @@ public:
 	}
 
 	friend dirichlet_series_prefix euler_transform_binary_indexed_tree(dirichlet_series_prefix a_pref) {
-		// TODO
-		dirichlet_series_binary_indexed_tree<layout, T> a(std::move(a_pref));
-		return dirichlet_series_prefix(std::move(a));
+		int x = 2;
+		while (x <= layout.N / x / x) x++;
+
+		dirichlet_series_prefix r_pref;
+		for (int i = x; i < layout.len; i++) {
+			r_pref.st[i] = a_pref.st[i] - a_pref.st[x-1];
+		}
+
+		for (int i = x; i <= layout.rt; i++) {
+			T vi = a_pref.st[i] - a_pref.st[i-1];
+			if (vi == 0) continue;
+
+			int64_t N_over_i = layout.N / i;
+			int64_t rt_over_i = layout.rt / i;
+			int64_t max_z = N_over_i / i;
+			for (int z = 1; z <= max_z; z++) {
+				int jlo_idx = i-1;
+				int jhi_idx = int(z <= rt_over_i ? layout.len - i * z : N_over_i / z);
+				assert(jlo_idx < jhi_idx);
+				T v = vi * (a_pref.st[jhi_idx] - a_pref.st[jlo_idx]);
+				r_pref.st[layout.len-z] += v;
+			}
+		}
+
+		dirichlet_series_binary_indexed_tree<layout, T> r(std::move(r_pref));
+		r.increment_bucket_suffix(1, T(1));
+		for (int i = x-1; i >= 2; i--) {
+			T cur = a_pref.st[i] - a_pref.st[i-1];
+			if (cur == 0) continue;
+			r.sparse_mul_unlimited(i, cur);
+		}
+		return dirichlet_series_prefix(std::move(r));
 	}
 
 	friend dirichlet_series_prefix inverse_euler_transform_binary_indexed_tree(dirichlet_series_prefix a_pref) {

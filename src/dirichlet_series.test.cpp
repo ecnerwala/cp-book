@@ -135,7 +135,7 @@ TEMPLATE_TEST_CASE("Dirichlet series euler transform", "[dirichlet]", modnum<int
 			INFO("i = " << i);
 			INFO("bound = " << layout.get_bucket_bound(i));
 			REQUIRE(a.st[i] == b.st[i]);
-			//REQUIRE(a.st[i] == b2.st[i]);
+			REQUIRE(a.st[i] == b2.st[i]);
 		}
 	}
 }
