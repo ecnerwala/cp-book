@@ -268,15 +268,15 @@ private:
 				assert(z <= layout.rt);
 				int64_t rt_over_z = layout.rt/z;
 				int64_t N_over_z = layout.N/z;
-				int64_t x_max = layout.N / z / z;
+				int64_t x_max = N_over_z/(z+1);
 
 				T tot_val = T();
-				for (int64_t x = 2; x * x <= N_over_z && x <= x_max; x++) {
+				for (int64_t x = 2; x * (x+1) <= N_over_z && x <= x_max; x++) {
 					// ylo = std::max(x, z)
 					int ylo_idx = std::max(int(x), z);
 					// yhi = N / x / z
 					int yhi_idx = int(x <= rt_over_z ? layout.len - x * z : N_over_z / x);
-					assert(ylo_idx <= yhi_idx);
+					assert(ylo_idx < yhi_idx);
 
 					T ax = a.st[x] - a.st[x-1];
 					T bx = b.st[x] - b.st[x-1];
