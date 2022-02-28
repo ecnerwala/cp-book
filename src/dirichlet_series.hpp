@@ -518,9 +518,9 @@ public:
 		dirichlet_series_binary_indexed_tree<layout, T> a_bit(std::move(a_pref));
 		dirichlet_series_values<layout, T> r;
 
-		// First, use the BIT to clear up to N^1/4
+		// First, use the BIT to clear up to N^1/3
 		int x;
-		for (x = 2; int64_t(x) * int64_t(x) <= layout.rt; x++) {
+		for (x = 2; x <= layout.N / x / x; x++) {
 			T cur = a_bit.get_bucket_prefix(x) - T(1);
 			if (cur == 0) continue;
 			r.st[x] = cur;
@@ -528,86 +528,30 @@ public:
 		}
 		a_pref = dirichlet_series_prefix<layout, T>(std::move(a_bit));
 
-		// Now, a_pref contains terms of the form r[i], r[i] * r[j], and r[i] * r[j] * r[k] (i <= j <= k)
-		// The PIE works out to:
-		//   +1 * a[i] for each x <= i
-		//   -1 * a[i] * a[j] for each x <= i <= j
-		//   +2 * a[i] * a[j] * a[k] for each x <= i < j < k
-		//   +1 * a[i] * a[j] * a[k] for each x <= i < j = k
-		//   +1 * a[i] * a[j] * a[k] for each x <= i = j < k
+		// Now, a_pref contains terms of the form r[i] or r[i] * r[j], so let's
+		// subtract out the semiprimes.
+		// Note that N^1/3 < x <= i <= j, so N/i/j <= N^1/3 < x
 
-		// a[i]
 		for (int i = x; i < layout.len; i++) {
 			T vi = a_pref.st[i] - a_pref.st[i-1];
 			r.st[i] = vi;
 		}
 
-		// We compute a[i] <= a[j] similarly to convolve_helper: r_pref[N/z] += a[i] * a[j] in 2 cases:
-		//  Case 0: i = j
-		//  Case 1: i < j <= z <= N/i/j
-		//  Case 2: max(i, z) < j <= N/i/z
-		for (int i = x; i <= layout.rt; i++) {
-			T vi = r.st[i];
-
-			if (vi == 0) continue;
-
-			int64_t N_over_i = layout.N / i;
-
-			// Case 1
-			T tot_sub = T();
-			int max_j = int(std::min<int64_t>(N_over_i / i, (i-1)));
-			for (int j = x; j <= max_j; j++) {
-				T v = vi * r.st[j];
-				if (v == 0) continue;
-
-				r.st[layout.len - N_over_i / j] -= v;
-				tot_sub += v;
-			}
-			r.st[layout.len - (i-1)] += tot_sub;
-
-			// Case 0
-			r.st[layout.len - N_over_i / i] -= vi * vi;
-		}
-
-		// Case 2
+		// We want i <= j <= N/i/z
 		for (int i = x; i <= layout.rt; i++) {
 			T vi = r.st[i];
 			if (vi == 0) continue;
 
 			int64_t N_over_i = layout.N / i;
 			int64_t rt_over_i = layout.rt / i;
-			int64_t max_z = N_over_i / (i+1);
-			for (int z = 1; int64_t(z) * int64_t(z+1) <= N_over_i && z <= max_z; z++) {
-				int jlo_idx = std::max(i, z);
+			int64_t max_z = N_over_i / i;
+			for (int z = 1; z <= max_z; z++) {
+				int jlo_idx = i-1;
 				int jhi_idx = int(z <= rt_over_i ? layout.len - i * z : N_over_i / z);
 				assert(jlo_idx < jhi_idx);
 				T v = vi * (a_pref.st[jhi_idx] - a_pref.st[jlo_idx]);
 				r.en[-z] -= v;
 				if (z > 0) r.en[-(z-1)] += v;
-			}
-		}
-
-		// TODO: WHOOPS this is N^3/4
-		// Now, we need r_pref[N/z] += a[i] a[j] a[k] * {0|1|2} for x <= i <= j <= k and ijkz <= N
-		// Since x > N^1/4, then z < x <= i <= j <= k <= N/i/j/z <= N^1/2
-		for (int j = x; j <= layout.N / x / j; j++) {
-			T vj = r.st[j];
-			if (vj == 0) continue;
-			int N_over_j2 = int(layout.N / j / j);
-			int max_i = std::min(j, N_over_j2);
-			for (int i = x; i <= max_i; i++) {
-				T vi = r.st[i];
-				if (vi == 0) continue;
-				int max_z = N_over_j2 / i;
-				for (int z = 1; z <= max_z; z++) {
-					int max_k = int(layout.N / j / i / z);
-					assert(max_k >= j);
-					T k_sum = a_pref.st[max_k] - a_pref.st[j];
-
-					T v = vi * vj * (i == j ? k_sum : k_sum * 2 + vj);
-					r.en[-z] += v;
-					if (z > 0) r.en[-(z-1)] -= v;
-				}
 			}
 		}
 
