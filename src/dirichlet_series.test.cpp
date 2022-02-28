@@ -126,7 +126,7 @@ TEMPLATE_TEST_CASE("Dirichlet series euler transform", "[dirichlet]", modnum<int
 			INFO("i = " << i);
 			INFO("bound = " << layout.get_bucket_bound(i));
 			REQUIRE(primes_slow.st[i] == primes.st[i]);
-			//REQUIRE(primes_slow.st[i] == primes2.st[i]);
+			REQUIRE(primes_slow.st[i] == primes2.st[i]);
 		}
 
 		dv_prefix<num> b = euler_transform_fraction(primes_slow);
