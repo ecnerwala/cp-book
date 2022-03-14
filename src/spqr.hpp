@@ -159,26 +159,28 @@ struct spqr_tree {
 	std::vector<int> depth;
 
 private:
+	// Pairs of nxt, e
 	// Negative e means new block; otherwise, it's 2*e + (has_nontrivial_lowval2)
-	std::vector<std::vector<std::pair<int, int>>> adj;
+	std::vector<std::pair<int, int>> adj_lists;
+	std::vector<array_range_t<std::pair<int, int>, &spqr_tree::adj_lists>> adj;
 
 	struct bucket_edge_t {
-		int e; int cur, nxt;
+		int v; int e; int cur, nxt;
 	};
-	std::vector<std::vector<bucket_edge_t>> lowval_buckets;
+	std::vector<bucket_edge_t> bucket_edges;
 
 	std::pair<int, int> dfs_lowval(int cur, int d, int prvE) {
 		depth[cur] = d;
 		int v1 = d, v2 = d;
-		for (auto [nxt, e] : adj[cur]) {
+		for (auto [nxt, e] : adj[cur].bind(*this)) {
 			if (e == prvE) continue;
 			if (depth[nxt] == -1) {
 				const auto [n1, n2] = dfs_lowval(nxt, d+1, e);
 
 				if (n1 >= d) {
-					lowval_buckets[0].push_back({~e, cur, nxt});
+					bucket_edges.push_back({0, ~e, cur, nxt});
 				} else {
-					lowval_buckets[1 + n1 * 2 + (n2 < d)].push_back({2*e + (n2 < d), cur, nxt});
+					bucket_edges.push_back({1 + n1 * 2 + (n2 < d), 2*e + (n2 < d), cur, nxt});
 				}
 
 				if (n1 < v1) {
@@ -193,9 +195,9 @@ private:
 				int nd = depth[nxt];
 				if (nd == d) {
 					// Self-loop
-					lowval_buckets[0].push_back({~e, cur, nxt});
+					bucket_edges.push_back({0, ~e, cur, nxt});
 				} else {
-					lowval_buckets[1 + nd * 2].push_back({2*e, cur, nxt});
+					bucket_edges.push_back({1 + nd * 2, 2*e, cur, nxt});
 				}
 
 				if (nd < v1) {
@@ -220,41 +222,57 @@ private:
 					deg[v]++;
 				}
 			}
-			adj = std::vector<std::vector<std::pair<int, int>>>(NV);
+			adj.resize(NV);
+			int cur = 0;
 			for (int i = 0; i < NV; i++) {
-				adj[i].reserve(deg[i]);
+				adj[i].st = adj[i].en = cur;
+				cur += deg[i];
 			}
+			adj_lists.resize(cur);
 		}
 		for (int e = 0; e < int(edges.size()); e++) {
 			auto [u, v] = edges[e];
-			adj[u].push_back({v, e});
+			adj_lists[adj[u].en++] = {v, e};
 			if (u != v) {
-				adj[v].push_back({u, e});
+				adj_lists[adj[v].en++] = {u, e};
 			}
 		}
 
 		depth = std::vector<int>(NV, -1);
 
 		// Bucketed so that bridges come first, then BCCs, then children from shallowest to deepest lowval
-		lowval_buckets = std::vector<std::vector<bucket_edge_t>>(1 + NV * 2);
+		bucket_edges.reserve(NE);
 
 		for (int rt = 0; rt < NV; rt++) {
 			if (root != -1 && rt != root) continue;
 			if (depth[rt] != -1) continue;
 			dfs_lowval(rt, 0, -1);
 		}
+		assert(int(bucket_edges.size()) == NE);
 
 		for (auto& v : adj) {
-			v.clear();
-		}
-		for (const auto& bucket : lowval_buckets) {
-			for (auto [e, cur, nxt] : bucket) {
-				adj[cur].push_back({nxt, e});
-			}
+			v.en = v.st;
 		}
 
-		// Free this; literally no one cares about this
-		lowval_buckets = {};
+		std::vector<int> bucket_st(1 + NV * 2);
+		for (int i = 0; i < int(bucket_edges.size()); i++) {
+			++bucket_st[bucket_edges[i].v];
+		}
+		{
+			int cur = 0;
+			for (int i = 0; i < int(bucket_st.size()); i++) {
+				bucket_st[i] = std::exchange(cur, cur + bucket_st[i]);
+			}
+			assert(cur == int(bucket_edges.size()));
+		}
+		std::vector<bucket_edge_t> bucket_edges_2(bucket_edges.size());
+		for (int i = 0; i < int(bucket_edges.size()); i++) {
+			bucket_edges_2[bucket_st[bucket_edges[i].v]++] = bucket_edges[i];
+		}
+		bucket_edges = {};
+		for (auto [_, e, cur, nxt] : bucket_edges_2) {
+			adj_lists[adj[cur].en++] = {nxt, e};
+		}
 	}
 
 	// Tree edges have v = {child, parent}
@@ -469,7 +487,7 @@ private:
 
 	void dfs_spqr(int cur, int cur_low) {
 		int cur_depth = depth[cur];
-		for (auto [nxt, e] : adj[cur]) {
+		for (auto [nxt, e] : adj[cur].bind(*this)) {
 			if (e < 0) continue;
 			bool is_type_1 = !(e & 1);
 			e >>= 1;
@@ -659,7 +677,7 @@ private:
 	std::vector<int> vertex_blocks_buf;
 	void dfs_block(int cur) {
 		int buf_st = int(vertex_blocks_buf.size());
-		for (auto [nxt, e] : adj[cur]) {
+		for (auto [nxt, e] : adj[cur].bind(*this)) {
 			assert(depth[nxt] <= depth[cur] + 1);
 			if (depth[nxt] < depth[cur]) continue;
 			if (nxt != cur) {
@@ -761,6 +779,7 @@ public:
 		build_spqr();
 
 		adj = {};
+		adj_lists = {};
 		// Leave depth since it's sometimes useful
 		//depth = {};
 	}
