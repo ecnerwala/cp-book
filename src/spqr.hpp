@@ -23,7 +23,7 @@
  *  Every real edge is stored in a Q node. The Q node for edge e is numbered e
  *  and contains virtual edge e. You can test that virtual edge corresponds
  *  to a single real edge using `tree.vedges[ve].o_type == node_type::Q` or
- *  indirectly `tree.vedges[ve].o_ve < NE`.
+ *  less directly `tree.vedges[ve].o_ve < NE`.
  *
  *  We have several named objects: Vertices, Components (CCs), Blocks (BCCs),
  *  Nodes (TCCs), and VirtualEdges (which include edges as described above).
@@ -35,7 +35,8 @@
  *  The tree is specified unrooted, but is implicitly rooted: everything is
  *  numbered in postorder (except for Q nodes/their virtual edges). In
  *  particular, Nodes contain intervals of VirtualEdges, Blocks contain
- *  intervals of Nodes, and so on.
+ *  intervals of Nodes, and so on. Note that the Block/Component intervals do
+ *  not include their Q Nodes/VEdges!
  *
  *  More specifically, vectors of adjacent/contained objects are all
  *  represented as range_t's, representing subintervals of the corresponding
@@ -63,6 +64,9 @@ struct spqr_tree {
 	struct range_t {
 		int st = -1, en = -1;
 		int size() const { return en - st; }
+		bool contains(int v) const { return st <= v && v < en; }
+	};
+	struct iterable_range_t : public range_t {
 		struct iterator {
 			int v;
 			int operator * () const { return v; }
@@ -72,15 +76,20 @@ struct spqr_tree {
 		iterator begin() const { return iterator{st}; }
 		iterator end() const { return iterator{en}; }
 	};
+	template <typename T> struct bound_array_range_t {
+		typename std::vector<T>::const_iterator st, en;
+		int size() const { return int(en - st); }
+		auto begin() const { return st; }
+		auto end() const { return en; }
+	};
 	template <typename T, std::vector<T> spqr_tree::* array> struct array_range_t : public range_t {
-		struct bound_array_range_t {
-			typename std::vector<T>::const_iterator st, en;
-			int size() const { return en - st; }
-			auto begin() const { return st; }
-			auto end() const { return en; }
-		};
-		bound_array_range_t bind(const spqr_tree& tree) const {
-			return bound_array_range_t{(tree.*array).begin() + st, (tree.*array).begin() + en};
+		bound_array_range_t<T> bind(const spqr_tree& tree) const {
+			return {(tree.*array).begin() + st, (tree.*array).begin() + en};
+		}
+	};
+	template <typename T, std::vector<T> spqr_tree::* array> struct enumerable_array_range_t : public iterable_range_t {
+		bound_array_range_t<T> bind(const spqr_tree& tree) const {
+			return {(tree.*array).begin() + st, (tree.*array).begin() + en};
 		}
 	};
 
@@ -109,16 +118,16 @@ struct spqr_tree {
 		// TODO: maybe we want vertex_nodes or even vertex_block_nodes or something
 	};
 	struct component_t {
-		array_range_t<block_t, &spqr_tree::blocks> blocks;
-		array_range_t<node_t, &spqr_tree::nodes> nodes;
-		array_range_t<vedge_t, &spqr_tree::vedges> vedges;
+		enumerable_array_range_t<block_t, &spqr_tree::blocks> blocks;
+		enumerable_array_range_t<node_t, &spqr_tree::nodes> nodes;
+		enumerable_array_range_t<vedge_t, &spqr_tree::vedges> vedges;
 		array_range_t<int, &spqr_tree::component_vertices> component_vertices;
 	};
 
 	struct block_t {
 		int component = -1;
-		array_range_t<node_t, &spqr_tree::nodes> nodes;
-		array_range_t<vedge_t, &spqr_tree::vedges> vedges;
+		enumerable_array_range_t<node_t, &spqr_tree::nodes> nodes;
+		enumerable_array_range_t<vedge_t, &spqr_tree::vedges> vedges;
 		array_range_t<int, &spqr_tree::block_vertices> block_vertices;
 	};
 
@@ -130,7 +139,7 @@ struct spqr_tree {
 		node_type type;
 		int component = -1;
 		int block = -1;
-		array_range_t<vedge_t, &spqr_tree::vedges> vedges;
+		enumerable_array_range_t<vedge_t, &spqr_tree::vedges> vedges;
 		array_range_t<int, &spqr_tree::node_vertices> node_vertices;
 	};
 
@@ -260,7 +269,7 @@ private:
 	};
 	std::vector<vestack_t> vestack;
 
-	using vestack_range_t = array_range_t<vestack_t, &spqr_tree::vestack>;
+	using vestack_range_t = enumerable_array_range_t<vestack_t, &spqr_tree::vestack>;
 
 	struct estack_t {
 		std::array<int, 2> vs;
@@ -590,9 +599,6 @@ private:
 			cur_low = cur;
 		}
 
-		component_vertices.push_back(cur);
-		vertices[cur].component = cur_component;
-
 		block_vertices.push_back(cur);
 		vertex_blocks[vertices[cur].vertex_blocks.en++] = cur_block;
 	}
@@ -677,12 +683,14 @@ private:
 		if (depth[cur] > 0) {
 			vertex_blocks.push_back(-1);
 		}
+
+		component_vertices.push_back(cur);
+		vertices[cur].component = cur_component;
 	}
 
 	void build_spqr() {
 		vertices.resize(NV);
 		vertex_blocks.reserve(NV + NE);
-		vertex_blocks_buf.reserve(NV + NE);
 
 		components.reserve(NV);
 		component_vertices.reserve(NV);
@@ -703,6 +711,7 @@ private:
 		NVE = NE;
 		vedges.resize(NVE);
 
+		vertex_blocks_buf.reserve(NE);
 		vestack.reserve(NE);
 		estack.reserve(NE);
 		tstack.reserve(NE);
@@ -720,8 +729,6 @@ private:
 
 			cur_component = component;
 			dfs_block(rt);
-			component_vertices.push_back(rt);
-			vertices[rt].component = cur_component;
 			cur_component = -1;
 
 			c.blocks.en = int(blocks.size());
@@ -730,6 +737,7 @@ private:
 			c.component_vertices.en = int(component_vertices.size());
 		}
 
+		vertex_blocks_buf = {};
 		vestack = {};
 		estack = {};
 		tstack = {};
