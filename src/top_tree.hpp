@@ -495,13 +495,16 @@ struct sample_top_tree_node : public top_tree_node_base<sample_top_tree_node> {
 		if (lazy_flip_path) {
 			assert(is_path);
 			if (!is_vert) {
-				if (c[0]) c[0]->do_flip_path();
-				if (c[1]) c[1]->do_flip_path();
+				c[0]->do_flip_path();
+				c[1]->do_flip_path();
 			}
 			lazy_flip_path = false;
 		}
 	}
 
+	// NOTE: You may assume downdate() has been called on the current node, but
+	// it may not have been called on the children! In particular, be careful
+	// when accessing grandchildren information.
 	void update() {
 		if (is_path) {
 		} else {
