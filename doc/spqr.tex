@@ -1,0 +1,123 @@
+\documentclass[letterpaper]{article}
+\usepackage{url}
+\usepackage[colorlinks,urlcolor=blue,citecolor=blue,breaklinks]{hyperref}
+\usepackage{andrewsym}
+
+\begin{document}
+
+\title{SPQR Trees for Fun and Profit}
+\author{ecnerwala}
+\date{\today}
+
+\maketitle
+
+\tableofcontents
+
+\section{Introduction}
+
+Recently, a few problems have appeared which ask about removing up to 2 vertices
+and/or edges from a graph to separate it into disconnected components
+\todo{Links}. We can think of these 2-vertex or 2-edge cuts as one step
+generalizations of articulation vertices (1-vertex cuts) or bridge edges (1-edge
+cuts), which can be found using Tarjan's algorithm for biconnected components
+(BCCs); in fact, the size 2 cuts divide the graph into \emph{triconnected components}.
+One representation of biconnected components is the \emph{Block-Cut tree} (BC
+tree), which describes all possible articulation vertices and how they split the
+tree. The generalization of the BC tree to represent 2-vertex cuts/triconnected
+components is the \emph{SPQR tree}\footnote{SPQR doesn't stand for anything,
+it's named after the 4 node types in the tree.}, which can actually be
+constructed in linear time!
+
+We'll begin in Section~\ref{sec:intuitive} with an intuitive explanation of the
+SPQR tree structure. Then, in Section~\ref{sec:basics}, we'll go over some basic
+definitions generalized from BCCs and Tarjan's algorithm. In
+Section~\ref{sec:algorithm}, we'll present the linear-time algorithm. Finally,
+in Section~\ref{sec:planarity}, we'll take a detour and extend our algorithm to
+also perform planarity testing and find/represent all planar embeddings of the
+graph.
+
+\section{Intuitive SQPR}
+\label{sec:intuitive}
+
+\begin{note}
+There are 2 related notions of connectivity:
+$k$-vertex-connectivity refers to the lack of nontrivial $(k-1)$-vertex-cuts,
+and $k$-edge-connectivity refers to the lack of nontrivial $(k-1)$-edge-cuts.
+\todo{diagram}
+An edge-cut of size $k-1$ typically results in a vertex-cut of size $k-1$ by
+taking one endpoint of each edge, so in general, $k$-vertex-connectivity is the
+harder of the two problems \todo{footnote about general reduction algorithm}.
+Today, we'll be looking at \emph{$3$-vertex-connectivity}, i.e.\ looking for $2$-vertex
+cuts (which generalizes articulation vertices, i.e.\ $1$-vertex cuts).
+\end{note}
+
+In order to represent biconnected components, we typically build the
+\emph{Block-Cut Tree} (BC tree) of a (connected) graph. This is a bipartite tree: there is a
+\emph{cut} node for each vertex of the original graph, and a \emph{block} node
+for each biconnected component of edges, connected to all cut nodes
+corresponding to vertices that it touches. By definition of biconnected
+components, this must form a tree (not have cycles), otherwise we'd have two
+biconnected components which cannot be separated by a single-vertex cut.
+
+SPQR trees are a generalization of BC trees to represent all \emph{triconnected}
+components of a (biconnected) graph. SPQR doesn't stand for anything, but
+instead refers to the 4 types of nodes in an SPQR tree. Unlike BC trees, a
+``cut'' in an SPQR tree contains 2 vertices, so we don't directly include cut
+vertices. Instead, if we identify a 2-vertex cut which splits the graph in 2, we
+can represent it by adding a \emph{virtual edge} in the adjacent ``block'' nodes
+(triconnected components) and linking the 2 virtual edges together; then, the
+link is represented by an edge in the SPQR tree.
+
+\todo{Diagram}
+
+The procedure shown above of repeatedly splitting the graph at 2-vertex-cuts
+does give a tree of triconnected component, but doesn't quite produce the SPQR
+tree. Note that we may end up with some very simple ``minimal'' components which
+are barely triconnected: 3 parallel edges or a triangle graph (a $K_3$).
+Furthermore, we may have many of these next to each other, which can combine to
+form many parallel edges or a large cycle, respectively. \todo{Diagram}
+
+Note that either merged structure can be broken down in several orders, which
+makes the naive triconnectivity tree non-unique. However, if we use the merged
+versions as nodes, then the tree turns out to be unique! \todo{Proof?} This is
+our SPQR tree. The four node types are:
+\begin{description}
+	\item[P node] 3 or more parallel edges. $P$ stands for ``parallel''.
+	\item[S node] 3 or more edges in a cycle. $S$ stands for ``series''.
+	\item[R node] Any other nontrivial/large region. $R$ stands for ``rigid'',
+		since $R$ blocks have unique planar embeddings (if planar).
+	\item[Q node] A degenerate node consisting of a single non-virtual edge and
+		a single virtual edge. Some definitions will split \emph{all}
+		non-virtual edges into $Q$ nodes, while others will only use $Q$ nodes
+		to represent small/degenerate graphs with at most $2$ edges.
+\end{description}
+
+\section{BC/SQPR Basics}
+\label{sec:basics}
+
+The basic construct used in the BC tree or SPQR tree algorithms is the \emph{DFS
+tree}\footnote{This has a few other names, I've seen it referred to as a
+\emph{palm tree} or a \emph{Tr\`{e}maux tree}, but I like DFS tree.}.
+Intuitively, a DFS tree of a graph is the (rooted) spanning tree attained from a
+depth-first-search of the graph. The key property of DFS trees is that all
+non-tree edges of the graph must connect an ancestor/child pair; otherwise, the
+DFS would've visited the later vertex in the subtree of the earlier. In fact,
+this property is necessary and sufficient: there exists some DFS which produces
+the tree if and only if all non-tree edges connect ancestor/child pairs.
+
+\begin{definition}[DFS tree]
+	For a connected graph $G$, a DFS tree
+\end{definition}
+
+\section{Building SPQR Trees in Linear Time}
+\label{sec:algorithm}
+
+\section{Bonus: Planarity Testing and Finding Planar Embeddings}
+\label{sec:planarity}
+
+\section{Further reading}
+
+\todo{4-edge-connectivity}
+\todo{dynamic-k-connectivity}
+
+\end{document}
