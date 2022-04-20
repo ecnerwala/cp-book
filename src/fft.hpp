@@ -41,6 +41,9 @@ template <typename num> struct getRoot {
 };
 template <typename dbl> struct getRoot<cplx<dbl>> {
 	static cplx<dbl> f(int k) {
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 		dbl a=2*M_PI/k;
 		return cplx<dbl>(cos(a),sin(a));
 	}
