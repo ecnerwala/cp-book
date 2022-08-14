@@ -1,6 +1,7 @@
 #pragma once
 
 #include <complex>
+#include <tuple>
 #include <iostream>
 
 template <typename T> struct Point {
@@ -67,6 +68,10 @@ public:
 	// Must be a unit vector; otherwise multiplies the result by abs(u)
 	Point rotate(const Point& u) const { return dot_cross(conj(u), *this); }
 	Point unrotate(const Point& u) const { return dot_cross(u, *this); }
+
+	friend bool lex_less(const Point& a, const Point& b) {
+		return std::tie(a.x, a.y) < std::tie(b.x, b.y);
+	}
 
 	friend bool same_dir(const Point& a, const Point& b) { return cross(a,b) == 0 && dot(a,b) > 0; }
 
