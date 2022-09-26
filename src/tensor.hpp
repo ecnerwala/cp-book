@@ -74,11 +74,11 @@ public:
 
 	explicit tensor(std::array<int, NDIMS> shape_, const T& t = T()) {
 		shape = shape_;
-		strides[NDIMS-1] = 1;
-		for (int i = NDIMS-1; i > 0; i--) {
-			strides[i-1] = strides[i] * shape[i];
+		len = 1;
+		for (int i = NDIMS-1; i >= 0; i--) {
+			strides[i] = len;
+			len *= shape[i];
 		}
-		len = strides[0] * shape[0];
 		data = new T[len];
 		std::fill(data, data + len, t);
 	}
