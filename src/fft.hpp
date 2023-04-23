@@ -296,5 +296,134 @@ template <typename T> vector<T> fft_double_inverse(const vector<T>& a) {
 template <typename T> vector<T> fft_mod_inverse(const vector<T>& a) {
 	return inverse<multiply_inverser<fft_mod_multiplier<T>, T>, T>(a);
 }
+/* namespace fft */ }
 
-}} // namespace ecnerwala::fft
+// Power series; these are assumed to be the min of the length
+template <typename T, typename multiplier, typename inverser>
+struct power_series : public std::vector<T> {
+	using std::vector<T>::vector;
+
+	int ssize() const {
+		return int(this->size());
+	}
+	int len() const {
+		return ssize();
+	}
+	int degree() const {
+		return len() - 1;
+	}
+	void extend(int sz) {
+		assert(sz >= ssize());
+		this->resize(sz);
+	}
+	void shrink(int sz) {
+		assert(sz <= ssize());
+		this->resize(sz);
+	}
+	power_series& operator += (const power_series& o) {
+		assert(len() == o.len());
+		for (int i = 0; i < int(o.size()); i++) {
+			(*this)[i] += o[i];
+		}
+		return *this;
+	}
+	friend power_series operator + (const power_series& a, const power_series& b) {
+		power_series r(std::min(a.size(), b.size()));
+		for (int i = 0; i < r.len(); i++) {
+			r[i] = a[i] + b[i];
+		}
+		return r;
+	}
+	power_series& operator -= (const power_series& o) {
+		assert(len() == o.len());
+		for (int i = 0; i < int(o.size()); i++) {
+			(*this)[i] -= o[i];
+		}
+		return *this;
+	}
+	friend power_series operator - (const power_series& a, const power_series& b) {
+		power_series r(std::min(a.size(), b.size()));
+		for (int i = 0; i < r.len(); i++) {
+			r[i] = a[i] - b[i];
+		}
+		return r;
+	}
+
+	friend power_series operator * (const power_series& a, const power_series& b) {
+		if (sz(a) == 0 || sz(b) == 0) return {};
+		power_series r(std::max(0, sz(a) + sz(b) - 1));
+		multiplier::multiply(begin(a), sz(a), begin(b), sz(b), begin(r));
+		r.resize(std::min(a.size(), b.size()));
+		return r;
+	}
+	power_series& operator *= (const power_series& o) {
+		return *this = (*this) * o;
+	}
+
+	friend power_series inverse(power_series a) {
+		power_series r(sz(a));
+		inverser::inverse(begin(a), sz(a), begin(r));
+		return r;
+	}
+	friend power_series deriv_shift(power_series a) {
+		for (int i = 0; i < a.len(); i++) {
+			a[i] *= i;
+		}
+		return a;
+	}
+	friend power_series integ_shift(power_series a) {
+		assert(a[0] == 0);
+		T f = 1;
+		for (int i = 1; i < int(a.size()); i++) {
+			a[i] *= f;
+			f *= i;
+		}
+		f = inv(f);
+		for (int i = int(a.size()) - 1; i > 0; i--) {
+			a[i] *= f;
+			f *= i;
+		}
+		return a;
+	}
+	friend power_series deriv_shift_log(power_series a) {
+		auto r = deriv_shift(a);
+		return r * inverse(a);
+	}
+	friend power_series poly_log(power_series a) {
+		assert(a[0] == 1);
+		return integ_shift(deriv_shift_log(std::move(a)));
+	}
+	friend power_series poly_exp(power_series a) {
+		assert(a.size() >= 1);
+		assert(a[0] == 0);
+		power_series r(1, T(1));
+		while (r.size() < a.size()) {
+			int n_sz = std::min(int(r.size()) * 2, int(a.size()));
+			r.resize(n_sz);
+			power_series v(a.begin(), a.begin() + n_sz);
+			v -= poly_log(r);
+			v[0] += 1;
+			r *= v;
+		}
+		return r;
+	}
+	friend power_series to_newton_sums(const power_series& a, int deg) {
+		auto r = log_deriv_shift(a);
+		r[0] = deg;
+		for (int i = 1; i < int(r.size()); i++) r[i] = -r[i];
+		return r;
+	}
+	friend power_series from_newton_sums(power_series S, int deg) {
+		assert(S[0] == int(deg));
+		S[0] = 0;
+		for (int i = 1; i < int(S.size()); i++) S[i] = -S[i];
+		return poly_exp(integ_shift(std::move(S)));
+	}
+};
+
+template <typename num> using power_series_fft = power_series<num, fft::fft_multiplier<num>, fft::fft_inverser<num>>;
+template <typename num, typename multiplier> using power_series_with_multiplier = power_series<num, multiplier, fft::multiply_inverser<multiplier, num>>;
+template <typename num> using power_series_fft_mod = power_series_with_multiplier<num, fft::fft_mod_multiplier<num>>;
+template <typename num> using power_series_fft_double = power_series_with_multiplier<num, fft::fft_double_multiplier<num>>;
+
+/* namespace ecnerwala */ }
