@@ -6,6 +6,7 @@
 template <typename T> T mod_inv_in_range(T a, T m) {
 	// assert(0 <= a && a < m);
 	T x = a, y = m;
+	// coeff of a in x and y
 	T vx = 1, vy = 0;
 	while (x) {
 		T k = y / x;
@@ -16,6 +17,27 @@ template <typename T> T mod_inv_in_range(T a, T m) {
 	}
 	assert(y == 1);
 	return vy < 0 ? m + vy : vy;
+}
+
+template <typename T> struct extended_gcd_result {
+	T gcd;
+	T coeff_a, coeff_b;
+};
+template <typename T> extended_gcd_result<T> extended_gcd(T a, T b) {
+	T x = a, y = b;
+	// coeff of a and b in x and y
+	T ax = 1, ay = 0;
+	T bx = 0, by = 1;
+	while (x) {
+		T k = y / x;
+		y %= x;
+		ay -= k * ax;
+		by -= k * bx;
+		std::swap(x, y);
+		std::swap(ax, ay);
+		std::swap(bx, by);
+	}
+	return {y, ay, by};
 }
 
 template <typename T> T mod_inv(T a, T m) {
@@ -292,4 +314,25 @@ public:
 	friend dynamic_modnum operator - (const dynamic_modnum& a, const dynamic_modnum& b) { return dynamic_modnum(a) -= b; }
 	friend dynamic_modnum operator * (const dynamic_modnum& a, const dynamic_modnum& b) { return dynamic_modnum(a) *= b; }
 	friend dynamic_modnum operator / (const dynamic_modnum& a, const dynamic_modnum& b) { return dynamic_modnum(a) /= b; }
+};
+
+template <typename T> struct mod_constraint {
+	T v, mod;
+
+	friend mod_constraint operator & (mod_constraint a, mod_constraint b) {
+		if (a.mod < b.mod) std::swap(a, b);
+		if (b.mod == 1) return a;
+
+		extended_gcd_result<T> egcd = extended_gcd<T>(a.mod, b.mod);
+		assert(a.v % egcd.gcd == b.v % egcd.gcd);
+		T extra = (b.v - a.v % b.mod) / egcd.gcd;
+		extra *= egcd.coeff_a;
+		extra %= b.mod;
+		extra += (extra < 0) ? b.mod : 0;
+
+		return mod_constraint{
+			a.v + extra * a.mod,
+			a.mod * b.mod
+		};
+	}
 };
