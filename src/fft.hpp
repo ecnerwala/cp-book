@@ -73,8 +73,8 @@ public:
 	static vector<num> scratch_b;
 };
 
-template <typename num> vector<int> fft<num>::rev({0,1});
-template <typename num> vector<num> fft<num>::rt(2, num(1));
+template <typename num> vector<int> fft<num>::rev;
+template <typename num> vector<num> fft<num>::rt;
 template <typename num> vector<num> fft<num>::scratch_a;
 template <typename num> vector<num> fft<num>::scratch_b;
 
@@ -85,6 +85,7 @@ template <typename num> void fft<num>::init(int n) {
 		rev[i] = (rev[i>>1] | ((i&1)*n)) >> 1;
 	}
 	rt.reserve(n);
+	while (sz(rt) < 2 && sz(rt) < n) rt.push_back(num(1));
 	for (int k = sz(rt); k < n; k *= 2) {
 		rt.resize(2*k);
 		num z = getRoot<num>::f(2*k);
