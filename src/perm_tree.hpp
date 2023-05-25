@@ -4,7 +4,7 @@
 #include <array>
 #include <cassert>
 
-class PQTree {
+class PermTree {
 public:
 	enum class NodeType {
 		LEAF,
@@ -23,13 +23,13 @@ public:
 	std::vector<Node> nodes;
 	int root = -1;
 
-	PQTree() {}
+	PermTree() {}
 	Node& operator [] (int idx) { return nodes[idx]; }
 	const Node& operator [] (int idx) const { return nodes[idx]; }
 
 	int size() const { return int(nodes.size()); }
 
-	PQTree(const std::vector<int>& A) : nodes(int(A.size())*2-1) {
+	PermTree(const std::vector<int>& A) : nodes(int(A.size())*2-1) {
 		int N = int(A.size());
 		std::vector<int> nxt_earlier(N);
 		std::vector<int> prv_earlier(N);
