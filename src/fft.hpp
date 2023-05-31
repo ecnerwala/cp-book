@@ -350,6 +350,24 @@ struct power_series : public std::vector<T> {
 		return r;
 	}
 
+	power_series& operator *= (const T& n) {
+		for (auto& v : *this) v *= n;
+	}
+	friend power_series operator * (const power_series& a, const T& n) {
+		power_series r(a.size());
+		for (int i = 0; i < a.len(); i++) {
+			r[i] = a[i] * n;
+		}
+		return r;
+	}
+	friend power_series operator * (const T& n, const power_series& a) {
+		power_series r(a.size());
+		for (int i = 0; i < a.len(); i++) {
+			r[i] = n * a[i];
+		}
+		return r;
+	}
+
 	friend power_series operator * (const power_series& a, const power_series& b) {
 		if (sz(a) == 0 || sz(b) == 0) return {};
 		power_series r(std::max(0, sz(a) + sz(b) - 1));
@@ -408,6 +426,28 @@ struct power_series : public std::vector<T> {
 		}
 		return r;
 	}
+	friend power_series poly_pow_monic(power_series a, int64_t k) {
+		if (a.empty()) return a;
+		assert(a.size() >= 1);
+		assert(a[0] == 1);
+		a = poly_log(a);
+		a *= k;
+		return poly_exp(a);
+	}
+	friend power_series poly_pow(power_series a, int64_t k) {
+		int st = 0;
+		while (st < a.len() && a[st] == 0) st++;
+		if (st == a.len()) return a;
+
+		power_series r(a.begin() + st, a.end());
+		T leading_coeff = r[0];
+		r *= inv(leading_coeff);
+		r = poly_pow_monic(r, k);
+		r *= pow(leading_coeff, k);
+		r.insert(r.begin(), size_t(st), T(0));
+		return r;
+	}
+
 	friend power_series to_newton_sums(const power_series& a, int deg) {
 		auto r = log_deriv_shift(a);
 		r[0] = deg;
