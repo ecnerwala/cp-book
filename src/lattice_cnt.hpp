@@ -4,7 +4,7 @@
 #include <cassert>
 
 // number of integer solutions to Ax + By <= C and x,y >= 0
-long long lattice_cnt(long long A, long long B, long long C) {
+inline long long lattice_cnt(long long A, long long B, long long C) {
 	using ll = long long;
 
 	assert(A >= 0 && B >= 0);
@@ -46,7 +46,7 @@ long long lattice_cnt(long long A, long long B, long long C) {
 }
 
 // count the number of 0 <= (a * x % m) < c for 0 <= x < n
-long long mod_count(long long a, long long m, long long c, long long n) {
+inline long long mod_count(long long a, long long m, long long c, long long n) {
 	assert(m > 0);
 	if (n == 0) return 0;
 
@@ -75,6 +75,6 @@ long long mod_count(long long a, long long m, long long c, long long n) {
 	return ans;
 }
 
-long long mod_count_range(long long a, long long m, long long clo, long long chi, long long nlo, long long nhi) {
+inline long long mod_count_range(long long a, long long m, long long clo, long long chi, long long nlo, long long nhi) {
 	return mod_count(a, m, chi, nhi) - mod_count(a, m, chi, nlo) - mod_count(a, m, clo, nhi) + mod_count(a, m, clo, nlo);
 }
