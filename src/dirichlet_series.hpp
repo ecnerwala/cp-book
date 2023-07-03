@@ -427,8 +427,10 @@ public:
 
 		// Phase 3: apply the extra below x
 		for (x--; x >= 2; x--) {
+			T ax = a.st[x];
+			if (ax == 0) continue;
 			for (int i = x; i < layout.len; i++) {
-				r.st[i] += r.st[layout.get_value_bucket(layout.get_bucket_bound(i) / x)] * a.st[x];
+				r.st[i] += r.st[layout.get_value_bucket(layout.get_bucket_bound(i) / x)] * ax;
 			}
 		}
 
@@ -655,13 +657,17 @@ public:
 		T cur = get_bucket_prefix(int(j <= layout.rt / x ? layout.len - j * x : layout.N / x / j));
 		for (; (j+1) <= layout.N / x / (j+1); j++) {
 			T nxt = get_bucket_prefix(int(j + 1 <= layout.rt / x ? layout.len - (j+1) * x : layout.N / x / (j+1)));
-			increment_bucket_suffix(int(layout.len - j), w * (cur - nxt));
-			cur = nxt;
+			if (cur != nxt) {
+				increment_bucket_suffix(int(layout.len - j), w * (cur - nxt));
+				cur = nxt;
+			}
 		}
 		for (int64_t i = layout.N / x / j; i > 0; i--) {
 			T nxt = get_bucket_prefix(int(i-1));
-			increment_bucket_suffix(int(i <= layout.rt / x ? i * x : layout.len - layout.N / x / i), w * (cur - nxt));
-			cur = nxt;
+			if (cur != nxt) {
+				increment_bucket_suffix(int(i <= layout.rt / x ? i * x : layout.len - layout.N / x / i), w * (cur - nxt));
+				cur = nxt;
+			}
 		}
 	}
 
@@ -672,13 +678,17 @@ public:
 		int64_t i;
 		for (i = 1; i <= layout.N / x / i; i++) {
 			T cur = get_bucket_prefix(int(i));
-			increment_bucket_suffix(int(i <= layout.rt / x ? i * x : layout.len - layout.N / x / i), w * (cur - prv));
-			prv = cur;
+			if (cur != prv) {
+				increment_bucket_suffix(int(i <= layout.rt / x ? i * x : layout.len - layout.N / x / i), w * (cur - prv));
+				prv = cur;
+			}
 		}
 		for (int64_t j = layout.N / x / i; j >= 1; j--) {
 			T cur = get_bucket_prefix(int(j <= layout.rt / x ? layout.len - j * x : layout.N / x / j));
-			increment_bucket_suffix(int(layout.len - j), w * (cur - prv));
-			prv = cur;
+			if (cur != prv) {
+				increment_bucket_suffix(int(layout.len - j), w * (cur - prv));
+				prv = cur;
+			}
 		}
 	}
 
