@@ -467,4 +467,63 @@ template <typename num, typename multiplier> using power_series_with_multiplier 
 template <typename num> using power_series_fft_mod = power_series_with_multiplier<num, fft::fft_mod_multiplier<num>>;
 template <typename num> using power_series_fft_double = power_series_with_multiplier<num, fft::fft_double_multiplier<num>>;
 
+// TODO: Use iterator traits to deduce value type?
+template <typename base_iterator, typename value_type> struct add_into_iterator {
+	base_iterator base;
+	add_into_iterator() : base() {}
+	add_into_iterator(base_iterator b) : base(b) {}
+	add_into_iterator& operator * () { return *this; }
+	add_into_iterator& operator ++ () { base.operator ++ (); return *this; }
+	add_into_iterator& operator ++ (int) { auto temp = *this; operator ++ (); return temp; }
+	auto operator = (value_type v) { base.operator * () += v; }
+};
+
+template <typename num, typename multiplier> struct online_multiplier {
+	int N; int i;
+	std::vector<num> f, g;
+	std::vector<num> res;
+
+	// Computes the first 2N terms of the product
+	online_multiplier(int N_) : N(N_), i(0), f(N), g(N), res(2*N+1, num(0)) {}
+
+	num peek() {
+		return res[i];
+	}
+
+	void push(num v_f, num v_g) {
+		assert(i < N);
+		f[i] = v_f;
+		g[i] = v_g;
+		if (i == 0) {
+			res[i] += v_f * v_g;
+		} else {
+			res[i] += v_f * g[0];
+			res[i] += f[0] * v_g;
+			// TODO: We could do this second half more lazily, since it only affects res[i+1]...
+			for (int p = 1; (i & (p-1)) == (p-1); p <<= 1) {
+				int lo1 = p;
+				int lo2 = i + 1 - p;
+				multiplier::multiply(
+					// TODO: We can cache FFT([f,g].begin() + p, p)
+					f.begin() + lo1, p,
+					g.begin() + lo2, p,
+					add_into_iterator<decltype(res.begin()), num>(res.begin() + lo1 + lo2)
+				);
+				if (i == 2*p-1) break;
+				// TODO: Don't recompute if squaring
+				multiplier::multiply(
+					f.begin() + lo2, p,
+					g.begin() + lo1, p,
+					add_into_iterator<decltype(res.begin()), num>(res.begin() + lo1 + lo2)
+				);
+			}
+		}
+		i++;
+	}
+
+	num back() {
+		return res[i-1];
+	}
+};
+
 /* namespace ecnerwala */ }
