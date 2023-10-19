@@ -139,6 +139,11 @@ template <typename num> struct fft_multiplier {
 		fft<num>::go(fa.begin(), n);
 		copy(fa.begin(), fa.begin()+s, io);
 	}
+
+	template <typename IterA, typename IterOut>
+	static void square(IterA ia, int sza, IterOut io) {
+		multiply<IterA, IterA, IterOut>(ia, sza, ia, sza, io);
+	}
 };
 
 template <typename num>
@@ -193,6 +198,11 @@ struct fft_double_multiplier {
 		fft<cplx<dbl>>::go(fb.begin(), n);
 		{ auto it = io; for (int i = 0; i < s; ++i, ++it) *it = fb[i].y / (4*n); }
 	}
+
+	template <typename IterA, typename IterOut>
+	static void square(IterA ia, int sza, IterOut io) {
+		multiply<IterA, IterA, IterOut>(ia, sza, ia, sza, io);
+	}
 };
 
 template <typename mnum>
@@ -243,6 +253,11 @@ struct fft_mod_multiplier {
 						+ (ll(fb[i].y+0.5) % m << 30)) % m);
 		}
 	}
+
+	template <typename IterA, typename IterOut>
+	static void square(IterA ia, int sza, IterOut io) {
+		multiply<IterA, IterA, IterOut>(ia, sza, ia, sza, io);
+	}
 };
 
 template <class multiplier, typename num>
@@ -283,6 +298,22 @@ template <typename T> vector<T> fft_mod_multiply(const vector<T>& a, const vecto
 	return multiply<fft_mod_multiplier<T>, T>(a, b);
 }
 
+template <class multiplier, typename T> vector<T> square(const vector<T>& a) {
+	if (sz(a) == 0) return {};
+	vector<T> r(2 * sz(a) - 1);
+	multiplier::square(begin(a), sz(a), begin(r));
+	return r;
+}
+template <typename T> vector<T> fft_square(const vector<T>& a, const vector<T>& b) {
+	return square<fft_multiplier<T>, T>(a, b);
+}
+template <typename T> vector<T> fft_double_square(const vector<T>& a, const vector<T>& b) {
+	return square<fft_double_multiplier<T>, T>(a, b);
+}
+template <typename T> vector<T> fft_mod_square(const vector<T>& a, const vector<T>& b) {
+	return square<fft_mod_multiplier<T>, T>(a, b);
+}
+
 template <class inverser, typename T> vector<T> inverse(const vector<T>& a) {
 	vector<T> r(sz(a));
 	inverser::inverse(begin(a), sz(a), begin(r));
@@ -320,6 +351,18 @@ struct power_series : public std::vector<T> {
 	void shrink(int sz) {
 		assert(sz <= ssize());
 		this->resize(sz);
+	}
+	// multiply by x^n
+	void shift(int n = 1) {
+		assert(n >= 0 && n <= ssize());
+		std::rotate(this->begin(), this->end()-n, this->end());
+		std::fill(this->begin(), this->begin()+n, T(0));
+	}
+	// divide by x^n and 0-pad
+	void unshift(int n = 1) {
+		assert(n >= 0 && n <= ssize());
+		std::fill(this->begin(), this->begin()+n, T(0));
+		std::rotate(this->begin(), this->begin()+n, this->end());
 	}
 	power_series& operator += (const power_series& o) {
 		assert(len() == o.len());
@@ -378,7 +421,21 @@ struct power_series : public std::vector<T> {
 	power_series& operator *= (const power_series& o) {
 		return *this = (*this) * o;
 	}
+	friend power_series square(const power_series& a) {
+		if (sz(a) == 0) return {};
+		power_series r(sz(a) * 2 - 1);
+		multiplier::square(begin(a), sz(a), begin(r));
+		r.resize(a.size());
+		return r;
+	}
 
+	friend power_series stretch(const power_series& a, int n) {
+		power_series r(a.size());
+		for (int i = 0; i*n < int(a.size()); i++) {
+			r[i*n] = a[i];
+		}
+		return r;
+	}
 	friend power_series inverse(power_series a) {
 		power_series r(sz(a));
 		inverser::inverse(begin(a), sz(a), begin(r));
@@ -460,6 +517,32 @@ struct power_series : public std::vector<T> {
 		for (int i = 1; i < int(S.size()); i++) S[i] = -S[i];
 		return poly_exp(integ_shift(std::move(S)));
 	}
+
+	// Calculates prod 1/(1-x^i)^{a[i]}
+	friend power_series euler_transform(const power_series& a) {
+		power_series r = deriv_shift(a);
+		std::vector<bool> is_prime(a.size(), true);
+		for (int p = 2; p < int(a.size()); p++) {
+			if (!is_prime[p]) continue;
+			for (int i = 1; i*p < int(a.size()); i++) {
+				r[i*p] += r[i];
+				is_prime[i*p] = false;
+			}
+		}
+		return poly_exp(integ_shift(r));
+	}
+	friend power_series inverse_euler_transform(const power_series& a) {
+		power_series r = deriv_shift(poly_log(a));
+		std::vector<bool> is_prime(a.size(), true);
+		for (int p = 2; p < int(a.size()); p++) {
+			if (!is_prime[p]) continue;
+			for (int i = (int(a.size())-1)/p; i >= 1; i--) {
+				r[i*p] -= r[i];
+				is_prime[i*p] = false;
+			}
+		}
+		return integ_shift(r);
+	}
 };
 
 template <typename num> using power_series_fft = power_series<num, fft::fft_multiplier<num>, fft::fft_inverser<num>>;
@@ -476,6 +559,17 @@ template <typename base_iterator, typename value_type> struct add_into_iterator 
 	add_into_iterator& operator ++ () { base.operator ++ (); return *this; }
 	add_into_iterator& operator ++ (int) { auto temp = *this; operator ++ (); return temp; }
 	auto operator = (value_type v) { base.operator * () += v; }
+};
+
+// TODO: Use iterator traits to deduce value type?
+template <typename base_iterator, typename value_type> struct add_double_into_iterator {
+	base_iterator base;
+	add_double_into_iterator() : base() {}
+	add_double_into_iterator(base_iterator b) : base(b) {}
+	add_double_into_iterator& operator * () { return *this; }
+	add_double_into_iterator& operator ++ () { base.operator ++ (); return *this; }
+	add_double_into_iterator& operator ++ (int) { auto temp = *this; operator ++ (); return temp; }
+	auto operator = (value_type v) { base.operator * () += 2 * v; }
 };
 
 template <typename num, typename multiplier> struct online_multiplier {
@@ -516,6 +610,54 @@ template <typename num, typename multiplier> struct online_multiplier {
 					g.begin() + lo1, p,
 					add_into_iterator<decltype(res.begin()), num>(res.begin() + lo1 + lo2)
 				);
+			}
+		}
+		i++;
+	}
+
+	num back() {
+		return res[i-1];
+	}
+};
+
+template <typename num, typename multiplier> struct online_squarer {
+	int N; int i;
+	std::vector<num> f;
+	std::vector<num> res;
+
+	// Computes the first 2N terms of the product
+	online_squarer(int N_) : N(N_), i(0), f(N), res(2*N+1, num(0)) {}
+
+	num peek() {
+		return res[i];
+	}
+
+	void push(num v_f) {
+		assert(i < N);
+		f[i] = v_f;
+		if (i == 0) {
+			res[i] += v_f * v_f;
+		} else {
+			res[i] += 2 * v_f * f[0];
+			// TODO: We could do this second half more lazily, since it only affects res[i+1]...
+			for (int p = 1; (i & (p-1)) == (p-1); p <<= 1) {
+				int lo1 = p;
+				int lo2 = i + 1 - p;
+				if (i == 2*p-1) {
+					multiplier::square(
+						// TODO: We can cache FFT([f,g].begin() + p, p)
+						f.begin() + lo1, p,
+						add_into_iterator<decltype(res.begin()), num>(res.begin() + lo1 + lo2)
+					);
+					break;
+				} else {
+					multiplier::multiply(
+						// TODO: Use cached FFT
+						f.begin() + lo1, p,
+						f.begin() + lo2, p,
+						add_double_into_iterator<decltype(res.begin()), num>(res.begin() + lo1 + lo2)
+					);
+				}
 			}
 		}
 		i++;
