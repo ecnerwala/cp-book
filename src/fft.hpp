@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 #include <utility>
+#include <algorithm>
 
 #include "modnum.hpp"
 
@@ -395,6 +396,7 @@ struct power_series : public std::vector<T> {
 
 	power_series& operator *= (const T& n) {
 		for (auto& v : *this) v *= n;
+		return *this;
 	}
 	friend power_series operator * (const power_series& a, const T& n) {
 		power_series r(a.size());
