@@ -1,6 +1,6 @@
 #include "perm_tree.hpp"
 
-#include "catch.hpp"
+#include <catch2/catch_all.hpp>
 #include <bits/stdc++.h>
 
 void check_tree(std::vector<int> A) {

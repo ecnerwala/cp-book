@@ -1,5 +1,5 @@
 #include <bits/stdc++.h>
-#include "catch.hpp"
+#include <catch2/catch_all.hpp>
 
 #include "fft.hpp"
 
