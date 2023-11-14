@@ -1,6 +1,6 @@
 #include "dirichlet_series.hpp"
 
-#include <catch2/catch_all.hpp>
+#include <catch2/catch_template_test_macros.hpp>
 #include <bits/stdc++.h>
 
 #include "modnum.hpp"

@@ -1,6 +1,6 @@
 #include "cartesian_tree.hpp"
 
-#include <catch2/catch_all.hpp>
+#include <catch2/catch_test_macros.hpp>
 #include <bits/stdc++.h>
 
 TEST_CASE("Cartesian Tree", "[cartesian_tree]") {
