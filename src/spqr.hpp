@@ -4,6 +4,7 @@
 #include <array>
 #include <vector>
 #include <cassert>
+#include <utility>
 
 /** Block-Cut/SPQR Tree
  *
