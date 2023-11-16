@@ -1,8 +1,10 @@
-#include "catch.hpp"
-
 #include "spqr.hpp"
 
 #include <map>
+#include <random>
+#include <algorithm>
+
+#include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("SQPR Tree", "[spqr]") {
 	int NV = 10;
