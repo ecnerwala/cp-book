@@ -125,19 +125,32 @@ template <typename num> struct fft_multiplier {
 		if (sza == 0 || szb == 0) return;
 		int s = sza + szb - 1;
 		int n = nextPow2(s);
-		fft<num>::init(n);
 		if (sz(fa) < n) fa.resize(n);
 		if (sz(fb) < n) fb.resize(n);
+		fft<num>::init(n);
+
+		bool did_cut = false;
+		if (sza > 1 && szb > 1 && n == 2 * (s - 1)) {
+			// we have exactly 1 wraparound, so let's just handle it explicitly to save a factor of 2
+			// only do it if sza < s and szb < s so we don't have to wrap the inputs
+			did_cut = true;
+			n /= 2;
+		}
 		copy(ia, ia+sza, fa.begin());
 		fill(fa.begin()+sza, fa.begin()+n, num(0));
 		copy(ib, ib+szb, fb.begin());
 		fill(fb.begin()+szb, fb.begin()+n, num(0));
+		// used if did_cut
+		num v_init; if (did_cut) { v_init = fa[0] * fb[0]; }
 		fft<num>::go(fa.begin(), n);
 		fft<num>::go(fb.begin(), n);
 		num d = inv(num(n));
 		for (int i = 0; i < n; i++) fa[i] = fa[i] * fb[i] * d;
 		reverse(fa.begin()+1, fa.begin()+n);
 		fft<num>::go(fa.begin(), n);
+		if (did_cut) {
+			fa[s-1] = std::exchange(fa[0], v_init) - v_init;
+		}
 		copy(fa.begin(), fa.begin()+s, io);
 	}
 
@@ -284,7 +297,7 @@ struct multiply_inverser {
 
 template <class multiplier, typename T> vector<T> multiply(const vector<T>& a, const vector<T>& b) {
 	if (sz(a) == 0 || sz(b) == 0) return {};
-	vector<T> r(max(0, sz(a) + sz(b) - 1));
+	vector<T> r(sz(a) + sz(b) - 1);
 	multiplier::multiply(begin(a), sz(a), begin(b), sz(b), begin(r));
 	return r;
 }
