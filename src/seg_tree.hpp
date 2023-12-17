@@ -5,13 +5,16 @@
 namespace seg_tree {
 
 // Floor of log_2(a); index of highest 1-bit
-inline int log_2(int a) {
+inline int floor_log_2(int a) {
 	return a ? (8 * sizeof(a)) - 1 - __builtin_clz(a) : -1;
 }
 
+inline int ceil_log_2(int a) {
+	return a ? floor_log_2(2*a-1) : -1;
+}
+
 inline int next_pow_2(int a) {
-	assert(a > 0);
-	return 1 << log_2(2*a-1);
+	return 1 << ceil_log_2(a);
 }
 
 struct point {
@@ -46,7 +49,7 @@ struct point {
 
 	template <typename F> void for_parents_down(F f) const {
 		// strictly greater than 0
-		for (int L = log_2(a); L > 0; L--) {
+		for (int L = floor_log_2(a); L > 0; L--) {
 			f(point(a >> L));
 		}
 	}
@@ -102,14 +105,14 @@ struct range {
 	// Iterate over the range from left to right.
 	//    Calls f(point)
 	template <typename F> void for_each_l_to_r(F f) const {
-		int anc_depth = log_2((a-1) ^ b);
+		int anc_depth = floor_log_2((a-1) ^ b);
 		int anc_msk = (1 << anc_depth) - 1;
 		for (int v = (-a) & anc_msk; v; v &= v-1) {
 			int i = __builtin_ctz(v);
 			f(point(((a-1) >> i) + 1));
 		}
 		for (int v = b & anc_msk; v; ) {
-			int i = log_2(v);
+			int i = floor_log_2(v);
 			f(point((b >> i) - 1));
 			v ^= (1 << i);
 		}
@@ -118,14 +121,14 @@ struct range {
 	// Iterate over the range from right to left.
 	//    Calls f(point)
 	template <typename F> void for_each_r_to_l(F f) const {
-		int anc_depth = log_2((a-1) ^ b);
+		int anc_depth = floor_log_2((a-1) ^ b);
 		int anc_msk = (1 << anc_depth) - 1;
 		for (int v = b & anc_msk; v; v &= v-1) {
 			int i = __builtin_ctz(v);
 			f(point((b >> i) - 1));
 		}
 		for (int v = (-a) & anc_msk; v; ) {
-			int i = log_2(v);
+			int i = floor_log_2(v);
 			f(point(((a-1) >> i) + 1));
 			v ^= (1 << i);
 		}
@@ -136,8 +139,8 @@ struct range {
 		if ((x ^ y) > x) { x <<= 1, std::swap(x, y); }
 		int dx = __builtin_ctz(x);
 		int dy = __builtin_ctz(y);
-		int anc_depth = log_2((x-1) ^ y);
-		for (int i = log_2(x); i > dx; i--) {
+		int anc_depth = floor_log_2((x-1) ^ y);
+		for (int i = floor_log_2(x); i > dx; i--) {
 			f(point(x >> i));
 		}
 		for (int i = anc_depth; i > dy; i--) {
@@ -150,7 +153,7 @@ struct range {
 		if ((x ^ y) > x) { x <<= 1, std::swap(x, y); }
 		int dx = __builtin_ctz(x);
 		int dy = __builtin_ctz(y);
-		int anc_depth = log_2((x-1) ^ y);
+		int anc_depth = floor_log_2((x-1) ^ y);
 		for (int i = dx+1; i <= anc_depth; i++) {
 			f(point(x >> i));
 		}
