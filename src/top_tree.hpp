@@ -480,6 +480,20 @@ public:
 		n->expose();
 		return n;
 	}
+
+	friend top_tree_node* get_path_to_root(top_tree_node* b) {
+		assert(b->is_vert);
+		b->expose();
+		if (!b->p) return b;
+		assert(!b->p->p);
+		return b->p;
+	}
+
+	friend top_tree_node* get_subtree_from_root(top_tree_node* n) {
+		n->expose();
+		return n;
+	}
+
 };
 
 struct sample_top_tree_node : public top_tree_node_base<sample_top_tree_node> {
@@ -506,7 +520,8 @@ struct sample_top_tree_node : public top_tree_node_base<sample_top_tree_node> {
 	// it may not have been called on the children! In particular, be careful
 	// when accessing grandchildren information.
 	void update() {
-		if (is_path) {
+		if (is_vert) {
+		} else if (is_path) {
 		} else {
 		}
 	}
