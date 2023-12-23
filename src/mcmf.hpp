@@ -33,8 +33,8 @@ struct MCMF_SSPA {
 		adj[to].push_back(e+1);
 	}
 
-	const cost_t INF_COST = std::numeric_limits<cost_t>::max() / 4;
-	const flow_t INF_FLOW = std::numeric_limits<flow_t>::max() / 4;
+	static constexpr cost_t INF_COST = std::numeric_limits<cost_t>::max() / 4;
+	static constexpr flow_t INF_FLOW = std::numeric_limits<flow_t>::max() / 4;
 	std::vector<cost_t> dist;
 	__gnu_pbds::priority_queue<std::pair<cost_t, int>> q;
 	std::vector<typename decltype(q)::point_iterator> its;
@@ -87,10 +87,21 @@ struct MCMF_SSPA {
 		return cur_flow;
 	}
 
-	std::pair<flow_t, cost_t> max_flow(int s, int t) {
+	std::vector<std::pair<flow_t, cost_t>> all_flows(int s, int t, cost_t max_cost = INF_COST - 1) {
+		assert(s != t);
+		std::vector<std::pair<flow_t, cost_t>> res;
+		while (dijkstra(s, t) <= max_cost) {
+			assert(res.empty() || pi[t] >= res.back().second);
+			flow_t f = path(s, t);
+			res.push_back({f, pi[t]});
+		}
+		return res;
+	}
+
+	std::pair<flow_t, cost_t> max_flow(int s, int t, cost_t max_cost = INF_COST - 1) {
 		assert(s != t);
 		flow_t tot_flow = 0; cost_t tot_cost = 0;
-		while (dijkstra(s, t) < INF_COST) {
+		while (dijkstra(s, t) <= max_cost) {
 			flow_t cur_flow = path(s, t);
 			tot_flow += cur_flow;
 			tot_cost += cur_flow * pi[t];
@@ -220,7 +231,7 @@ struct MCMF_Dinic {
 		assert(s != t);
 		flow_t tot_flow = 0; cost_t tot_cost = 0;
 		while (dijkstra(s, t) <= max_cost) {
-			int cur_flow = dinic(s, t);
+			flow_t cur_flow = dinic(s, t);
 			tot_flow += cur_flow;
 			tot_cost += cur_flow * pi[t];
 		}
