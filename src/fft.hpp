@@ -284,8 +284,7 @@ struct multiply_inverser {
 		vector<num> tmp(2*s);
 		b[0] = inv(*ia);
 		for (int n = 1; n < sza; ) {
-			// TODO: could be square instead of multiply
-			multiplier::multiply(b.begin(),n,b.begin(),n,tmp.begin());
+			multiplier::square(b.begin(),n,tmp.begin());
 			int nn = min(sza,2*n);
 			multiplier::multiply(tmp.begin(),nn,ia,nn,tmp.begin());
 			for (int i = n; i < nn; i++) b[i] = -tmp[i];
@@ -318,14 +317,14 @@ template <class multiplier, typename T> vector<T> square(const vector<T>& a) {
 	multiplier::square(begin(a), sz(a), begin(r));
 	return r;
 }
-template <typename T> vector<T> fft_square(const vector<T>& a, const vector<T>& b) {
-	return square<fft_multiplier<T>, T>(a, b);
+template <typename T> vector<T> fft_square(const vector<T>& a) {
+	return square<fft_multiplier<T>, T>(a);
 }
-template <typename T> vector<T> fft_double_square(const vector<T>& a, const vector<T>& b) {
-	return square<fft_double_multiplier<T>, T>(a, b);
+template <typename T> vector<T> fft_double_square(const vector<T>& a) {
+	return square<fft_double_multiplier<T>, T>(a);
 }
-template <typename T> vector<T> fft_mod_square(const vector<T>& a, const vector<T>& b) {
-	return square<fft_mod_multiplier<T>, T>(a, b);
+template <typename T> vector<T> fft_mod_square(const vector<T>& a) {
+	return square<fft_mod_multiplier<T>, T>(a);
 }
 
 template <class inverser, typename T> vector<T> inverse(const vector<T>& a) {
