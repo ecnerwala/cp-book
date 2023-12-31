@@ -12,22 +12,17 @@
 // Returns a topological sort. Back out the edge directions yourself.
 inline std::vector<int> make_st_dag(const std::vector<std::vector<int>>& adj, int source = -1, int sink = -1) {
 	int N = int(adj.size());
-	if (N == 0) {
-		return {};
-	}
-	if (N == 1) {
-		return {0};
-	}
+	if (N == 0) return {};
+	if (N == 1) return {0};
 	assert(N >= 2);
+
 	// Make some arbitrary choices as defaults
-	if (source == -1 && sink == -1) {
-		source = 0, sink = adj[source][0];
-	} else if (source == -1) {
-		source = adj[sink][0];
-	} else if (sink == -1) {
-		sink = adj[source][0];
-	}
+	if (source == -1 && sink == -1) source = 0, sink = adj[source][0];
+	else if (source == -1) source = adj[sink][0];
+	else if (sink == -1) sink = adj[source][0];
+
 	assert(source != sink);
+
 	std::vector<int> depth(N, -1);
 	std::vector<int> lowval(N);
 	std::vector<bool> has_sink(N);
@@ -64,17 +59,9 @@ inline std::vector<int> make_st_dag(const std::vector<std::vector<int>>& adj, in
 		for (int nxt : ch[cur]) {
 			// If we're on the path to the sink, mark it as downwards.
 
-			bool d;
-			if (has_sink[nxt]) {
-				d = true;
-			} else if (lowval[nxt] >= depth[cur]) {
-				// Arbitrary choice
-				d = true;
-				// Uncomment to skip extra BCCs.
-				//continue;
-			} else {
-				d = !edge_dir[lowval[nxt]];
-			}
+			// Uncomment to skip extra bccs:
+			//if (!has_sink[nxt] && lowval[nxt] >= depth[cur]) continue;
+			bool d = (has_sink[nxt] || lowval[nxt] >= depth[cur]) ? true : !edge_dir[lowval[nxt]];
 			edge_dir[depth[cur]] = d;
 
 			auto ch_res = self(nxt);
