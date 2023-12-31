@@ -7,21 +7,18 @@
 
 // Direct a graph into a DAG so that given source and sink are the unique sources/sinks.
 // If there are any biconnected components not on the path from the source to
-// the sink, they will be directed arbitrariy and will each contribute an extra sink.
-// Skips components that are not connected.
+// the sink, they will not be output, modify the code if necessary.
 // Returns a topological sort. Back out the edge directions yourself.
 inline std::vector<int> make_st_dag(const std::vector<std::vector<int>>& adj, int source = -1, int sink = -1) {
 	int N = int(adj.size());
+
+	// What's even going on lol
 	if (N == 0) return {};
-	if (N == 1) return {0};
-	assert(N >= 2);
 
 	// Make some arbitrary choices as defaults
-	if (source == -1 && sink == -1) source = 0, sink = adj[source][0];
-	else if (source == -1) source = adj[sink][0];
-	else if (sink == -1) sink = adj[source][0];
-
-	assert(source != sink);
+	if (source == -1 && sink == -1) source = 0;
+	if (source == -1) source = adj[sink].empty() ? sink : adj[sink][0];
+	if (sink == -1) sink = adj[source].empty() ? source : adj[source][0];
 
 	std::vector<int> depth(N, -1);
 	std::vector<int> lowval(N);
@@ -39,10 +36,6 @@ inline std::vector<int> make_st_dag(const std::vector<std::vector<int>>& adj, in
 				self(nxt, cur);
 				lowval[cur] = std::min(lowval[cur], lowval[nxt]);
 				if (has_sink[nxt]) has_sink[cur] = true;
-				if (lowval[nxt] >= depth[cur] && !has_sink[nxt]) {
-					// WARNING: This component will be directed arbitrarily.
-					// In practice, we'll just make the first child an extra sink
-				}
 			} else if (depth[nxt] < depth[cur]) {
 				lowval[cur] = std::min(lowval[cur], depth[nxt]);
 			} else {
@@ -59,8 +52,9 @@ inline std::vector<int> make_st_dag(const std::vector<std::vector<int>>& adj, in
 		for (int nxt : ch[cur]) {
 			// If we're on the path to the sink, mark it as downwards.
 
-			// Uncomment to skip extra bccs:
-			//if (!has_sink[nxt] && lowval[nxt] >= depth[cur]) continue;
+			// Comment out this line to direct extra bcc's as extra sinks
+			if (!has_sink[nxt] && lowval[nxt] >= depth[cur]) continue;
+
 			bool d = (has_sink[nxt] || lowval[nxt] >= depth[cur]) ? true : !edge_dir[lowval[nxt]];
 			edge_dir[depth[cur]] = d;
 
@@ -73,10 +67,10 @@ inline std::vector<int> make_st_dag(const std::vector<std::vector<int>>& adj, in
 		return res;
 	})(source);
 
-	std::vector<int> res(N);
+	std::vector<int> res; res.reserve(N);
 	int cur = lst[0];
-	for (int i = 0; i < N; i++) {
-		res[i] = cur;
+	while (cur != -1) {
+		res.push_back(cur);
 		cur = lst_nxt[cur];
 	}
 	return res;
