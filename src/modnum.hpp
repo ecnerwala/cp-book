@@ -326,14 +326,17 @@ template <typename T> struct mod_constraint {
 
 		extended_gcd_result<T> egcd = extended_gcd<T>(a.mod, b.mod);
 		assert(a.v % egcd.gcd == b.v % egcd.gcd);
-		T extra = (b.v - a.v % b.mod) / egcd.gcd;
-		extra *= egcd.coeff_a;
-		extra %= b.mod;
+
+		T extra = b.v - a.v % b.mod;
 		extra += (extra < 0) ? b.mod : 0;
+		extra /= egcd.gcd;
+
+		extra *= egcd.coeff_a;
+		extra %= b.mod / egcd.gcd;
 
 		return mod_constraint{
 			a.v + extra * a.mod,
-			a.mod * b.mod
+			a.mod * (b.mod / egcd.gcd)
 		};
 	}
 };
