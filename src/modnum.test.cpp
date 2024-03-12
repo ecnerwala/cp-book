@@ -1,7 +1,6 @@
 #include "modnum.hpp"
 #include <catch2/catch_test_macros.hpp>
-// #include <numeric> // Include for std::lcm
-// #include <algorithm> // Include for std::gcd
+#include <numeric> // Include for std::lcm and std::gcd
 
 TEST_CASE("Mod Constraint Regression Test", "[mod_constraint]") {
     for (int a_mod = 1; a_mod <= 10; ++a_mod) {
