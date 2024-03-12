@@ -333,6 +333,7 @@ template <typename T> struct mod_constraint {
 
 		extra *= egcd.coeff_a;
 		extra %= b.mod / egcd.gcd;
+		if (extra < 0) extra += b.mod / egcd.gcd;
 
 		return mod_constraint{
 			a.v + extra * a.mod,
