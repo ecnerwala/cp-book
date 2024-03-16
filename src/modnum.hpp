@@ -328,11 +328,11 @@ template <typename T> struct mod_constraint {
 		assert(a.v % egcd.gcd == b.v % egcd.gcd);
 
 		T extra = b.v - a.v % b.mod;
-		extra += (extra < 0) ? b.mod : 0;
 		extra /= egcd.gcd;
 
 		extra *= egcd.coeff_a;
 		extra %= b.mod / egcd.gcd;
+		extra += (extra < 0) ? b.mod / egcd.gcd : 0;
 
 		return mod_constraint{
 			a.v + extra * a.mod,
