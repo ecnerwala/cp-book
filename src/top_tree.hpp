@@ -440,6 +440,29 @@ public:
 		return true;
 	}
 
+	// Link v2 as a child of v1 with edge e, v2 must be the root
+	friend void link_direct(top_tree_node* e, top_tree_node* v1, top_tree_node* v2) {
+		assert(e && v1 && v2);
+		assert(!e->c[0] && !e->c[1] && !e->c[2]);
+		v1->expose();
+		v2->expose();
+
+		while (v1->p) v1 = v1->p;
+		assert(!v2->p);
+
+		assert(v1 != v2);
+
+		assert(!v1->p);
+		assert(!v2->p);
+
+		e->is_path = true, e->is_vert = false;
+		e->c[0] = v1;
+		v1->p = e;
+		e->c[1] = v2;
+		v2->p = e;
+		e->update();
+	}
+
 	// Cuts the edge e
 	// Returns the top-tree-root of the two halves; they are not necessarily the split vertices.
 	friend std::pair<top_tree_node*, top_tree_node*> cut(top_tree_node* e) {
