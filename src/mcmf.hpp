@@ -238,3 +238,74 @@ struct MCMF_Dinic {
 		return {tot_flow, tot_cost};
 	}
 };
+
+template <typename flow_t = int>
+struct Dinic {
+	int N;
+	std::vector<std::vector<int>> adj;
+	struct edge_t {
+		int dest;
+		flow_t cap;
+	};
+	std::vector<edge_t> edges;
+
+	std::vector<char> seen;
+
+	explicit Dinic(int N_) : N(N_), adj(N) {}
+
+	void add_edge(int from, int to, flow_t cap) {
+		assert(cap >= 0);
+		int e = int(edges.size());
+		edges.emplace_back(edge_t{to, cap});
+		edges.emplace_back(edge_t{from, 0});
+		adj[from].push_back(e);
+		adj[to].push_back(e+1);
+	}
+
+	static constexpr flow_t INF_FLOW = std::numeric_limits<flow_t>::max() / 4;
+	std::vector<int> buf;
+	std::vector<int> level;
+	flow_t dinic_dfs(int cur, int t, flow_t f) {
+		if (cur == t) return f;
+		flow_t cur_f = 0;
+		assert(f > 0);
+		for (; buf[cur] < int(adj[cur].size()); buf[cur]++) {
+			int e = adj[cur][buf[cur]];
+			int nxt = edges[e].dest;
+			if (level[nxt] == level[cur] + 1 && edges[e].cap > 0) {
+				flow_t v = dinic_dfs(nxt, t, std::min(f, edges[e].cap));
+				edges[e].cap -= v;
+				edges[e^1].cap += v;
+				f -= v;
+				cur_f += v;
+				if (f == 0) break;
+			}
+		}
+		return cur_f;
+	}
+	flow_t dinic(int s, int t) {
+		flow_t tot_flow = 0;
+		while (true) {
+			buf.clear();
+			buf.reserve(N);
+			level.assign(N, -1);
+			buf.push_back(s);
+			level[s] = 0;
+			for (int z = 0; z < int(buf.size()); z++) {
+				int cur = buf[z];
+				for (int e : adj[cur]) {
+					int nxt = edges[e].dest;
+					if (edges[e].cap > 0 && level[nxt] == -1) {
+						level[nxt] = level[cur] + 1;
+						buf.push_back(nxt);
+					}
+				}
+			}
+			if (level[t] == -1) break;
+			buf.assign(N, 0);
+			tot_flow += dinic_dfs(s, t, INF_FLOW);
+		}
+		return tot_flow;
+	}
+	flow_t max_flow(int s, int t) { return dinic(s, t); }
+};
