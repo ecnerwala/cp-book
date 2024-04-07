@@ -38,6 +38,7 @@ public:
 		return sa;
 	}
 
+	// Pass a function which returns a value in [0, sigma)
 	template <typename String, typename F> static SuffixArray map_and_construct(const String& S, const F& f, int sigma) {
 		std::vector<decltype((f(S[0])))> mapped(sz(S));
 		for (int i = 0; i < sz(S); i++) {
@@ -47,6 +48,7 @@ public:
 		return construct_raw(mapped, sigma);
 	}
 
+	// Sorts the elements of S and then runs suffix array. This takes O(N log N) time with no dependence on sigma.
 	template <typename String> static SuffixArray sort_and_construct(const String& S) {
 		using std::begin;
 		using std::end;
@@ -73,6 +75,7 @@ public:
 		return construct_raw(compressed_s, sigma);
 	}
 
+	// Shifts the elements so that sigma = max(S) - min(S) + 1
 	template <typename String> static SuffixArray shift_and_construct(const String& S) {
 		using std::begin;
 		using std::end;
@@ -97,6 +100,8 @@ public:
 		return construct_raw(compressed_s, sigma);
 	}
 
+	// Renumber/filter to only the used elements with bucket sorting. Still takes O(max(S) - min(S) + 1) memory/time,
+	// but should be less memory than `shift_and_construct` when sigma ~ N and max(S) - min(S) + 1 > N.
 	template <typename String> static SuffixArray bucket_and_construct(const String& S) {
 		using std::begin;
 		using std::end;
