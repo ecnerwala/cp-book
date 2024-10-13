@@ -19,6 +19,12 @@ Test with
 ctest --test-dir build
 ```
 
+or directly with
+
+```sh
+./build/tests
+```
+
 ## License and Attribution
 
 All code in this book is written by me and CC0 licensed unless otherwise noted
