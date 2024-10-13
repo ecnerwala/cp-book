@@ -157,7 +157,7 @@ template <typename T, typename T_sum = T> std::vector<int> alphabetic_huffman_co
 }
 
 // Returns the lca array of length N - 1, suitable for building a Cartesian tree
-std::vector<int> binary_code_depths_to_lca_depths(std::vector<int> depths) {
+inline std::vector<int> binary_code_depths_to_lca_depths(std::vector<int> depths) {
 	int N = int(depths.size());
 	if (N == 0) return {};
 	std::vector<int> res; res.reserve(N-1);
