@@ -68,6 +68,17 @@ template <typename T, typename T_sum = T> std::vector<int> alphabetic_huffman_co
 		nodes[0].update();
 		splay_node* cur = &nodes[1];
 
+		// We'll store our current state as the left spine of some splay tree.
+		// All vertices from cur to the root are precisely the vertices that may satisfy w[n-2] <= w[n]
+		// (all others provably satisfy w[x-2] > w[x] at all times),
+		// so cur is exactly the leftmost vertex that might satisfy w[n-2] <= w[n].
+		//
+		// We then check this condition, and if it does have w[n-2] <= w[n],
+		// we merge w[n-2] and w[n-1] and reinsert somewhere according to Garsia-Wachs,
+		// i.e. right after the last element of w[0:n-1] greater than or equal to it.
+		// Then, the newly inserted node is added to the candidate chain
+		// (exercise: prove that all other positions still satisfy w[x-2] > w[x]).
+
 		while (cur) {
 			// Note: cur is not necessarily updated
 
