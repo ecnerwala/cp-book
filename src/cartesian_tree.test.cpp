@@ -1,10 +1,11 @@
 #include "cartesian_tree.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_get_random_seed.hpp>
 #include <bits/stdc++.h>
 
 TEST_CASE("Cartesian Tree", "[cartesian_tree]") {
-	std::mt19937 mt(48);
+	std::mt19937 mt(Catch::getSeed());
 	for (int sz : {0, 1, 2, 3, 5, 8, 13}) {
 		std::vector<int> v(sz);
 		iota(v.begin(), v.end(), 0);

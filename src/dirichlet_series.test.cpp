@@ -1,6 +1,7 @@
 #include "dirichlet_series.hpp"
 
 #include <catch2/catch_template_test_macros.hpp>
+#include <catch2/catch_get_random_seed.hpp>
 #include <bits/stdc++.h>
 
 #include "modnum.hpp"
@@ -30,7 +31,7 @@ TEMPLATE_TEST_CASE("Dirichlet series multiplication and inverse", "[dirichlet]",
 	using num = TestType;
 	for (int N = 1; N <= 30; N++) {
 		INFO("N = " << N);
-		std::mt19937 mt(48);
+		std::mt19937 mt(Catch::getSeed());
 		layout = div_vector_layout(N);
 		dv_prefix<num> a([&](int64_t x) { return num(x); });
 		dv_prefix<num> b([&](int64_t x) { return num(x) * num(x+1) / num(2); });

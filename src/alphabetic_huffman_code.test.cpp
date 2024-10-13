@@ -1,6 +1,7 @@
 #include "alphabetic_huffman_code.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_get_random_seed.hpp>
 #include <cassert>
 #include <random>
 
@@ -26,11 +27,12 @@ template <typename T> T alphabetic_huffman_code_naive(std::vector<T> weights) {
 }
 
 TEST_CASE("Alphabetic Huffman Code", "[alphabetic_huffman_code]") {
-	std::mt19937 mt(48);
-	for (int z = 0; z <= 100000; z++) {
-		int N = std::uniform_int_distribution(1, 15)(mt);
+	std::mt19937 mt(Catch::getSeed());
+	for (int z = 0; z <= 1000; z++) {
+		int N = std::uniform_int_distribution(1, 60)(mt);
+		int MX = 1 << std::uniform_int_distribution(0, 15)(mt);
 		std::vector<int> weights(N);
-		for (auto& w : weights) w = std::uniform_int_distribution(0, 15)(mt);
+		for (auto& w : weights) w = std::uniform_int_distribution(0, MX-1)(mt);
 		auto naive_tot = alphabetic_huffman_code_naive(weights);
 
 		auto code_depths = alphabetic_huffman_code(weights);
