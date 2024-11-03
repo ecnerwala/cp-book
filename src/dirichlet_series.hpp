@@ -338,6 +338,14 @@ public:
 	}
 	dirichlet_series_prefix& operator *= (const dirichlet_series_prefix& o) { return *this = *this * o; }
 
+	friend T get_conv_N(dirichlet_series_prefix const& a, dirichlet_series_prefix const& b) {
+		T ans = a.st[1] * b.en[-1];
+		for (int i = 2; i <= layout.len; i++) {
+			ans += (a.st[i] - a.st[i-1]) * b.en[-i];
+		}
+		return ans;
+	}
+
 	friend dirichlet_series_prefix operator / (dirichlet_series_prefix const& a, dirichlet_series_prefix const& b) {
 		dirichlet_series_prefix r;
 		T inv_b1 = inv(b.st[1]);
