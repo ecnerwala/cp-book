@@ -1,6 +1,6 @@
 #pragma once
 
-#include<bits/extc++.h>
+#include <ext/pb_ds/assoc_container.hpp>
 
 template <typename K, typename V, typename Comp = std::less<K>>
 using order_statistic_map = __gnu_pbds::tree<
