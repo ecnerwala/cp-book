@@ -18,7 +18,7 @@ file(GLOB SRC_FILES "src/*.hpp")
 
 add_library(cp-book INTERFACE)
 target_include_directories(cp-book INTERFACE src)
-target_compile_features(cp-book INTERFACE cxx_std_17)
+target_compile_features(cp-book INTERFACE cxx_std_20)
 # TODO: Clean these up somehow
 target_compile_options(cp-book INTERFACE -O2 -Wall -Wextra -pedantic -Wshadow -Wformat=2 -Wfloat-equal -Wconversion -Wlogical-op -Wshift-overflow=2 -Wduplicated-cond -Wcast-qual -Wcast-align -Wno-unused-result -Wno-sign-conversion -g -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fstack-protector -D_FORTIFY_SOURCE=2)
 target_link_options(cp-book INTERFACE -O2 -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fstack-protector)
