@@ -47,6 +47,19 @@ struct point {
 		}
 	}
 
+	template <typename F> void for_each_down(F f) const {
+		// strictly greater than 0
+		for (int L = floor_log_2(a); L >= 0; L--) {
+			f(point(a >> L));
+		}
+	}
+
+	template <typename F> void for_each_up(F f) const {
+		for (int v = a; v > 0; v >>= 1) {
+			f(point(v));
+		}
+	}
+
 	template <typename F> void for_parents_down(F f) const {
 		// strictly greater than 0
 		for (int L = floor_log_2(a); L > 0; L--) {
