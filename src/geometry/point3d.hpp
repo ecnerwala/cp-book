@@ -5,14 +5,14 @@
 const double PI = acos(-1.);
 const double TAU = 2 * PI;
 
-template <typename T> struct Point3D {
+template <typename T, typename AreaT=T, typename VolT=T> struct Point3D {
 	using P = Point3D;
 
 	T x, y, z;
 	Point3D() : x(0), y(0), z(0) {}
 	Point3D(T x_, T y_, T z_) : x(x_), y(y_), z(z_) {}
 
-	template <typename U> explicit Point3D(const Point3D<U>& p) : x(T(p.x)), y(T(p.y)), z(T(p.z)) {}
+	template <typename U, typename V, typename W> explicit Point3D(const Point3D<U, V, W>& p) : x(T(p.x)), y(T(p.y)), z(T(p.z)) {}
 
 	friend std::istream& operator >> (std::istream& i, P& p) { return i >> p.x >> p.y >> p.z; }
 	friend std::ostream& operator << (std::ostream& o, const P& p) { return o << "(" << p.x << "," << p.y << "," << p.z << ")"; }
@@ -34,22 +34,23 @@ template <typename T> struct Point3D {
 	friend P operator + (const P& a) { return P(+a.x, +a.y, +a.z); }
 	friend P operator - (const P& a) { return P(-a.x, -a.y, -a.z); }
 
-	friend T dot(const P& a, const P& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
-	friend T norm(const P& a) { return dot(a,a); }
-	friend P cross(const P& a, const P& b) { return P(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x); }
+	friend AreaT dot(const P& a, const P& b) { return AreaT(a.x) * AreaT(b.x) + AreaT(a.y) * AreaT(b.y) + AreaT(a.z) * AreaT(b.z); }
+	friend AreaT norm(const P& a) { return dot(a,a); }
+	// We're playing a little loose with this type, expliitly cast it if you need
+	friend Point3D<AreaT, VolT> cross(const P& a, const P& b) { return Point3D<AreaT, VolT>(AreaT(a.y) * AreaT(b.z) - AreaT(a.z) * AreaT(b.y), AreaT(a.z) * AreaT(b.x) - AreaT(a.x) * AreaT(b.z), AreaT(a.x) * AreaT(b.y) - AreaT(a.y) * AreaT(b.x)); }
 
 	friend T int_norm(const P& p) {
-		return gcd(gcd(abs(p.x), abs(p.y)), abs(p.z));
+		return std::gcd(std::gcd(abs(p.x), abs(p.y)), abs(p.z));
 	}
 	friend P int_unit(const P& p) {
 		T g = int_norm(p);
 		return g ? p / g : p;
 	}
 
-	friend T abs(const P& a) { return sqrt(std::max(T(0), norm(a))); }
+	friend T abs(const P& a) { return std::sqrt(std::max(T(0), norm(a))); }
 	friend P unit(const P& a) { return a / abs(a); }
 
-	friend T vol(const P& a, const P& b, const P& c, const P& d) { return dot(cross(b-a, c-a), d-a); }
+	friend VolT vol(const P& a, const P& b, const P& c, const P& d) { return dot(cross(b-a, c-a), Point3D<AreaT, VolT>(d-a)); }
 
 	friend bool lexLess(const P& a, const P& b) { return tie(a.x, a.y, a.z) < tie(b.x, b.y, b.z); }
 

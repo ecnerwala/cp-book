@@ -3,17 +3,20 @@
 #include <complex>
 #include <tuple>
 #include <iostream>
+#include <numeric>
 
-template <typename T> struct Point {
+template <typename T, typename AreaT=T> struct Point {
 public:
 	T x, y;
 	Point() : x(0), y(0) {}
 	Point(T x_, T y_) : x(x_), y(y_) {}
-	template <typename U> explicit Point(const Point<U>& p) : x(p.x), y(p.y) {}
+	template <typename U, typename V> explicit Point(const Point<U, V>& p) : x(p.x), y(p.y) {}
 	Point(const std::pair<T, T>& p) : x(p.first), y(p.second) {}
 	Point(const std::complex<T>& p) : x(real(p)), y(imag(p)) {}
 	explicit operator std::pair<T, T> () const { return std::pair<T, T>(x, y); }
 	explicit operator std::complex<T> () const { return std::complex<T>(x, y); }
+	void as_pair() const { return std::pair<T, T>(*this); }
+	void as_complex() const { return std::complex<T>(*this); }
 
 	friend std::ostream& operator << (std::ostream& o, const Point& p) { return o << '(' << p.x << ',' << p.y << ')'; }
 	friend std::istream& operator >> (std::istream& i, Point& p) { return i >> p.x >> p.y; }
@@ -34,12 +37,12 @@ public:
 	friend Point operator * (const T& t ,const Point& a) { return Point(t*a.x, t*a.y); }
 	friend Point operator / (const Point& a, const T& t) { return Point(a.x/t, a.y/t); }
 
-	T dist2() const { return x * x + y * y; }
+	AreaT dist2() const { return AreaT(x) * AreaT(x) + AreaT(y) * AreaT(y); }
 	auto dist() const { return std::sqrt(dist2()); }
 	Point unit() const { return *this / this->dist(); }
 	auto angle() const { return std::atan2(y, x); }
 
-	T int_norm() const { return __gcd(x,y); }
+	T int_norm() const { return std::gcd(x,y); }
 	Point int_unit() const { if (!x && !y) return *this; return *this / this->int_norm(); }
 
 	// Convenient free-functions, mostly for generic interop
@@ -53,9 +56,9 @@ public:
 	Point perp_cw() const { return Point(y, -x); }
 	Point perp_ccw() const { return Point(-y, x); }
 
-	friend T dot(const Point& a, const Point& b) { return a.x * b.x + a.y * b.y; }
-	friend T cross(const Point& a, const Point& b) { return a.x * b.y - a.y * b.x; }
-	friend T cross3(const Point& a, const Point& b, const Point& c) { return cross(b-a, c-a); }
+	friend AreaT dot(const Point& a, const Point& b) { return AreaT(a.x) * AreaT(b.x) + AreaT(a.y) * AreaT(b.y); }
+	friend AreaT cross(const Point& a, const Point& b) { return AreaT(a.x) * AreaT(b.y) - AreaT(a.y) * AreaT(b.x); }
+	friend AreaT cross3(const Point& a, const Point& b, const Point& c) { return cross(b-a, c-a); }
 
 	// Complex numbers and rotation
 	friend Point conj(const Point& a) { return Point(a.x, -a.y); }
@@ -63,7 +66,7 @@ public:
 	// Returns conj(a) * b
 	friend Point dot_cross(const Point& a, const Point& b) { return Point(dot(a, b), cross(a, b)); }
 	friend Point cmul(const Point& a, const Point& b) { return dot_cross(conj(a), b); }
-	friend Point cdiv(const Point& a, const Point& b) { return dot_cross(b, a) / b.norm(); }
+	friend Point cdiv(const Point& a, const Point& b) { return dot_cross(b, a) / b.dist2(); }
 
 	// Must be a unit vector; otherwise multiplies the result by abs(u)
 	Point rotate(const Point& u) const { return dot_cross(conj(u), *this); }
