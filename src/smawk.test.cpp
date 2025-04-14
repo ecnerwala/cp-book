@@ -5,6 +5,25 @@
 
 #include <random>
 
+struct move_only_t {
+	int v;
+	move_only_t() : v(-1) {}
+	explicit move_only_t(int v_) : v(v_) {
+		assert(v_ != -1);
+	}
+	move_only_t(move_only_t&& o) {
+		v = o.v;
+		o.v = -1;
+	}
+	move_only_t& operator = (move_only_t&& o) {
+		v = o.v;
+		o.v = -1;
+		return *this;
+	}
+	move_only_t(const move_only_t& o) = delete;
+	move_only_t& operator = (const move_only_t& o) = delete;
+};
+
 std::vector<std::vector<int>> generate_totally_monotone(int N, int M, auto&& rng) {
 	std::vector<int> cur_order(M);
 	std::iota(cur_order.begin(), cur_order.end(), 0);
@@ -48,25 +67,25 @@ std::vector<std::vector<int>> generate_totally_monotone(int N, int M, auto&& rng
 }
 
 void check_smawk(int N, int M, std::vector<std::vector<int>> mat) {
-	auto result = smawk::smawk(N, M, [&](int row, int col) -> int {
+	auto result = smawk::smawk(N, M, [&](int row, int col) -> move_only_t {
 		REQUIRE(0 <= row); REQUIRE(row < N);
 		REQUIRE(0 <= col); REQUIRE(col < M);
-		return mat[row][col];
-	}, [&](int r, smawk::value_t<int> cnd1, smawk::value_t<int> cnd2) -> bool {
+		return move_only_t{mat[row][col]};
+	}, [&](int r, const smawk::value_t<move_only_t>& cnd1, const smawk::value_t<move_only_t>& cnd2) -> bool {
 		REQUIRE(0 <= r); REQUIRE(r < N);
 		REQUIRE(0 <= cnd1.col); REQUIRE(cnd1.col < M);
 		REQUIRE(0 <= cnd2.col); REQUIRE(cnd2.col < M);
 		REQUIRE(cnd1.col < cnd2.col);
-		REQUIRE(cnd1.v == mat[r][cnd1.col]);
-		REQUIRE(cnd2.v == mat[r][cnd2.col]);
+		REQUIRE(cnd1.v.v == mat[r][cnd1.col]);
+		REQUIRE(cnd2.v.v == mat[r][cnd2.col]);
 		// cnd2 is better when it's strictly smaller
-		return cnd2.v < cnd1.v;
+		return cnd2.v.v < cnd1.v.v;
 	});
 	REQUIRE(int(result.size()) == N);
 	for (int i = 0; i < N; i++) {
 		int j = int(std::min_element(mat[i].begin(), mat[i].end()) - mat[i].begin());
 		REQUIRE(result[i].col == j);
-		REQUIRE(result[i].v == mat[i][j]);
+		REQUIRE(result[i].v.v == mat[i][j]);
 	}
 }
 
@@ -81,25 +100,6 @@ TEST_CASE("SMAWK", "[smawk]") {
 		}
 	}
 }
-
-struct move_only_t {
-	int v;
-	move_only_t() : v(-1) {}
-	explicit move_only_t(int v_) : v(v_) {
-		assert(v_ != -1);
-	}
-	move_only_t(move_only_t&& o) {
-		v = o.v;
-		o.v = -1;
-	}
-	move_only_t& operator = (move_only_t&& o) {
-		v = o.v;
-		o.v = -1;
-		return *this;
-	}
-	move_only_t(const move_only_t& o) = delete;
-	move_only_t& operator = (const move_only_t& o) = delete;
-};
 
 void check_larsch(int N, std::vector<std::vector<int>> mat) {
 	const int M = N;

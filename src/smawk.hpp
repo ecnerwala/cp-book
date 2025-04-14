@@ -132,7 +132,8 @@ LARSCH(int, Get&&, Select&&) -> LARSCH<std::invoke_result_t<Get, int, int>, Get,
 template <typename Get, typename Select> std::vector<value_t<std::invoke_result_t<Get&&, int, int>>> smawk(int N, int M, Get&& get, Select&& select) {
 	// TODO: If M >> N, then we should do an extra layer of column filter on the outside. The cutoff should be M > 2N or so.
 	using result_t = std::invoke_result_t<Get&&, int, int>;
-	std::vector<value_t<result_t>> res(N, {result_t(), -1});
+	std::vector<value_t<result_t>> res(N);
+	for (int i = 0; i < N; i++) res[i].col = -1;
 	std::vector<int> stks(N);
 	int L = N ? 31 - __builtin_clz(N) : 0;
 	std::vector<int> stk_ends(L+1);
@@ -190,7 +191,7 @@ template <typename Get, typename Select> std::vector<value_t<std::invoke_result_
 				int col = l == 0 ? z : stks[z];
 				value_t<result_t> cnd = {get(row, col), col};
 				if (res[row].col == -1 || select(row, res[row], cnd)) {
-					res[row] = cnd;
+					res[row] = std::move(cnd);
 				}
 				if ((r+1) < (N >> l) && col == res[((r+2) << l) - 1].col) break;
 			}
