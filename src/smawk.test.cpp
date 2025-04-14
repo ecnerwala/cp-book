@@ -82,33 +82,33 @@ TEST_CASE("SMAWK", "[smawk]") {
 	}
 }
 
-struct expensive_move_t {
+struct move_only_t {
 	int v;
-	expensive_move_t() : v(-1) {}
-	explicit expensive_move_t(int v_) : v(v_) {
+	move_only_t() : v(-1) {}
+	explicit move_only_t(int v_) : v(v_) {
 		assert(v_ != -1);
 	}
-	expensive_move_t(expensive_move_t&& o) {
+	move_only_t(move_only_t&& o) {
 		v = o.v;
 		o.v = -1;
 	}
-	expensive_move_t& operator = (expensive_move_t&& o) {
+	move_only_t& operator = (move_only_t&& o) {
 		v = o.v;
 		o.v = -1;
 		return *this;
 	}
-	expensive_move_t(const expensive_move_t& o) = delete;
-	expensive_move_t& operator = (const expensive_move_t& o) = delete;
+	move_only_t(const move_only_t& o) = delete;
+	move_only_t& operator = (const move_only_t& o) = delete;
 };
 
 void check_larsch(int N, std::vector<std::vector<int>> mat) {
 	const int M = N;
-	smawk::LARSCH l(N, [&](int row, int col) -> expensive_move_t {
+	smawk::LARSCH l(N, [&](int row, int col) -> move_only_t {
 		REQUIRE(0 <= row); REQUIRE(row < N);
 		REQUIRE(0 <= col); REQUIRE(col < M);
 		REQUIRE(col <= row);
-		return expensive_move_t{mat[row][col]};
-	}, [&](int r, const smawk::value_t<expensive_move_t>& cnd1, const smawk::value_t<expensive_move_t>& cnd2) -> bool {
+		return move_only_t{mat[row][col]};
+	}, [&](int r, const smawk::value_t<move_only_t>& cnd1, const smawk::value_t<move_only_t>& cnd2) -> bool {
 		REQUIRE(0 <= r); REQUIRE(r < N);
 		REQUIRE(0 <= cnd1.col); REQUIRE(cnd1.col < M);
 		REQUIRE(0 <= cnd2.col); REQUIRE(cnd2.col < M);
