@@ -3,6 +3,9 @@
 #include <vector>
 #include <cassert>
 #include <optional>
+#if __cpp_concepts >= 202002
+#include <concepts>
+#endif
 
 namespace smawk {
 
@@ -11,9 +14,21 @@ template <typename T> struct value_t {
 	int col;
 };
 
+#if __cpp_concepts >= 202002
+template <typename T, typename Get, typename Select> concept totally_monotone_matrix_oracle =
+	std::default_initializable<T> && std::movable<T>
+	&& std::invocable<Get, int, int> && std::convertible_to<std::invoke_result_t<Get, int, int>, T>
+	&& std::predicate<Select, int, const value_t<T>&, const value_t<T>&>;
+#endif
+
+
 // Select returns 0 or 1 for which is better
 // TODO: Add C++20 contracts for Get and Select
-template <typename T, typename Get, typename Select> class LARSCH {
+template <typename T, typename Get, typename Select>
+#if __cpp_concepts >= 202002
+requires totally_monotone_matrix_oracle<T, Get, Select>
+#endif
+class LARSCH {
 public:
 	int N;
 	Get get;
@@ -129,7 +144,11 @@ public:
 template <typename Get, typename Select>
 LARSCH(int, Get&&, Select&&) -> LARSCH<std::invoke_result_t<Get, int, int>, Get, Select>;
 
-template <typename Get, typename Select> std::vector<value_t<std::invoke_result_t<Get&&, int, int>>> smawk(int N, int M, Get&& get, Select&& select) {
+template <typename Get, typename Select>
+#if __cpp_concepts >= 202002
+requires totally_monotone_matrix_oracle<std::invoke_result_t<Get&&, int, int>, Get&&, Select&&>
+#endif
+std::vector<value_t<std::invoke_result_t<Get&&, int, int>>> smawk(int N, int M, Get&& get, Select&& select) {
 	// TODO: If M >> N, then we should do an extra layer of column filter on the outside. The cutoff should be M > 2N or so.
 	using result_t = std::invoke_result_t<Get&&, int, int>;
 	std::vector<value_t<result_t>> res(N);
