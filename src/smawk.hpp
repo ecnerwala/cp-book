@@ -14,6 +14,8 @@ template <typename T> struct value_t {
 	int col;
 };
 
+// Get(int row, int col) -> T
+// Select(int row, const value_t<T>& opt_0, const value_t<T>& opt_1) returns 0 or 1 for which is better
 #if __cpp_concepts >= 202002
 template <typename T, typename Get, typename Select> concept totally_monotone_matrix_oracle =
 	std::default_initializable<T> && std::movable<T>
@@ -22,8 +24,6 @@ template <typename T, typename Get, typename Select> concept totally_monotone_ma
 #endif
 
 
-// Select returns 0 or 1 for which is better
-// TODO: Add C++20 contracts for Get and Select
 template <typename T, typename Get, typename Select>
 #if __cpp_concepts >= 202002
 requires totally_monotone_matrix_oracle<T, Get, Select>
