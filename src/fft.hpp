@@ -58,7 +58,7 @@ template <> struct primitive_root<998244353> {
 template <int MOD> struct getRoot<modnum<MOD>> {
 	static modnum<MOD> f(int k) {
 		assert((MOD-1)%k == 0);
-		return pow(modnum<MOD>(primitive_root<MOD>::value), (MOD-1)/k);
+		return power(modnum<MOD>(primitive_root<MOD>::value), (MOD-1)/k);
 	}
 };
 
@@ -514,7 +514,7 @@ struct power_series : public std::vector<T> {
 		T leading_coeff = r[0];
 		r *= inv(leading_coeff);
 		r = poly_pow_monic(r, k);
-		r *= pow(leading_coeff, k);
+		r *= power(leading_coeff, k);
 		r.insert(r.begin(), size_t(st), T(0));
 		return r;
 	}
