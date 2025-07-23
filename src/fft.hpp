@@ -497,7 +497,7 @@ struct power_series : public std::vector<T> {
 		}
 		return r;
 	}
-	friend power_series poly_pow_monic(power_series a, int64_t k) {
+	friend power_series poly_pow_monic(power_series a, T k) {
 		if (a.empty()) return a;
 		assert(a.size() >= 1);
 		assert(a[0] == 1);
@@ -506,16 +506,26 @@ struct power_series : public std::vector<T> {
 		return poly_exp(a);
 	}
 	friend power_series poly_pow(power_series a, int64_t k) {
+		assert(k >= 0);
+		if (k == 0) {
+			power_series r(T(0), a.len());
+			if (r.len() > 0) r[0] = T(1);
+			return r;
+		}
+
 		int st = 0;
 		while (st < a.len() && a[st] == 0) st++;
-		if (st == a.len()) return a;
 
-		power_series r(a.begin() + st, a.end());
+		if (st > 0 && k > (a.len() - 1) / st) {
+			return power_series(T(0), a.len());
+		}
+
+		power_series r(a.begin() + st, a.end() - (st * (k-1)));
 		T leading_coeff = r[0];
 		r *= inv(leading_coeff);
-		r = poly_pow_monic(r, k);
+		r = poly_pow_monic(r, T(k));
 		r *= power(leading_coeff, k);
-		r.insert(r.begin(), size_t(st), T(0));
+		r.insert(r.begin(), size_t(st * k), T(0));
 		return r;
 	}
 
