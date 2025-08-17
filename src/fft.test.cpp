@@ -44,4 +44,37 @@ TEST_CASE("FFT Inverse", "[fft]") {
 	REQUIRE(r == tgt);
 }
 
+TEST_CASE("poly_ap_values eval", "[fft,poly_ap_values]") {
+	using num = modnum<998244353>;
+	using poly_vals = poly_ap_values_fft<num>;
+	mt19937 mt(48);
+	for (int len : {0, 1, 2, 3, 5, 8, 13, 21}) {
+		INFO("len = " << len);
+		std::vector<num> poly(len);
+		for (int i = 0; i < len; i++) poly[i] = num(mt());
+		auto eval_at = [&](num v) {
+			num r = 0;
+			for (int i = len-1; i >= 0; i--) r = r * v + poly[i];
+			return r;
+		};
+		poly_vals v(len);
+		for (int i = 0; i < len; i++) v[i] = eval_at(i);
+		for (int i = -2 * len; i <= 2 * len; i++) {
+			REQUIRE(v.eval_at(i) == eval_at(i));
+		}
+		auto eval_range = [&](num k, int osz) {
+			poly_vals r(osz);
+			for (int i = 0; i < osz; i++) {
+				r[i] = eval_at(k + num(i));
+			}
+			return r;
+		};
+		num k = 1023895;
+		for (int osz : {0, 1, 2, 3, 5, 8, 13, 21}) {
+			INFO("osz = " << osz);
+			REQUIRE(v.eval_range(k, osz) == eval_range(k, osz));
+		}
+	}
+}
+
 }} // namespace ecnerwala::fft

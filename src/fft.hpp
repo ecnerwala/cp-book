@@ -693,4 +693,160 @@ template <typename num, typename multiplier> struct online_squarer {
 	}
 };
 
+// A polynomial represented by its values evaluated at an Arithmetic Progression (AP).
+// TODO: The AP is always assumed to be 0..length-1; store an explicit offset/gap instead?
+// Maybe not, this is just more convenient.
+template <typename T, typename multiplier, typename inverser>
+struct poly_ap_values : public std::vector<T> {
+	using std::vector<T>::vector;
+
+	int ssize() const {
+		return int(this->size());
+	}
+	int len() const {
+		return ssize();
+	}
+	int degree() const {
+		return len() - 1;
+	}
+
+	poly_ap_values& operator += (const poly_ap_values& o) {
+		assert(len() == o.len());
+		for (int i = 0; i < int(o.size()); i++) {
+			(*this)[i] += o[i];
+		}
+		return *this;
+	}
+	friend poly_ap_values operator + (const poly_ap_values& a, const poly_ap_values& b) {
+		assert(a.size() == b.size());
+		poly_ap_values r(a.size());
+		for (int i = 0; i < r.len(); i++) {
+			r[i] = a[i] + b[i];
+		}
+		return r;
+	}
+	poly_ap_values& operator -= (const poly_ap_values& o) {
+		assert(len() == o.len());
+		for (int i = 0; i < int(o.size()); i++) {
+			(*this)[i] -= o[i];
+		}
+		return *this;
+	}
+	friend poly_ap_values operator - (const poly_ap_values& a, const poly_ap_values& b) {
+		assert(a.size() == b.size());
+		poly_ap_values r(a.size());
+		for (int i = 0; i < r.len(); i++) {
+			r[i] = a[i] - b[i];
+		}
+		return r;
+	}
+
+	T eval_at(T k) {
+		if (0 <= int(k) && int(k) < len()) {
+			return (*this)[int(k)];
+		} else {
+			// Just do the lagrange interpolation
+			std::vector<T> terms(*this);
+			{
+				// Inverse factorial terms
+				T v = 1;
+				for (int i = 1; i <= len(); i++) v *= T(i);
+				v = inv(v);
+				for (int i = len()-1; i >= 0; i--) {
+					v *= T(i+1);
+					terms[i] *= v;
+					terms[len()-1-i] *= (i & 1) ? -v : v;
+				}
+			}
+			{
+				// Prefix terms
+				T v = 1;
+				for (int i = 0; i < len(); i++) {
+					terms[i] *= v;
+					v *= T(k - i);
+				}
+			}
+			{
+				// Suffix terms
+				T v = 1;
+				for (int i = len() - 1; i >= 0; i--) {
+					terms[i] *= v;
+					v *= T(k - i);
+				}
+			}
+			T res = 0;
+			for (int i = 0; i < len(); i++) res += terms[i];
+			return res;
+		}
+	}
+
+	poly_ap_values eval_range(T k, int osz) {
+		if (osz == 0) {
+			return poly_ap_values(osz);
+		}
+		if (len() == 0) {
+			return poly_ap_values(osz, T(0));
+		}
+
+		// just assume there's no overlap; TODO: Fix this
+
+		std::vector<T> inps(*this);
+		{
+			// Inverse factorial terms
+			T v = 1;
+			for (int i = 1; i <= len(); i++) v *= T(i);
+			v = inv(v);
+			for (int i = len()-1; i >= 0; i--) {
+				v *= T(i+1);
+				inps[i] *= v;
+				inps[len()-1-i] *= (i & 1) ? -v : v;
+			}
+		}
+		std::vector<T> inv_offsets(len() + osz - 1);
+		poly_ap_values results(osz);
+		{
+			T v = 1;
+			for (int i = - (len() - 1); i <= osz - 1; i++) {
+				inv_offsets[i + (len() - 1)] = v;
+				v *= k + i;
+				if (i >= 0) results[i] = v;
+			}
+			// Assert there's no overlap
+			assert(v != T(0));
+			v = inv(v);
+			for (int i = osz - 1; i >= -(len() - 1); i--) {
+				inv_offsets[i + (len() - 1)] *= v;
+				v *= k + i;
+				if (i + (len() - 1) <= osz - 1) {
+					results[i + (len() - 1)] *= v;
+				}
+			}
+		}
+		// TODO: Circular multiply to make this smaller
+		std::vector<T> prod(len() + osz - 1 + len() - 1);
+		multiplier::multiply(inps.begin(), len(), inv_offsets.begin(), int(inv_offsets.size()), prod.begin());
+		for (int i = 0; i < osz; i++) results[i] *= prod[i + (len() - 1)];
+		return results;
+	}
+
+	void extend_right() {
+		this->push_back(eval_at(T(len())));
+	}
+	void extend_left() {
+		this->insert(this->begin(), eval_at(T(-1)));
+	}
+
+	poly_ap_values prefix_sum_inclusive() const {
+		poly_ap_values r = *this;
+		r.extend_right();
+		for (int i = 1; i < len(); i++) r[i] += r[i-1];
+		return r;
+	}
+};
+
+template <typename num> using poly_ap_values_fft = poly_ap_values<num, fft::fft_multiplier<num>, fft::fft_inverser<num>>;
+template <typename num, typename multiplier> using poly_ap_values_with_multiplier = poly_ap_values<num, multiplier, fft::multiply_inverser<multiplier, num>>;
+template <typename num> using poly_ap_values_fft_mod = poly_ap_values_with_multiplier<num, fft::fft_mod_multiplier<num>>;
+template <typename num> using poly_ap_values_fft_double = poly_ap_values_with_multiplier<num, fft::fft_double_multiplier<num>>;
+
 /* namespace ecnerwala */ }
