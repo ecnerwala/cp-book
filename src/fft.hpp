@@ -836,10 +836,10 @@ struct poly_ap_values : public std::vector<T> {
 		this->insert(this->begin(), eval_at(T(-1)));
 	}
 
-	poly_ap_values prefix_sum_inclusive() const {
+	[[nodiscard]] poly_ap_values prefix_sum_inclusive() const {
 		poly_ap_values r = *this;
 		r.extend_right();
-		for (int i = 1; i < len(); i++) r[i] += r[i-1];
+		for (int i = 1; i < r.len(); i++) r[i] += r[i-1];
 		return r;
 	}
 };
