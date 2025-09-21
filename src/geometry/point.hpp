@@ -15,8 +15,8 @@ public:
 	Point(const std::complex<T>& p) : x(real(p)), y(imag(p)) {}
 	explicit operator std::pair<T, T> () const { return std::pair<T, T>(x, y); }
 	explicit operator std::complex<T> () const { return std::complex<T>(x, y); }
-	void as_pair() const { return std::pair<T, T>(*this); }
-	void as_complex() const { return std::complex<T>(*this); }
+	auto as_pair() const { return std::pair<T, T>(*this); }
+	auto as_complex() const { return std::complex<T>(*this); }
 
 	friend std::ostream& operator << (std::ostream& o, const Point& p) { return o << '(' << p.x << ',' << p.y << ')'; }
 	friend std::istream& operator >> (std::istream& i, Point& p) { return i >> p.x >> p.y; }
