@@ -65,14 +65,18 @@ public:
 				if (l == 0) prv_col_top = {get(row, col), col};
 				else prv_col_top = {std::move(stk[l-1][r].v), stk[l-1][r].col};
 
+				assert(bests[l].second < r);
+
 				// just check this guy at this row, and then push it into the next layer, but don't query yet
 				if (select(row, bests[l].first, prv_col_top)) {
 					// prv_col_top is better here
 					bests[l].first = std::move(prv_col_top);
-					bests[l].second = (r+1)/2;
+					bests[l].second = r;
 					// optimization: since we're the global best, we know we'll kill the entire rest of the stack, so just do it here
 					assert(int(stk[l].size()) >= (r+1)/2);
 					stk[l].resize((r+1)/2);
+
+					// TODO: Maybe we should also optimize the layers below: they should all get pruned too. This also helps the inconsistencies later on.
 				}
 			}
 			if (l < L) {
@@ -124,6 +128,7 @@ public:
 			bool did_set = false;
 			while (true) {
 				int idx = bests[l].second;
+				assert(idx <= r);
 				int col = (l == 0 ? idx : stk[l-1][idx].col);
 				value_t<T> cnd;
 				if (l > 0 && idx == r) cnd = {std::move(stk[l-1][r].v), col};
@@ -131,6 +136,11 @@ public:
 				if (!did_set || select(row, nbest, cnd)) {
 					did_set = true;
 					nbest = std::move(cnd);
+				}
+				if (col > bests[l].first.col) {
+					// We're in an inconsistent state, where we advanced in the r&1 case but the lower layers didn't.
+					// This should be somewhat robust: our current column is at least as good as everything to the left of it, so we can use it as the standin for the argmin.
+					break;
 				}
 				if (col == bests[l].first.col) break;
 				bests[l].second++;
