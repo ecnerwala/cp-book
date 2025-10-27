@@ -101,7 +101,7 @@ TEST_CASE("SMAWK", "[smawk]") {
 	}
 }
 
-void check_larsch(int N, std::vector<std::vector<int>> mat) {
+void check_larsch(int N, std::vector<std::vector<int>> mat, bool is_totally_monotone = true) {
 	const int M = N;
 	smawk::LARSCH l(N, [&](int row, int col) -> move_only_t {
 		REQUIRE(0 <= row); REQUIRE(row < N);
@@ -120,11 +120,17 @@ void check_larsch(int N, std::vector<std::vector<int>> mat) {
 		// cnd2 is better when it's strictly smaller
 		return cnd2.v.v < cnd1.v.v;
 	});
+	int prv_col = 0;
 	for (int i = 0; i < N; i++) {
 		auto res = l.push_and_query_next();
-		int j = int(std::min_element(mat[i].begin(), mat[i].begin() + i + 1) - mat[i].begin());
-		REQUIRE(res.col == j);
-		REQUIRE(res.v.v == mat[i][j]);
+		REQUIRE(0 <= res.col); REQUIRE(res.col <= i);
+		REQUIRE(res.v.v == mat[i][res.col]);
+		if (is_totally_monotone) {
+			int j = int(std::min_element(mat[i].begin(), mat[i].begin() + i + 1) - mat[i].begin());
+			REQUIRE(res.col == j);
+		}
+		REQUIRE(res.col >= prv_col);
+		prv_col = res.col;
 	}
 }
 
@@ -139,5 +145,25 @@ TEST_CASE("LARSCH", "[smawk]") {
 		}
 		CAPTURE(N, inp);
 		check_larsch(N, inp);
+	}
+}
+
+TEST_CASE("LARSCH Consistency", "[smawk]") {
+	std::mt19937 mt(Catch::getSeed());
+	for (int N : {0, 1, 2, 3, 5, 8, 13}) {
+		std::vector<std::vector<int>> inp(N);
+		for (int i = 0; i < N; i++) {
+			inp[i].resize(N);
+			std::iota(inp[i].begin(), inp[i].end(), 0);
+			std::shuffle(inp[i].begin(), inp[i].end(), mt);
+		}
+		for (int i = 0; i < N; i++) {
+			for (int j = i+1; j < N; j++) {
+				inp[i][j] = -1;
+			}
+		}
+		CAPTURE(N, inp);
+		// Don't check that it's the global min
+		check_larsch(N, inp, false);
 	}
 }
