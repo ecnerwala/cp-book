@@ -296,9 +296,9 @@ private:
 		return pa;
 	}
 
-	// Return the topmost vertex which was spliced into
+	// Return the topmost vertex which was spliced into, self if none
 	top_tree_node* splice_all() {
-		top_tree_node* res = nullptr;
+		top_tree_node* res = derived_this();
 		for (top_tree_node* cur = derived_this(); cur; cur = cur->p) {
 			if (!cur->is_path) {
 				res = cur->splice_non_path();
@@ -309,7 +309,7 @@ private:
 	}
 
 public:
-	// Return the topmost vertex which was spliced into
+	// Return the topmost vertex which was spliced into, self if none
 	top_tree_node* expose() {
 		assert(is_vert);
 		downdate_all();
@@ -323,7 +323,7 @@ public:
 		return res;
 	}
 
-	// Return the topmost vertex which was spliced into
+	// Return the topmost vertex which was spliced into, self (an edge) if none.
 	top_tree_node* expose_edge() {
 		assert(!is_vert);
 		downdate_all();
@@ -343,7 +343,7 @@ public:
 		assert(!p);
 		assert(v == c[1]);
 
-		return res;
+		return res == v ? derived_this() : res;
 	}
 
 	// Return the new root
@@ -517,6 +517,23 @@ public:
 		return n;
 	}
 
+	// Assumes a and b are in the same connected component
+	friend top_tree_node* lca_same_cc(top_tree_node *a, top_tree_node *b) {
+		a->expose();
+		return b->expose();
+	}
+
+	// Returns nullptr if a and b are in different ccs
+	friend top_tree_node* maybe_lca(top_tree_node *a, top_tree_node *b) {
+		a->expose();
+		auto ap = a->p;
+		assert(!ap || !ap->p);
+		auto res = b->expose();
+		assert(!b->p || !b->p->p);
+		// If a didn't move in the tree when exposing b, then a and b are in different trees
+		if (a != b && ap == a->p && (!ap || !ap->p)) return nullptr;
+		return res;
+	}
 };
 
 struct sample_top_tree_node : public top_tree_node_base<sample_top_tree_node> {
