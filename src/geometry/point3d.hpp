@@ -52,7 +52,7 @@ template <typename T, typename AreaT=T, typename VolT=T> struct Point3D {
 
 	friend VolT vol(const P& a, const P& b, const P& c, const P& d) { return dot(cross(b-a, c-a), Point3D<AreaT, VolT>(d-a)); }
 
-	friend bool lexLess(const P& a, const P& b) { return tie(a.x, a.y, a.z) < tie(b.x, b.y, b.z); }
+	friend bool lexLess(const P& a, const P& b) { return std::tie(a.x, a.y, a.z) < std::tie(b.x, b.y, b.z); }
 
 	friend bool parallelSame(const P& a, const P& b) {
 		assert(a != P());
