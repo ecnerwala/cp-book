@@ -508,16 +508,19 @@ struct power_series : public std::vector<T> {
 		return r;
 	}
 
+	friend power_series inverse(power_series a) {
+		power_series r(sz(a));
+		inverser::inverse(begin(a), sz(a), begin(r));
+		return r;
+	}
+	// TODO: operator / can be done slightly faster than inverse:
+	// we only need the n/2 terms of inverse(), and can do the last Newton step directly on the quotient
+
 	friend power_series stretch(const power_series& a, int n) {
 		power_series r(a.size());
 		for (int i = 0; i*n < int(a.size()); i++) {
 			r[i*n] = a[i];
 		}
-		return r;
-	}
-	friend power_series inverse(power_series a) {
-		power_series r(sz(a));
-		inverser::inverse(begin(a), sz(a), begin(r));
 		return r;
 	}
 	friend power_series deriv_shift(power_series a) {
@@ -665,6 +668,90 @@ struct power_series : public std::vector<T> {
 			}
 		}
 		return integ_shift(r);
+	}
+
+	// Calculates f(g(x)) mod x^n where deg(g) == n
+	friend power_series poly_compose(const power_series& f, const power_series& g) {
+		if (sz(g) == 0) return {};
+
+		int m = int(f.size());
+		int n = int(g.size());
+
+		// https://arxiv.org/pdf/2404.05177
+		// Consider P(y) = f(1/y) has terms from y^{-(m-1)}...y^0 (Laurent series)
+		// We want [y^0] P(y) / (1 - y g(x))
+		// Let Q_0 = 1 - yg(x)
+		// Q_{i+1}(x^2, y) = Q_i(x, y) * Q_i(-x, y) mod x^{ceil(n / 2^i)}
+		// deg_y(Q_i) = 2^i, deg_x(Q_i) = ceil(n / 2^i) - 1
+		//
+		// [y^0] P(y) / Q_l(x^2^l, y) * Q_{l-1}(-x^2^{l-1}, y) * Q_{l-2}(-x^2^{l-2}, y) * ... * Q_0(-x, y)
+		// The total y deg of Q_{k-1} ... Q_0 is 2^k-1
+		int L = __builtin_ctz(fft::nextPow2(n));
+		std::vector<power_series> Q(L+1);
+		Q[0] = power_series(4 << L);
+		Q[0][0] = 1;
+		for (int i = 0; i < n; i++) Q[0][(2 << L) + i] = -g[i];
+		for (int l = 1; l <= L; l++) {
+			auto a = Q[l-1];
+			// negate in place
+			for (int i = 1; i < (4 << L); i += 2) Q[l-1][i] = -Q[l-1][i];
+			Q[l] = power_series(4 << L);
+			// TODO: Could be much more efficient:
+			// We only need to do 1 forward FFT and then reflect it, and the backwards can be half the size and compactify at the same time.
+			// We could also cache the forward FFT for the backwards pass
+			multiplier::multiply_circular(a.begin(), 4 << L, Q[l-1].begin(), 4 << L, Q[l].begin(), 4 << L, 4 << L);
+			// Compactify
+			for (int i = 1; i < (2 << L); i++) {
+				Q[l][i] = Q[l][2*i];
+			}
+			// Undo the circularity since we know it's monic
+			for (int i = 0; i < (2 << (L - l)); i++) {
+				Q[l][(2 << L) + i] = Q[l][i];
+				Q[l][i] = 0;
+			}
+			Q[l][(2 << L)] -= T(1);
+			Q[l][0] = T(1);
+			// Zero out xs which are too big
+			std::fill(Q[l].begin() + (2 << L) + (1 << (L-l)), Q[l].end(), T(0));
+			for (int i = 0; i < (2 << L); i += 2 << (L-l)) {
+				for (int j = 0; j < (1 << (L-l)); j++) {
+					Q[l][i + (1 << (L-l)) + j] = 0;
+				}
+			}
+		}
+		power_series P;
+		{
+			P = f;
+			std::reverse(P.begin(), P.end());
+			power_series QL((1 << L) + 1);
+			for (int i = 0; i <= (1 << L); i++) {
+				QL[i] = Q[L][2 * i];
+			}
+			QL.resize(m, T(0));
+			P *= inverse(QL);
+			std::reverse(P.begin(), P.end());
+			P.resize(1 << L, T(0));
+			std::reverse(P.begin(), P.end());
+			P.resize(4 << L, T(0));
+			for (int i = (1 << L) - 1; i > 0; i--) {
+				P[2*i] = P[i];
+				P[i] = T(0);
+			}
+		}
+		for (int l = L-1; l >= 0; l--) {
+			// Spread it out, clear the high terms
+			for (int i = (2 << L) - 1; i > 0; i--) {
+				T v = P[i];
+				P[2*i] = ((2*i) & (1 << (L-l))) ? T(0) : v;
+				P[i] = T(0);
+			}
+			multiplier::multiply_circular(Q[l].begin(), 4 << L, P.begin(), 4 << L, P.begin(), 4 << L, 4 << L);
+			for (int i = 0; i < (2 << L); i++) {
+				P[i] = P[(2 << L) + i];
+				P[(2 << L) + i] = T(0);
+			}
+		}
+		return power_series(P.begin(), P.begin() + n);
 	}
 };
 
