@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <vector>
 #include <cassert>
 
@@ -32,7 +33,7 @@ struct level_ancestor {
 						sz[cur] += sz[nxt];
 					}
 					if (!ch[cur].empty()) {
-						auto mit = max_element(ch[cur].begin(), ch[cur].end(), [&](int a, int b) { return sz[a] < sz[b]; });
+						auto mit = std::max_element(ch[cur].begin(), ch[cur].end(), [&](int a, int b) { return sz[a] < sz[b]; });
 						swap(*ch[cur].begin(), *mit);
 					}
 				})(i);
