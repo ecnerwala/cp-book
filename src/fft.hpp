@@ -464,6 +464,52 @@ template <typename T> vector<T> fft_2ntt_square(const vector<T>& a) {
 	return square<fft_2ntt_multiplier<T>, T>(a);
 }
 
+template <class multiplier, typename T> vector<T> multiply_inner(const vector<T>& a, const vector<T>& b) {
+	if (sz(a) == 0 || sz(b) == 0) return {};
+	assert(sz(a) >= sz(b));
+	assert(sz(b) > 0);
+	// Really, we should handle any case where sz(a) >= 2 * sz(b)
+	if (sz(a) == sz(b)) {
+		T r = 0;
+		for (int i = 0; i < sz(a); i++) {
+			r += a[i] * b[sz(b) - 1 - i];
+		}
+		return std::vector<T>(1, r);
+	}
+	assert(sz(a) > sz(b));
+	int n = nextPow2(sz(a) - 1);
+	if (sz(a) == n + 1) {
+		assert(sz(b) <= n);
+		vector<T> r(n);
+		for (int i = 0; i < n; i++) r[i] = a[i];
+		r[0] += a[n];
+		multiplier::multiply_circular(begin(r), n, begin(b), sz(b), begin(r), n, n);
+		T v = r[0] - a[0] * b[0];
+		r.erase(r.begin(), r.begin() + (sz(b) - 1));
+		r.push_back(v);
+		r[0] -= a[n] * b.back();
+		return r;
+	} else {
+		vector<T> r(sz(a));
+		multiplier::multiply_circular(begin(a), sz(a), begin(b), sz(b), begin(r), sz(a), n);
+		r.erase(r.begin(), r.begin() + (sz(b) - 1));
+		return r;
+	}
+}
+
+template <typename T> vector<T> fft_multiply_inner(const vector<T>& a, const vector<T>& b) {
+	return multiply_inner<fft_multiplier<T>, T>(a, b);
+}
+template <typename T> vector<T> fft_double_multiply_inner(const vector<T>& a, const vector<T>& b) {
+	return multiply_inner<fft_double_multiplier<T>, T>(a, b);
+}
+template <typename T> vector<T> fft_mod_multiply_inner(const vector<T>& a, const vector<T>& b) {
+	return multiply_inner<fft_mod_multiplier<T>, T>(a, b);
+}
+template <typename T> vector<T> fft_2ntt_multiply_inner(const vector<T>& a, const vector<T>& b) {
+	return multiply_inner<fft_2ntt_multiplier<T>, T>(a, b);
+}
+
 template <class inverser, typename T> vector<T> inverse(const vector<T>& a) {
 	vector<T> r(sz(a));
 	inverser::inverse(begin(a), sz(a), begin(r));
@@ -829,6 +875,43 @@ struct power_series : public std::vector<T> {
 		return power_series(P.begin(), P.begin() + n);
 	}
 };
+
+template <typename T, typename multiplier, typename inverser>
+std::vector<T> poly_evaluate(const std::vector<T>& poly, const std::vector<T>& pts) {
+	if (pts.empty()) return {};
+	using ps = power_series<T, multiplier, inverser>;
+	std::vector<std::vector<T>> series(pts.size() * 2);
+	for (int i = 0; i < int(pts.size()); i++) {
+		series[int(pts.size()) + i] = {T(1), -pts[i]};
+	}
+	for (int i = int(pts.size()) - 1; i > 0; i--) {
+		series[i] = ecnerwala::fft::multiply<multiplier, T>(series[2*i], series[2*i+1]);
+	}
+	{
+		ps root(poly.rbegin(), poly.rend());
+		assert(int(series[1].size()) == int(pts.size()) + 1);
+		ps pts_series(series[1].begin(), series[1].end());
+		pts_series.resize(root.size());
+		ps top = inverse(pts_series) * root;
+
+		series[1] = top;
+
+		// front-pad it back to pts.size()
+		std::reverse(series[1].begin(), series[1].end());
+		series[1].resize(pts.size(), T(0));
+		std::reverse(series[1].begin(), series[1].end());
+	}
+	for (int i = 1; i < int(pts.size()); i++) {
+		series[2*i+0] = ecnerwala::fft::multiply_inner<multiplier, T>(series[i], series[2*i+0]);
+		series[2*i+1] = ecnerwala::fft::multiply_inner<multiplier, T>(series[i], series[2*i+1]);
+		std::swap(series[2*i+0], series[2*i+1]);
+	}
+	std::vector<T> ans(pts.size());
+	for (int i = 0; i < int(pts.size()); i++) {
+		ans[i] = series[int(pts.size()) + i][0];
+	}
+	return ans;
+}
 
 template <typename num> using power_series_fft = power_series<num, fft::fft_multiplier<num>, fft::fft_inverser<num>>;
 template <typename num, typename multiplier> using power_series_with_multiplier = power_series<num, multiplier, fft::multiply_inverser<multiplier, num>>;
