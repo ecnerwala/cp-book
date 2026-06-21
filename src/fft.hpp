@@ -935,6 +935,64 @@ template <typename T> std::vector<T> poly_evaluate_fft_double(const std::vector<
 	return poly_evaluate_with_multiplier<T, fft::fft_double_multiplier<T>>(poly, pts);
 }
 
+template <typename T, typename multiplier, typename inverser>
+std::vector<T> poly_interpolate(const std::vector<T>& pts, const std::vector<T>& vals) {
+	if (pts.empty()) return {};
+	using ps = power_series<T, multiplier, inverser>;
+	std::vector<std::vector<T>> series(pts.size() * 2);
+	for (int i = 0; i < int(pts.size()); i++) {
+		series[int(pts.size()) + i] = {T(1), -pts[i]};
+	}
+	for (int i = int(pts.size()) - 1; i > 0; i--) {
+		series[i] = ecnerwala::fft::multiply<multiplier, T>(series[2*i], series[2*i+1]);
+	}
+	std::vector<std::vector<T>> series_down(pts.size() * 2);
+	{
+		assert(int(series[1].size()) == int(pts.size()) + 1);
+		ps root(series[1].begin(), series[1].end() - 1);
+		ps deriv_root = root;
+		for (int i = 0; i < int(pts.size()); i++) {
+			deriv_root[i] *= T(int(pts.size()) - i);
+		}
+		series_down[1] = inverse(root) * deriv_root;
+	}
+	for (int i = 1; i < int(pts.size()); i++) {
+		series_down[2*i+0] = ecnerwala::fft::multiply_inner<multiplier, T>(series_down[i], series[2*i+1]);
+		series_down[2*i+1] = ecnerwala::fft::multiply_inner<multiplier, T>(series_down[i], series[2*i+0]);
+	}
+	for (int i = 0; i < int(pts.size()); i++) {
+		auto& s = series_down[int(pts.size()) + i];
+		assert(int(s.size()) == 1);
+		s[0] = vals[i] / s[0];
+	}
+	for (int i = int(pts.size()) - 1; i > 0; i--) {
+		auto a = ecnerwala::fft::multiply<multiplier, T>(series_down[2*i+0], series[2*i+1]);
+		auto b = ecnerwala::fft::multiply<multiplier, T>(series_down[2*i+1], series[2*i+0]);
+		assert(int(a.size()) == int(series_down[i].size()));
+		assert(int(b.size()) == int(series_down[i].size()));
+		for (int z = 0; z < int(series_down[i].size()); z++) series_down[i][z] = a[z] + b[z];
+	}
+	std::vector<T> top = series_down[1];
+	std::reverse(top.begin(), top.end());
+	return top;
+}
+
+template <typename T> std::vector<T> poly_interpolate_fft(const std::vector<T>& pts, const std::vector<T>& vals) {
+	return poly_interpolate<T, fft::fft_multiplier<T>, fft::fft_inverser<T>>(pts, vals);
+}
+template <typename T, typename multiplier> std::vector<T> poly_interpolate_with_multiplier(const std::vector<T>& pts, const std::vector<T>& vals) {
+	return poly_interpolate<T, multiplier, fft::multiply_inverser<multiplier, T>>(pts, vals);
+}
+template <typename T> std::vector<T> poly_interpolate_fft_mod(const std::vector<T>& pts, const std::vector<T>& vals) {
+	return poly_interpolate_with_multiplier<T, fft::fft_mod_multiplier<T>>(pts, vals);
+}
+template <typename T> std::vector<T> poly_interpolate_fft_2ntt(const std::vector<T>& pts, const std::vector<T>& vals) {
+	return poly_interpolate_with_multiplier<T, fft::fft_2ntt_multiplier<T>>(pts, vals);
+}
+template <typename T> std::vector<T> poly_interpolate_fft_double(const std::vector<T>& pts, const std::vector<T>& vals) {
+	return poly_interpolate_with_multiplier<T, fft::fft_double_multiplier<T>>(pts, vals);
+}
+
 // TODO: Use iterator traits to deduce value type?
 template <typename base_iterator, typename value_type> struct add_into_iterator {
 	base_iterator base;
