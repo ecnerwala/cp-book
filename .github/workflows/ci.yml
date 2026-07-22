@@ -23,7 +23,10 @@ jobs:
           key: ${{ runner.os }}-cmake-deps-${{ hashFiles('CMakeLists.txt') }}
 
       - name: Configure
-        run: cmake -B build -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        run: |
+          SEED=$(shuf -i 1-4294967295 -n 1)
+          echo "Catch2 RNG seed: $SEED (rerun with -DCP_BOOK_RNG_SEED=$SEED to reproduce)"
+          cmake -B build -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCP_BOOK_RNG_SEED=$SEED
 
       - name: Build
         run: cmake --build build -j
