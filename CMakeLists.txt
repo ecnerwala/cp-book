@@ -29,9 +29,7 @@ target_link_libraries(tests PRIVATE Catch2::Catch2WithMain)
 target_compile_features(tests PUBLIC cxx_std_17)
 target_include_directories(tests PRIVATE src)
 
-set(CP_BOOK_RNG_SEED "time" CACHE STRING "Catch2 --rng-seed passed to tests (number, 'time', or 'random-device')")
-
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(CTest)
 include(Catch)
-catch_discover_tests(tests EXTRA_ARGS --rng-seed ${CP_BOOK_RNG_SEED})
+catch_discover_tests(tests)
