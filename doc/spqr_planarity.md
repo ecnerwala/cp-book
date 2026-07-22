@@ -1,103 +1,92 @@
-# Integrated planarity testing + combinatorial embedding in `spqr_tree`
+# Per-node planarity testing + skeleton embedding in `spqr_tree`
 
-This note explains how `spqr.hpp` computes a planar combinatorial embedding *as
-the SPQR construction goes*, what state the SPQR machinery already provides,
-what had to be added, and why the split is exactly the way it is.
+This note explains how `spqr.hpp` computes, for every SPQR node as it is
+sealed, a planarity verdict and a combinatorial embedding of that node's
+virtual-edge skeleton — what the SPQR machinery already provides, what had to
+be added, and why the split is exactly the way it is.
 
 ## What the SPQR construction already provides
 
-The construction shares its entire preprocessing phase with left-right (LR)
-planarity (de Fraysseix–Rosenstiehl; Brandes' writeup is the reference used
-here):
+The construction shares its preprocessing with left-right (LR) planarity
+(de Fraysseix–Rosenstiehl; Brandes' writeup is the reference used here):
 
 - `dfs_lowval` is LR's phase 1 (DFS orientation): it computes `depth`,
-  per-edge `lowpt` and `lowpt2`, and orients every edge (tree edges
-  parent→child, back edges deep→shallow).
+  per-edge `lowpt`/`lowpt2`, and orients every edge (tree edges parent→child,
+  back edges deep→shallow).
 - The bucket key `1 + 2*lowpt + (lowpt2 < depth)` used by `build_sorted_adj`
-  is *exactly* LR's nesting depth `2*lowpt(e) + [lowpt2(e) < height(v)]`. So
-  after the bucket sort, `dfs_spqr` visits outgoing edges in precisely the
-  order LR's second DFS requires. This is the crucial shared invariant: it is
-  what makes segment interlacement a stack-local phenomenon for both
-  algorithms.
-- `dfs_spqr` is a DFS in that order, with well-defined "traverse child edge",
-  "traverse back edge", and "backtrack over vertex" events.
+  is exactly LR's nesting depth, so `dfs_spqr` traverses in LR's required
+  order, and the estack entries of a sealed node's range appear in DFS order
+  of the node's skeleton: every tree vedge appears *after* all entries of its
+  subtree, chords appear at their (deeper) source.
+- Crucially, every estack entry / vedge is a *collapsed 2-attachment
+  component*: its interlacement behavior within its node's skeleton depends
+  only on its two endpoints. So each vedge acts as a single tree or back edge
+  of the skeleton, and the LR test factors completely over skeletons — the
+  conflict component of a piece of graph closes exactly when its attachment
+  set shrinks to a split pair, i.e. exactly when `pop_estack_range` seals it
+  into a node.
 
-## What the SPQR state does *not* provide
+## What the storage order does *not* provide
 
-The `estack`/`tstack` machinery only remembers, for each active entry, its
-two boundary vertices (`estack_t::vs`) plus split-pair candidates. To embed,
-LR needs to know, for every *active* tree edge, the multiset of return points
-of its segment and how those interleave with the return points of earlier
-sibling segments — the "conflict pairs". A segment with k attachments never
-exists as a single object on the estack (it is flattened into 2-attachment
-entries as split pairs resolve), and the depths of already-merged attachments
-are discarded. So the embedding constraints cannot be reconstructed from a
-finalized `pop_estack_range` range alone; the earlier idea of a local
-two-stack scan over the popped range is not justified by any invariant the
-estack maintains. The information has to be *carried*, not recovered.
+The one thing the sealed range's order does **not** preserve is the *nesting
+order between siblings*: collapsing a subtree into a single virtual tree edge
+can change its lowpoints and its "has a second attachment" (chordality) bit
+relative to the original graph, so the original bucket-sorted sibling order
+is no longer a valid LR nesting order for the skeleton. (This is observable:
+random tests produce sealed R ranges where a skeleton-chordal virtual tree
+edge precedes a chord with strictly smaller skeleton nesting depth.) Hence
+`emit_rigid` recomputes skeleton lowpoints (one linear scan, using the DFS
+postorder that the storage order *does* guarantee) and re-sorts each skeleton
+vertex's outgoing vedges by skeleton nesting depth before running the test.
 
-## The integration
+## Per-node emission (`finalize_node` → `emit_node_embedding`)
 
-Fortunately, carrying it is cheap, because the traversal order is already
-correct. LR's testing phase is grafted directly onto `dfs_spqr` as parallel
-state (a few per-edge int arrays and one stack of conflict pairs), with its
-three event hooks placed at the three corresponding SPQR events:
+Every node type gets its skeleton rotation the moment it is created:
 
-- **Back edge traversed** (`lr_push_back_edge`, in the back-edge branch of
-  `dfs_spqr`): push a singleton conflict pair.
-- **Child edge finished** (`lr_integrate` → `lr_add_constraints`, right after
-  the recursive `dfs_spqr` call and after each back edge): merge the conflict
-  pairs generated by that edge into the constraints of the parent edge
-  (`prvE`, a new parameter of `dfs_spqr`), fusing same-side intervals and
-  detecting non-planarity when both sides of a pair conflict.
-- **Backtrack over a vertex** (`lr_finish_vertex`, at the end of the
-  `dfs_spqr` frame): trim return edges that end at the parent, fixing the
-  relative side (`lr_side`) of edges whose constraints are now decided, and
-  assign the parent edge its reference edge.
+- **Q/I**: one edge; the identity rotation.
+- **O/S**: the vedge range is already in cycle order (the estack path entries
+  plus the cap), so the rotation is read off directly (`emit_cycle`).
+- **P**: parallel edges don't interlace; storage order is used
+  (`emit_parallel`) — this is where the `(k-1)!/2` embedding freedom lives.
+- **R** (`emit_rigid`): the real work, in four small passes over the range:
+  1. index the skeleton vertices;
+  2. compute skeleton lowpoints bottom-up and re-sort each vertex's outgoing
+     vedges by skeleton nesting depth;
+  3. run the LR test on the skeleton (Brandes' algorithms 3–5: chords push
+     singleton conflict pairs, finished tree edges merge their subtree's
+     constraints into the parent's, backtracking trims return edges), with
+     the two-coloring kept implicit via `lr_ref`/`lr_side`;
+  4. resolve the signs and emit the rotation (Brandes' embedding phase:
+     left edges reversed, then right edges; incoming chords are spliced next
+     to the tree edge leading to their subtree).
 
-The two-coloring is kept implicit via `lr_ref`/`lr_side` (each edge's side is
-relative to a reference edge; the referrals form a forest), so every hook is
-amortized O(1) and the SPQR construction's linear time is preserved. The
-`lr_stack` is naturally per-block: it is empty exactly at the `start_spqr`
-boundaries, which is also why planarity is reported per block
-(`block_t::planar`, conjunction in `is_planar`) — on a non-planar block the
-LR state is simply dropped for the remainder of that block and construction
-continues.
+A non-planar R skeleton only clears its own `node_t::planar` flag (its
+rotation falls back to a structurally-valid but meaningless grouping);
+`block_t::planar` and `is_planar` are the conjunctions. Since each skeleton
+has O(its size) work and skeleton sizes sum to O(NVE), the whole thing adds
+linear time up to the per-vertex re-sort (a `std::stable_sort` of each
+skeleton's events).
 
-This also realizes the "conflict components ↔ SPQR tree" intuition: a
-conflict pair's constraints become decided exactly when the attachment set of
-the corresponding piece shrinks to a split pair — the same event that seals an
-estack range into an S/P/R node. R nodes correspond to closed conflict
-components (their one free flip is the R reflection); P freedom shows up as
-*absence* of constraints between parallel segments; S/Q/I/O contribute
-nothing.
+## Output format
 
-## Emission
-
-After construction, `build_embedding` resolves the `lr_ref` chains to
-absolute signs, bucket-sorts the edges once more by *signed* nesting depth
-(reusing `edge_nesting` from `dfs_lowval`), and runs one small DFS
-(`dfs_embed`, Brandes' phase 3) that splices incoming back edges into
-per-vertex rotations next to the tree edge leading to their subtree. This
-final pass is inherent to LR — the absolute side of an edge is only known once
-its whole block has been traversed — but it is a single linear pass over the
-whole graph, not a per-R-node or per-skeleton re-run of anything.
-
-The output is a rotation system over half-edges: half-edge `2*e+k` is the
-endpoint of edge `e` at `vedges[e].vs[k]`, `embed_next[h]` is the next
-half-edge around the same vertex (circular), `embed_head[v]` an arbitrary
-entry point. Bridges and cut vertices are handled uniformly (blocks nest side
-by side in the rotation); self loops are placed as adjacent half-edge pairs.
-For vertices touching a non-planar block the rotation is structurally valid
-but meaningless.
+The output is a rotation system over vedge half-edges, node by node:
+half-edge `2*ve+k` is the endpoint of `vedges[ve]` at `vedges[ve].vs[k]`, and
+`embed_next[h]` is the next half-edge around the same skeleton vertex
+(circular within the node). Rotations of different nodes can be glued along
+twin virtual edges (`vedge_t::o_ve`), flipping the child's reflection as
+desired — R rotations are unique up to reflection, P rotations may be
+permuted, S/Q/I/O are rigid.
 
 ## Correctness checks
 
 - `spqr.test.cpp` verifies on ~5000 random multigraphs (plus fixtures: K5,
-  K3,3, Petersen, cube, grids, multigraphs with self loops/bridges) that the
-  rotation at each vertex is a circular permutation of exactly its incident
-  half-edges, and that for every component whose blocks are all planar the
-  face count satisfies Euler's formula `V - E + F = 2` — which holds iff the
-  rotation system is a genus-0 (planar) embedding.
-- The planarity flag was additionally cross-checked against networkx's
-  planarity test on 60,000 random multigraphs (0 mismatches).
+  K3,3, Petersen, cube, grids, multigraphs with self loops/bridges, and a
+  K5+K4 sharing an edge — one block, two R nodes, only one non-planar) that
+  every node's rotation is a circular permutation of exactly its incident
+  half-edges, that non-R nodes are always planar, and that every planar
+  node's skeleton satisfies Euler's formula `V - E + F = 2` — which holds iff
+  the rotation is a genus-0 (planar) embedding of the skeleton.
+- The same per-node checks pass on 4000 random multigraphs with up to 60
+  vertices and 140 edges under ASan/UBSan.
+- `is_planar` was cross-checked against networkx's planarity test on 60,000
+  random multigraphs (0 mismatches).

@@ -309,65 +309,74 @@ TEST_CASE("SQPR Tree", "[spqr]") {
 
 			// ==== CHECK PLANARITY / EMBEDDING ====
 			{
+				bool all_nodes_planar = true;
+				std::vector<char> block_nodes_planar(tree.NB, 1);
+				for (int node = 0; node < tree.NN; node++) {
+					if (tree.nodes[node].type != node_type::R) {
+						REQUIRE(tree.nodes[node].planar);
+					}
+					all_nodes_planar = all_nodes_planar && tree.nodes[node].planar;
+					if (!tree.nodes[node].planar) {
+						block_nodes_planar[tree.nodes[node].block] = 0;
+					}
+				}
 				bool all_blocks_planar = true;
 				for (int b = 0; b < tree.NB; b++) {
+					REQUIRE(tree.blocks[b].planar == bool(block_nodes_planar[b]));
 					all_blocks_planar = all_blocks_planar && tree.blocks[b].planar;
 				}
+				REQUIRE(tree.is_planar == all_nodes_planar);
 				REQUIRE(tree.is_planar == all_blocks_planar);
 
-				REQUIRE(int(tree.embed_next.size()) == 2 * NE);
-				REQUIRE(int(tree.embed_head.size()) == NV);
+				REQUIRE(int(tree.embed_next.size()) == 2 * tree.NVE);
 
-				// The rotation at each vertex is a circular list over exactly
-				// its incident half-edges
-				std::vector<int> vertex_deg(NV, 0);
-				for (int e = 0; e < NE; e++) {
-					vertex_deg[tree.vedges[e].vs[0]]++;
-					vertex_deg[tree.vedges[e].vs[1]]++;
-				}
-				for (int v = 0; v < NV; v++) {
-					INFO("v = " << v);
-					int h0 = tree.embed_head[v];
-					if (h0 == -1) {
-						REQUIRE(vertex_deg[v] == 0);
-						continue;
-					}
-					int cnt = 0;
-					int h = h0;
-					do {
-						REQUIRE(tree.vedges[h >> 1].vs[h & 1] == v);
-						cnt++;
-						REQUIRE(cnt <= vertex_deg[v]);
-						h = tree.embed_next[h];
-					} while (h != h0);
-					REQUIRE(cnt == vertex_deg[v]);
-				}
+				for (int node = 0; node < tree.NN; node++) {
+					INFO("node = " << node);
+					const auto& node_struct = tree.nodes[node];
 
-				// For components whose blocks are all planar, the rotation
-				// system must satisfy Euler's formula: V - E + F == 2
-				std::vector<char> component_planar(tree.NC, 1);
-				for (int b = 0; b < tree.NB; b++) {
-					if (!tree.blocks[b].planar) {
-						component_planar[tree.blocks[b].component] = 0;
+					// The rotation at each skeleton vertex is a circular list
+					// over exactly its incident half-edges within this node
+					std::map<int, std::vector<int>> vertex_halves;
+					for (int ve = node_struct.vedges.st; ve < node_struct.vedges.en; ve++) {
+						vertex_halves[tree.vedges[ve].vs[0]].push_back(2*ve);
+						vertex_halves[tree.vedges[ve].vs[1]].push_back(2*ve+1);
 					}
-				}
-				std::vector<int> comp_V(tree.NC, 0), comp_E(tree.NC, 0), comp_F(tree.NC, 0);
-				for (int v = 0; v < NV; v++) comp_V[tree.vertices[v].component]++;
-				for (int e = 0; e < NE; e++) comp_E[tree.vedges[e].component]++;
-				std::vector<char> face_seen(2 * NE, 0);
-				for (int h0 = 0; h0 < 2 * NE; h0++) {
-					if (face_seen[h0]) continue;
-					int h = h0;
-					do {
-						face_seen[h] = 1;
-						h = tree.embed_next[h ^ 1];
-					} while (h != h0);
-					comp_F[tree.vedges[h0 >> 1].component]++;
-				}
-				for (int c = 0; c < tree.NC; c++) {
-					INFO("component = " << c);
-					if (!component_planar[c] || comp_E[c] == 0) continue;
-					REQUIRE(comp_V[c] - comp_E[c] + comp_F[c] == 2);
+					for (const auto& [v, halves] : vertex_halves) {
+						INFO("v = " << v);
+						std::vector<char> seen(halves.size(), 0);
+						int h = halves[0];
+						for (int cnt = 0; cnt < int(halves.size()); cnt++) {
+							auto it = std::lower_bound(halves.begin(), halves.end(), h);
+							REQUIRE(it != halves.end());
+							REQUIRE(*it == h);
+							REQUIRE(!seen[it - halves.begin()]);
+							seen[it - halves.begin()] = 1;
+							h = tree.embed_next[h];
+						}
+						REQUIRE(h == halves[0]);
+					}
+
+					// For planar nodes, the skeleton rotation must satisfy
+					// Euler's formula: V - E + F == 2
+					if (node_struct.planar) {
+						int V = node_struct.node_vertices.size();
+						int E = node_struct.vedges.size();
+						int F = 0;
+						std::map<int, char> face_seen;
+						for (int ve = node_struct.vedges.st; ve < node_struct.vedges.en; ve++) {
+							for (int k = 0; k < 2; k++) {
+								int h0 = 2*ve + k;
+								if (face_seen[h0]) continue;
+								int h = h0;
+								do {
+									face_seen[h] = 1;
+									h = tree.embed_next[h ^ 1];
+								} while (h != h0);
+								F++;
+							}
+						}
+						REQUIRE(V - E + F == 2);
+					}
 				}
 			}
 		}
@@ -418,5 +427,34 @@ TEST_CASE("SPQR Tree planarity fixtures", "[spqr]") {
 		}
 		REQUIRE(tree.NB == 2);
 		REQUIRE(num_planar_blocks == 1);
+	}
+
+	// K5 and K4 sharing the edge {0,1}: one block, two R nodes, and only the
+	// K5's is non-planar
+	{
+		std::vector<std::array<int, 2>> edges;
+		for (int i = 0; i < 5; i++) {
+			for (int j = i+1; j < 5; j++) {
+				edges.push_back({i, j});
+			}
+		}
+		std::array<int, 4> k4 = {0, 1, 5, 6};
+		for (int i = 0; i < 4; i++) {
+			for (int j = i+1; j < 4; j++) {
+				if (i == 0 && j == 1) continue;
+				edges.push_back({k4[i], k4[j]});
+			}
+		}
+		spqr_tree tree(7, edges);
+		REQUIRE(!tree.is_planar);
+		REQUIRE(tree.NB == 1);
+		REQUIRE(!tree.blocks[0].planar);
+		int num_R = 0, num_nonplanar = 0;
+		for (int node = 0; node < tree.NN; node++) {
+			num_R += tree.nodes[node].type == spqr_tree::node_type::R;
+			num_nonplanar += !tree.nodes[node].planar;
+		}
+		REQUIRE(num_R == 2);
+		REQUIRE(num_nonplanar == 1);
 	}
 }
