@@ -1,7 +1,9 @@
 #pragma once
 
 #include <iostream>
+#include <algorithm>
 #include <array>
+#include <cstdint>
 #include <vector>
 #include <cassert>
 #include <utility>
@@ -127,6 +129,7 @@ struct spqr_tree {
 
 	struct block_t {
 		int component = -1;
+		bool planar = true;
 		enumerable_array_range_t<node_t, &spqr_tree::nodes> nodes;
 		enumerable_array_range_t<vedge_t, &spqr_tree::vedges> vedges;
 		array_range_t<int, &spqr_tree::block_vertices> block_vertices;
@@ -159,6 +162,25 @@ struct spqr_tree {
 
 	std::vector<int> depth;
 
+	/** Planarity / combinatorial embedding
+	 *
+	 *  Planarity is tested per block (left-right / de Fraysseix-Rosenstiehl
+	 *  style, riding on the SPQR DFS); `blocks[b].planar` records the result,
+	 *  and `is_planar` is the conjunction over all blocks.
+	 *
+	 *  The combinatorial embedding is given as a rotation system over
+	 *  half-edges: half-edge 2*e+k is the endpoint of edge e at vertex
+	 *  vedges[e].vs[k] (vedges[e].vs is the DFS orientation of edge e).
+	 *  embed_next[h] is the next half-edge in the rotation around the same
+	 *  vertex (circular), and embed_head[v] is some half-edge at v, or -1 if v
+	 *  is isolated. The rotations are only a planar embedding for vertices and
+	 *  edges whose blocks are planar; for non-planar blocks the rotation is
+	 *  structurally valid but meaningless.
+	 */
+	bool is_planar = true;
+	std::vector<int> embed_next;
+	std::vector<int> embed_head;
+
 private:
 	// Pairs of nxt, e
 	// Negative e means new block; otherwise, it's 2*e + (has_nontrivial_lowval2)
@@ -176,8 +198,11 @@ private:
 		for (auto [nxt, e] : adj[cur].bind(*this)) {
 			if (e == prvE) continue;
 			if (depth[nxt] == -1) {
+				par_edge[nxt] = e;
 				const auto [n1, n2] = dfs_lowval(nxt, d+1, e);
 
+				edge_lowpt[e] = std::min(d, n1);
+				edge_nesting[e] = 2 * edge_lowpt[e] + (n2 < d);
 				if (n1 >= d) {
 					bucket_edges.push_back({0, ~e, cur, nxt});
 				} else {
@@ -194,6 +219,8 @@ private:
 				}
 			} else if (depth[nxt] <= d) {
 				int nd = depth[nxt];
+				edge_lowpt[e] = nd;
+				edge_nesting[e] = 2 * nd;
 				if (nd == d) {
 					// Self-loop
 					bucket_edges.push_back({0, ~e, cur, nxt});
@@ -309,6 +336,157 @@ private:
 
 	int cur_component;
 	int cur_block;
+
+	// Left-right planarity state, maintained alongside the SPQR DFS.
+	// dfs_lowval doubles as LR's orientation phase (edge_lowpt/edge_nesting;
+	// the bucket order of adj is exactly LR's nesting order), and dfs_spqr
+	// doubles as LR's constraint phase: back edges push singleton conflict
+	// pairs, returning tree edges merge them (lr_add_constraints), and
+	// backtracking trims return edges to the parent (lr_finish_vertex).
+	// lr_ref/lr_side implicitly encode the two-coloring of back edges; the
+	// rotation system is emitted afterwards by build_embedding.
+	std::vector<int> par_edge;
+	std::vector<int> edge_lowpt;
+	std::vector<int> edge_nesting;
+	std::vector<int> lowpt_edge;
+	std::vector<int> lr_ref;
+	std::vector<int8_t> lr_side;
+	struct lr_interval {
+		int hi = -1, lo = -1;
+		bool empty() const { return lo == -1; }
+	};
+	struct lr_pair {
+		lr_interval L, R;
+	};
+	std::vector<lr_pair> lr_stack;
+	bool lr_ok = true;
+
+	void lr_fail() {
+		lr_ok = false;
+		is_planar = false;
+		blocks[cur_block].planar = false;
+		lr_stack.clear();
+	}
+
+	void lr_push_back_edge(int e) {
+		if (!lr_ok) return;
+		lowpt_edge[e] = e;
+		lr_stack.push_back({{}, {e, e}});
+	}
+
+	// Merge the conflict pairs generated while traversing edge ei into the
+	// constraints of its parent edge pe (Brandes, Algorithm 4).
+	void lr_add_constraints(int ei, int pe, int sb) {
+		lr_pair P;
+		// merge return edges of ei into P.R
+		do {
+			lr_pair Q = lr_stack.back();
+			lr_stack.pop_back();
+			if (!Q.L.empty()) std::swap(Q.L, Q.R);
+			if (!Q.L.empty()) return lr_fail();
+			if (edge_lowpt[Q.R.lo] > edge_lowpt[pe]) {
+				// merge intervals
+				if (P.R.empty()) {
+					P.R.hi = Q.R.hi;
+				} else {
+					lr_ref[P.R.lo] = Q.R.hi;
+				}
+				P.R.lo = Q.R.lo;
+			} else {
+				// align with the parent's lowpoint edge
+				lr_ref[Q.R.lo] = lowpt_edge[pe];
+			}
+		} while (int(lr_stack.size()) != sb);
+		// merge conflicting return edges of earlier siblings into P.L
+		auto conflicting = [&](const lr_interval& I) {
+			return !I.empty() && edge_lowpt[I.hi] > edge_lowpt[ei];
+		};
+		while (!lr_stack.empty() && (conflicting(lr_stack.back().L) || conflicting(lr_stack.back().R))) {
+			lr_pair Q = lr_stack.back();
+			lr_stack.pop_back();
+			if (conflicting(Q.R)) std::swap(Q.L, Q.R);
+			if (conflicting(Q.R)) return lr_fail();
+			// merge interval below lowpt(ei) into P.R
+			if (!Q.R.empty()) {
+				if (P.R.empty()) {
+					P.R.hi = Q.R.hi;
+				} else {
+					lr_ref[P.R.lo] = Q.R.hi;
+				}
+				P.R.lo = Q.R.lo;
+			}
+			if (P.L.empty()) {
+				P.L.hi = Q.L.hi;
+			} else {
+				lr_ref[P.L.lo] = Q.L.hi;
+			}
+			P.L.lo = Q.L.lo;
+		}
+		if (!(P.L.empty() && P.R.empty())) lr_stack.push_back(P);
+	}
+
+	// Integrate the constraints of edge ei (just traversed, from a vertex at
+	// cur_depth) into those of its parent edge pe.
+	void lr_integrate(int ei, int pe, int cur_depth, int sb) {
+		if (!lr_ok) return;
+		if (edge_lowpt[ei] < cur_depth) {
+			// ei has a return edge
+			if (lowpt_edge[pe] == -1) {
+				lowpt_edge[pe] = lowpt_edge[ei];
+			} else {
+				lr_add_constraints(ei, pe, sb);
+			}
+		}
+	}
+
+	// Backtracking over the tree edge pe into the vertex cur: trim back edges
+	// returning to cur's parent and assign pe its reference edge (Brandes,
+	// Algorithm 5).
+	void lr_finish_vertex(int cur, int pe) {
+		if (!lr_ok) return;
+		int ud = depth[cur] - 1;
+		auto lowest = [&](const lr_pair& P) {
+			if (P.L.empty()) return edge_lowpt[P.R.lo];
+			if (P.R.empty()) return edge_lowpt[P.L.lo];
+			return std::min(edge_lowpt[P.L.lo], edge_lowpt[P.R.lo]);
+		};
+		// drop entire conflict pairs returning only to the parent
+		while (!lr_stack.empty() && lowest(lr_stack.back()) == ud) {
+			lr_pair P = lr_stack.back();
+			lr_stack.pop_back();
+			if (P.L.lo != -1) lr_side[P.L.lo] = -1;
+		}
+		if (!lr_stack.empty()) {
+			lr_pair P = lr_stack.back();
+			lr_stack.pop_back();
+			// trim left interval
+			while (P.L.hi != -1 && edge_lowpt[P.L.hi] == ud) P.L.hi = lr_ref[P.L.hi];
+			if (P.L.hi == -1 && P.L.lo != -1) {
+				lr_ref[P.L.lo] = P.R.lo;
+				lr_side[P.L.lo] = -1;
+				P.L.lo = -1;
+			}
+			// trim right interval
+			while (P.R.hi != -1 && edge_lowpt[P.R.hi] == ud) P.R.hi = lr_ref[P.R.hi];
+			if (P.R.hi == -1 && P.R.lo != -1) {
+				lr_ref[P.R.lo] = P.L.lo;
+				lr_side[P.R.lo] = -1;
+				P.R.lo = -1;
+			}
+			if (!(P.L.empty() && P.R.empty())) lr_stack.push_back(P);
+		}
+		// side of pe is determined by the highest return edge
+		if (edge_lowpt[pe] < ud) {
+			assert(!lr_stack.empty());
+			int hL = lr_stack.back().L.hi;
+			int hR = lr_stack.back().R.hi;
+			if (hL != -1 && (hR == -1 || edge_lowpt[hL] > edge_lowpt[hR])) {
+				lr_ref[pe] = hL;
+			} else {
+				lr_ref[pe] = hR;
+			}
+		}
+	}
 
 	void finalize_node(estack_t es, vestack_t cap) {
 		assert(es.type != node_type::Q);
@@ -486,7 +664,7 @@ private:
 		return estack_t{{nxt, cur}, {int(vestack.size()) - 1, int(vestack.size())}, node_type::Q, is_tree};
 	}
 
-	void dfs_spqr(int cur, int cur_low) {
+	void dfs_spqr(int cur, int cur_low, int prvE) {
 		int cur_depth = depth[cur];
 		for (auto [nxt, e] : adj[cur].bind(*this)) {
 			if (e < 0) continue;
@@ -494,10 +672,12 @@ private:
 			e >>= 1;
 
 			int orig_size = int(estack.size());
+			int lr_sb = int(lr_stack.size());
 
 			bool is_tree = (depth[nxt] > cur_depth);
 			if (is_tree) {
-				dfs_spqr(nxt, cur_low);
+				dfs_spqr(nxt, cur_low, e);
+				lr_integrate(e, prvE, cur_depth, lr_sb);
 
 				// Before we insert our edge, we may have to fix the single-tree-edge tstack
 				assert(!tstack.empty());
@@ -596,6 +776,9 @@ private:
 					tstack.push_back({int(estack.size())-1, nxt, cur_depth});
 				}
 			} else {
+				lr_push_back_edge(e);
+				lr_integrate(e, prvE, cur_depth, lr_sb);
+
 				if (!estack.empty() && estack.back().vs == e_ins.vs) {
 					push_estack_p(e_ins);
 					// Don't change tstack, keep its old low value
@@ -618,6 +801,8 @@ private:
 			cur_low = cur;
 		}
 
+		lr_finish_vertex(cur, prvE);
+
 		block_vertices.push_back(cur);
 		vertex_blocks[vertices[cur].vertex_blocks.en++] = cur_block;
 	}
@@ -631,8 +816,10 @@ private:
 		blocks[block].block_vertices.st = int(block_vertices.size());
 		cur_block = block;
 
+		lr_ok = true;
 		if (nxt != cur) {
-			dfs_spqr(nxt, nxt);
+			dfs_spqr(nxt, nxt, e);
+			assert(!lr_ok || lr_stack.empty());
 			if (estack.empty()) {
 				estack.push_back(estack_t{{cur, nxt}, {int(vestack.size()), int(vestack.size())}, node_type::I, false});
 			} else {
@@ -763,6 +950,163 @@ private:
 		first_occurrence = {};
 	}
 
+	// Embedding emission state (Brandes, Algorithm 6): rotations are built as
+	// doubly-linked lists of half-edges per vertex; outgoing edges are placed
+	// in signed nesting order, incoming edges are placed during a DFS.
+	std::vector<int> embed_prev;
+	std::vector<int> emb_out;
+	std::vector<range_t> emb_out_adj;
+	std::vector<int> emb_lref, emb_rref;
+
+	void list_make_first(int v, int h) {
+		int a = embed_head[v];
+		embed_prev[h] = -1;
+		embed_next[h] = a;
+		if (a != -1) embed_prev[a] = h;
+		embed_head[v] = h;
+	}
+	void list_insert_after(int a, int h) {
+		int b = embed_next[a];
+		embed_next[a] = h;
+		embed_prev[h] = a;
+		embed_next[h] = b;
+		if (b != -1) embed_prev[b] = h;
+	}
+	void list_insert_before(int v, int a, int h) {
+		int b = embed_prev[a];
+		embed_prev[a] = h;
+		embed_next[h] = a;
+		embed_prev[h] = b;
+		if (b != -1) embed_next[b] = h;
+		else embed_head[v] = h;
+	}
+
+	void dfs_embed(int v) {
+		for (int i = emb_out_adj[v].st; i < emb_out_adj[v].en; i++) {
+			int e = emb_out[i];
+			int w = vedges[e].vs[1];
+			int h = 2*e+1; // the half-edge of e at its target w
+			if (par_edge[w] == e) {
+				// tree edge: it goes first in w's rotation, and incoming
+				// back edges from its subtree anchor around it at v
+				list_make_first(w, h);
+				emb_lref[v] = emb_rref[v] = 2*e;
+				dfs_embed(w);
+			} else {
+				// back edge: place at its target next to the tree edge
+				// leading down to its source, on its assigned side
+				if (lr_side[e] == 1) {
+					list_insert_after(emb_rref[w], h);
+				} else {
+					list_insert_before(w, emb_lref[w], h);
+					emb_lref[w] = h;
+				}
+			}
+		}
+	}
+
+	void build_embedding() {
+		embed_next.assign(2 * NE, -1);
+		embed_head.assign(NV, -1);
+		if (NE == 0) return;
+
+		// Resolve the implicit two-coloring: lr_side[e] relative to lr_ref[e]
+		// chains becomes an absolute sign.
+		{
+			std::vector<int> chain;
+			for (int e0 = 0; e0 < NE; e0++) {
+				int x = e0;
+				while (lr_ref[x] != -1) {
+					chain.push_back(x);
+					x = lr_ref[x];
+				}
+				int8_t s = lr_side[x];
+				while (!chain.empty()) {
+					int y = chain.back();
+					chain.pop_back();
+					s = int8_t(lr_side[y] * s);
+					lr_side[y] = s;
+					lr_ref[y] = -1;
+				}
+			}
+		}
+
+		// Bucket sort edges by signed nesting depth and group by source vertex.
+		int OFF = 2 * NV + 1;
+		std::vector<int> bucket_st(2 * OFF + 1, 0);
+		auto key = [&](int e) { return lr_side[e] * edge_nesting[e] + OFF; };
+		int num_out = 0;
+		for (int e = 0; e < NE; e++) {
+			if (vedges[e].vs[0] == vedges[e].vs[1]) continue;
+			++bucket_st[key(e)];
+			num_out++;
+		}
+		{
+			int cur = 0;
+			for (int i = 0; i < int(bucket_st.size()); i++) {
+				bucket_st[i] = std::exchange(cur, cur + bucket_st[i]);
+			}
+		}
+		std::vector<int> sorted_e(num_out);
+		for (int e = 0; e < NE; e++) {
+			if (vedges[e].vs[0] == vedges[e].vs[1]) continue;
+			sorted_e[bucket_st[key(e)]++] = e;
+		}
+		emb_out_adj.assign(NV, {});
+		{
+			std::vector<int> odeg(NV, 0);
+			for (int e : sorted_e) odeg[vedges[e].vs[0]]++;
+			int cur = 0;
+			for (int v = 0; v < NV; v++) {
+				emb_out_adj[v].st = emb_out_adj[v].en = cur;
+				cur += odeg[v];
+			}
+		}
+		emb_out.resize(num_out);
+		for (int e : sorted_e) {
+			emb_out[emb_out_adj[vedges[e].vs[0]].en++] = e;
+		}
+
+		// Initial rotations: the sorted outgoing half-edges.
+		embed_prev.assign(2 * NE, -1);
+		{
+			std::vector<int> tail(NV, -1);
+			for (int v = 0; v < NV; v++) {
+				for (int i = emb_out_adj[v].st; i < emb_out_adj[v].en; i++) {
+					int h = 2 * emb_out[i];
+					if (tail[v] == -1) embed_head[v] = h;
+					else {
+						embed_next[tail[v]] = h;
+						embed_prev[h] = tail[v];
+					}
+					tail[v] = h;
+				}
+			}
+		}
+
+		emb_lref.assign(NV, -1);
+		emb_rref.assign(NV, -1);
+		for (int rt = 0; rt < NV; rt++) {
+			if (depth[rt] != 0) continue;
+			dfs_embed(rt);
+		}
+
+		// Self loops: place the two half-edges adjacently, anywhere.
+		for (int e = 0; e < NE; e++) {
+			if (vedges[e].vs[0] != vedges[e].vs[1]) continue;
+			list_make_first(vedges[e].vs[0], 2*e);
+			list_insert_after(2*e, 2*e+1);
+		}
+
+		// Close the rotations into circular lists.
+		for (int v = 0; v < NV; v++) {
+			int h = embed_head[v];
+			if (h == -1) continue;
+			while (embed_next[h] != -1) h = embed_next[h];
+			embed_next[h] = embed_head[v];
+		}
+	}
+
 public:
 	spqr_tree() = default;
 	explicit spqr_tree(int NV_, std::vector<std::array<int, 2>> edges, int root = -1) {
@@ -775,12 +1119,34 @@ public:
 
 		NE = int(edges.size());
 
+		par_edge.assign(NV, -1);
+		edge_lowpt.assign(NE, 0);
+		edge_nesting.assign(NE, 0);
+		lowpt_edge.assign(NE, -1);
+		lr_ref.assign(NE, -1);
+		lr_side.assign(NE, 1);
+		lr_stack.reserve(NE);
+
 		build_sorted_adj(std::move(edges), root);
 
 		build_spqr();
 
+		build_embedding();
+
 		adj = {};
 		adj_lists = {};
+		par_edge = {};
+		edge_lowpt = {};
+		edge_nesting = {};
+		lowpt_edge = {};
+		lr_ref = {};
+		lr_side = {};
+		lr_stack = {};
+		embed_prev = {};
+		emb_out = {};
+		emb_out_adj = {};
+		emb_lref = {};
+		emb_rref = {};
 		// Leave depth since it's sometimes useful
 		//depth = {};
 	}

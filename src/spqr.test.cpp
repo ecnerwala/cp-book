@@ -306,6 +306,117 @@ TEST_CASE("SQPR Tree", "[spqr]") {
 
 				REQUIRE(vb_pairs == bv_pairs);
 			}
+
+			// ==== CHECK PLANARITY / EMBEDDING ====
+			{
+				bool all_blocks_planar = true;
+				for (int b = 0; b < tree.NB; b++) {
+					all_blocks_planar = all_blocks_planar && tree.blocks[b].planar;
+				}
+				REQUIRE(tree.is_planar == all_blocks_planar);
+
+				REQUIRE(int(tree.embed_next.size()) == 2 * NE);
+				REQUIRE(int(tree.embed_head.size()) == NV);
+
+				// The rotation at each vertex is a circular list over exactly
+				// its incident half-edges
+				std::vector<int> vertex_deg(NV, 0);
+				for (int e = 0; e < NE; e++) {
+					vertex_deg[tree.vedges[e].vs[0]]++;
+					vertex_deg[tree.vedges[e].vs[1]]++;
+				}
+				for (int v = 0; v < NV; v++) {
+					INFO("v = " << v);
+					int h0 = tree.embed_head[v];
+					if (h0 == -1) {
+						REQUIRE(vertex_deg[v] == 0);
+						continue;
+					}
+					int cnt = 0;
+					int h = h0;
+					do {
+						REQUIRE(tree.vedges[h >> 1].vs[h & 1] == v);
+						cnt++;
+						REQUIRE(cnt <= vertex_deg[v]);
+						h = tree.embed_next[h];
+					} while (h != h0);
+					REQUIRE(cnt == vertex_deg[v]);
+				}
+
+				// For components whose blocks are all planar, the rotation
+				// system must satisfy Euler's formula: V - E + F == 2
+				std::vector<char> component_planar(tree.NC, 1);
+				for (int b = 0; b < tree.NB; b++) {
+					if (!tree.blocks[b].planar) {
+						component_planar[tree.blocks[b].component] = 0;
+					}
+				}
+				std::vector<int> comp_V(tree.NC, 0), comp_E(tree.NC, 0), comp_F(tree.NC, 0);
+				for (int v = 0; v < NV; v++) comp_V[tree.vertices[v].component]++;
+				for (int e = 0; e < NE; e++) comp_E[tree.vedges[e].component]++;
+				std::vector<char> face_seen(2 * NE, 0);
+				for (int h0 = 0; h0 < 2 * NE; h0++) {
+					if (face_seen[h0]) continue;
+					int h = h0;
+					do {
+						face_seen[h] = 1;
+						h = tree.embed_next[h ^ 1];
+					} while (h != h0);
+					comp_F[tree.vedges[h0 >> 1].component]++;
+				}
+				for (int c = 0; c < tree.NC; c++) {
+					INFO("component = " << c);
+					if (!component_planar[c] || comp_E[c] == 0) continue;
+					REQUIRE(comp_V[c] - comp_E[c] + comp_F[c] == 2);
+				}
+			}
 		}
+	}
+}
+
+TEST_CASE("SPQR Tree planarity fixtures", "[spqr]") {
+	auto planarity = [](int NV, std::vector<std::array<int, 2>> edges) {
+		return spqr_tree(NV, std::move(edges)).is_planar;
+	};
+
+	// K4
+	REQUIRE(planarity(4, {{0,1},{0,2},{0,3},{1,2},{1,3},{2,3}}));
+	// K5
+	REQUIRE(!planarity(5, {{0,1},{0,2},{0,3},{0,4},{1,2},{1,3},{1,4},{2,3},{2,4},{3,4}}));
+	// K5 minus an edge
+	REQUIRE(planarity(5, {{0,1},{0,2},{0,3},{0,4},{1,2},{1,3},{1,4},{2,3},{2,4}}));
+	// K3,3
+	REQUIRE(!planarity(6, {{0,3},{0,4},{0,5},{1,3},{1,4},{1,5},{2,3},{2,4},{2,5}}));
+	// Petersen graph
+	{
+		std::vector<std::array<int, 2>> edges;
+		for (int i = 0; i < 5; i++) {
+			edges.push_back({i, (i+1) % 5});
+			edges.push_back({i, i+5});
+			edges.push_back({5 + i, 5 + (i+2) % 5});
+		}
+		REQUIRE(!planarity(10, edges));
+	}
+	// Cube graph
+	REQUIRE(planarity(8, {{0,1},{1,2},{2,3},{3,0},{4,5},{5,6},{6,7},{7,4},{0,4},{1,5},{2,6},{3,7}}));
+	// Multigraph with self loops, parallel edges, and a bridge
+	REQUIRE(planarity(5, {{0,0},{0,1},{0,1},{0,1},{1,2},{2,3},{3,4},{4,2},{2,2}}));
+
+	// K5 hanging off a square through a cutvertex: only the K5 block is non-planar
+	{
+		std::vector<std::array<int, 2>> edges = {{0,1},{1,2},{2,3},{3,0}};
+		for (int i = 0; i < 5; i++) {
+			for (int j = i+1; j < 5; j++) {
+				edges.push_back({i == 0 ? 0 : i + 3, j + 3});
+			}
+		}
+		spqr_tree tree(8, edges);
+		REQUIRE(!tree.is_planar);
+		int num_planar_blocks = 0;
+		for (int b = 0; b < tree.NB; b++) {
+			num_planar_blocks += tree.blocks[b].planar;
+		}
+		REQUIRE(tree.NB == 2);
+		REQUIRE(num_planar_blocks == 1);
 	}
 }
