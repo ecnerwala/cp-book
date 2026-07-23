@@ -8,6 +8,9 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -49,3 +52,10 @@ jobs:
         with:
           name: coverage-report
           path: coverage/
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage
+          path: coverage/summary.md
