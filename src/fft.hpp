@@ -1646,7 +1646,6 @@ struct cached_power_series_exact {
 
 	int len() const { return s.len(); }
 	const power_series_exact<E>& series() const { return s; }
-	power_series_exact<E> take_series() && { return std::move(s); }
 	// the fft_cache over series(), fed to the cached fft:: entry points alongside it
 	fft::fft_cache<E>& cache() { return f; }
 
@@ -1692,16 +1691,16 @@ private:
 //   - multiplying by x (the common way to raise the degree) is an amortized-O(1)
 //     push_back of the new constant 0;
 //   - the transposed-multiplication world (linear forms, middle products,
-//     subproduct-tree kernels, Bostan-Mori denominators) consumes rev(p): rev() is a
-//     free span, so one transform cache of the storage serves both a poly's products
-//     and its transposed products (the transforms of p and rev(p) are unrelated in
-//     our convention);
-//   - a monic poly's storage starts with its leading 1 (rev() front == 1, a
+//     subproduct-tree kernels, Bostan-Mori denominators) consumes rev(p):
+//     rev_series() is a free view, so one transform cache of the storage serves both
+//     a poly's products and its transposed products (the transforms of p and rev(p)
+//     are unrelated in our convention);
+//   - a monic poly's storage starts with its leading 1 (storage front == 1, a
 //     compile-time fact candidate for transform caches);
 //   - Horner evaluation is a forward pass over the storage.
 // Conversions to/from the exact series rev(p) are free (rev_series /
 // from_rev_series); natural-order conversion is spelled out via iterators or the
-// series(n) truncation method, never an implicit reorder.
+// unrev_series(n) truncation method, never an implicit reorder.
 template <typename E> struct poly {
 	using T = typename E::value_type;
 	power_series_exact<E> c; // rev(p): c[j] = [x^(deg-j)], leading coefficient first
@@ -1712,18 +1711,16 @@ template <typename E> struct poly {
 	// coefficient (x^0-first) order
 	poly(std::initializer_list<T> coeffs) : c(std::rbegin(coeffs), std::rend(coeffs)) {}
 	explicit poly(std::span<const T> coeffs) : c(coeffs.rbegin(), coeffs.rend()) {}
-	template <typename It> poly(It first, It last) : c(first, last) { std::reverse(c.begin(), c.end()); }
 
 	// the reversed convention: p <-> the exact series rev(p), a free (un)wrapping
 	const power_series_exact<E>& rev_series() const { return c; }
-	power_series_exact<E> take_rev_series() && { return std::move(c); }
 	static poly from_rev_series(power_series_exact<E> s) {
 		poly r;
 		r.c = std::move(s);
 		return r;
 	}
 	// natural-order coefficients truncated (or zero-extended) to precision n
-	power_series<E> series(int n) const {
+	power_series<E> unrev_series(int n) const {
 		power_series<E> r(size_t(n), T{});
 		std::copy(begin(), begin() + std::min(n, len()), r.begin());
 		return r;
@@ -1738,10 +1735,6 @@ template <typename E> struct poly {
 	T& operator[](int i) { return c[len() - 1 - i]; }
 	const T& operator[](int i) const { return c[len() - 1 - i]; }
 	T leading() const { return c.front(); }
-	// rev(p) as a contiguous span (what transposed multiplications consume)
-	std::span<const T> rev() const { return std::span<const T>(c); }
-	// cached copy of the storage, shared by products and transposed products
-	cached_power_series_exact<E> rev_cache() const { return cached_power_series_exact<E>(c); }
 	// multiply by x^k: appends the new zero constant terms to the storage
 	void shift(int k = 1) {
 		if (len() > 0) c.insert(c.end(), size_t(k), T(0));
@@ -1782,14 +1775,14 @@ template <typename E> struct poly {
 	friend poly operator*(const poly& a, const poly& b) {
 		if (a.len() == 0 || b.len() == 0) return {};
 		poly r(a.len() + b.len() - 1);
-		fft::multiply<E>(a.rev(), b.rev(), std::span<T>(r.c));
+		fft::multiply<E>(std::span<const T>(a.c), std::span<const T>(b.c), std::span<T>(r.c));
 		return r;
 	}
 	poly& operator*=(const poly& o) { return *this = (*this) * o; }
 	friend poly square(const poly& a) {
 		if (a.len() == 0) return {};
 		poly r(2 * a.len() - 1);
-		fft::square<E>(a.rev(), std::span<T>(r.c));
+		fft::square<E>(std::span<const T>(a.c), std::span<T>(r.c));
 		return r;
 	}
 };
@@ -1798,8 +1791,7 @@ template <typename E> struct poly {
 // the member c is the reverse of the logical coefficient series (c[i], the weight
 // applied to S_i, is logical coefficient len-1-i). Constructors take logical
 // (x^0-first) order like poly's; adopting/exposing the reversed storage is the named
-// rev_series / from_rev_series, and rev() is the contiguous storage span (what middle
-// products consume). Applying it is a dot product over the storage.
+// rev_series / from_rev_series. Applying it is a dot product over the storage.
 // composed_with(q) is the transposed multiplication: f(S * q) as a functional of S,
 // i.e. a middle product of the storage with q's reversed storage. Evaluation-at-z has
 // storage z^i; multipoint evaluation is the pushdown of such functionals through a
@@ -1815,11 +1807,9 @@ struct linear_form {
 	// logical (x^0-first) coefficient order, mirroring poly
 	linear_form(std::initializer_list<T> coeffs) : c(std::rbegin(coeffs), std::rend(coeffs)) {}
 	explicit linear_form(std::span<const T> coeffs) : c(coeffs.rbegin(), coeffs.rend()) {}
-	template <typename It> linear_form(It first, It last) : c(first, last) { std::reverse(c.begin(), c.end()); }
 
 	// the reversed convention, mirroring poly
 	const power_series_exact<E>& rev_series() const { return c; }
-	power_series_exact<E> take_rev_series() && { return std::move(c); }
 	static linear_form from_rev_series(power_series_exact<E> s) {
 		linear_form r;
 		r.c = std::move(s);
@@ -1827,7 +1817,6 @@ struct linear_form {
 	}
 	// the functional q -> [x^deg(p)] p*q (weight p[deg(p)-i] on S_i): a copy of p's storage
 	static linear_form from_poly(const poly<E>& p) { return from_rev_series(p.rev_series()); }
-	std::span<const T> rev() const { return std::span<const T>(c); }
 
 	int len() const { return c.len(); }
 	T& operator[](int i) { return c[len() - 1 - i]; }
@@ -1860,8 +1849,8 @@ struct linear_form {
 	// of the two storages. Result supports S windows up to len - deg q.
 	linear_form composed_with(const poly<E>& q) const {
 		assert(q.len() > 0 && q.len() <= len());
-		return from_rev_series(power_series_exact<E>(
-				fft::middle_product<E>(rev(), q.rev())));
+		return from_rev_series(power_series_exact<E>(fft::middle_product<E>(
+				std::span<const T>(c), std::span<const T>(q.rev_series()))));
 	}
 
 	// Composition with the transposed multiplication by s: a power series lives in
@@ -1914,7 +1903,7 @@ struct subproduct_tree {
 		down[1] = std::move(f);
 		for (int i = 1; i < N; i++) {
 			// one transform of the kernel serves both children's middle products
-			std::span<const T> k = down[i].rev();
+			std::span<const T> k(down[i].rev_series());
 			fft::fft_cache<E> ck;
 			down[2*i+0] = linear_form<E>::from_rev_series(power_series_exact<E>(fft::middle_product<E>(
 					k, ck, std::span<const T>(nodes[2*i+1].series()), nodes[2*i+1].cache())));
@@ -1922,7 +1911,7 @@ struct subproduct_tree {
 					k, ck, std::span<const T>(nodes[2*i+0].series()), nodes[2*i+0].cache())));
 		}
 		std::vector<T> out(size_t(N), T{});
-		for (int i = 0; i < N; i++) out[i] = down[N + i].rev()[0];
+		for (int i = 0; i < N; i++) out[i] = down[N + i].rev_series()[0];
 		return out;
 	}
 

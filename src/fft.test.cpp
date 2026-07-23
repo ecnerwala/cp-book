@@ -454,8 +454,8 @@ TEST_CASE("linear_form evaluation and transposed multiplication", "[fft]") {
 	REQUIRE(ft.len() == n);
 	for (int j = 0; j < n; j++) {
 		num want{};
-		for (int d = 0; d <= j; d++) want += t[d] * f.rev()[j - d];
-		REQUIRE(ft.rev()[j] == want);
+		for (int d = 0; d <= j; d++) want += t[d] * f.rev_series()[j - d];
+		REQUIRE(ft.rev_series()[j] == want);
 	}
 	// an exact series may be any length; the tail beyond it is zero
 	power_series_exact<E> e(t.begin(), t.begin() + 11);
@@ -463,8 +463,8 @@ TEST_CASE("linear_form evaluation and transposed multiplication", "[fft]") {
 	REQUIRE(fe.len() == n);
 	for (int j = 0; j < n; j++) {
 		num want{};
-		for (int d = 0; d <= j && d < 11; d++) want += t[d] * f.rev()[j - d];
-		REQUIRE(fe.rev()[j] == want);
+		for (int d = 0; d <= j && d < 11; d++) want += t[d] * f.rev_series()[j - d];
+		REQUIRE(fe.rev_series()[j] == want);
 	}
 }
 
@@ -526,8 +526,8 @@ TEST_CASE("poly reversed storage and series interop", "[fft]") {
 	// indexing is coefficient order, storage is reversed
 	REQUIRE(a[0] == pa[0]);
 	REQUIRE(a.leading() == pa[36]);
-	REQUIRE(a.rev()[0] == pa[36]);
-	REQUIRE(a.rev()[36] == pa[0]);
+	REQUIRE(a.rev_series()[0] == pa[36]);
+	REQUIRE(a.rev_series()[36] == pa[0]);
 	// products convolve the storage directly
 	poly<E> p = a * b;
 	check_eq(vector<num>(p.begin(), p.end()), multiply_slow(pa, pb));
@@ -546,7 +546,7 @@ TEST_CASE("poly reversed storage and series interop", "[fft]") {
 	REQUIRE(g[0] == num(0));
 	REQUIRE(g[1] == num(0));
 	for (int i = 0; i < 37; i++) REQUIRE(g[i + 2] == pa[i]);
-	REQUIRE(g.rev().data()[0] == pa[36]);
+	REQUIRE(g.rev_series().data()[0] == pa[36]);
 	// named conversions use the reversed convention and round-trip freely
 	const power_series_exact<E>& ra = a.rev_series();
 	REQUIRE(ra.len() == 37);
@@ -555,15 +555,19 @@ TEST_CASE("poly reversed storage and series interop", "[fft]") {
 	// a poly's natural-order coefficients as an exact series (for series products)
 	power_series_exact<E> xa(a.begin(), a.end());
 	REQUIRE(equal(xa.begin(), xa.end(), pa.begin(), pa.end()));
-	REQUIRE(a.series(10) == power_series<E>(pa.begin(), pa.begin() + 10));
-	// the storage transform serves transposed products: middle product against rev()
+	REQUIRE(a.unrev_series(10) == power_series<E>(pa.begin(), pa.begin() + 10));
+	// the storage transform serves transposed products: middle product against rev_series()
 	std::vector<num> vals(60);
 	fill_rnd(vals, mt);
 	cached_power_series_exact<E> cv(power_series_exact<E>(vals.begin(), vals.end()));
-	cached_power_series_exact<E> ca = a.rev_cache();
+	cached_power_series_exact<E> ca(a.rev_series());
 	auto mp = middle_product(cv, ca);
-	cached_power_series_exact<E> cra(a.rev_series());
-	REQUIRE(mp == middle_product(cv, cra));
+	auto naive = [&](int j) {
+		num r{};
+		for (int d = 0; d < 37; d++) r += pa[d] * vals[j + d];
+		return r;
+	};
+	for (int j = 0; j < sz(mp); j++) REQUIRE(mp[size_t(j)] == naive(j));
 }
 
 TEST_CASE("power_series log/exp/pow", "[fft]") {
