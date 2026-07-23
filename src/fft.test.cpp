@@ -339,6 +339,233 @@ TEMPLATE_TEST_CASE("negate_arg transforms", "[fft]", ALL_ENGINES) {
 	}
 }
 
+TEMPLATE_TEST_CASE("Bostan-Mori kth_term", "[fft]", MOD_ENGINES) {
+	using E = TestType;
+	using num = typename E::value_type;
+	mt19937 mt(Catch::getSeed());
+	for (int d : {1, 2, 3, 8, 20}) {
+		vector<num> p(d - 1), q(d);
+		fill_rnd(p, mt);
+		fill_rnd(q, mt);
+		if (q[0] == 0) q[0] = 1;
+		// reference: power series division to many terms
+		int terms = 300;
+		vector<num> ser(terms);
+		num iq0 = inv(q[0]);
+		for (int i = 0; i < terms; i++) {
+			num v = i < int(p.size()) ? p[i] : num(0);
+			for (int j = 1; j <= min<int>(i, d - 1); j++) v -= q[j] * ser[i-j];
+			ser[i] = v * iq0;
+		}
+		power_series_exact<E> xp(p.begin(), p.end()), xq(q.begin(), q.end());
+		for (uint64_t k : {uint64_t(0), uint64_t(1), uint64_t(7), uint64_t(100), uint64_t(299)}) {
+			INFO("d = " << d << ", k = " << k);
+			REQUIRE(kth_term<E>(xp, xq, k) == ser[k]);
+		}
+	}
+}
+
+TEST_CASE("power_series cached wrappers", "[fft]") {
+	using num = modnum<998244353>;
+	using E = fft_engine<num>;
+	mt19937 mt(Catch::getSeed());
+	// cached_power_series_exact works with the cached fft:: entry points
+	power_series_exact<E> a(37), b(21);
+	fill_rnd(a, mt);
+	fill_rnd(b, mt);
+	cached_power_series_exact<E> ca(a), cb(b);
+	power_series_exact<E> got(size_t(a.len() + b.len() - 1));
+	fft::multiply<E>(span<const num>(ca.series()), ca.cache(),
+			span<const num>(cb.series()), cb.cache(), span<num>(got));
+	REQUIRE(got == a * b);
+	REQUIRE((ca * cb) == (a * b));
+	REQUIRE(middle_product(ca, cb) == fft::middle_product<E>(a, b));
+	REQUIRE(square(ca) == square(a));
+	// the same fft_cache serves multiply and square of the same coefficients
+	fft::fft_cache<E> fa, fb;
+	power_series_exact<E> got2(size_t(a.len() + b.len() - 1));
+	fft::multiply<E>(span<const num>(a), fa, span<const num>(b), fb, span<num>(got2));
+	REQUIRE(got2 == a * b);
+	fft::square<E>(span<const num>(a), fa, span<num>(got2));
+	power_series_exact<E> asq = square(a);
+	REQUIRE(equal(got2.begin(), got2.end(), asq.begin()));
+	// cached_power_series products match plain products at all mixed shapes (see the
+	// templated multiply_cached test for the transform-seeding path on all engines)
+	power_series<E> pa(40), pb(25);
+	fill_rnd(pa, mt);
+	fill_rnd(pb, mt);
+	prefix_cached_power_series<E> qa(pa), qb(pb);
+	REQUIRE((qa * qb) == (pa * pb));
+	REQUIRE((qa * pb) == (pa * pb));
+	REQUIRE((pa * qb) == (pa * pb));
+	// prefix caches survive precision extension: covered prefixes are reused, the
+	// clamped full cache is rebuilt, and results still match
+	power_series<E> tail(15);
+	fill_rnd(tail, mt);
+	qa.append(span<const num>(tail));
+	power_series<E> pa2 = pa;
+	pa2.insert(pa2.end(), tail.begin(), tail.end());
+	for (int p : {8, 16, 32, 64}) {
+		auto& pc = qa.prefix_cache(p);
+		REQUIRE(pc.len() == min(p + 1, qa.len()));
+		REQUIRE(qa.prefix(p)[0] == pa2[0]);
+	}
+	REQUIRE((qa * qb) == (pa2 * pb));
+	// products against many smaller operands reuse per-scale prefix caches
+	for (int k : {1, 2, 3, 5, 17, 33, 100}) {
+		power_series<E> small(size_t(k), num{});
+		fill_rnd(small, mt);
+		REQUIRE((qa * small) == (pa2 * small));
+		REQUIRE((small * qa) == (small * pa2));
+	}
+	// exact cached series give full products, mixing with truncated operands
+	prefix_cached_power_series<E, true> xqa(a), xqb(b);
+	REQUIRE((xqa * xqb) == (a * b));
+	REQUIRE((xqa * b) == (a * b));
+	REQUIRE((xqa * qb) == (a * pb));
+	REQUIRE((pb * xqa) == (pb * a));
+}
+
+TEST_CASE("linear_form evaluation and transposed multiplication", "[fft]") {
+	using num = modnum<998244353>;
+	using E = fft_engine<num>;
+	mt19937 mt(Catch::getSeed());
+	int n = 40;
+	num z = num(mt());
+	auto f = linear_form<E>::polynomial_evaluation(z, n);
+	vector<num> sv(30);
+	fill_rnd(sv, mt);
+	poly<E> s((span<const num>(sv)));
+	REQUIRE(f(s) == s(z));
+	// f(S * q) == composed_with(q)(S)
+	vector<num> qv(11), s2v(n - 11);
+	fill_rnd(qv, mt);
+	fill_rnd(s2v, mt);
+	poly<E> q((span<const num>(qv))), s2((span<const num>(s2v)));
+	auto fq = f.composed_with(q);
+	REQUIRE(fq(s2) == f(s2 * q));
+	// evaluation functional composed with q evaluates S * q at z
+	REQUIRE(fq(s2) == (s2 * q)(z));
+	// composing with a power series (living in 1/x) multiplies the storages,
+	// prefix-truncated back to length n
+	power_series<E> t(size_t(n), num{});
+	fill_rnd(t, mt);
+	auto ft = f.composed_with(t);
+	REQUIRE(ft.len() == n);
+	for (int j = 0; j < n; j++) {
+		num want{};
+		for (int d = 0; d <= j; d++) want += t[d] * f.rev()[j - d];
+		REQUIRE(ft.rev()[j] == want);
+	}
+	// an exact series may be any length; the tail beyond it is zero
+	power_series_exact<E> e(t.begin(), t.begin() + 11);
+	auto fe = f.composed_with(e);
+	REQUIRE(fe.len() == n);
+	for (int j = 0; j < n; j++) {
+		num want{};
+		for (int d = 0; d <= j && d < 11; d++) want += t[d] * f.rev()[j - d];
+		REQUIRE(fe.rev()[j] == want);
+	}
+}
+
+TEST_CASE("power_series mixed exactness operators", "[fft]") {
+	using num = modnum<998244353>;
+	using E = fft_engine<num>;
+	using xps = power_series_exact<E>;
+	using ps = power_series<E>;
+	mt19937 mt(Catch::getSeed());
+	xps a(37), b(23);
+	fill_rnd(a, mt);
+	fill_rnd(b, mt);
+	// exact * exact is the full product
+	xps p = a * b;
+	check_eq(std::vector<num>(p), multiply_slow(a, b));
+	REQUIRE(square(a) == a * a);
+	// exact +/- extend to the max length
+	xps s = a + b, d = a - b;
+	REQUIRE(s.len() == 37);
+	for (int i = 0; i < 37; i++) REQUIRE(s[i] == a[i] + (i < 23 ? b[i] : num(0)));
+	for (int i = 0; i < 37; i++) REQUIRE(d[i] == a[i] - (i < 23 ? b[i] : num(0)));
+	// an exact operand doesn't lower a truncated result's precision
+	ps t(b.begin(), b.end());
+	ps m = a * t;
+	REQUIRE(m.len() == 23);
+	for (int i = 0; i < 23; i++) REQUIRE(m[i] == p[i]);
+	REQUIRE(t * a == m);
+	ps st = a + t, dt = t - a;
+	REQUIRE(st.len() == 23);
+	for (int i = 0; i < 23; i++) REQUIRE(st[i] == a[i] + t[i]);
+	for (int i = 0; i < 23; i++) REQUIRE(dt[i] == t[i] - a[i]);
+	// truncated * truncated is the min precision
+	ps u(a.begin(), a.end());
+	REQUIRE((u * t).len() == 23);
+	REQUIRE(u * t == m);
+	REQUIRE((u + t).len() == 23);
+	// square of a truncated series keeps its precision
+	REQUIRE(square(t).len() == 23);
+	for (int i = 0; i < 23; i++) REQUIRE(square(t)[i] == (b * b)[i]);
+	// exact -> truncated is implicit (forgetting exactness); the reverse is explicit
+	ps forgot = p;
+	REQUIRE(forgot.len() == p.len());
+	REQUIRE(equal(forgot.begin(), forgot.end(), p.begin()));
+	xps back(forgot);
+	REQUIRE(back == p);
+	static_assert(std::is_convertible_v<xps, ps>);
+	static_assert(!std::is_convertible_v<ps, xps>);
+	static_assert(std::is_constructible_v<xps, ps>);
+}
+
+TEST_CASE("poly reversed storage and series interop", "[fft]") {
+	using num = modnum<998244353>;
+	using E = fft_engine<num>;
+	mt19937 mt(Catch::getSeed());
+	vector<num> pa(37), pb(23);
+	fill_rnd(pa, mt);
+	fill_rnd(pb, mt);
+	poly<E> a((span<const num>(pa))), b((span<const num>(pb)));
+	// indexing is coefficient order, storage is reversed
+	REQUIRE(a[0] == pa[0]);
+	REQUIRE(a.leading() == pa[36]);
+	REQUIRE(a.rev()[0] == pa[36]);
+	REQUIRE(a.rev()[36] == pa[0]);
+	// products convolve the storage directly
+	poly<E> p = a * b;
+	check_eq(vector<num>(p.begin(), p.end()), multiply_slow(pa, pb));
+	REQUIRE(square(a) == a * a);
+	num x = num(mt());
+	REQUIRE(p(x) == a(x) * b(x));
+	// +/- align at x^0 (the shared storage tail)
+	poly<E> s = a + b, d = b - a;
+	REQUIRE(s.len() == 37);
+	for (int i = 0; i < 37; i++) REQUIRE(s[i] == pa[i] + (i < 23 ? pb[i] : num(0)));
+	for (int i = 0; i < 37; i++) REQUIRE(d[i] == (i < 23 ? pb[i] : num(0)) - pa[i]);
+	// multiplying by x^k appends zeros to the storage; coefficients shift up
+	poly<E> g = a;
+	g.shift(2);
+	REQUIRE(g.len() == 39);
+	REQUIRE(g[0] == num(0));
+	REQUIRE(g[1] == num(0));
+	for (int i = 0; i < 37; i++) REQUIRE(g[i + 2] == pa[i]);
+	REQUIRE(g.rev().data()[0] == pa[36]);
+	// named conversions use the reversed convention and round-trip freely
+	const power_series_exact<E>& ra = a.rev_series();
+	REQUIRE(ra.len() == 37);
+	for (int i = 0; i < 37; i++) REQUIRE(ra[i] == pa[36 - i]);
+	REQUIRE(poly<E>::from_rev_series(ra) == a);
+	// a poly's natural-order coefficients as an exact series (for series products)
+	power_series_exact<E> xa(a.begin(), a.end());
+	REQUIRE(equal(xa.begin(), xa.end(), pa.begin(), pa.end()));
+	REQUIRE(a.series(10) == power_series<E>(pa.begin(), pa.begin() + 10));
+	// the storage transform serves transposed products: middle product against rev()
+	std::vector<num> vals(60);
+	fill_rnd(vals, mt);
+	cached_power_series_exact<E> cv(power_series_exact<E>(vals.begin(), vals.end()));
+	cached_power_series_exact<E> ca = a.rev_cache();
+	auto mp = middle_product(cv, ca);
+	cached_power_series_exact<E> cra(a.rev_series());
+	REQUIRE(mp == middle_product(cv, cra));
+}
+
 TEST_CASE("power_series log/exp/pow", "[fft]") {
 	using num = modnum<998244353>;
 	using ps = power_series<fft_engine<num>>;
@@ -413,18 +640,17 @@ TEST_CASE("poly_evaluate and poly_interpolate", "[fft]") {
 	mt19937 mt(Catch::getSeed());
 	for (int n : {1, 2, 3, 8, 17, 40}) {
 		INFO("n = " << n);
-		vector<num> poly(n);
-		for (num& x : poly) { x = num(mt()); }
+		vector<num> coeffs(n);
+		for (num& x : coeffs) { x = num(mt()); }
+		poly<fft_engine<num>> p((span<const num>(coeffs)));
 		vector<num> pts(n);
 		for (int i = 0; i < n; i++) pts[i] = num(1000 + i);
-		auto vals = poly_evaluate<fft_engine<num>>(poly, pts);
+		auto vals = poly_evaluate<fft_engine<num>>(p, pts);
 		for (int i = 0; i < n; i++) {
-			num expect = 0;
-			for (int j = n - 1; j >= 0; j--) expect = expect * pts[i] + poly[j];
-			REQUIRE(vals[i] == expect);
+			REQUIRE(vals[i] == p(pts[i]));
 		}
 		auto rec = poly_interpolate<fft_engine<num>>(pts, vals);
-		REQUIRE(rec == poly);
+		REQUIRE(rec == p);
 	}
 }
 

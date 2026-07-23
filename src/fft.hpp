@@ -1085,68 +1085,126 @@ template <conv_engine E> vector<typename E::value_type> inverse(const vector<typ
 
 /* namespace fft */ }
 
-// Power series; these are assumed to be the min of the length
-template <typename E>
+// Packed bivariate buffer for Kinoshita-Li composition (arXiv:2404.05177): level l
+// holds Q_l(x, y), monic of degree exactly 2^l in y with x truncated mod x^(2^(L-l)),
+// packed into one length-2^(L+2) buffer with x fastest-varying: coefficient of x^i y^j
+// at index j * 2^(L+1-l) + i, the y-stride shrinking as the y-degree grows (the upper
+// half of each y-block is zero, absorbing the product's x-degree). advance() computes
+// Q_{l+1}(x^2, y) = Q_l(x, y) Q_l(-x, y): since x has stride 1, Q_l(-x)'s transform is
+// the free negate_arg twin of Q_l's, the product is one circular convolution, the
+// x^2 -> x compactification is a strided copy, and the monic-in-y structure supplies
+// the exact wraparound correction (the leading y-coefficient is a known 1).
+// advance() returns the transform of Q_l(-x, y), which the transposed pushdown pass
+// reuses -- so each
+// direction costs one forward and one inverse transform per level.
+template <typename E> struct packed_bivariate {
+	using T = typename E::value_type;
+	int L, l;
+	std::vector<T> c;
+
+	// Q_0 = 1 - y g(x), deg g < n <= 2^L
+	packed_bivariate(int L_, std::span<const T> g) : L(L_), l(0), c(size_t(4) << L) {
+		c[0] = T(1);
+		for (int i = 0; i < sz(g); i++) c[(2 << L) + i] = -g[i];
+	}
+
+	typename E::transformed advance() {
+		int B = 4 << L;
+		auto tq = E::transform(std::span<const T>(c), B);
+		auto tn = E::negate_arg(tq, B);
+		E::finish(E::mul(tq, tn, B), std::span<T>(c));
+		l++;
+		// compactify x^2 -> x
+		for (int i = 1; i < (2 << L); i++) c[i] = c[2*i];
+		// undo the circular wraparound using monicity in y
+		for (int i = 0; i < (2 << (L - l)); i++) {
+			c[(2 << L) + i] = c[i];
+			c[i] = T(0);
+		}
+		c[2 << L] -= T(1);
+		c[0] = T(1);
+		// zero x coefficients beyond the level's truncation mod x^(2^(L-l))
+		std::fill(c.begin() + (2 << L) + (1 << (L - l)), c.end(), T(0));
+		for (int i = 0; i < (2 << L); i += 2 << (L - l)) {
+			for (int j = 0; j < (1 << (L - l)); j++) {
+				c[i + (1 << (L - l)) + j] = T(0);
+			}
+		}
+		return tn;
+	}
+};
+
+// Power series in natural coefficient order. exact = false (the default) means the
+// series is known modulo x^len(): coefficients [0, len()) + O(x^len()); exact = true
+// means the O(x^len()) term is absent, i.e. the series is a polynomial known in full.
+// The two are interoperable: binary operators accept any mix, the result is exact iff
+// both operands are (see the free operators below), and truncation-based algorithms
+// (inverse, log, exp, ...) are only defined on the truncated type.
+template <typename E, bool exact = false>
 struct power_series : public std::vector<typename E::value_type> {
 	using T = typename E::value_type;
 	using std::vector<T>::vector;
 
-	int ssize() const {
+	// forgetting exactness is safe: implicit. Asserting it (the O(x^len()) term is
+	// absent) loses no data but adds information: explicit. (Templates so they never
+	// double as copy/move constructors.)
+	template <bool oe> requires (oe && !exact)
+	power_series(const power_series<E, oe>& p) : std::vector<T>(p) {}
+	template <bool oe> requires (oe && !exact)
+	power_series(power_series<E, oe>&& p) : std::vector<T>(std::move(p)) {}
+	template <bool oe> requires (!oe && exact)
+	explicit power_series(const power_series<E, oe>& p) : std::vector<T>(p) {}
+	template <bool oe> requires (!oe && exact)
+	explicit power_series(power_series<E, oe>&& p) : std::vector<T>(std::move(p)) {}
+	// adopt a plain coefficient vector
+	explicit power_series(std::vector<T> v) : std::vector<T>(std::move(v)) {}
+
+	int len() const {
 		return int(this->size());
 	}
-	int len() const {
-		return ssize();
-	}
-	int degree() const {
+	int degree() const requires (exact) {
 		return len() - 1;
 	}
 	void extend(int sz) {
-		assert(sz >= ssize());
+		assert(sz >= len());
 		this->resize(sz);
 	}
 	void shrink(int sz) {
-		assert(sz <= ssize());
+		assert(sz <= len());
 		this->resize(sz);
 	}
-	// multiply by x^n
-	void shift(int n = 1) {
-		assert(n >= 0 && n <= ssize());
+	// multiply by x^n within the fixed precision window
+	void shift_trunc(int n = 1) requires (!exact) {
+		assert(n >= 0 && n <= len());
 		std::rotate(this->begin(), this->end()-n, this->end());
 		std::fill(this->begin(), this->begin()+n, T(0));
 	}
-	// divide by x^n and 0-pad
-	void unshift(int n = 1) {
-		assert(n >= 0 && n <= ssize());
+	// divide by x^n and 0-pad within the fixed precision window
+	void unshift_trunc(int n = 1) requires (!exact) {
+		assert(n >= 0 && n <= len());
 		std::fill(this->begin(), this->begin()+n, T(0));
 		std::rotate(this->begin(), this->begin()+n, this->end());
 	}
-	power_series& operator += (const power_series& o) {
-		assert(len() == o.len());
-		for (int i = 0; i < int(o.size()); i++) {
+	// In-place forms of the free mixed-exactness operators (same length/exactness
+	// rules); the result's exactness must equal this operand's, i.e. an exact series
+	// only accepts exact addends.
+	template <bool oe> requires (oe || !exact)
+	power_series& operator += (const power_series<E, oe>& o) {
+		if constexpr (exact) { if (o.len() > len()) this->resize(o.len()); }
+		else if constexpr (!oe) { if (o.len() < len()) this->resize(o.len()); }
+		for (int i = 0; i < std::min(len(), o.len()); i++) {
 			(*this)[i] += o[i];
 		}
 		return *this;
 	}
-	friend power_series operator + (const power_series& a, const power_series& b) {
-		power_series r(std::min(a.size(), b.size()));
-		for (int i = 0; i < r.len(); i++) {
-			r[i] = a[i] + b[i];
-		}
-		return r;
-	}
-	power_series& operator -= (const power_series& o) {
-		assert(len() == o.len());
-		for (int i = 0; i < int(o.size()); i++) {
+	template <bool oe> requires (oe || !exact)
+	power_series& operator -= (const power_series<E, oe>& o) {
+		if constexpr (exact) { if (o.len() > len()) this->resize(o.len()); }
+		else if constexpr (!oe) { if (o.len() < len()) this->resize(o.len()); }
+		for (int i = 0; i < std::min(len(), o.len()); i++) {
 			(*this)[i] -= o[i];
 		}
 		return *this;
-	}
-	friend power_series operator - (const power_series& a, const power_series& b) {
-		power_series r(std::min(a.size(), b.size()));
-		for (int i = 0; i < r.len(); i++) {
-			r[i] = a[i] - b[i];
-		}
-		return r;
 	}
 
 	power_series& operator *= (const T& n) {
@@ -1168,23 +1226,17 @@ struct power_series : public std::vector<typename E::value_type> {
 		return r;
 	}
 
-	friend power_series operator * (const power_series& a, const power_series& b) {
-		if (sz(a) == 0 || sz(b) == 0) return {};
-		power_series r(std::min(a.size(), b.size()));
-		fft::multiply<E>(std::span<const T>(a), std::span<const T>(b), std::span<T>(r));
-		return r;
-	}
 	power_series& operator *= (const power_series& o) {
 		return *this = (*this) * o;
 	}
 	friend power_series square(const power_series& a) {
 		if (sz(a) == 0) return {};
-		power_series r(a.size());
+		power_series r(size_t(exact ? 2 * a.len() - 1 : a.len()));
 		fft::square<E>(std::span<const T>(a), std::span<T>(r));
 		return r;
 	}
 
-	friend power_series inverse(const power_series& a) {
+	friend power_series inverse(const power_series& a) requires (!exact) {
 		power_series r(a.size());
 		fft::inverse<E>(std::span<const T>(a), std::span<T>(r));
 		return r;
@@ -1233,15 +1285,15 @@ struct power_series : public std::vector<typename E::value_type> {
 		}
 		return a;
 	}
-	friend power_series deriv_shift_log(power_series a) {
+	friend power_series deriv_shift_log(power_series a) requires (!exact) {
 		auto r = deriv_shift(a);
 		return r * inverse(a);
 	}
-	friend power_series poly_log(power_series a) {
+	friend power_series poly_log(power_series a) requires (!exact) {
 		assert(a[0] == 1);
 		return integ_shift(deriv_shift_log(std::move(a)));
 	}
-	friend power_series poly_exp(power_series a) {
+	friend power_series poly_exp(power_series a) requires (!exact) {
 		// See https://mathexp.eu/bostan/publications/BoSc09a.pdf for details
 		assert(a.size() >= 1);
 		assert(a[0] == 0);
@@ -1274,7 +1326,7 @@ struct power_series : public std::vector<typename E::value_type> {
 		}
 		return r;
 	}
-	friend power_series poly_pow_monic(power_series a, T k) {
+	friend power_series poly_pow_monic(power_series a, T k) requires (!exact) {
 		if (a.empty()) return a;
 		assert(a.size() >= 1);
 		assert(a[0] == 1);
@@ -1282,7 +1334,7 @@ struct power_series : public std::vector<typename E::value_type> {
 		a *= k;
 		return poly_exp(a);
 	}
-	friend power_series poly_pow(power_series a, int64_t k) {
+	friend power_series poly_pow(power_series a, int64_t k) requires (!exact) {
 		assert(k >= 0);
 		if (k == 0) {
 			power_series r(a.len(), T(0));
@@ -1307,13 +1359,13 @@ struct power_series : public std::vector<typename E::value_type> {
 		return r;
 	}
 
-	friend power_series to_newton_sums(const power_series& a, int deg) {
+	friend power_series to_newton_sums(const power_series& a, int deg) requires (!exact) {
 		auto r = deriv_shift_log(a);
 		r[0] = deg;
 		for (int i = 1; i < int(r.size()); i++) r[i] = -r[i];
 		return r;
 	}
-	friend power_series from_newton_sums(power_series S, int deg) {
+	friend power_series from_newton_sums(power_series S, int deg) requires (!exact) {
 		assert(S[0] == int(deg));
 		S[0] = 0;
 		for (int i = 1; i < int(S.size()); i++) S[i] = -S[i];
@@ -1321,7 +1373,7 @@ struct power_series : public std::vector<typename E::value_type> {
 	}
 
 	// Calculates prod 1/(1-x^i)^{a[i]}
-	friend power_series euler_transform(const power_series& a) {
+	friend power_series euler_transform(const power_series& a) requires (!exact) {
 		power_series r = deriv_shift(a);
 		std::vector<bool> is_prime(a.size(), true);
 		for (int p = 2; p < int(a.size()); p++) {
@@ -1333,7 +1385,7 @@ struct power_series : public std::vector<typename E::value_type> {
 		}
 		return poly_exp(integ_shift(r));
 	}
-	friend power_series inverse_euler_transform(const power_series& a) {
+	friend power_series inverse_euler_transform(const power_series& a) requires (!exact) {
 		power_series r = deriv_shift(poly_log(a));
 		std::vector<bool> is_prime(a.size(), true);
 		for (int p = 2; p < int(a.size()); p++) {
@@ -1347,7 +1399,7 @@ struct power_series : public std::vector<typename E::value_type> {
 	}
 
 	// Calculates f(g(x)) mod x^n where deg(g) == n
-	friend power_series poly_compose(const power_series& f, const power_series& g) {
+	friend power_series poly_compose(const power_series& f, const power_series& g) requires (!exact) {
 		if (sz(g) == 0) return {};
 
 		int m = int(f.size());
@@ -1363,52 +1415,26 @@ struct power_series : public std::vector<typename E::value_type> {
 		// [y^0] P(y) / Q_l(x^2^l, y) * Q_{l-1}(-x^2^{l-1}, y) * Q_{l-2}(-x^2^{l-2}, y) * ... * Q_0(-x, y)
 		// The total y deg of Q_{k-1} ... Q_0 is 2^k-1
 		int L = __builtin_ctz(unsigned(nextPow2(n)));
-		std::vector<power_series> Q(L+1);
-		Q[0] = power_series(4 << L);
-		Q[0][0] = 1;
-		for (int i = 0; i < n; i++) Q[0][(2 << L) + i] = -g[i];
-		for (int l = 1; l <= L; l++) {
-			auto a = Q[l-1];
-			// negate in place
-			for (int i = 1; i < (4 << L); i += 2) Q[l-1][i] = -Q[l-1][i];
-			Q[l] = power_series(4 << L);
-			// TODO: Could be much more efficient:
-			// We only need to do 1 forward FFT and then reflect it, and the backwards can be half the size and compactify at the same time.
-			// We could also cache the forward FFT for the backwards pass
-			fft::multiply_circular<E>(std::span<const T>(a), std::span<const T>(Q[l-1]), std::span<T>(Q[l]), 4 << L);
-			// Compactify
-			for (int i = 1; i < (2 << L); i++) {
-				Q[l][i] = Q[l][2*i];
-			}
-			// Undo the circularity since we know it's monic
-			for (int i = 0; i < (2 << (L - l)); i++) {
-				Q[l][(2 << L) + i] = Q[l][i];
-				Q[l][i] = 0;
-			}
-			Q[l][(2 << L)] -= T(1);
-			Q[l][0] = T(1);
-			// Zero out xs which are too big
-			std::fill(Q[l].begin() + (2 << L) + (1 << (L-l)), Q[l].end(), T(0));
-			for (int i = 0; i < (2 << L); i += 2 << (L-l)) {
-				for (int j = 0; j < (1 << (L-l)); j++) {
-					Q[l][i + (1 << (L-l)) + j] = 0;
-				}
-			}
-		}
+		int B = 4 << L;
+		packed_bivariate<E> Q(L, std::span<const T>(g));
+		// tneg[l] is the transform of Q_l(-x, y), reused by the pushdown pass below
+		std::vector<typename E::transformed> tneg;
+		tneg.reserve(L);
+		for (int l = 1; l <= L; l++) tneg.push_back(Q.advance());
 		power_series P;
 		{
 			P = f;
 			std::reverse(P.begin(), P.end());
 			power_series QL((1 << L) + 1);
 			for (int i = 0; i <= (1 << L); i++) {
-				QL[i] = Q[L][2 * i];
+				QL[i] = Q.c[2 * i];
 			}
 			QL.resize(m, T(0));
 			P *= inverse(QL);
 			std::reverse(P.begin(), P.end());
 			P.resize(1 << L, T(0));
 			std::reverse(P.begin(), P.end());
-			P.resize(4 << L, T(0));
+			P.resize(B, T(0));
 			for (int i = (1 << L) - 1; i > 0; i--) {
 				P[2*i] = P[i];
 				P[i] = T(0);
@@ -1421,7 +1447,8 @@ struct power_series : public std::vector<typename E::value_type> {
 				P[2*i] = ((2*i) & (1 << (L-l))) ? T(0) : v;
 				P[i] = T(0);
 			}
-			fft::multiply_circular<E>(std::span<const T>(Q[l]), std::span<const T>(P), std::span<T>(P), 4 << L);
+			auto tp = E::transform(std::span<const T>(P), B);
+			E::finish(E::mul(tneg[l], tp, B), std::span<T>(P));
 			for (int i = 0; i < (2 << L); i++) {
 				P[i] = P[(2 << L) + i];
 				P[(2 << L) + i] = T(0);
@@ -1431,88 +1458,538 @@ struct power_series : public std::vector<typename E::value_type> {
 	}
 };
 
+// Descriptive names for the two exactness flavors.
+template <typename E> using power_series_exact = power_series<E, true>;
+template <typename E> using power_series_trunc = power_series<E, false>;
 
-template <typename E>
-std::vector<typename E::value_type> poly_evaluate(
-		const std::vector<typename E::value_type>& poly, const std::vector<typename E::value_type>& pts) {
+// Mixed-exactness arithmetic: the result is exact iff both operands are. An exact
+// operand doesn't lower a truncated result's precision (it is known everywhere);
+// two truncated operands truncate to the min precision, and two exact ones give the
+// full result.
+template <typename E, bool ea, bool eb>
+power_series<E, ea && eb> operator+(const power_series<E, ea>& a, const power_series<E, eb>& b) {
 	using T = typename E::value_type;
-	if (pts.empty()) return {};
-	using ps = power_series<E>;
-	std::vector<std::vector<T>> series(pts.size() * 2);
-	for (int i = 0; i < int(pts.size()); i++) {
-		series[pts.size() + i] = {T(1), -pts[i]};
+	int n = (ea && eb) ? std::max(a.len(), b.len())
+		: ea ? b.len() : eb ? a.len() : std::min(a.len(), b.len());
+	power_series<E, ea && eb> r(size_t(n), T(0));
+	for (int i = 0; i < n; i++)
+		r[i] = (i < a.len() ? a[i] : T(0)) + (i < b.len() ? b[i] : T(0));
+	return r;
+}
+template <typename E, bool ea, bool eb>
+power_series<E, ea && eb> operator-(const power_series<E, ea>& a, const power_series<E, eb>& b) {
+	using T = typename E::value_type;
+	int n = (ea && eb) ? std::max(a.len(), b.len())
+		: ea ? b.len() : eb ? a.len() : std::min(a.len(), b.len());
+	power_series<E, ea && eb> r(size_t(n), T(0));
+	for (int i = 0; i < n; i++)
+		r[i] = (i < a.len() ? a[i] : T(0)) - (i < b.len() ? b[i] : T(0));
+	return r;
+}
+template <typename E, bool ea, bool eb>
+power_series<E, ea && eb> operator*(const power_series<E, ea>& a, const power_series<E, eb>& b) {
+	using T = typename E::value_type;
+	if constexpr (ea && eb) {
+		if (a.len() == 0 || b.len() == 0) return {};
+		power_series_exact<E> r(size_t(a.len() + b.len() - 1), T(0));
+		fft::multiply<E>(std::span<const T>(a), std::span<const T>(b), std::span<T>(r));
+		return r;
+	} else {
+		int prec = ea ? b.len() : eb ? a.len() : std::min(a.len(), b.len());
+		power_series<E, false> r(size_t(prec), T(0));
+		if (prec == 0 || a.len() == 0 || b.len() == 0) return r;
+		fft::multiply<E>(std::span<const T>(a).first(std::min(a.len(), prec)),
+		                 std::span<const T>(b).first(std::min(b.len(), prec)),
+		                 std::span<T>(r));
+		return r;
 	}
-	for (int i = int(pts.size()) - 1; i > 0; i--) {
-		series[i] = fft::multiply<E>(series[2*i], series[2*i+1]);
-	}
-	{
-		ps root(poly.rbegin(), poly.rend());
-		assert(int(series[1].size()) == int(pts.size()) + 1);
-		ps pts_series(series[1].begin(), series[1].end());
-		pts_series.resize(root.size());
-		ps top = inverse(pts_series) * root;
-
-		series[1] = top;
-
-		// front-pad it back to pts.size()
-		std::reverse(series[1].begin(), series[1].end());
-		series[1].resize(pts.size(), T(0));
-		std::reverse(series[1].begin(), series[1].end());
-	}
-	for (int i = 1; i < int(pts.size()); i++) {
-		series[2*i+0] = fft::middle_product<E>(series[i], series[2*i+0]);
-		series[2*i+1] = fft::middle_product<E>(series[i], series[2*i+1]);
-		std::swap(series[2*i+0], series[2*i+1]);
-	}
-	std::vector<T> ans(pts.size());
-	for (int i = 0; i < int(pts.size()); i++) {
-		ans[i] = series[pts.size() + i][0];
-	}
-	return ans;
 }
 
-template <typename E>
-std::vector<typename E::value_type> poly_interpolate(
-		const std::vector<typename E::value_type>& pts, const std::vector<typename E::value_type>& vals) {
+// [x^k] p(x)/q(x) (Bostan-Mori) for an exact rational function. Requires q[0] != 0 and
+// p.len() < q.len(). Each level uses p(x) q(-x) (keeping the parity-of-k half) and
+// q(x) q(-x) (even, giving the next q in x^2); q(-x)'s transform is negate_arg of q's,
+// so a level costs 2 forward and 2 inverse transforms.
+template <fft::conv_engine E> typename E::value_type kth_term(
+		power_series_exact<E> p, power_series_exact<E> q, uint64_t k) {
 	using T = typename E::value_type;
-	if (pts.empty()) return {};
-	using ps = power_series<E>;
-	std::vector<std::vector<T>> series(pts.size() * 2);
-	for (int i = 0; i < int(pts.size()); i++) {
-		series[pts.size() + i] = {T(1), -pts[i]};
+	assert(q.len() > 0 && q[0] != T(0));
+	assert(p.len() < q.len());
+	int d = q.len();
+	if (d == 1) return T(0);
+	p.resize(d - 1);
+	while (k > 0) {
+		int n = nextPow2(2 * d - 1);
+		auto tq = E::transform(std::span<const T>(q), n);
+		auto tnq = E::negate_arg(tq, n);
+		auto buf = fft::buffer_pool<T>::get(n);
+		auto tp = E::transform(std::span<const T>(p), n);
+		E::finish(E::mul(tp, tnq, n), buf.span());
+		// deg(p * q(-x)) <= 2d-3 < n: wraparound-free
+		for (int j = 0; j < d - 1; j++) p[j] = buf[2*j + int(k & 1)];
+		E::finish(E::mul(tq, tnq, n), buf.span());
+		// q(x) q(-x) is even with degree <= 2d-2
+		for (int j = 0; j < d; j++) q[j] = buf[2*j];
+		k >>= 1;
 	}
-	for (int i = int(pts.size()) - 1; i > 0; i--) {
-		series[i] = fft::multiply<E>(series[2*i], series[2*i+1]);
+	return p[0] * inv(q[0]);
+}
+
+// Opt-in all-power-of-two transform caching for a power series, for multiplying one
+// fixed large (conceptually infinite) series against many smaller ones. A product with
+// a precision-k operand only needs this series' first k terms: it uses the prefix of
+// length nextPow2(k-1) + 1 (the extra term is free -- see below) and a circular product
+// of size 2*nextPow2(k-1), so each scale's prefix transform is computed once and shared
+// by every multiply of that magnitude. The prefixes are cached per power of two n as
+// length-(n+1) transforms: two such prefixes make s - 1 = 2n exactly, which is the
+// 2^k+1 cut in fft::multiply, keeping the transform size at 2n. Every product at a
+// scale fits in size 2n, so the caches are coefficient-free fft_cache transforms
+// built directly at 2n. Extending precision (appending coefficients) never
+// invalidates a cache that already covered its window; a clamped cache is rebuilt on
+// demand. Coefficients are only reachable through the const series() view, so
+// existing coefficients can't be edited out from under the caches.
+// Works for either exactness; products follow the power_series mixed-exactness rules.
+template <typename E, bool exact = false>
+struct prefix_cached_power_series {
+	using T = typename E::value_type;
+
+	prefix_cached_power_series() = default;
+	explicit prefix_cached_power_series(power_series<E, exact> s_) : s(std::move(s_)) {}
+
+	int len() const { return s.len(); }
+	const power_series<E, exact>& series() const { return s; }
+
+	// extend precision: appends coefficients, keeping all covering caches valid
+	void append(std::span<const T> tail) {
+		s.insert(s.end(), tail.begin(), tail.end());
 	}
-	std::vector<std::vector<T>> series_down(pts.size() * 2);
-	{
-		assert(int(series[1].size()) == int(pts.size()) + 1);
-		ps root(series[1].begin(), series[1].end() - 1);
-		ps deriv_root = root;
-		for (int i = 0; i < int(pts.size()); i++) {
-			deriv_root[i] *= T(int(pts.size()) - i);
+
+	// the prefix coefficients paired with prefix_cache(n)
+	std::span<const T> prefix(int n) const {
+		return std::span<const T>(s).first(std::min(n + 1, len()));
+	}
+	// cache over the prefix of length min(n + 1, len()); n a power of two
+	fft::fft_cache<E>& prefix_cache(int n) {
+		assert(n > 0 && !(n & (n-1)));
+		int k = __builtin_ctz(unsigned(n));
+		if (k >= sz(caches)) caches.resize(size_t(k) + 1);
+		auto& c = caches[k];
+		int e = std::min(n + 1, len());
+		if (c.len() != e) c = fft::fft_cache<E>(std::span<const T>(s).first(e), 2 * n);
+		return c;
+	}
+	// the prefix covering a precision-k product: k <= n + 1 with n = nextPow2(k - 1),
+	// so precision 2^j + 1 still fits at scale 2^j thanks to the +1 prefix term
+
+private:
+	power_series<E, exact> s;
+	std::vector<fft::fft_cache<E>> caches;
+};
+
+namespace detail {
+template <bool ea, bool eb> int product_prec(int la, int lb) {
+	if constexpr (ea && eb) return la > 0 && lb > 0 ? la + lb - 1 : 0;
+	else return ea ? lb : eb ? la : std::min(la, lb);
+}
+/* namespace detail */ }
+
+template <typename E, bool ea, bool eb>
+power_series<E, ea && eb> operator*(prefix_cached_power_series<E, ea>& a, prefix_cached_power_series<E, eb>& b) {
+	using T = typename E::value_type;
+	int prec = detail::product_prec<ea, eb>(a.len(), b.len());
+	power_series<E, ea && eb> r(size_t(prec), T{});
+	if (prec > 0 && a.len() > 0 && b.len() > 0) {
+		int n = nextPow2(std::max(prec - 1, 1));
+		fft::multiply<E>(a.prefix(n), a.prefix_cache(n), b.prefix(n), b.prefix_cache(n), std::span<T>(r));
+	}
+	return r;
+}
+template <typename E, bool ea, bool eb>
+power_series<E, ea && eb> operator*(prefix_cached_power_series<E, ea>& a, const power_series<E, eb>& b) {
+	using T = typename E::value_type;
+	int prec = detail::product_prec<ea, eb>(a.len(), b.len());
+	power_series<E, ea && eb> r(size_t(prec), T{});
+	if (prec > 0 && a.len() > 0 && b.len() > 0) {
+		int n = nextPow2(std::max(prec - 1, 1));
+		std::span<const T> bs = std::span<const T>(b).first(std::min(prec, b.len()));
+		fft::fft_cache<E> bc(bs, 2 * n);
+		fft::multiply<E>(a.prefix(n), a.prefix_cache(n), bs, bc, std::span<T>(r));
+	}
+	return r;
+}
+template <typename E, bool ea, bool eb>
+power_series<E, ea && eb> operator*(const power_series<E, ea>& a, prefix_cached_power_series<E, eb>& b) {
+	using T = typename E::value_type;
+	int prec = detail::product_prec<ea, eb>(a.len(), b.len());
+	power_series<E, ea && eb> r(size_t(prec), T{});
+	if (prec > 0 && a.len() > 0 && b.len() > 0) {
+		int n = nextPow2(std::max(prec - 1, 1));
+		std::span<const T> as = std::span<const T>(a).first(std::min(prec, a.len()));
+		fft::fft_cache<E> ac(as, 2 * n);
+		fft::multiply<E>(as, ac, b.prefix(n), b.prefix_cache(n), std::span<T>(r));
+	}
+	return r;
+}
+
+// An exact power series bundled with one lazily built transform of its coefficients:
+// the coefficient-owning cached operand (it feeds its own coefficients to
+// fft_cache::extend_to). The transform is built at the first product's size and
+// extended in place (half-cost doublings) for bigger ones; coefficients are only
+// reachable through the const series() view, so they can't change under the cache.
+// series() + cache() are exactly the (coefficients, fft_cache) pair the cached
+// fft:: entry points take; products of two cached exact series come out exact.
+template <typename E>
+struct cached_power_series_exact {
+	using T = typename E::value_type;
+
+	cached_power_series_exact() = default;
+	explicit cached_power_series_exact(power_series_exact<E> s_) : s(std::move(s_)) {}
+
+	int len() const { return s.len(); }
+	const power_series_exact<E>& series() const { return s; }
+	power_series_exact<E> take_series() && { return std::move(s); }
+	// the fft_cache over series(), fed to the cached fft:: entry points alongside it
+	fft::fft_cache<E>& cache() { return f; }
+
+	friend power_series_exact<E> operator*(cached_power_series_exact& a, cached_power_series_exact& b) {
+		if (a.len() == 0 || b.len() == 0) return {};
+		power_series_exact<E> r(size_t(a.len() + b.len() - 1), T{});
+		fft::multiply<E>(std::span<const T>(a.s), a.f, std::span<const T>(b.s), b.f, std::span<T>(r));
+		return r;
+	}
+	friend power_series_exact<E> square(cached_power_series_exact& a) {
+		if (a.len() == 0) return {};
+		power_series_exact<E> r(size_t(2 * a.len() - 1), T{});
+		fft::square<E>(std::span<const T>(a.s), a.f, std::span<T>(r));
+		return r;
+	}
+
+	// coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0
+	friend std::vector<T> middle_product(cached_power_series_exact& a, cached_power_series_exact& b) {
+		return fft::middle_product<E>(std::span<const T>(a.s), a.f, std::span<const T>(b.s), b.f);
+	}
+
+	// full product of two cached operands, retaining the pointwise product transform
+	// when the engine supports it (see fft::multiply_cached)
+	friend cached_power_series_exact multiply_cached(cached_power_series_exact& a, cached_power_series_exact& b) {
+		cached_power_series_exact r;
+		std::vector<T> coeffs;
+		fft::multiply_cached<E>(std::span<const T>(a.s), a.f, std::span<const T>(b.s), b.f, coeffs, r.f);
+		r.s = power_series_exact<E>(std::move(coeffs));
+		return r;
+	}
+
+private:
+	power_series_exact<E> s;
+	fft::fft_cache<E> f;
+};
+
+// Exact polynomial backed by its reversal: the member c is the exact power series
+// rev(p) = x^deg p(1/x) in natural order (c[j] = [x^(deg-j)] p), and poly indexes it
+// reversed: p[i] = c[len-1-i]. Why reversed storage:
+//   - full products commute with reversal (rev(a) conv rev(b) = rev(a b)), so
+//     poly * poly convolves the storage directly, and += / -= align at x^0, which
+//     reversed storage makes a shared tail;
+//   - multiplying by x (the common way to raise the degree) is an amortized-O(1)
+//     push_back of the new constant 0;
+//   - the transposed-multiplication world (linear forms, middle products,
+//     subproduct-tree kernels, Bostan-Mori denominators) consumes rev(p): rev() is a
+//     free span, so one transform cache of the storage serves both a poly's products
+//     and its transposed products (the transforms of p and rev(p) are unrelated in
+//     our convention);
+//   - a monic poly's storage starts with its leading 1 (rev() front == 1, a
+//     compile-time fact candidate for transform caches);
+//   - Horner evaluation is a forward pass over the storage.
+// Conversions to/from the exact series rev(p) are free (rev_series /
+// from_rev_series); natural-order conversion is spelled out via iterators or the
+// series(n) truncation method, never an implicit reorder.
+template <typename E> struct poly {
+	using T = typename E::value_type;
+	power_series_exact<E> c; // rev(p): c[j] = [x^(deg-j)], leading coefficient first
+
+	poly() = default;
+	// zero polynomial with `len` coefficient slots
+	explicit poly(int len) : c(size_t(len), T{}) {}
+	// coefficient (x^0-first) order
+	poly(std::initializer_list<T> coeffs) : c(std::rbegin(coeffs), std::rend(coeffs)) {}
+	explicit poly(std::span<const T> coeffs) : c(coeffs.rbegin(), coeffs.rend()) {}
+	template <typename It> poly(It first, It last) : c(first, last) { std::reverse(c.begin(), c.end()); }
+
+	// the reversed convention: p <-> the exact series rev(p), a free (un)wrapping
+	const power_series_exact<E>& rev_series() const { return c; }
+	power_series_exact<E> take_rev_series() && { return std::move(c); }
+	static poly from_rev_series(power_series_exact<E> s) {
+		poly r;
+		r.c = std::move(s);
+		return r;
+	}
+	// natural-order coefficients truncated (or zero-extended) to precision n
+	power_series<E> series(int n) const {
+		power_series<E> r(size_t(n), T{});
+		std::copy(begin(), begin() + std::min(n, len()), r.begin());
+		return r;
+	}
+
+	// logical (coefficient) order
+	auto begin() const { return c.rbegin(); }
+	auto end() const { return c.rend(); }
+
+	int len() const { return c.len(); }
+	int degree() const { return len() - 1; }
+	T& operator[](int i) { return c[len() - 1 - i]; }
+	const T& operator[](int i) const { return c[len() - 1 - i]; }
+	T leading() const { return c.front(); }
+	// rev(p) as a contiguous span (what transposed multiplications consume)
+	std::span<const T> rev() const { return std::span<const T>(c); }
+	// cached copy of the storage, shared by products and transposed products
+	cached_power_series_exact<E> rev_cache() const { return cached_power_series_exact<E>(c); }
+	// multiply by x^k: appends the new zero constant terms to the storage
+	void shift(int k = 1) {
+		if (len() > 0) c.insert(c.end(), size_t(k), T(0));
+	}
+	// grow (zero-filled leading coefficients) or shrink to n coefficients
+	void resize(int n) {
+		if (n >= len()) c.insert(c.begin(), size_t(n - len()), T(0));
+		else c.erase(c.begin(), c.begin() + (len() - n));
+	}
+
+	// Horner evaluation: a forward pass over the storage (leading first)
+	T operator()(const T& x) const {
+		T r{};
+		for (const T& v : c) r = r * x + v;
+		return r;
+	}
+
+	// +/- align at x^0: reversed storage makes that a shared tail
+	poly& operator+=(const poly& o) {
+		if (o.len() > len()) resize(o.len());
+		for (int i = 0; i < o.len(); i++) (*this)[i] += o[i];
+		return *this;
+	}
+	friend poly operator+(poly a, const poly& b) { a += b; return a; }
+	poly& operator-=(const poly& o) {
+		if (o.len() > len()) resize(o.len());
+		for (int i = 0; i < o.len(); i++) (*this)[i] -= o[i];
+		return *this;
+	}
+	friend poly operator-(poly a, const poly& b) { a -= b; return a; }
+	friend bool operator==(const poly& a, const poly& b) { return a.c == b.c; }
+
+	poly& operator*=(const T& n) { for (T& v : c) v *= n; return *this; }
+	friend poly operator*(poly a, const T& n) { a *= n; return a; }
+	friend poly operator*(const T& n, poly a) { a *= n; return a; }
+
+	// rev(a b) = rev(a) conv rev(b): the product's storage is the storages' convolution
+	friend poly operator*(const poly& a, const poly& b) {
+		if (a.len() == 0 || b.len() == 0) return {};
+		poly r(a.len() + b.len() - 1);
+		fft::multiply<E>(a.rev(), b.rev(), std::span<T>(r.c));
+		return r;
+	}
+	poly& operator*=(const poly& o) { return *this = (*this) * o; }
+	friend poly square(const poly& a) {
+		if (a.len() == 0) return {};
+		poly r(2 * a.len() - 1);
+		fft::square<E>(a.rev(), std::span<T>(r.c));
+		return r;
+	}
+};
+
+// Linear functional f(S) = sum_i c[i] S_i on length-len sequences, stored like poly:
+// the member c is the reverse of the logical coefficient series (c[i], the weight
+// applied to S_i, is logical coefficient len-1-i). Constructors take logical
+// (x^0-first) order like poly's; adopting/exposing the reversed storage is the named
+// rev_series / from_rev_series, and rev() is the contiguous storage span (what middle
+// products consume). Applying it is a dot product over the storage.
+// composed_with(q) is the transposed multiplication: f(S * q) as a functional of S,
+// i.e. a middle product of the storage with q's reversed storage. Evaluation-at-z has
+// storage z^i; multipoint evaluation is the pushdown of such functionals through a
+// subproduct tree of monic nodes.
+template <typename E>
+struct linear_form {
+	using T = typename E::value_type;
+	power_series_exact<E> c; // c[i] = weight applied to S_i
+
+	linear_form() = default;
+	// zero functional with `len` weight slots
+	explicit linear_form(int len) : c(size_t(len), T{}) {}
+	// logical (x^0-first) coefficient order, mirroring poly
+	linear_form(std::initializer_list<T> coeffs) : c(std::rbegin(coeffs), std::rend(coeffs)) {}
+	explicit linear_form(std::span<const T> coeffs) : c(coeffs.rbegin(), coeffs.rend()) {}
+	template <typename It> linear_form(It first, It last) : c(first, last) { std::reverse(c.begin(), c.end()); }
+
+	// the reversed convention, mirroring poly
+	const power_series_exact<E>& rev_series() const { return c; }
+	power_series_exact<E> take_rev_series() && { return std::move(c); }
+	static linear_form from_rev_series(power_series_exact<E> s) {
+		linear_form r;
+		r.c = std::move(s);
+		return r;
+	}
+	// the functional q -> [x^deg(p)] p*q (weight p[deg(p)-i] on S_i): a copy of p's storage
+	static linear_form from_poly(const poly<E>& p) { return from_rev_series(p.rev_series()); }
+	std::span<const T> rev() const { return std::span<const T>(c); }
+
+	int len() const { return c.len(); }
+	T& operator[](int i) { return c[len() - 1 - i]; }
+	const T& operator[](int i) const { return c[len() - 1 - i]; }
+
+	// change the support to S_0..S_{n-1}, keeping the tail alignment: existing weights
+	// slide so the last one stays at S_{n-1}, padding or dropping at the storage front
+	// (mirrors poly::resize; in the Laurent picture P is multiplied by x^(len-n))
+	void resize(int n) {
+		if (n >= len()) c.insert(c.begin(), size_t(n - len()), T(0));
+		else c.erase(c.begin(), c.begin() + (len() - n));
+	}
+
+	// the functional p -> p(z) on polynomials of length up to len (weight z^i on [x^i])
+	static linear_form polynomial_evaluation(T z, int len) {
+		power_series_exact<E> k(size_t(len), T{});
+		T p = T(1);
+		for (int i = 0; i < len; i++) { k[i] = p; p *= z; }
+		return from_rev_series(std::move(k));
+	}
+
+	T operator()(const poly<E>& p) const {
+		assert(p.len() <= len());
+		T r{};
+		for (int i = 0; i < p.len(); i++) r += c[i] * p[i]; // weights multiply from the left
+		return r;
+	}
+
+	// f(S * q) as a functional of S: c'[j] = sum_d q[d] c[j + d], the middle product
+	// of the two storages. Result supports S windows up to len - deg q.
+	linear_form composed_with(const poly<E>& q) const {
+		assert(q.len() > 0 && q.len() <= len());
+		return from_rev_series(power_series_exact<E>(
+				fft::middle_product<E>(rev(), q.rev())));
+	}
+
+	// Composition with the transposed multiplication by s: a power series lives in
+	// 1/x under the reversed convention, so the kernel is the plain product of the
+	// storages, c'[j] = sum_d s[d] c[j - d], prefix-truncated back to the support
+	// len. A truncated s must cover the full window; an exact one may be any length.
+	template <bool eb>
+	linear_form composed_with(const power_series<E, eb>& s) const {
+		if constexpr (!eb) assert(s.len() >= len());
+		auto r = c * s;
+		r.resize(size_t(len()));
+		return from_rev_series(power_series_exact<E>(std::move(r)));
+	}
+};
+
+// Subproduct tree over points z_0..z_{N-1}: heap-indexed (node i has children 2i and
+// 2i+1, leaves at [N, 2N)), each node storing rev(prod (x - z)) = prod (1 - z x) over
+// its leaves -- monic at index 0 -- as a cached exact power series, so a node's
+// transform is computed once and shared by the build, the linear_form pushdown
+// (evaluate), and the combine pass (interpolate).
+template <typename E>
+struct subproduct_tree {
+	using T = typename E::value_type;
+	int N;
+	std::vector<cached_power_series_exact<E>> nodes;
+
+	explicit subproduct_tree(std::span<const T> pts) : N(sz(pts)), nodes(size_t(2) * N) {
+		assert(N > 0);
+		for (int i = 0; i < N; i++) {
+			nodes[N + i] = cached_power_series_exact<E>(power_series_exact<E>{T(1), -pts[i]});
 		}
-		series_down[1] = inverse(root) * deriv_root;
+		for (int i = N - 1; i > 0; i--) {
+			nodes[i] = multiply_cached(nodes[2*i], nodes[2*i+1]);
+		}
 	}
-	for (int i = 1; i < int(pts.size()); i++) {
-		series_down[2*i+0] = fft::middle_product<E>(series_down[i], series[2*i+1]);
-		series_down[2*i+1] = fft::middle_product<E>(series_down[i], series[2*i+0]);
+
+	// number of points under node i
+	int size(int i) const { return nodes[i].len() - 1; }
+	// rev(prod (x - z_j)) over node i's leaves; length size(i) + 1
+	const power_series_exact<E>& rev_prod(int i) const { return nodes[i].series(); }
+
+	// Pushes the root functional down the tree: each child composes its parent's
+	// functional with the sibling's product (a cached middle product; the node stores
+	// the reversed product, which is exactly the middle-product operand), so leaf i
+	// ends up with f composed with prod_{j != i} (x - z_j) -- a length-1 kernel.
+	// Requires f.len() == N.
+	std::vector<T> pushdown(linear_form<E> f) {
+		assert(f.len() == N);
+		std::vector<linear_form<E>> down(size_t(2) * N);
+		down[1] = std::move(f);
+		for (int i = 1; i < N; i++) {
+			// one transform of the kernel serves both children's middle products
+			std::span<const T> k = down[i].rev();
+			fft::fft_cache<E> ck;
+			down[2*i+0] = linear_form<E>::from_rev_series(power_series_exact<E>(fft::middle_product<E>(
+					k, ck, std::span<const T>(nodes[2*i+1].series()), nodes[2*i+1].cache())));
+			down[2*i+1] = linear_form<E>::from_rev_series(power_series_exact<E>(fft::middle_product<E>(
+					k, ck, std::span<const T>(nodes[2*i+0].series()), nodes[2*i+0].cache())));
+		}
+		std::vector<T> out(size_t(N), T{});
+		for (int i = 0; i < N; i++) out[i] = down[N + i].rev()[0];
+		return out;
 	}
-	for (int i = 0; i < int(pts.size()); i++) {
-		auto& s = series_down[pts.size() + i];
-		assert(int(s.size()) == 1);
-		s[0] = vals[i] / s[0];
+
+	// Transposed pushdown: combines per-leaf constants d_i upward via
+	// node = left * rev_prod(right sibling) + right * rev_prod(left sibling), returning
+	// the root's length-N series rev(sum_i d_i prod_{j != i} (x - z_j)).
+	power_series_exact<E> combine_up(std::span<const T> leaf_vals) {
+		assert(sz(leaf_vals) == N);
+		std::vector<power_series_exact<E>> up(size_t(2) * N);
+		for (int i = 0; i < N; i++) {
+			up[N + i] = power_series_exact<E>{leaf_vals[i]};
+		}
+		for (int i = N - 1; i > 0; i--) {
+			power_series_exact<E> r(size_t(size(i)), T{});
+			fft::fft_cache<E> cl, cr;
+			fft::multiply_add2<E>(
+					std::span<const T>(up[2*i+0]), cl,
+					std::span<const T>(nodes[2*i+1].series()), nodes[2*i+1].cache(),
+					std::span<const T>(up[2*i+1]), cr,
+					std::span<const T>(nodes[2*i+0].series()), nodes[2*i+0].cache(),
+					std::span<T>(r));
+			up[i] = std::move(r);
+		}
+		return std::move(up[1]);
 	}
-	for (int i = int(pts.size()) - 1; i > 0; i--) {
-		auto a = fft::multiply<E>(series_down[2*i+0], series[2*i+1]);
-		auto b = fft::multiply<E>(series_down[2*i+1], series[2*i+0]);
-		assert(int(a.size()) == int(series_down[i].size()));
-		assert(int(b.size()) == int(series_down[i].size()));
-		for (int z = 0; z < int(series_down[i].size()); z++) series_down[i][z] = a[z] + b[z];
+};
+
+// Multipoint evaluation as the transpose of interpolation: the functional
+// S -> rev(p)(S) pushed through the tree. The root kernel is the length-N window of
+// rev(p) / rev_prod(root) (division transposes the multiplication by the full
+// product), and the pushdown specializes it to evaluation at each point.
+template <typename E>
+std::vector<typename E::value_type> poly_evaluate(
+		const poly<E>& p, std::span<const typename E::value_type> pts) {
+	if (pts.empty()) return {};
+	int N = sz(pts);
+	subproduct_tree<E> tree{pts};
+	power_series<E> q = tree.rev_prod(1);
+	q.resize(p.len()); // inverse precision must cover the form's window
+	linear_form<E> f = linear_form<E>::from_poly(p).composed_with(inverse(q));
+	f.resize(N);
+	return tree.pushdown(std::move(f));
+}
+
+// Lagrange interpolation on the same tree: the pushdown of 1/rev_prod(root) *
+// rev_prod(root)' yields prod'(z_i) at leaf i, and combine_up assembles
+// sum_i vals[i]/prod'(z_i) * prod_{j != i} (x - z_j).
+template <typename E>
+poly<E> poly_interpolate(
+		std::span<const typename E::value_type> pts, std::span<const typename E::value_type> vals) {
+	using T = typename E::value_type;
+	assert(sz(pts) == sz(vals));
+	if (pts.empty()) return {};
+	int N = sz(pts);
+	using ps = power_series<E>;
+	subproduct_tree<E> tree{pts};
+	ps root = tree.rev_prod(1);
+	root.shrink(N);
+	ps deriv_root = root;
+	for (int i = 0; i < N; i++) {
+		deriv_root[i] *= T(N - i);
 	}
-	std::vector<T> top = series_down[1];
-	std::reverse(top.begin(), top.end());
-	return top;
+	std::vector<T> denoms = tree.pushdown(
+			linear_form<E>::from_rev_series(power_series_exact<E>(inverse(root) * deriv_root)));
+	std::vector<T> leaf_vals(size_t(N), T{});
+	for (int i = 0; i < N; i++) leaf_vals[i] = vals[i] / denoms[i];
+	return poly<E>::from_rev_series(tree.combine_up(std::span<const T>(leaf_vals)));
 }
 
 // Online (relaxed) multiplication: computes the first 2N terms of f*g given the terms
@@ -1621,11 +2098,8 @@ struct poly_ap_values : public std::vector<typename E::value_type> {
 	using T = typename E::value_type;
 	using std::vector<T>::vector;
 
-	int ssize() const {
-		return int(this->size());
-	}
 	int len() const {
-		return ssize();
+		return int(this->size());
 	}
 	int degree() const {
 		return len() - 1;
