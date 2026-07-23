@@ -15,11 +15,13 @@
 //
 //   * Distinct Tag => distinct, non-interconvertible type.
 //   * Explicit casts between newtypes (and to/from the underlying type).
-//   * Implicit conversion from compile-time integer constants (literals) only,
-//     via a consteval constructor; runtime integers require an explicit cast.
+//   * Implicit conversion from raw integers: from T itself at runtime, and
+//     from compile-time constants of any integral type (range-checked) via a
+//     consteval constructor. Conversion back to T is explicit.
 //   * Ring semantics within a type: +, -, *, /, %, bit ops, and shifts are all
-//     closed over the newtype (with 0 and 1 as distinguished points, usable as
-//     literals); operands from other spaces still require an explicit cast.
+//     closed over the newtype (with 0 and 1 as distinguished points, and raw
+//     integers embedding implicitly as operands); operands from other newtype
+//     spaces always require an explicit cast.
 template <typename Tag, typename T = int> struct int_newtype {
 	using underlying_type = T;
 
@@ -29,7 +31,7 @@ template <typename Tag, typename T = int> struct int_newtype {
 	template <std::integral U> consteval int_newtype(U v_) : v(T(v_)) {
 		assert(std::in_range<T>(v_));
 	}
-	explicit constexpr int_newtype(T v_) : v(v_) {}
+	constexpr int_newtype(T v_) : v(v_) {}
 	template <typename Tag2, typename T2> explicit constexpr int_newtype(int_newtype<Tag2, T2> o) : v(T(o.v)) {}
 
 	explicit constexpr operator T() const { return v; }

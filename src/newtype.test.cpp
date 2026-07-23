@@ -17,13 +17,16 @@ static_assert(!std::is_convertible_v<edge_t, node_t>);
 static_assert(std::is_constructible_v<edge_t, node_t>);
 static_assert(std::is_constructible_v<big_t, node_t>);
 
-// No implicit conversion to/from runtime integers
+// Raw ints embed implicitly (exact underlying type at runtime, any integral
+// constant at compile time); conversion back out is explicit
+static_assert(std::is_convertible_v<int, node_t>);
 static_assert(!std::is_convertible_v<node_t, int>);
-static_assert(std::is_constructible_v<node_t, int>);
+// (runtime conversion from other integral types, e.g. int64_t -> node_t, goes
+// through the consteval ctor and is rejected unless it's a constant expression)
 
 TEST_CASE("Newtype basics", "[newtype]") {
 	node_t a = 3;   // implicit from literal (consteval)
-	node_t b(7);    // explicit from runtime value
+	node_t b(7);    // also implicit from runtime ints of the underlying type
 	REQUIRE(a != b);
 	REQUIRE(a < b);
 	REQUIRE(a.v == 3);

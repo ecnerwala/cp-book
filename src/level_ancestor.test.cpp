@@ -49,6 +49,7 @@ TEST_CASE("Level ancestor with newtype nodes", "[level_ancestor]") {
 	vec<node_t, node_t> par{node_t(-1), node_t(0), node_t(0), node_t(1), node_t(1), node_t(3)};
 	ecnerwala::level_ancestor<node_t> la(par);
 	check_tree<decltype(la), node_t>(la);
-	// la.get_ancestor(0, 1) with a raw runtime int does not compile; literals do:
-	REQUIRE(la.get_ancestor(2, 1) == node_t(0));
+	// raw ints embed implicitly, so untyped call sites still work:
+	int k = 1;
+	REQUIRE(la.get_ancestor(2, k) == node_t(0));
 }
