@@ -9,6 +9,7 @@ namespace {
 INT_NEWTYPE(node_t);
 
 template <typename LA, typename Node> void check_tree(const LA& la) {
+	using pre_t = typename LA::pre_t;
 	//        0
 	//       / \
 	//      1   2
@@ -30,10 +31,10 @@ template <typename LA, typename Node> void check_tree(const LA& la) {
 	REQUIRE(la.lca(Node(5), Node(5)) == Node(5));
 	REQUIRE(la.lca(Node(0), Node(5)) == Node(0));
 
-	REQUIRE(la.dist(Node(3), Node(4)) == 2);
-	REQUIRE(la.dist(Node(5), Node(2)) == 4);
-	REQUIRE(la.dist(Node(5), Node(1)) == 2);
-	REQUIRE(la.dist(Node(0), Node(0)) == 0);
+	REQUIRE(la.dist(Node(3), Node(4)) == pre_t(2));
+	REQUIRE(la.dist(Node(5), Node(2)) == pre_t(4));
+	REQUIRE(la.dist(Node(5), Node(1)) == pre_t(2));
+	REQUIRE(la.dist(Node(0), Node(0)) == pre_t(0));
 }
 
 } // namespace

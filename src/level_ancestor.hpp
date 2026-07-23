@@ -21,7 +21,7 @@ template <IntKey Node = int> struct level_ancestor {
 	pre_t N;
 	vec<pre_t, Node> preorder;
 	vec<Node, pre_t> idx;
-	vec<pre_t, std::pair<pre_t, int>> heavyPar; // heavy parent, distance
+	vec<pre_t, std::pair<pre_t, pre_t>> heavyPar; // heavy parent, distance
 	level_ancestor() : N(0) {}
 
 	explicit level_ancestor(const vec<Node, Node>& par) : N(pre_t(par.size())), preorder(N), idx(par.size()), heavyPar(N) {
@@ -64,16 +64,16 @@ template <IntKey Node = int> struct level_ancestor {
 	}
 	explicit level_ancestor(std::vector<Node> par) : level_ancestor(vec<Node, Node>(std::move(par))) {}
 
-	Node get_ancestor(Node n, int k) const {
+	Node get_ancestor(Node n, pre_t k) const {
 		assert(k >= 0);
 		pre_t a = idx[n];
-		while (a != -1 && k) {
+		while (a != -1 && k != 0) {
 			if (k >= heavyPar[a].second) {
 				k -= heavyPar[a].second;
-				assert(heavyPar[a].first <= a - pre_t(heavyPar[a].second));
+				assert(heavyPar[a].first <= a - heavyPar[a].second);
 				a = heavyPar[a].first;
 			} else {
-				a -= pre_t(k);
+				a -= k;
 				k = 0;
 			}
 		}
@@ -86,7 +86,7 @@ template <IntKey Node = int> struct level_ancestor {
 		while (true) {
 			if (a > b) swap(a, b);
 			assert(a <= b);
-			if (a > b - pre_t(heavyPar[b].second)) {
+			if (a > b - heavyPar[b].second) {
 				return preorder[a];
 			}
 			b = heavyPar[b].first;
@@ -94,14 +94,14 @@ template <IntKey Node = int> struct level_ancestor {
 		}
 	}
 
-	int dist(Node a_, Node b_) const {
+	pre_t dist(Node a_, Node b_) const {
 		pre_t a = idx[a_], b = idx[b_];
-		int res = 0;
+		pre_t res = 0;
 		while (true) {
 			if (a > b) swap(a, b);
 			assert(a <= b);
-			if (a > b - pre_t(heavyPar[b].second)) {
-				res += (b - a).v;
+			if (a > b - heavyPar[b].second) {
+				res += b - a;
 				break;
 			}
 			res += heavyPar[b].second;
