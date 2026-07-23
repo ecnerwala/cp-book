@@ -375,8 +375,8 @@ TEST_CASE("power_series cached wrappers", "[fft]") {
 	fill_rnd(b, mt);
 	cached_power_series_exact<E> ca(a), cb(b);
 	power_series_exact<E> got(size_t(a.len() + b.len() - 1));
-	fft::multiply<E>(span<const num>(ca.series()), ca.cache(),
-			span<const num>(cb.series()), cb.cache(), span<num>(got));
+	fft::multiply<E>(span<const num>(ca.underlying()), ca.cache(),
+			span<const num>(cb.underlying()), cb.cache(), span<num>(got));
 	REQUIRE(got == a * b);
 	REQUIRE((ca * cb) == (a * b));
 	REQUIRE(middle_product(ca, cb) == fft::middle_product<E>(a, b));

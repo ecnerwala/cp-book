@@ -1545,7 +1545,7 @@ template <fft::conv_engine E> typename E::value_type kth_term(
 // scale fits in size 2n, so the caches are coefficient-free fft_cache transforms
 // built directly at 2n. Extending precision (appending coefficients) never
 // invalidates a cache that already covered its window; a clamped cache is rebuilt on
-// demand. Coefficients are only reachable through the const series() view, so
+// demand. Coefficients are only reachable through the const underlying() view, so
 // existing coefficients can't be edited out from under the caches.
 // Works for either exactness; products follow the power_series mixed-exactness rules.
 template <typename E, bool exact = false>
@@ -1553,10 +1553,17 @@ struct prefix_cached_power_series {
 	using T = typename E::value_type;
 
 	prefix_cached_power_series() = default;
-	explicit prefix_cached_power_series(power_series<E, exact> s_) : s(std::move(s_)) {}
+	// moving coefficients in is the common, free construction: implicit
+	prefix_cached_power_series(power_series<E, exact>&& s_) : s(std::move(s_)) {}
+	explicit prefix_cached_power_series(const power_series<E, exact>& s_) : s(s_) {}
 
 	int len() const { return s.len(); }
-	const power_series<E, exact>& series() const { return s; }
+	const power_series<E, exact>& underlying() const { return s; }
+	// free const view of the coefficients: implicit
+	operator const power_series<E, exact>&() const { return s; }
+	const T& operator[](int i) const { return s[size_t(i)]; }
+	auto begin() const { return s.cbegin(); }
+	auto end() const { return s.cend(); }
 
 	// extend precision: appends coefficients, keeping all covering caches valid
 	void append(std::span<const T> tail) {
@@ -1634,19 +1641,26 @@ power_series<E, ea && eb> operator*(const power_series<E, ea>& a, prefix_cached_
 // the coefficient-owning cached operand (it feeds its own coefficients to
 // fft_cache::extend_to). The transform is built at the first product's size and
 // extended in place (half-cost doublings) for bigger ones; coefficients are only
-// reachable through the const series() view, so they can't change under the cache.
-// series() + cache() are exactly the (coefficients, fft_cache) pair the cached
+// reachable through the const underlying() view, so they can't change under the cache.
+// underlying() + cache() are exactly the (coefficients, fft_cache) pair the cached
 // fft:: entry points take; products of two cached exact series come out exact.
 template <typename E>
 struct cached_power_series_exact {
 	using T = typename E::value_type;
 
 	cached_power_series_exact() = default;
-	explicit cached_power_series_exact(power_series_exact<E> s_) : s(std::move(s_)) {}
+	// moving coefficients in is the common, free construction: implicit
+	cached_power_series_exact(power_series_exact<E>&& s_) : s(std::move(s_)) {}
+	explicit cached_power_series_exact(const power_series_exact<E>& s_) : s(s_) {}
 
 	int len() const { return s.len(); }
-	const power_series_exact<E>& series() const { return s; }
-	// the fft_cache over series(), fed to the cached fft:: entry points alongside it
+	const power_series_exact<E>& underlying() const { return s; }
+	// free const view of the coefficients: implicit
+	operator const power_series_exact<E>&() const { return s; }
+	const T& operator[](int i) const { return s[size_t(i)]; }
+	auto begin() const { return s.cbegin(); }
+	auto end() const { return s.cend(); }
+	// the fft_cache over underlying(), fed to the cached fft:: entry points alongside it
 	fft::fft_cache<E>& cache() { return f; }
 
 	friend power_series_exact<E> operator*(cached_power_series_exact& a, cached_power_series_exact& b) {
@@ -1890,7 +1904,7 @@ struct subproduct_tree {
 	// number of points under node i
 	int size(int i) const { return nodes[i].len() - 1; }
 	// rev(prod (x - z_j)) over node i's leaves; length size(i) + 1
-	const power_series_exact<E>& rev_prod(int i) const { return nodes[i].series(); }
+	const power_series_exact<E>& rev_prod(int i) const { return nodes[i].underlying(); }
 
 	// Pushes the root functional down the tree: each child composes its parent's
 	// functional with the sibling's product (a cached middle product; the node stores
@@ -1906,9 +1920,9 @@ struct subproduct_tree {
 			std::span<const T> k(down[i].rev_series());
 			fft::fft_cache<E> ck;
 			down[2*i+0] = linear_form<E>::from_rev_series(power_series_exact<E>(fft::middle_product<E>(
-					k, ck, std::span<const T>(nodes[2*i+1].series()), nodes[2*i+1].cache())));
+					k, ck, std::span<const T>(nodes[2*i+1].underlying()), nodes[2*i+1].cache())));
 			down[2*i+1] = linear_form<E>::from_rev_series(power_series_exact<E>(fft::middle_product<E>(
-					k, ck, std::span<const T>(nodes[2*i+0].series()), nodes[2*i+0].cache())));
+					k, ck, std::span<const T>(nodes[2*i+0].underlying()), nodes[2*i+0].cache())));
 		}
 		std::vector<T> out(size_t(N), T{});
 		for (int i = 0; i < N; i++) out[i] = down[N + i].rev_series()[0];
@@ -1929,9 +1943,9 @@ struct subproduct_tree {
 			fft::fft_cache<E> cl, cr;
 			fft::multiply_add2<E>(
 					std::span<const T>(up[2*i+0]), cl,
-					std::span<const T>(nodes[2*i+1].series()), nodes[2*i+1].cache(),
+					std::span<const T>(nodes[2*i+1].underlying()), nodes[2*i+1].cache(),
 					std::span<const T>(up[2*i+1]), cr,
-					std::span<const T>(nodes[2*i+0].series()), nodes[2*i+0].cache(),
+					std::span<const T>(nodes[2*i+0].underlying()), nodes[2*i+0].cache(),
 					std::span<T>(r));
 			up[i] = std::move(r);
 		}
