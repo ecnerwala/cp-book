@@ -80,45 +80,57 @@ template <typename> inline constexpr bool is_int_newtype_v = false;
 template <typename Tag, typename T> inline constexpr bool is_int_newtype_v<int_newtype<Tag, T>> = true;
 template <typename K> concept IntNewtype = is_int_newtype_v<K>;
 
+// Keys for typed containers: either a newtype or a plain integer, so that
+// structures can be templated on a key type with `int` as the default.
+template <typename K> concept IntKey = IntNewtype<K> || std::integral<K>;
+template <typename K> struct newtype_underlying { using type = K; };
+template <typename Tag, typename T> struct newtype_underlying<int_newtype<Tag, T>> { using type = T; };
+template <typename K> using newtype_underlying_t = typename newtype_underlying<K>::type;
+template <IntKey K> constexpr newtype_underlying_t<K> newtype_raw(K k) {
+	if constexpr (is_int_newtype_v<K>) return k.v;
+	else return k;
+}
+
 // Declares a newtype with a fresh tag, e.g.:
 //   INT_NEWTYPE(node_t);            // int_newtype<..., int>
 //   INT_NEWTYPE(edge_t, int64_t);   // int_newtype<..., int64_t>
 #define INT_NEWTYPE(name, ...) struct name ## _newtype_tag__; using name = int_newtype<name ## _newtype_tag__ __VA_OPT__(,) __VA_ARGS__>
 
 // vec<K, V>: contiguous storage (std::vector<V>) indexed only by keys of
-// newtype K. Sizes and iteration are expressed in key-space.
-template <IntNewtype K, typename V> struct vec {
+// type K (a newtype or a plain integer). Sizes and iteration are expressed
+// in key-space.
+template <IntKey K, typename V> struct vec {
 	using key_type = K;
 	using value_type = V;
 
 	std::vector<V> data;
 
 	vec() {}
-	explicit vec(K n) : data(size_t(n.v)) {}
-	vec(K n, const V& init) : data(size_t(n.v), init) {}
+	explicit vec(K n) : data(size_t(newtype_raw(n))) {}
+	vec(K n, const V& init) : data(size_t(newtype_raw(n)), init) {}
 	explicit vec(std::vector<V> data_) : data(std::move(data_)) {}
 	vec(std::initializer_list<V> init) : data(init) {}
 
-	V& operator [] (K k) { return data[size_t(k.v)]; }
-	const V& operator [] (K k) const { return data[size_t(k.v)]; }
-	V& at(K k) { return data.at(size_t(k.v)); }
-	const V& at(K k) const { return data.at(size_t(k.v)); }
+	V& operator [] (K k) { return data[size_t(newtype_raw(k))]; }
+	const V& operator [] (K k) const { return data[size_t(newtype_raw(k))]; }
+	V& at(K k) { return data.at(size_t(newtype_raw(k))); }
+	const V& at(K k) const { return data.at(size_t(newtype_raw(k))); }
 
 	// Past-the-end key; loop with: for (K i{}; i < a.size(); ++i)
-	K size() const { return K(typename K::underlying_type(data.size())); }
+	K size() const { return K(newtype_underlying_t<K>(data.size())); }
 	bool empty() const { return data.empty(); }
-	void resize(K n) { data.resize(size_t(n.v)); }
-	void resize(K n, const V& init) { data.resize(size_t(n.v), init); }
-	void assign(K n, const V& init) { data.assign(size_t(n.v), init); }
-	void reserve(K n) { data.reserve(size_t(n.v)); }
+	void resize(K n) { data.resize(size_t(newtype_raw(n))); }
+	void resize(K n, const V& init) { data.resize(size_t(newtype_raw(n)), init); }
+	void assign(K n, const V& init) { data.assign(size_t(newtype_raw(n)), init); }
+	void reserve(K n) { data.reserve(size_t(newtype_raw(n))); }
 	void clear() { data.clear(); }
 
 	// Returns the key of the inserted element.
-	K push_back(const V& val) { data.push_back(val); return K(typename K::underlying_type(data.size() - 1)); }
-	K push_back(V&& val) { data.push_back(std::move(val)); return K(typename K::underlying_type(data.size() - 1)); }
+	K push_back(const V& val) { data.push_back(val); return K(newtype_underlying_t<K>(data.size() - 1)); }
+	K push_back(V&& val) { data.push_back(std::move(val)); return K(newtype_underlying_t<K>(data.size() - 1)); }
 	template <typename... Args> K emplace_back(Args&&... args) {
 		data.emplace_back(std::forward<Args>(args)...);
-		return K(typename K::underlying_type(data.size() - 1));
+		return K(newtype_underlying_t<K>(data.size() - 1));
 	}
 	void pop_back() { data.pop_back(); }
 	V& back() { return data.back(); }
