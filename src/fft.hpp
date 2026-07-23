@@ -1546,7 +1546,9 @@ template <fft::conv_engine E> typename E::value_type kth_term(
 // built directly at 2n. Extending precision (appending coefficients) never
 // invalidates a cache that already covered its window; a clamped cache is rebuilt on
 // demand. Coefficients are only reachable through the const underlying() view, so
-// existing coefficients can't be edited out from under the caches.
+// existing coefficients can't be edited out from under the caches. The caches are
+// mutable memoization, so everything cached is callable on a const wrapper -- but
+// const does not mean safe for concurrent use.
 // Works for either exactness; products follow the power_series mixed-exactness rules.
 template <typename E, bool exact = false>
 struct prefix_cached_power_series {
@@ -1575,7 +1577,7 @@ struct prefix_cached_power_series {
 		return std::span<const T>(s).first(std::min(n + 1, len()));
 	}
 	// cache over the prefix of length min(n + 1, len()); n a power of two
-	fft::fft_cache<E>& prefix_cache(int n) {
+	fft::fft_cache<E>& prefix_cache(int n) const {
 		assert(n > 0 && !(n & (n-1)));
 		int k = __builtin_ctz(unsigned(n));
 		if (k >= sz(caches)) caches.resize(size_t(k) + 1);
@@ -1589,7 +1591,7 @@ struct prefix_cached_power_series {
 
 private:
 	power_series<E, exact> s;
-	std::vector<fft::fft_cache<E>> caches;
+	mutable std::vector<fft::fft_cache<E>> caches; // memoized transforms: logically const
 };
 
 namespace detail {
@@ -1600,7 +1602,7 @@ template <bool ea, bool eb> int product_prec(int la, int lb) {
 /* namespace detail */ }
 
 template <typename E, bool ea, bool eb>
-power_series<E, ea && eb> operator*(prefix_cached_power_series<E, ea>& a, prefix_cached_power_series<E, eb>& b) {
+power_series<E, ea && eb> operator*(const prefix_cached_power_series<E, ea>& a, const prefix_cached_power_series<E, eb>& b) {
 	using T = typename E::value_type;
 	int prec = detail::product_prec<ea, eb>(a.len(), b.len());
 	power_series<E, ea && eb> r(size_t(prec), T{});
@@ -1611,7 +1613,7 @@ power_series<E, ea && eb> operator*(prefix_cached_power_series<E, ea>& a, prefix
 	return r;
 }
 template <typename E, bool ea, bool eb>
-power_series<E, ea && eb> operator*(prefix_cached_power_series<E, ea>& a, const power_series<E, eb>& b) {
+power_series<E, ea && eb> operator*(const prefix_cached_power_series<E, ea>& a, const power_series<E, eb>& b) {
 	using T = typename E::value_type;
 	int prec = detail::product_prec<ea, eb>(a.len(), b.len());
 	power_series<E, ea && eb> r(size_t(prec), T{});
@@ -1624,7 +1626,7 @@ power_series<E, ea && eb> operator*(prefix_cached_power_series<E, ea>& a, const 
 	return r;
 }
 template <typename E, bool ea, bool eb>
-power_series<E, ea && eb> operator*(const power_series<E, ea>& a, prefix_cached_power_series<E, eb>& b) {
+power_series<E, ea && eb> operator*(const power_series<E, ea>& a, const prefix_cached_power_series<E, eb>& b) {
 	using T = typename E::value_type;
 	int prec = detail::product_prec<ea, eb>(a.len(), b.len());
 	power_series<E, ea && eb> r(size_t(prec), T{});
@@ -1644,6 +1646,8 @@ power_series<E, ea && eb> operator*(const power_series<E, ea>& a, prefix_cached_
 // reachable through the const underlying() view, so they can't change under the cache.
 // underlying() + cache() are exactly the (coefficients, fft_cache) pair the cached
 // fft:: entry points take; products of two cached exact series come out exact.
+// The cache is mutable memoization: everything is callable on a const wrapper, but
+// const does not mean safe for concurrent use.
 template <typename E>
 struct cached_power_series_exact {
 	using T = typename E::value_type;
@@ -1661,15 +1665,15 @@ struct cached_power_series_exact {
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
 	// the fft_cache over underlying(), fed to the cached fft:: entry points alongside it
-	fft::fft_cache<E>& cache() { return f; }
+	fft::fft_cache<E>& cache() const { return f; }
 
-	friend power_series_exact<E> operator*(cached_power_series_exact& a, cached_power_series_exact& b) {
+	friend power_series_exact<E> operator*(const cached_power_series_exact& a, const cached_power_series_exact& b) {
 		if (a.len() == 0 || b.len() == 0) return {};
 		power_series_exact<E> r(size_t(a.len() + b.len() - 1), T{});
 		fft::multiply<E>(std::span<const T>(a.s), a.f, std::span<const T>(b.s), b.f, std::span<T>(r));
 		return r;
 	}
-	friend power_series_exact<E> square(cached_power_series_exact& a) {
+	friend power_series_exact<E> square(const cached_power_series_exact& a) {
 		if (a.len() == 0) return {};
 		power_series_exact<E> r(size_t(2 * a.len() - 1), T{});
 		fft::square<E>(std::span<const T>(a.s), a.f, std::span<T>(r));
@@ -1677,13 +1681,13 @@ struct cached_power_series_exact {
 	}
 
 	// coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0
-	friend std::vector<T> middle_product(cached_power_series_exact& a, cached_power_series_exact& b) {
+	friend std::vector<T> middle_product(const cached_power_series_exact& a, const cached_power_series_exact& b) {
 		return fft::middle_product<E>(std::span<const T>(a.s), a.f, std::span<const T>(b.s), b.f);
 	}
 
 	// full product of two cached operands, retaining the pointwise product transform
 	// when the engine supports it (see fft::multiply_cached)
-	friend cached_power_series_exact multiply_cached(cached_power_series_exact& a, cached_power_series_exact& b) {
+	friend cached_power_series_exact multiply_cached(const cached_power_series_exact& a, const cached_power_series_exact& b) {
 		cached_power_series_exact r;
 		std::vector<T> coeffs;
 		fft::multiply_cached<E>(std::span<const T>(a.s), a.f, std::span<const T>(b.s), b.f, coeffs, r.f);
@@ -1693,7 +1697,7 @@ struct cached_power_series_exact {
 
 private:
 	power_series_exact<E> s;
-	fft::fft_cache<E> f;
+	mutable fft::fft_cache<E> f; // memoized transform: filling it is logically const
 };
 
 // Exact polynomial backed by its reversal: the member c is the exact power series
@@ -1911,7 +1915,7 @@ struct subproduct_tree {
 	// the reversed product, which is exactly the middle-product operand), so leaf i
 	// ends up with f composed with prod_{j != i} (x - z_j) -- a length-1 kernel.
 	// Requires f.len() == N.
-	std::vector<T> pushdown(linear_form<E> f) {
+	std::vector<T> pushdown(linear_form<E> f) const {
 		assert(f.len() == N);
 		std::vector<linear_form<E>> down(size_t(2) * N);
 		down[1] = std::move(f);
@@ -1932,7 +1936,7 @@ struct subproduct_tree {
 	// Transposed pushdown: combines per-leaf constants d_i upward via
 	// node = left * rev_prod(right sibling) + right * rev_prod(left sibling), returning
 	// the root's length-N series rev(sum_i d_i prod_{j != i} (x - z_j)).
-	power_series_exact<E> combine_up(std::span<const T> leaf_vals) {
+	power_series_exact<E> combine_up(std::span<const T> leaf_vals) const {
 		assert(sz(leaf_vals) == N);
 		std::vector<power_series_exact<E>> up(size_t(2) * N);
 		for (int i = 0; i < N; i++) {
