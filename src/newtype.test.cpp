@@ -29,15 +29,28 @@ TEST_CASE("Newtype basics", "[newtype]") {
 	REQUIRE(a.v == 3);
 	REQUIRE(int(b) == 7);
 
-	// idx + offset -> idx, idx - idx -> offset
+	// ring arithmetic, closed within the type; literals participate implicitly
 	node_t c = a + 4;
 	REQUIRE(c == b);
-	REQUIRE(b - a == 4);
+	REQUIRE(b - a == node_t(4));
+	REQUIRE(bool(b - a == 4)); // bare literals work outside Catch's expression decomposer
 	c += 2;
-	REQUIRE(c - b == 2);
+	REQUIRE(c - b == node_t(2));
 	REQUIRE(--c == b + 1);
 	REQUIRE(c++ == b + 1);
 	REQUIRE(c == b + 2);
+
+	// 0 and 1 are distinguished points; *, /, %, shifts are closed too
+	REQUIRE(a * 0 == node_t(0));
+	REQUIRE(b * 1 == b);
+	REQUIRE(a * b == node_t(21));
+	REQUIRE(b / 2 == a);
+	REQUIRE(b % a == node_t(1));
+	REQUIRE((a << 1) == node_t(6));
+	REQUIRE((b >> 1) == a);
+	REQUIRE((a & b) == a);
+	REQUIRE(-a == node_t(-3));
+	// a + node_t2(1) does not compile: cross-type operands need explicit casts
 
 	// explicit casts between newtypes
 	edge_t e(a);
@@ -77,7 +90,7 @@ TEST_CASE("Separate index spaces", "[newtype]") {
 	INT_NEWTYPE(node);
 	INT_NEWTYPE(edge_slot);
 
-	vec<node, int> deg(node(3), 0);
+	vec<node, edge_slot> deg(node(3), edge_slot(0));
 	std::vector<std::pair<node, node>> edges = {{node(0), node(1)}, {node(1), node(2)}, {node(0), node(2)}};
 	for (auto [u, v_] : edges) { deg[u]++; deg[v_]++; }
 

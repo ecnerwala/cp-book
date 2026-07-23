@@ -17,7 +17,9 @@
 //   * Explicit casts between newtypes (and to/from the underlying type).
 //   * Implicit conversion from compile-time integer constants (literals) only,
 //     via a consteval constructor; runtime integers require an explicit cast.
-//   * Index-space arithmetic: idx + offset -> idx, idx - idx -> offset.
+//   * Ring semantics within a type: +, -, *, /, %, bit ops, and shifts are all
+//     closed over the newtype (with 0 and 1 as distinguished points, usable as
+//     literals); operands from other spaces still require an explicit cast.
 template <typename Tag, typename T = int> struct int_newtype {
 	using underlying_type = T;
 
@@ -40,12 +42,31 @@ template <typename Tag, typename T = int> struct int_newtype {
 	constexpr int_newtype& operator -- () { --v; return *this; }
 	constexpr int_newtype operator -- (int) { int_newtype r = *this; --v; return r; }
 
-	constexpr int_newtype& operator += (T d) { v = T(v + d); return *this; }
-	constexpr int_newtype& operator -= (T d) { v = T(v - d); return *this; }
-	friend constexpr int_newtype operator + (int_newtype a, T d) { return int_newtype(T(a.v + d)); }
-	friend constexpr int_newtype operator + (T d, int_newtype a) { return int_newtype(T(d + a.v)); }
-	friend constexpr int_newtype operator - (int_newtype a, T d) { return int_newtype(T(a.v - d)); }
-	friend constexpr T operator - (int_newtype a, int_newtype b) { return T(a.v - b.v); }
+	constexpr int_newtype operator + () const { return *this; }
+	constexpr int_newtype operator - () const { return int_newtype(T(-v)); }
+	constexpr int_newtype operator ~ () const { return int_newtype(T(~v)); }
+
+	constexpr int_newtype& operator += (int_newtype o) { v = T(v + o.v); return *this; }
+	constexpr int_newtype& operator -= (int_newtype o) { v = T(v - o.v); return *this; }
+	constexpr int_newtype& operator *= (int_newtype o) { v = T(v * o.v); return *this; }
+	constexpr int_newtype& operator /= (int_newtype o) { v = T(v / o.v); return *this; }
+	constexpr int_newtype& operator %= (int_newtype o) { v = T(v % o.v); return *this; }
+	constexpr int_newtype& operator &= (int_newtype o) { v = T(v & o.v); return *this; }
+	constexpr int_newtype& operator |= (int_newtype o) { v = T(v | o.v); return *this; }
+	constexpr int_newtype& operator ^= (int_newtype o) { v = T(v ^ o.v); return *this; }
+	constexpr int_newtype& operator <<= (int s) { v = T(v << s); return *this; }
+	constexpr int_newtype& operator >>= (int s) { v = T(v >> s); return *this; }
+
+	friend constexpr int_newtype operator + (int_newtype a, int_newtype b) { return int_newtype(T(a.v + b.v)); }
+	friend constexpr int_newtype operator - (int_newtype a, int_newtype b) { return int_newtype(T(a.v - b.v)); }
+	friend constexpr int_newtype operator * (int_newtype a, int_newtype b) { return int_newtype(T(a.v * b.v)); }
+	friend constexpr int_newtype operator / (int_newtype a, int_newtype b) { return int_newtype(T(a.v / b.v)); }
+	friend constexpr int_newtype operator % (int_newtype a, int_newtype b) { return int_newtype(T(a.v % b.v)); }
+	friend constexpr int_newtype operator & (int_newtype a, int_newtype b) { return int_newtype(T(a.v & b.v)); }
+	friend constexpr int_newtype operator | (int_newtype a, int_newtype b) { return int_newtype(T(a.v | b.v)); }
+	friend constexpr int_newtype operator ^ (int_newtype a, int_newtype b) { return int_newtype(T(a.v ^ b.v)); }
+	friend constexpr int_newtype operator << (int_newtype a, int s) { return int_newtype(T(a.v << s)); }
+	friend constexpr int_newtype operator >> (int_newtype a, int s) { return int_newtype(T(a.v >> s)); }
 
 	friend std::ostream& operator << (std::ostream& out, int_newtype n) { return out << n.v; }
 	friend std::istream& operator >> (std::istream& in, int_newtype& n) { return in >> n.v; }
