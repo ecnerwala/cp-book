@@ -23,10 +23,29 @@ jobs:
           key: ${{ runner.os }}-cmake-deps-${{ hashFiles('CMakeLists.txt') }}
 
       - name: Configure
-        run: cmake -B build -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+        run: cmake -B build -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DENABLE_COVERAGE=ON
 
       - name: Build
         run: cmake --build build -j
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      - name: Install gcovr
+        run: pipx install gcovr
+
+      - name: Generate coverage report
+        run: |
+          mkdir -p coverage
+          gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
+            --html-details coverage/index.html \
+            --cobertura coverage/coverage.xml \
+            --markdown-summary coverage/summary.md \
+            --print-summary
+          cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
