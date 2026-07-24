@@ -1,4 +1,3 @@
-// competitive-verifier: DISPLAY no-index
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_get_random_seed.hpp>
 

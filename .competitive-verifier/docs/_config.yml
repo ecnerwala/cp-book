@@ -1,5 +1,0 @@
-# User overrides merged into the generated Jekyll _config.yml by
-# competitive-verifier's docs builder.
-# Show bare filenames in the index (directories are already the category
-# headings), matching the -I src include convention.
-filename-index: true

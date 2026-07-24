@@ -1,4 +1,3 @@
-// competitive-verifier: DISPLAY no-index
 #include <catch2/catch_template_test_macros.hpp>
 
 #include "seg_tree.hpp"

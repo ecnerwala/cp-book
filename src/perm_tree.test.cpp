@@ -1,4 +1,3 @@
-// competitive-verifier: DISPLAY no-index
 #include "perm_tree.hpp"
 
 #include <catch2/catch_test_macros.hpp>

@@ -1,0 +1,26 @@
+{%- comment -%}
+Overrides the competitive-verifier theme's dependencies.html to display
+paths with the leading "src/" stripped (headers are included with bare
+names via -I src). Links keep the full path.
+{%- endcomment -%}
+{%- for dep in include.data.dependencies -%}
+{%- if dep.files.size != 0 -%}
+<h2>{{dep.type}}</h2>
+<ul>
+    {%- for item in dep.files -%}
+    {%- assign name = item.path | remove_first: "src/" -%}
+    {%- if item.title -%}
+        {%- capture link_title -%}{{item.title | xml_escape }} <small>({{ name | xml_escape }})</small>{%- endcapture -%}
+    {%- else -%}
+        {%- capture link_title -%}{{name | xml_escape }}{%- endcapture -%}
+    {%- endif -%}
+    {%- comment -%} Catch2 unit tests are not verification files; suppress the not-verified icon. {%- endcomment -%}
+    {%- if item.path contains ".test.cpp" and item.path contains "src/" -%}
+    <li><a href="{{ item.path | relative_url }}">{{ link_title | xml_escape }}</a></li>
+    {%- else -%}
+    <li><a href="{{ item.path | relative_url }}">{{ site.icons[item.icon] }} {{ link_title | xml_escape }}</a></li>
+    {%- endif -%}
+    {%- endfor -%}
+</ul>
+{%- endif -%}
+{%- endfor -%}
