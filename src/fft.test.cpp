@@ -150,6 +150,19 @@ TEMPLATE_TEST_CASE("transform add", "[fft]", MOD_ENGINES) {
 		want.resize(n);
 		check_eq(got, want);
 	}
+	// scale conversions: widening is implicit, narrowing is an explicit downcast
+	if constexpr (E::unit_scale != 0) {
+		using T1 = typename E::template transformed_t<1>;
+		using T2 = typename E::template transformed_t<2>;
+		STATIC_REQUIRE(std::is_convertible_v<T1&&, T2>);
+		STATIC_REQUIRE(!std::is_convertible_v<T2&&, T1>);
+		STATIC_REQUIRE(std::is_constructible_v<T1, T2&&>);
+		using P1 = typename E::template product_t<1>;
+		using P2 = typename E::template product_t<2>;
+		STATIC_REQUIRE(std::is_convertible_v<P1&&, P2>);
+		STATIC_REQUIRE(!std::is_convertible_v<P2&&, P1>);
+		STATIC_REQUIRE(std::is_constructible_v<P1, P2&&>);
+	}
 }
 
 TEMPLATE_TEST_CASE("matrix engine", "[fft]",

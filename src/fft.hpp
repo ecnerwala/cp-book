@@ -536,9 +536,16 @@ template <typename mnum> struct fft_split_engine {
 	using core = fft_core<cnum>;
 	// A = operand scale (see the conv_engine preamble): a sum of A unit transforms,
 	// so limb magnitudes are up to A times a single operand's.
+	// Scale conversions on the tracked types: widening is implicit (a scale-A2 value
+	// is a valid scale-A one for A2 < A), narrowing is an explicit downcast (the
+	// caller asserts the true magnitude is within the smaller scale).
 	template <int A = 1> struct transformed_t {
 		vector<cnum> v;
 		int size() const { return sz(v); }
+		transformed_t() = default;
+		explicit transformed_t(vector<cnum>&& v_) : v(std::move(v_)) {}
+		template <int A2> requires (A2 != A) explicit(A2 > A) transformed_t(transformed_t<A2>&& o)
+			: v(std::move(o.v)) {}
 	};
 	using transformed = transformed_t<1>;
 	// K = accumulated operand-scale product (see the conv_engine preamble).
@@ -548,8 +555,7 @@ template <typename mnum> struct fft_split_engine {
 		int size() const { return sz(lo); }
 		product_t() = default;
 		product_t(vector<cnum>&& lo_, vector<cnum>&& hi_) : lo(std::move(lo_)), hi(std::move(hi_)) {}
-		// widening: a scale-K2 product is a valid scale-K product for K2 <= K
-		template <int K2> requires (K2 < K) product_t(product_t<K2>&& o)
+		template <int K2> requires (K2 != K) explicit(K2 > K) product_t(product_t<K2>&& o)
 			: lo(std::move(o.lo)), hi(std::move(o.hi)) {}
 	};
 	using product = product_t<1>;
@@ -676,10 +682,17 @@ struct crt_engine {
 	using E2 = fft_engine<num2>;
 	// A = operand scale (see the conv_engine preamble): a sum of A unit transforms,
 	// so balanced representatives are bounded by A MOD/2.
+	// Scale conversions: widening implicit, narrowing an explicit downcast (see
+	// fft_split_engine).
 	template <int A = 1> struct transformed_t {
 		typename E1::transformed t1;
 		typename E2::transformed t2;
 		int size() const { return t1.size(); }
+		transformed_t() = default;
+		transformed_t(typename E1::transformed&& t1_, typename E2::transformed&& t2_)
+			: t1(std::move(t1_)), t2(std::move(t2_)) {}
+		template <int A2> requires (A2 != A) explicit(A2 > A) transformed_t(transformed_t<A2>&& o)
+			: t1(std::move(o.t1)), t2(std::move(o.t2)) {}
 	};
 	using transformed = transformed_t<1>;
 	// K = accumulated operand-scale product (see the conv_engine preamble).
@@ -690,8 +703,7 @@ struct crt_engine {
 		product_t() = default;
 		product_t(typename E1::product&& p1_, typename E2::product&& p2_)
 			: p1(std::move(p1_)), p2(std::move(p2_)) {}
-		// widening: a scale-K2 product is a valid scale-K product for K2 <= K
-		template <int K2> requires (K2 < K) product_t(product_t<K2>&& o)
+		template <int K2> requires (K2 != K) explicit(K2 > K) product_t(product_t<K2>&& o)
 			: p1(std::move(o.p1)), p2(std::move(o.p2)) {}
 	};
 	using product = product_t<1>;
@@ -831,11 +843,23 @@ struct componentwise_engine {
 	template <int A = unit_scale> struct transformed_t {
 		std::array<typename E::template transformed_t<A>, size_t(L)> t;
 		int size() const { return t[0].size(); }
+		transformed_t() = default;
+		// scale conversions delegate to the inner engine's (widening implicit,
+		// narrowing an explicit downcast)
+		template <int A2> requires (A2 != A) explicit(A2 > A) transformed_t(transformed_t<A2>&& o) {
+			for (int c = 0; c < L; c++)
+				t[c] = typename E::template transformed_t<A>(std::move(o.t[c]));
+		}
 	};
 	using transformed = transformed_t<>;
 	template <int K> struct product_t {
 		std::array<typename E::template product_t<K>, size_t(L)> t;
 		int size() const { return t[0].size(); }
+		product_t() = default;
+		template <int K2> requires (K2 != K) explicit(K2 > K) product_t(product_t<K2>&& o) {
+			for (int c = 0; c < L; c++)
+				t[c] = typename E::template product_t<K>(std::move(o.t[c]));
+		}
 	};
 
 	static transformed transform(std::span<const V> a, int n) {
