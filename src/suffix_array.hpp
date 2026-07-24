@@ -4,6 +4,7 @@
  * This is mostly inspired by https://golang.org/src/index/suffixarray/sais.go.
  */
 
+#include <algorithm>
 #include <vector>
 #include <string>
 #include <cassert>

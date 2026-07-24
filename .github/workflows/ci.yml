@@ -277,6 +277,20 @@ jobs:
           cmake --build build -j
           ctest --test-dir build --output-on-failure
 
+      # Never-run instrumented stubs so untouched headers appear in coverage
+      # denominators as 0% instead of being invisible (uninstantiated
+      # templates still can't be counted: they emit no code).
+      - name: Instrument untouched headers
+        run: |
+          mkdir -p coverage-stubs
+          for h in $(cd src && find . -name '*.hpp' | sed 's|^\./||'); do
+            stub="coverage-stubs/$(echo "$h" | tr '/' '_').cpp"
+            echo "#include \"$h\"" > "$stub"
+            ccache g++ --coverage -O0 -fkeep-inline-functions -std=c++26 -I src \
+              -c "$stub" -o "${stub%.cpp}.o" &
+          done
+          wait
+
       - name: Install gcovr
         run: pipx install gcovr
 
@@ -287,7 +301,7 @@ jobs:
             --exclude-lines-by-pattern '.*assert\(false\).*' \
             --exclude-throw-branches --exclude-noncode-lines \
             --json ${{ runner.temp }}/coverage-unit-tests.json \
-            build
+            build coverage-stubs
 
       - name: Upload coverage tracefile
         uses: actions/upload-artifact@v7
@@ -360,8 +374,24 @@ jobs:
             --add-tracefile '${{ steps.all-artifacts.outputs.artifacts-root }}/CoverageTrace-*/coverage-*.json' \
             --filter 'src/' --exclude '.*\.test\.cpp' \
             --markdown-summary coverage/summary.md \
+            --json-summary coverage/summary-src.json \
             --print-summary
           cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write coverage badge
+        run: |
+          python3 - <<'EOF'
+          import json
+          s = json.load(open("coverage/summary-src.json"))
+          pct = s["line_percent"]
+          color = "brightgreen" if pct >= 90 else "green" if pct >= 75 else "yellow" if pct >= 50 else "red"
+          json.dump({
+              "schemaVersion": 1,
+              "label": "coverage",
+              "message": f"{pct:.1f}%",
+              "color": color,
+          }, open("coverage/badge.json", "w"))
+          EOF
 
       - name: Add coverage sections to docs pages
         run: python3 scripts/coverage_links.py --coverage-dir coverage --jekyll-dir _jekyll
