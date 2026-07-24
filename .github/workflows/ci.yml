@@ -67,6 +67,20 @@ jobs:
             third_party
           config: .competitive-verifier/config.toml
 
+      # Second resolve for the coverage environment (its compile commands
+      # differ: --coverage via config-coverage.toml), so coverage-verify
+      # doesn't have to resolve again.
+      - name: oj-resolve (coverage environment)
+        uses: competitive-verifier/actions/oj-resolve@v2
+        with:
+          output-path: verify_files-coverage.json
+          include: |
+            src
+            verify
+          exclude: |
+            third_party
+          config: .competitive-verifier/config-coverage.toml
+
       - name: Bundle with library include path
         run: python3 scripts/bundle.py --site verify_files.json
 
@@ -74,6 +88,13 @@ jobs:
         uses: competitive-verifier/actions/upload-verify-artifact@v2
         with:
           file: verify_files.json
+
+      - name: Upload verify_files-coverage.json
+        uses: actions/upload-artifact@v7
+        with:
+          name: verify_files-coverage
+          path: verify_files-coverage.json
+          retention-days: 1
 
       - name: Upload bundled
         uses: actions/upload-artifact@v7
@@ -158,6 +179,7 @@ jobs:
 
   coverage-verify:
     runs-on: ubuntu-26.04
+    needs: [setup-verify]
     steps:
       # Full history: the prev-results skip logic compares each file's
       # last-commit time (git log -1) against the previous run's timestamps.
@@ -209,21 +231,15 @@ jobs:
             echo "file=.cv-coverage-result/result.json" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: oj-resolve (coverage environment)
-        uses: competitive-verifier/actions/oj-resolve@v2
+      - name: Download verify_files-coverage.json
+        uses: actions/download-artifact@v7
         with:
-          output-path: verify_files.json
-          include: |
-            src
-            verify
-          exclude: |
-            third_party
-          config: .competitive-verifier/config-coverage.toml
+          name: verify_files-coverage
 
       - name: Run verify solutions with coverage
         uses: competitive-verifier/actions/verify@v2
         with:
-          verify-files: verify_files.json
+          verify-files: verify_files-coverage.json
           destination: ${{ runner.temp }}/coverage-result.json
           prev-result: ${{ steps.prev-result.outputs.file }}
           timeout: 1800
@@ -240,7 +256,7 @@ jobs:
         run: |
           python3 - <<'EOF'
           import json, pathlib, shutil
-          manifest = json.load(open("verify_files.json"))["files"]
+          manifest = json.load(open("verify_files-coverage.json"))["files"]
           result_files = json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
           stage = pathlib.Path("coverage-counters")
           stage.mkdir(exist_ok=True)
