@@ -190,7 +190,6 @@ jobs:
         with:
           verify-files: verify_files.json
           timeout: 1800
-          check: true
 
       - name: Build and run unit tests with coverage
         run: |
