@@ -1,5 +1,9 @@
 # ecnerwala's CP Book
 
+[![CI](https://github.com/ecnerwala/cp-book/actions/workflows/ci.yml/badge.svg)](https://github.com/ecnerwala/cp-book/actions/workflows/ci.yml)
+[![verify](https://github.com/ecnerwala/cp-book/actions/workflows/verify.yml/badge.svg)](https://github.com/ecnerwala/cp-book/actions/workflows/verify.yml)
+[![pages](https://img.shields.io/badge/verification-results-blue?logo=github)](https://ecnerwala.github.io/cp-book/)
+
 This is my library of reference code for competitive programming. The goal is to
 write generic, fast, and clean algorithm implementations for use in contests
 like CodeForces or ICPC.
