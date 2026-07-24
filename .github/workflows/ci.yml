@@ -54,6 +54,10 @@ jobs:
       - name: Set up competitive-verifier
         uses: competitive-verifier/actions/setup@v2
         with:
+          # Fork with cp-book integration patches (content-hash skip, docs
+          # coverage integration, bundler include paths); see the branch's
+          # log vs upstream main.
+          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
           cache-pip: true
 
       - name: oj-resolve
@@ -119,6 +123,10 @@ jobs:
       - name: Set up competitive-verifier
         uses: competitive-verifier/actions/setup@v2
         with:
+          # Fork with cp-book integration patches (content-hash skip, docs
+          # coverage integration, bundler include paths); see the branch's
+          # log vs upstream main.
+          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
           cache-pip: true
 
       - name: Get library-checker-problems version
@@ -190,6 +198,10 @@ jobs:
       - name: Set up competitive-verifier
         uses: competitive-verifier/actions/setup@v2
         with:
+          # Fork with cp-book integration patches (content-hash skip, docs
+          # coverage integration, bundler include paths); see the branch's
+          # log vs upstream main.
+          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
           cache-pip: true
 
       # Slim rolling cache: only the staged counters of the previous run
@@ -408,18 +420,11 @@ jobs:
       - name: Set up competitive-verifier
         uses: competitive-verifier/actions/setup@v2
         with:
+          # Fork with cp-book integration patches (content-hash skip, docs
+          # coverage integration, bundler include paths); see the branch's
+          # log vs upstream main.
+          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
           cache-pip: true
-
-      - name: Docs
-        uses: competitive-verifier/actions/docs@v2
-        with:
-          verify-result: ${{ steps.all-artifacts.outputs.artifacts-root }}/Result-*/result.json
-          destination: _jekyll
-          write-summary: true
-
-      # The front page (docs/index.md) renders the README via include_relative.
-      - name: Copy README into docs
-        run: cp README.md _jekyll/README.md
 
       - name: Install gcovr
         run: pipx install gcovr
@@ -431,10 +436,26 @@ jobs:
             --add-tracefile '${{ steps.all-artifacts.outputs.artifacts-root }}/CoverageTrace-*/coverage-*.json' \
             --html-details coverage/index.html \
             --cobertura coverage/coverage.xml \
+            --json coverage/coverage.json \
             --markdown-summary coverage/summary.md \
             --json-summary coverage/summary.json \
             --print-summary
           cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Run the docs CLI directly (rather than competitive-verifier/actions/docs)
+      # to pass --coverage-json, which renders per-page coverage summaries and
+      # a per-line coverage tab.
+      - name: Docs
+        run: |
+          competitive-verifier docs \
+            ${{ steps.all-artifacts.outputs.artifacts-root }}/Result-*/result.json \
+            --coverage-json coverage/coverage.json \
+            --write-summary \
+            --destination _jekyll
+
+      # The front page (docs/index.md) renders the README via include_relative.
+      - name: Copy README into docs
+        run: cp README.md _jekyll/README.md
 
       - name: Write coverage badge
         run: |
@@ -450,9 +471,6 @@ jobs:
               "color": color,
           }, open("coverage/badge.json", "w"))
           EOF
-
-      - name: Add coverage sections to docs pages
-        run: python3 scripts/coverage_links.py --coverage-dir coverage --jekyll-dir _jekyll
 
       - name: Setup Pages
         uses: actions/configure-pages@v6
