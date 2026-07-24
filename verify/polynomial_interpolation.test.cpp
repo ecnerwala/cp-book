@@ -15,7 +15,7 @@ int main() {
 	std::vector<num> Y(N); for (auto& y : Y) std::cin >> y;
 	auto res = ecnerwala::poly_interpolate<E>(std::span<const num>(X), std::span<const num>(Y));
 	for (int i = 0; i < N; i++) {
-		std::cout << (i < res.len() ? res[i] : num(0)) << " \n"[i+1==N];
+		std::cout << res[i] << " \n"[i+1==N];
 	}
 
 	return 0;

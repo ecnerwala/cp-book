@@ -40,9 +40,14 @@ def update_site(verify_files_json: pathlib.Path) -> None:
         path = pathlib.Path(path_str)
         if path.suffix not in (".cpp", ".hpp"):
             continue
+        try:
+            bundled = bundle(path)
+        except Exception as e:  # e.g. #pragma GCC target confuses -fpreprocessed -dD
+            print(f"bundle failed for {path}: {e!r}", file=sys.stderr)
+            continue
         dest = bundled_root / path
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(bundle(path))
+        dest.write_bytes(bundled)
         sources = [
             s for s in file.get("additonal_sources", [])
             if s["name"] not in ("bundled", "bundle error")

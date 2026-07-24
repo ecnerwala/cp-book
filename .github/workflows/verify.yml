@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
 
@@ -54,7 +54,7 @@ jobs:
           retention-days: 1
 
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [setup]
     steps:
       - uses: actions/checkout@v4
@@ -81,7 +81,7 @@ jobs:
           retention-days: 1
 
   docs-and-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [verify]
     outputs:
       upload-pages: ${{ steps.upload-pages.outcome == 'success' }}
@@ -146,7 +146,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
