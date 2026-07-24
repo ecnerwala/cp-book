@@ -5,6 +5,10 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Weekly full re-verify: scheduled runs skip the previous-results
+    # restore, so every solution is re-verified from scratch.
+    - cron: '0 5 * * 6'
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
@@ -121,6 +125,7 @@ jobs:
 
       - name: Check for previous result
         id: prev-result
+        if: github.event_name != 'schedule'
         run: |
           if test -f .cv-prev-result/result.json; then
             echo "file=.cv-prev-result/result.json" >> "$GITHUB_OUTPUT"
@@ -193,6 +198,7 @@ jobs:
 
       - name: Check for previous result
         id: prev-result
+        if: github.event_name != 'schedule'
         run: |
           if test -f .cv-coverage-result/result.json; then
             echo "file=.cv-coverage-result/result.json" >> "$GITHUB_OUTPUT"
@@ -238,6 +244,7 @@ jobs:
           gcovr --root . --filter 'src/' --filter 'verify/' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
             --exclude-lines-by-pattern '.*assert\(false\).*' \
+            --exclude-throw-branches --exclude-noncode-lines \
             --json ${{ runner.temp }}/coverage-verify.json \
             .competitive-verifier/cache
 
@@ -278,6 +285,7 @@ jobs:
           gcovr --root . --filter 'src/' --filter 'verify/' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
             --exclude-lines-by-pattern '.*assert\(false\).*' \
+            --exclude-throw-branches --exclude-noncode-lines \
             --json ${{ runner.temp }}/coverage-unit-tests.json \
             build
 
