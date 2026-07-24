@@ -67,11 +67,47 @@ jobs:
         with:
           cache-pip: true
 
+      - name: Cache testcases
+        uses: actions/cache@v4
+        with:
+          path: .competitive-verifier/cache
+          key: testcases-${{ hashFiles('verify/*.test.cpp') }}
+          restore-keys: |
+            testcases-
+
+      - name: Restore previous results
+        uses: actions/cache/restore@v4
+        with:
+          path: .cv-prev-result
+          key: verify-result-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            verify-result-${{ github.ref }}-
+            verify-result-refs/heads/master-
+
+      - name: Check for previous result
+        id: prev-result
+        run: |
+          if test -f .cv-prev-result/result.json; then
+            echo "file=.cv-prev-result/result.json" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Verify
         uses: competitive-verifier/actions/verify@v2
         with:
           destination: ${{ runner.temp }}/result.json
+          prev-result: ${{ steps.prev-result.outputs.file }}
           timeout: 1800
+
+      - name: Save results for future runs
+        run: |
+          mkdir -p .cv-prev-result
+          cp "${{ runner.temp }}/result.json" .cv-prev-result/result.json
+
+      - name: Cache results
+        uses: actions/cache/save@v4
+        with:
+          path: .cv-prev-result
+          key: verify-result-${{ github.ref }}-${{ github.run_id }}
 
       - name: Upload result artifact
         uses: actions/upload-artifact@v4
@@ -80,9 +116,83 @@ jobs:
           path: ${{ runner.temp }}/result.json
           retention-days: 1
 
+  coverage:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up competitive-verifier
+        uses: competitive-verifier/actions/setup@v2
+        with:
+          cache-pip: true
+
+      - name: Cache testcases
+        uses: actions/cache@v4
+        with:
+          path: .competitive-verifier/cache
+          key: testcases-${{ hashFiles('verify/*.test.cpp') }}
+          restore-keys: |
+            testcases-
+
+      - name: oj-resolve (coverage environment)
+        uses: competitive-verifier/actions/oj-resolve@v2
+        with:
+          output-path: verify_files.json
+          include: |
+            src
+            verify
+          exclude: |
+            third_party
+          config: .competitive-verifier/config-coverage.toml
+
+      - name: Run verify solutions with coverage
+        uses: competitive-verifier/actions/verify@v2
+        with:
+          verify-files: verify_files.json
+          timeout: 1800
+          check: true
+
+      - name: Build and run unit tests with coverage
+        run: |
+          cmake -B build -DENABLE_COVERAGE=ON
+          cmake --build build -j
+          ctest --test-dir build --output-on-failure
+
+      - name: Install gcovr
+        run: pipx install gcovr
+
+      - name: Generate coverage report
+        run: |
+          mkdir -p coverage
+          gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
+            --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
+            --html-details coverage/index.html \
+            --cobertura coverage/coverage.xml \
+            --markdown-summary coverage/summary.md \
+            --print-summary \
+            build .competitive-verifier/cache
+          cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: Coverage-${{ runner.os }}
+          path: coverage/
+          retention-days: 7
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage
+          path: coverage/summary.md
+
   docs-and-check:
     runs-on: ubuntu-26.04
-    needs: [verify]
+    needs: [verify, coverage]
     outputs:
       upload-pages: ${{ steps.upload-pages.outcome == 'success' }}
     steps:
@@ -129,6 +239,15 @@ jobs:
         with:
           source: _jekyll
           destination: _site
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: Coverage-${{ runner.os }}
+          path: coverage-artifact
+      - name: Add coverage report to site
+        run: sudo cp -r coverage-artifact _site/coverage
+
       - name: Upload artifact
         id: upload-pages
         uses: actions/upload-pages-artifact@v3

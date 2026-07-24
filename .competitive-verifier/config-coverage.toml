@@ -1,0 +1,8 @@
+# Coverage-instrumented environment: run by the coverage CI job; the .gcda
+# counters land next to the compiled binaries and are aggregated with gcovr.
+[languages.cpp]
+read_macros = false
+
+[[languages.cpp.environments]]
+CXX = "g++"
+CXXFLAGS = ["-std=c++26", "-O2", "-g", "--coverage", "-I", "src"]
