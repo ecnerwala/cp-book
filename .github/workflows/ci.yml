@@ -434,6 +434,13 @@ jobs:
             --print-summary
           cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
 
+      # Headers absent from the gcov data (template-only headers emit no code
+      # even in the instrumented stubs) get zero-coverage entries so the docs
+      # show them as 0% instead of omitting them. The badge/summary above stay
+      # based on real gcov data only.
+      - name: Add uncovered headers to coverage.json
+        run: python3 scripts/coverage_fill_missing.py coverage/coverage.json
+
       # Run the docs CLI directly (rather than competitive-verifier/actions/docs)
       # to pass --coverage-json, which renders per-page coverage summaries and
       # a per-line coverage tab.

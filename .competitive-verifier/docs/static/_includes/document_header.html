@@ -12,6 +12,9 @@ names via -I src), including in the include directive.
 {%- comment -%} Catch2 unit tests are not verification files; mark them instead of the not-verified icon. {%- endcomment -%}
 {%- if include.data.path contains ".test.cpp" and include.data.path contains "src/" -%}
 <h1>🧪 {{ page_title | xml_escape }}</h1>
+{%- elsif include.data.pathExtension == "hpp" -%}
+{%- comment -%} For headers, the title is the include directive itself (click to copy). {%- endcomment -%}
+<h1>{{ site.icons[include.data.verificationStatus] }} <a id="include-directive-anchor" class="include-title"><code id="include-directive-code">#include "{{ display_path }}"</code></a></h1>
 {%- else -%}
 <h1>{{ site.icons[include.data.verificationStatus] }} {{ page_title | xml_escape }}</h1>
 {%- endif -%}
@@ -28,9 +31,6 @@ names via -I src), including in the include directive.
     </p>
     {% if include.data.attributes.PROBLEM %}
     <p class="page-meta-row">Problem: <a href="{{ include.data.attributes.PROBLEM }}">{{ include.data.attributes.PROBLEM | xml_escape }}</a></p>
-    {%- endif -%}
-    {% if include.data.pathExtension == "hpp" %}
-    <p class="page-meta-row"><a id="include-directive-anchor">Include: <code id="include-directive-code">#include "{{ display_path }}"</code></a></p>
     {%- endif -%}
     {%- assign reference_links = "" | split: "" -%}
     {%- for link in include.data.attributes.links -%}
@@ -49,6 +49,16 @@ names via -I src), including in the include directive.
 </div>
 
 {% if include.data.pathExtension == "hpp" %}
+<style>
+    .include-title {
+        cursor: pointer;
+    }
+
+    .include-title code {
+        font-size: 0.85em;
+        color: inherit;
+    }
+</style>
 <script defer type="text/javascript">
     // make the include directive clickable
     (function() {
