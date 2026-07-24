@@ -270,14 +270,6 @@ struct add_op { template <typename T> void operator()(T& d, T v) const { d += v;
 struct sub_op { template <typename T> void operator()(T& d, T v) const { d -= v; } };
 struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d += v + v; } };
 
-// Compile-time operand-scale algebra (see the conv_engine preamble). Scale 0 is the
-// exact/untracked sentinel and absorbs: exact engines never accumulate error, so any
-// combination of scale-0 operands is again scale 0.
-constexpr int scale_add(int a, int b) { return a == 0 || b == 0 ? 0 : a + b; }
-constexpr int scale_mul(int a, int b) { return a == 0 || b == 0 ? 0 : a * b; }
-// count addends of equal scale k
-constexpr int scale_sum(int k, int count) { return k == 0 ? 0 : k * count; }
-
 // Conv engine contract. Semantics that can't be expressed in the concept:
 //   transformed    operand-domain transform buffer; any power-of-two prefix of a
 //                  size-m transform is a valid size-n transform (n <= m) of the
@@ -304,12 +296,12 @@ constexpr int scale_sum(int k, int count) { return k == 0 ? 0 : k * count; }
 //                  scale is a first-class compile-time parameter on every engine:
 //                  transformed_t<A> / product_t<K>, with scale 0 the exact/untracked
 //                  sentinel (exact engines alias their one type for every scale and
-//                  only ever emit 0; 0 absorbs under scale_add/scale_mul). transform
-//                  gives A = unit_scale (0 exact, 1 tracked), transform add gives
-//                  scale_add(A, B), mul/sq give product_t<scale_mul(A, B)>, product
-//                  add gives scale_add(K1, K2), and the tracked engines' finish
-//                  static_asserts a conservative K <= 2. Zero runtime cost.
-//                  `transformed`/`product` are the unit-scale aliases.
+//                  only ever emit 0, which plain +/* preserve since scales never mix
+//                  across engines). transform gives A = unit_scale (0 exact,
+//                  1 tracked), transform add gives A + B, mul/sq give
+//                  product_t<A * B>, product add gives K1 + K2, and the tracked
+//                  engines' finish static_asserts a conservative K <= 2. Zero
+//                  runtime cost. `transformed`/`product` are the unit-scale aliases.
 //   finish         inverse transform + scale, then out[i] op= result[i] for
 //                  i < sz(out); requires sz(out) <= size of the product
 //   commutative    whether the coefficient ring's multiplication commutes. All the
@@ -612,8 +604,8 @@ template <typename mnum> struct fft_split_engine {
 	}
 	// Pointwise sum of transforms = transform of the coefficient-wise sum; limb
 	// magnitudes add, tracked by the scale parameter.
-	template <int A, int B> static transformed_t<scale_add(A, B)> add(transformed_t<A>&& a, const transformed_t<B>& b) {
-		transformed_t<scale_add(A, B)> r{std::move(a.v)};
+	template <int A, int B> static transformed_t<A + B> add(transformed_t<A>&& a, const transformed_t<B>& b) {
+		transformed_t<A + B> r{std::move(a.v)};
 		add_into(r.v, b.v);
 		return r;
 	}
@@ -632,19 +624,19 @@ template <typename mnum> struct fft_split_engine {
 			hi[i] = a[i] * g1;
 		}
 	}
-	template <int A, int B> static product_t<scale_mul(A, B)> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
+	template <int A, int B> static product_t<A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
 		assert(a.size() >= n && b.size() >= n);
-		product_t<scale_mul(A, B)> p;
+		product_t<A * B> p;
 		mul_impl(a.v, b.v, p.lo, p.hi, n);
 		return p;
 	}
-	template <int A> static product_t<scale_mul(A, A)> sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int A> static product_t<A * A> sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
 	static void add_into(vector<cnum>& a, const vector<cnum>& b) {
 		assert(sz(a) == sz(b));
 		for (int i = 0; i < sz(a); i++) a[i] = a[i] + b[i];
 	}
-	template <int K1, int K2> static product_t<scale_add(K1, K2)> add(product_t<K1>&& a, product_t<K2>&& b) {
-		product_t<scale_add(K1, K2)> r{std::move(a.lo), std::move(a.hi)};
+	template <int K1, int K2> static product_t<K1 + K2> add(product_t<K1>&& a, product_t<K2>&& b) {
+		product_t<K1 + K2> r{std::move(a.lo), std::move(a.hi)};
 		add_into(r.lo, b.lo);
 		add_into(r.hi, b.hi);
 		return r;
@@ -737,15 +729,15 @@ struct crt_engine {
 		return transformed_t<A>{E1::negate_arg(t.t1, n), E2::negate_arg(t.t2, n)};
 	}
 	// Exact per prime; the scale tracks the true (integer) coefficient growth.
-	template <int A, int B> static transformed_t<scale_add(A, B)> add(transformed_t<A>&& a, const transformed_t<B>& b) {
-		return transformed_t<scale_add(A, B)>{E1::add(std::move(a.t1), b.t1), E2::add(std::move(a.t2), b.t2)};
+	template <int A, int B> static transformed_t<A + B> add(transformed_t<A>&& a, const transformed_t<B>& b) {
+		return transformed_t<A + B>{E1::add(std::move(a.t1), b.t1), E2::add(std::move(a.t2), b.t2)};
 	}
-	template <int A, int B> static product_t<scale_mul(A, B)> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
-		return product_t<scale_mul(A, B)>{E1::mul(a.t1, b.t1, n), E2::mul(a.t2, b.t2, n)};
+	template <int A, int B> static product_t<A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
+		return product_t<A * B>{E1::mul(a.t1, b.t1, n), E2::mul(a.t2, b.t2, n)};
 	}
-	template <int A> static product_t<scale_mul(A, A)> sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
-	template <int K1, int K2> static product_t<scale_add(K1, K2)> add(product_t<K1>&& a, product_t<K2>&& b) {
-		return product_t<scale_add(K1, K2)>{E1::add(std::move(a.p1), b.p1), E2::add(std::move(a.p2), b.p2)};
+	template <int A> static product_t<A * A> sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int K1, int K2> static product_t<K1 + K2> add(product_t<K1>&& a, product_t<K2>&& b) {
+		return product_t<K1 + K2>{E1::add(std::move(a.p1), b.p1), E2::add(std::move(a.p2), b.p2)};
 	}
 	template <int K = 1, typename Op = assign_op> static void finish(product_t<K>&& p, std::span<mnum> out, Op op = {}) {
 		// The reconstruction needs |c| < whole/2; balanced inputs bound each addend's
@@ -877,13 +869,13 @@ struct componentwise_engine {
 		for (int c = 0; c < L; c++) r.t[c] = E::negate_arg(t.t[c], n);
 		return r;
 	}
-	template <int A, int B> static transformed_t<scale_add(A, B)> add(transformed_t<A>&& a, const transformed_t<B>& b) {
-		transformed_t<scale_add(A, B)> r;
+	template <int A, int B> static transformed_t<A + B> add(transformed_t<A>&& a, const transformed_t<B>& b) {
+		transformed_t<A + B> r;
 		for (int c = 0; c < L; c++) r.t[c] = E::add(std::move(a.t[c]), b.t[c]);
 		return r;
 	}
-	template <int K1, int K2> static product_t<scale_add(K1, K2)> add(product_t<K1>&& a, product_t<K2>&& b) {
-		product_t<scale_add(K1, K2)> r;
+	template <int K1, int K2> static product_t<K1 + K2> add(product_t<K1>&& a, product_t<K2>&& b) {
+		product_t<K1 + K2> r;
 		for (int c = 0; c < L; c++) r.t[c] = E::add(std::move(a.t[c]), std::move(b.t[c]));
 		return r;
 	}
@@ -909,7 +901,7 @@ struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N
 	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
 	template <int K> using product_t = typename base::template product_t<K>;
 	using transformed = typename base::transformed;
-	using product = product_t<scale_sum(scale_mul(unit_scale, unit_scale), N)>;
+	using product = product_t<N * unit_scale * unit_scale>;
 
 	// right fold over k so a tracked inner engine's per-addend types line up
 	template <int A, int B, int k = 0>
@@ -919,8 +911,8 @@ struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N
 		else return E::add(std::move(e), entry<A, B, k + 1>(a, b, r, c, n));
 	}
 	template <int A, int B>
-	static product_t<scale_sum(scale_mul(A, B), N)> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
-		product_t<scale_sum(scale_mul(A, B), N)> p;
+	static product_t<N * A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
+		product_t<N * A * B> p;
 		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++)
 			p.t[size_t(r) * N + c] = entry<A, B>(a, b, r, c, n);
 		return p;
@@ -939,7 +931,7 @@ struct trunc_poly_engine : componentwise_engine<E, trunc_poly<typename E::value_
 	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
 	template <int K> using product_t = typename base::template product_t<K>;
 	using transformed = typename base::transformed;
-	using product = product_t<scale_sum(scale_mul(unit_scale, unit_scale), N)>;
+	using product = product_t<N * unit_scale * unit_scale>;
 
 	template <int A, int B, int s, int i = 0>
 	static auto entry(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
@@ -948,8 +940,8 @@ struct trunc_poly_engine : componentwise_engine<E, trunc_poly<typename E::value_
 		else return E::add(std::move(e), entry<A, B, s, i + 1>(a, b, n));
 	}
 	template <int A, int B>
-	static product_t<scale_sum(scale_mul(A, B), N)> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
-		product_t<scale_sum(scale_mul(A, B), N)> p;
+	static product_t<N * A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
+		product_t<N * A * B> p;
 		[&]<size_t... s_>(std::index_sequence<s_...>) {
 			((p.t[s_] = entry<A, B, int(s_)>(a, b, n)), ...);
 		}(std::make_index_sequence<size_t(N)>{});
