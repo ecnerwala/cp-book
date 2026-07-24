@@ -4,7 +4,7 @@ paths with the leading "src/" stripped (headers are included with bare
 names via -I src), including in the include directive.
 {%- endcomment -%}
 {%- assign display_path = include.data.path | remove_first: "src/" -%}
-{%- if page.title -%}
+{%- if page.title and page.title != display_path -%}
     {%- capture page_title -%}{{page.title | xml_escape }} <small>({{ display_path | xml_escape }})</small>{%- endcapture -%}
 {%- else -%}
     {%- capture page_title -%}{{display_path | xml_escape }}{%- endcapture -%}

@@ -24,8 +24,10 @@ def details_page(coverage_dir: pathlib.Path, filename: str) -> str | None:
 
 
 def ensure_title(page: pathlib.Path, filename: str) -> None:
-    """Set an explicit front matter title (the source path, matching the
-    default) so jekyll-titles-from-headings doesn't promote a body heading."""
+    """Set an explicit front matter title (the source path with the leading
+    src/ stripped, matching the displayed path) so jekyll-titles-from-headings
+    doesn't promote a body heading."""
+    filename = filename.removeprefix("src/")
     content = page.read_text()
     if not content.startswith("---\n"):
         return
