@@ -237,6 +237,7 @@ jobs:
         run: |
           gcovr --root . --filter 'src/' --filter 'verify/' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
+            --exclude-lines-by-pattern '.*assert\(false\).*' \
             --json ${{ runner.temp }}/coverage-verify.json \
             .competitive-verifier/cache
 
@@ -276,6 +277,7 @@ jobs:
         run: |
           gcovr --root . --filter 'src/' --filter 'verify/' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
+            --exclude-lines-by-pattern '.*assert\(false\).*' \
             --json ${{ runner.temp }}/coverage-unit-tests.json \
             build
 
