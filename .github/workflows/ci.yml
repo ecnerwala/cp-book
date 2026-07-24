@@ -70,10 +70,28 @@ jobs:
       - name: Bundle with library include path
         run: python3 scripts/bundle.py --site verify_files.json
 
+      - name: oj-resolve (coverage environment)
+        uses: competitive-verifier/actions/oj-resolve@v2
+        with:
+          output-path: verify_files-coverage.json
+          include: |
+            src
+            verify
+          exclude: |
+            third_party
+          config: .competitive-verifier/config-coverage.toml
+
       - name: Upload verify_files.json
         uses: competitive-verifier/actions/upload-verify-artifact@v2
         with:
           file: verify_files.json
+
+      - name: Upload verify_files-coverage.json
+        uses: actions/upload-artifact@v7
+        with:
+          name: verify-files-coverage
+          path: verify_files-coverage.json
+          retention-days: 1
 
       - name: Upload bundled
         uses: actions/upload-artifact@v7
@@ -156,6 +174,7 @@ jobs:
 
   coverage-verify:
     runs-on: ubuntu-26.04
+    needs: [setup-verify]
     env:
       SPLIT_SIZE: 5
     strategy:
@@ -210,21 +229,15 @@ jobs:
             echo "file=.cv-coverage-result/result.json" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: oj-resolve (coverage environment)
-        uses: competitive-verifier/actions/oj-resolve@v2
+      - name: Download verify_files-coverage.json
+        uses: actions/download-artifact@v8
         with:
-          output-path: verify_files.json
-          include: |
-            src
-            verify
-          exclude: |
-            third_party
-          config: .competitive-verifier/config-coverage.toml
+          name: verify-files-coverage
 
       - name: Run verify solutions with coverage
         uses: competitive-verifier/actions/verify@v2
         with:
-          verify-files: verify_files.json
+          verify-files: verify_files-coverage.json
           destination: ${{ runner.temp }}/coverage-result.json
           prev-result: ${{ steps.prev-result.outputs.file }}
           split-size: ${{ env.SPLIT_SIZE }}
@@ -255,7 +268,7 @@ jobs:
         run: |
           python3 - <<'EOF'
           import json, pathlib, shutil
-          manifest = json.load(open("verify_files.json"))["files"]
+          manifest = json.load(open("verify_files-coverage.json"))["files"]
           result_files = json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
           stage = pathlib.Path("coverage-counters")
           stage.mkdir(exist_ok=True)
