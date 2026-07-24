@@ -165,17 +165,10 @@ TEMPLATE_TEST_CASE("transform add", "[fft]", MOD_ENGINES) {
 	}
 }
 
-TEMPLATE_TEST_CASE("matrix engine", "[fft]",
-		fft_engine<modnum<998244353>>,
-		fft_split_engine<modnum<int(1e9)+7>>,
-		crt_engine<modnum<int(1e9)+7>>) {
-	using IE = TestType;
-	using num = typename IE::value_type;
-	// the tracked engines' scale budget admits N = 2 (entries are N-addend sums)
-	constexpr int N = IE::unit_scale == 0 ? 3 : 2;
-	using M = mat<num, N>;
-	using E = matrix_engine<IE, N>;
-	mt19937 mt(Catch::getSeed());
+template <typename E, bool online, int N>
+void test_matrix_engine(mt19937& mt) {
+	using M = typename E::value_type;
+	using num = std::remove_reference_t<decltype(std::declval<M&>()[{0, 0}])>;
 	auto rnd_mat = [&]() {
 		M m;
 		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) m[{r, c}] = rnd_val<num>(mt);
@@ -199,9 +192,7 @@ TEMPLATE_TEST_CASE("matrix engine", "[fft]",
 	vector<M> got(2*n - 1);
 	square<E>(span<const M>(f), span<M>(got));
 	REQUIRE(got == vector<M>(slow.begin(), slow.begin() + 2*n - 1));
-	// the non-commutative online squarer accumulates two N-addend products per
-	// window (scale 2N), which exceeds the tracked engines' budget
-	if constexpr (IE::unit_scale == 0) {
+	if constexpr (online) {
 		online_squarer<E> os(n);
 		for (int i = 0; i < n; i++) {
 			os.push(f[i]);
@@ -210,16 +201,24 @@ TEMPLATE_TEST_CASE("matrix engine", "[fft]",
 	}
 }
 
-TEMPLATE_TEST_CASE("trunc_poly engine", "[fft]",
+TEMPLATE_TEST_CASE("matrix engine", "[fft]",
 		fft_engine<modnum<998244353>>,
 		fft_split_engine<modnum<int(1e9)+7>>,
 		crt_engine<modnum<int(1e9)+7>>) {
 	using IE = TestType;
-	using num = typename IE::value_type;
+	// the tracked engines' scale budget admits N = 2 (entries are N-addend sums), and
+	// the non-commutative online squarer accumulates two N-addend products per window
+	// (scale 2N), exceeding it
 	constexpr int N = IE::unit_scale == 0 ? 3 : 2;
-	using P = trunc_poly<num, N>;
-	using E = trunc_poly_engine<IE, N>;
 	mt19937 mt(Catch::getSeed());
+	test_matrix_engine<matrix_engine<IE, N>, IE::unit_scale == 0, N>(mt);
+	// the stable variant works at any N (and its online squarer stays at scale 2)
+	test_matrix_engine<matrix_engine_stable<IE, 3>, true, 3>(mt);
+}
+
+template <typename E, typename num, int N>
+void test_trunc_poly_engine(mt19937& mt) {
+	using P = typename E::value_type;
 	auto rnd_p = [&]() {
 		P p;
 		for (int i = 0; i < N; i++) p[i] = rnd_val<num>(mt);
@@ -234,6 +233,18 @@ TEMPLATE_TEST_CASE("trunc_poly engine", "[fft]",
 			REQUIRE(multiply<E>(a, b) == multiply_slow(a, b));
 		}
 	}
+}
+
+TEMPLATE_TEST_CASE("trunc_poly engine", "[fft]",
+		fft_engine<modnum<998244353>>,
+		fft_split_engine<modnum<int(1e9)+7>>,
+		crt_engine<modnum<int(1e9)+7>>) {
+	using IE = TestType;
+	using num = typename IE::value_type;
+	constexpr int N = IE::unit_scale == 0 ? 3 : 2;
+	mt19937 mt(Catch::getSeed());
+	test_trunc_poly_engine<trunc_poly_engine<IE, N>, num, N>(mt);
+	test_trunc_poly_engine<trunc_poly_engine_stable<IE, 3>, num, 3>(mt);
 }
 
 TEST_CASE("FFT double engine even/odd half", "[fft]") {

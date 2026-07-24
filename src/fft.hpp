@@ -835,10 +835,21 @@ template <typename num, int N> struct trunc_poly {
 // tracking flows through unchanged: an exact inner engine keeps everything at
 // scale 0, a tracked one static_asserts its budget in finish. Only the pointwise
 // product differs per wrapper, so derived engines supply mul/sq (and commutative).
-template <conv_engine E, typename V, int L>
+// The product side may have more components than the value: Ofs maps value
+// component c to product components [Ofs[c], Ofs[c+1]), each an unfinished addend
+// that finish sums in the coefficient domain (so a group's addends never meet in
+// the product domain and the scale stays per-addend). Default is one per component.
+template <int L> constexpr std::array<int, size_t(L) + 1> componentwise_iota = [] {
+	std::array<int, size_t(L) + 1> r{};
+	for (int i = 0; i <= L; i++) r[size_t(i)] = i;
+	return r;
+}();
+
+template <conv_engine E, typename V, int L, std::array<int, size_t(L) + 1> Ofs = componentwise_iota<L>>
 struct componentwise_engine {
 	using S = typename E::value_type;
 	using value_type = V;
+	static constexpr int P = Ofs[size_t(L)];  // total product components
 	static constexpr int unit_scale = E::unit_scale;
 	template <int A = unit_scale> struct transformed_t {
 		std::array<typename E::template transformed_t<A>, size_t(L)> t;
@@ -853,11 +864,11 @@ struct componentwise_engine {
 	};
 	using transformed = transformed_t<>;
 	template <int K> struct product_t {
-		std::array<typename E::template product_t<K>, size_t(L)> t;
+		std::array<typename E::template product_t<K>, size_t(P)> t;
 		int size() const { return t[0].size(); }
 		product_t() = default;
 		template <int K2> requires (K2 != K) explicit(K2 > K) product_t(product_t<K2>&& o) {
-			for (int c = 0; c < L; c++)
+			for (int c = 0; c < P; c++)
 				t[c] = typename E::template product_t<K>(std::move(o.t[c]));
 		}
 	};
@@ -900,13 +911,15 @@ struct componentwise_engine {
 	}
 	template <int K1, int K2> static product_t<K1 + K2> add(product_t<K1>&& a, product_t<K2>&& b) {
 		product_t<K1 + K2> r;
-		for (int c = 0; c < L; c++) r.t[c] = E::add(std::move(a.t[c]), std::move(b.t[c]));
+		for (int c = 0; c < P; c++) r.t[c] = E::add(std::move(a.t[c]), std::move(b.t[c]));
 		return r;
 	}
 	template <int K, typename Op = assign_op> static void finish(product_t<K>&& p, std::span<V> out, Op op = {}) {
 		auto buf = buffer_pool<S>::get(sz(out));
 		for (int c = 0; c < L; c++) {
-			E::finish(std::move(p.t[c]), buf.span());
+			E::finish(std::move(p.t[Ofs[size_t(c)]]), buf.span());
+			for (int j = Ofs[size_t(c)] + 1; j < Ofs[size_t(c) + 1]; j++)
+				E::finish(std::move(p.t[j]), buf.span(), add_op{});
 			for (int i = 0; i < sz(out); i++) op(out[i].data()[c], buf[i]);
 		}
 	}
@@ -975,6 +988,66 @@ struct trunc_poly_engine : componentwise_engine<E, trunc_poly<typename E::value_
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
 };
 
+// Stable variants of the wrapper engines: mul keeps every addend as a separate
+// unfinished inner product (no transform-domain adds, so the scale stays at A * B
+// for any N), and the base's grouped finish sums them in the coefficient domain.
+// Costs one inverse transform per addend (N per matrix entry, s+1 per trunc entry)
+// and holds them all live, in exchange for tracked inner engines working at any N.
+template <int N> constexpr std::array<int, size_t(N) * N + 1> matrix_stable_ofs = [] {
+	std::array<int, size_t(N) * N + 1> r{};
+	for (int i = 0; i <= N * N; i++) r[size_t(i)] = i * N;
+	return r;
+}();
+
+template <conv_engine E, int N>
+struct matrix_engine_stable
+		: componentwise_engine<E, mat<typename E::value_type, N>, N * N, matrix_stable_ofs<N>> {
+	using base = componentwise_engine<E, mat<typename E::value_type, N>, N * N, matrix_stable_ofs<N>>;
+	static constexpr bool commutative = false;
+	static constexpr int unit_scale = base::unit_scale;
+	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
+	template <int K> using product_t = typename base::template product_t<K>;
+	using transformed = typename base::transformed;
+	using product = product_t<unit_scale * unit_scale>;
+
+	template <int A, int B>
+	static product_t<A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
+		product_t<A * B> p;
+		// entry (r, c)'s k-th addend a(r,k)*b(k,c), grouped per the offsets
+		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) for (int k = 0; k < N; k++)
+			p.t[(size_t(r) * N + c) * N + k] = E::mul(a.t[size_t(r) * N + k], b.t[size_t(k) * N + c], n);
+		return p;
+	}
+	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+};
+
+template <int N> constexpr std::array<int, size_t(N) + 1> trunc_poly_stable_ofs = [] {
+	std::array<int, size_t(N) + 1> r{};
+	for (int i = 0; i <= N; i++) r[size_t(i)] = i * (i + 1) / 2;
+	return r;
+}();
+
+template <conv_engine E, int N>
+struct trunc_poly_engine_stable
+		: componentwise_engine<E, trunc_poly<typename E::value_type, N>, N, trunc_poly_stable_ofs<N>> {
+	using base = componentwise_engine<E, trunc_poly<typename E::value_type, N>, N, trunc_poly_stable_ofs<N>>;
+	static constexpr bool commutative = E::commutative;
+	static constexpr int unit_scale = base::unit_scale;
+	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
+	template <int K> using product_t = typename base::template product_t<K>;
+	using transformed = typename base::transformed;
+	using product = product_t<unit_scale * unit_scale>;
+
+	template <int A, int B>
+	static product_t<A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
+		product_t<A * B> p;
+		for (int s = 0; s < N; s++) for (int i = 0; i <= s; i++)
+			p.t[size_t(trunc_poly_stable_ofs<N>[size_t(s)] + i)] = E::mul(a.t[size_t(i)], b.t[size_t(s - i)], n);
+		return p;
+	}
+	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+};
+
 static_assert(conv_engine<fft_engine<modnum<998244353>>>);
 static_assert(conv_engine<fft_engine<mod_goldilocks>>);
 static_assert(conv_engine<fft_real_engine<double>>);
@@ -985,6 +1058,9 @@ static_assert(conv_engine<trunc_poly_engine<fft_engine<modnum<998244353>>, 3>>);
 // tracked inner engines work when the accumulated scale fits the budget (N <= 2)
 static_assert(conv_engine<matrix_engine<fft_split_engine<modnum<int(1e9)+7>>, 2>>);
 static_assert(conv_engine<trunc_poly_engine<crt_engine<modnum<int(1e9)+7>>, 2>>);
+// the stable variants keep tracked inner engines sound at any N
+static_assert(conv_engine<matrix_engine_stable<fft_split_engine<modnum<int(1e9)+7>>, 3>>);
+static_assert(conv_engine<trunc_poly_engine_stable<crt_engine<modnum<int(1e9)+7>>, 3>>);
 
 // The engine-level cached operand: a transform of a coefficient sequence plus its
 // logical length (which drives product sizes and the 2^k+1 cut). It does not own
