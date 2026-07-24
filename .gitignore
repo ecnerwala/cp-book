@@ -37,3 +37,4 @@
 /.competitive-verifier/bundled/
 /.competitive-verifier/cache/
 /verify_files.json
+__pycache__/
