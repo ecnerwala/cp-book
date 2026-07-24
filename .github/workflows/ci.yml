@@ -151,11 +151,8 @@ jobs:
           path: ${{ runner.temp }}/result.json
           retention-days: 1
 
-  coverage:
+  coverage-verify:
     runs-on: ubuntu-26.04
-    permissions:
-      contents: read
-      pull-requests: write
     steps:
       # Full history: the prev-results skip logic compares each file's
       # last-commit time (git log -1) against the previous run's timestamps.
@@ -233,6 +230,28 @@ jobs:
             .cv-coverage-result
           key: coverage-cache-${{ github.ref }}-${{ github.run_id }}
 
+      - name: Install gcovr
+        run: pipx install gcovr
+
+      - name: Generate coverage tracefile
+        run: |
+          gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
+            --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
+            --json ${{ runner.temp }}/coverage-verify.json \
+            .competitive-verifier/cache
+
+      - name: Upload coverage tracefile
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoverageTrace-verify
+          path: ${{ runner.temp }}/coverage-verify.json
+          retention-days: 1
+
+  coverage-unit-tests:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Set up ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -253,35 +272,28 @@ jobs:
       - name: Install gcovr
         run: pipx install gcovr
 
-      - name: Generate coverage report
+      - name: Generate coverage tracefile
         run: |
-          mkdir -p coverage
           gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
-            --html-details coverage/index.html \
-            --cobertura coverage/coverage.xml \
-            --markdown-summary coverage/summary.md \
-            --print-summary \
-            build .competitive-verifier/cache
-          cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+            --json ${{ runner.temp }}/coverage-unit-tests.json \
+            build
 
-      - name: Upload coverage report
+      - name: Upload coverage tracefile
         uses: actions/upload-artifact@v4
         with:
-          name: Coverage-${{ runner.os }}
-          path: coverage/
-          retention-days: 7
-
-      - name: Comment coverage on PR
-        if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v2
-        with:
-          header: coverage
-          path: coverage/summary.md
+          name: CoverageTrace-unit-tests
+          path: ${{ runner.temp }}/coverage-unit-tests.json
+          retention-days: 1
 
   docs-and-check:
     runs-on: ubuntu-26.04
-    needs: [verify, coverage]
+    needs: [verify, coverage-verify, coverage-unit-tests]
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      pull-requests: write
     outputs:
       upload-pages: ${{ steps.upload-pages.outcome == 'success' }}
     steps:
@@ -329,13 +341,36 @@ jobs:
           source: _jekyll
           destination: _site
 
-      - name: Download coverage report
-        uses: actions/download-artifact@v4
+      - name: Install gcovr
+        run: pipx install gcovr
+
+      - name: Merge coverage reports
+        run: |
+          mkdir -p coverage
+          gcovr --root . \
+            --add-tracefile '${{ steps.all-artifacts.outputs.artifacts-root }}/CoverageTrace-*/coverage-*.json' \
+            --html-details coverage/index.html \
+            --cobertura coverage/coverage.xml \
+            --markdown-summary coverage/summary.md \
+            --print-summary
+          cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Add coverage report to site
+        run: sudo cp -r coverage _site/coverage
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
         with:
           name: Coverage-${{ runner.os }}
-          path: coverage-artifact
-      - name: Add coverage report to site
-        run: sudo cp -r coverage-artifact _site/coverage
+          path: coverage/
+          retention-days: 7
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage
+          path: coverage/summary.md
 
       - name: Upload artifact
         id: upload-pages
