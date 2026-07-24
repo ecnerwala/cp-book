@@ -273,16 +273,16 @@ jobs:
           stage = pathlib.Path("coverage-counters")
           stage.mkdir(exist_ok=True)
           staged = 0
-          for f in result_files:
-              stem = pathlib.PurePosixPath(f).name.removesuffix(".cpp")
-              dest = stage / f  # unique subdir per solution: same-basename files can't collide
-              for v in manifest.get(f, {}).get("verification", []):
+          verify_files = [f for f in result_files if manifest.get(f, {}).get("verification")]
+          stems = [pathlib.PurePosixPath(f).name.removesuffix(".cpp") for f in verify_files]
+          assert len(stems) == len(set(stems)), "verify file basenames must be unique"
+          for f, stem in zip(verify_files, stems):
+              for v in manifest[f]["verification"]:
                   bindir = pathlib.Path(v["command"]).parent
                   for ext in (".gcno", ".gcda"):
                       p = bindir / f"a-{stem}{ext}"
                       if p.exists():
-                          dest.mkdir(parents=True, exist_ok=True)
-                          shutil.copy2(p, dest / p.name)
+                          shutil.copy2(p, stage / p.name)
                           staged += 1
                       else:
                           print(f"::warning::missing counter file {p}")
