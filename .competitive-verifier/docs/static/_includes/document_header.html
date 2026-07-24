@@ -26,9 +26,6 @@ names via -I src), including in the include directive.
         <a href="{{ site.github.repository_url }}/blob/{{ site.branch_name | default: "HEAD" }}/{{ site.basedir }}{{ include.data.documentPath }}">View document part on GitHub</a>{% endif %}
         <span class="meta-sep">&middot;</span>
         <span>Last update: {{ include.data.timestamp }}</span>
-        {%- assign coverage_page = site.data.coverage_pages[include.data.path] %}
-        {%- if coverage_page %}<span class="meta-sep">&middot;</span>
-        <a href="{{ "/coverage/" | append: coverage_page | relative_url }}">Coverage report</a>{% endif %}
         {%- if include.data.isFailed %}<span class="meta-sep">&middot;</span>
         <a href="{{ site.github.repository_url }}/actions">{{ site.icons[include.data.verificationStatus] }} View error logs on GitHub Actions</a>{% endif %}
     </p>

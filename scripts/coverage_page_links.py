@@ -2,7 +2,7 @@
 """Map source files to their gcovr details pages for the docs site.
 
 Writes <jekyll-dir>/_data/coverage_pages.yml mapping each covered source path
-to its gcovr details page name (gcovr names them
+to its gcovr details page href (gcovr names the pages
 ``index.<basename>.<md5 of path>.html``), so templates can link to them.
 
 Usage: coverage_page_links.py --coverage-dir coverage --jekyll-dir _jekyll
@@ -34,7 +34,7 @@ def main() -> int:
         filename = f["filename"]
         name = details_page(args.coverage_dir, filename)
         if name:
-            lines.append(f'"{filename}": "{name}"\n')
+            lines.append(f'"{filename}": "/coverage/{name}"\n')
 
     data_dir = args.jekyll_dir / "_data"
     data_dir.mkdir(parents=True, exist_ok=True)
