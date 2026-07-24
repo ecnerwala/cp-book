@@ -14,9 +14,9 @@ names via -I src). Links keep the full path.
     {%- else -%}
         {%- capture link_title -%}{{name | xml_escape }}{%- endcapture -%}
     {%- endif -%}
-    {%- comment -%} Catch2 unit tests are not verification files; suppress the not-verified icon. {%- endcomment -%}
+    {%- comment -%} Catch2 unit tests are not verification files; mark them instead of the not-verified icon. {%- endcomment -%}
     {%- if item.path contains ".test.cpp" and item.path contains "src/" -%}
-    <li><a href="{{ item.path | relative_url }}">{{ link_title | xml_escape }}</a></li>
+    <li><a href="{{ item.path | relative_url }}">🧪 {{ link_title | xml_escape }}</a></li>
     {%- else -%}
     <li><a href="{{ item.path | relative_url }}">{{ site.icons[item.icon] }} {{ link_title | xml_escape }}</a></li>
     {%- endif -%}

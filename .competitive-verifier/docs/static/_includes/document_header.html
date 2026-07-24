@@ -9,7 +9,12 @@ names via -I src), including in the include directive.
 {%- else -%}
     {%- capture page_title -%}{{display_path | xml_escape }}{%- endcapture -%}
 {%- endif -%}
+{%- comment -%} Catch2 unit tests are not verification files; mark them instead of the not-verified icon. {%- endcomment -%}
+{%- if include.data.path contains ".test.cpp" and include.data.path contains "src/" -%}
+<h1>🧪 {{ page_title | xml_escape }}</h1>
+{%- else -%}
 <h1>{{ site.icons[include.data.verificationStatus] }} {{ page_title | xml_escape }}</h1>
+{%- endif -%}
 
 <ul>
     <li><a href="{{ site.github.repository_url }}/blob/{{ site.branch_name | default: "HEAD" }}/{{ site.basedir }}{{ include.data.path }}">View this file on GitHub</a></li>
