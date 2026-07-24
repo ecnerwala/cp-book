@@ -32,3 +32,8 @@
 *.app
 
 /build/
+
+# competitive-verifier artifacts
+/.competitive-verifier/bundled/
+/.competitive-verifier/cache/
+/verify_files.json
