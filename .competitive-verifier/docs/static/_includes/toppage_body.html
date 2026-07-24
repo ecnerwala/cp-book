@@ -7,8 +7,8 @@ Overrides the competitive-verifier theme's toppage_body.html:
 {%- endcomment -%}
 {%- if page.data.coverage -%}
 <h2>Coverage</h2>
-{%- include coverage_summary.html coverage=page.data.coverage -%}
-<p class="coverage-report-link"><small><a href="{{ "/coverage/" | relative_url }}">Full coverage report</a></small></p>
+{%- assign coverage_report_href = "/coverage/" | relative_url -%}
+{%- include coverage_summary.html coverage=page.data.coverage report_href=coverage_report_href -%}
 {%- endif -%}
 {%- for top in page.data.top -%}
 <h2>{{ top.type }}</h2>
