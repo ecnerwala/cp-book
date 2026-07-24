@@ -233,9 +233,20 @@ jobs:
             .cv-coverage-result
           key: coverage-cache-${{ github.ref }}-${{ github.run_id }}
 
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ runner.os }}-ccache-coverage
+
+      - name: Cache CMake dependencies
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: ${{ runner.os }}-cmake-deps-${{ hashFiles('CMakeLists.txt') }}
+
       - name: Build and run unit tests with coverage
         run: |
-          cmake -B build -DENABLE_COVERAGE=ON
+          cmake -B build -DENABLE_COVERAGE=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           cmake --build build -j
           ctest --test-dir build --output-on-failure
 
