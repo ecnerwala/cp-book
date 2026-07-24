@@ -46,7 +46,7 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-  setup:
+  setup-verify:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
@@ -84,7 +84,7 @@ jobs:
 
   verify:
     runs-on: ubuntu-26.04
-    needs: [setup]
+    needs: [setup-verify]
     steps:
       # Full history: the prev-results skip logic compares each file's
       # last-commit time (git log -1) against the previous run's timestamps.
