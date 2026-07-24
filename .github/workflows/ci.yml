@@ -231,29 +231,6 @@ jobs:
           split-index: ${{ matrix.shard }}
           timeout: 1800
 
-      # Opt-in counter selection: stage only the .gcno/.gcda of solutions in
-      # this shard's current result, so stale counters in the rolling cache
-      # (removed files, or files that moved to another shard) can't leak
-      # into the report.
-      - name: Stage coverage counters
-        run: |
-          python3 - <<'EOF'
-          import json, pathlib, shutil
-          stems = {
-              pathlib.PurePosixPath(f).name.removesuffix(".cpp")
-              for f in json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
-          }
-          stage = pathlib.Path("coverage-counters")
-          stage.mkdir(exist_ok=True)
-          staged = 0
-          for p in pathlib.Path(".competitive-verifier/cache").rglob("a-*.gc*"):
-              stem = p.name.removeprefix("a-").rsplit(".gc", 1)[0]
-              if stem in stems:
-                  shutil.copy2(p, stage / p.name)
-                  staged += 1
-          print(f"staged {staged} counter files")
-          EOF
-
       - name: Save results for future runs
         run: |
           mkdir -p .cv-coverage-result
@@ -265,11 +242,12 @@ jobs:
           path: |
             .competitive-verifier/cache
             .cv-coverage-result
-          key: coverage-cache-${{ github.ref }}-${{ matrix.shard }}-${{ github.run_id }}
+          key: coverage-cache-${{ github.ref }}-${{ env.SPLIT_SIZE }}-${{ matrix.shard }}-${{ github.run_id }}
 
       # Opt-in counter selection: stage only the .gcno/.gcda of solutions in
-      # the current result, so stale counters in the rolling cache (from
-      # removed or renamed files) can't leak into the report. Counter paths
+      # this shard's current result, so stale counters in the rolling cache
+      # (removed files, or files that moved to another shard) can't leak
+      # into the report. Counter paths
       # are constructed exactly (no globbing): gcc compiling `x.cpp` with
       # `-o <dir>/a.out` writes `<dir>/a-x.gcno`/`.gcda`, and the binary dir
       # comes from the manifest's verification command.
