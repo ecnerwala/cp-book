@@ -5,6 +5,10 @@ Overrides the competitive-verifier theme's toppage_body.html:
 - Catch2 unit tests (src/*.test.cpp) are not verification files, so they get
   a 🧪 marker instead of the not-verified warning icon.
 {%- endcomment -%}
+{%- if page.data.coverage -%}
+<h2><a href="{{ "/coverage/" | relative_url }}">Coverage</a></h2>
+{%- include coverage_summary.html coverage=page.data.coverage -%}
+{%- endif -%}
 {%- for top in page.data.top -%}
 <h2>{{ top.type }}</h2>
 {%- for category in top.categories -%}
@@ -25,7 +29,7 @@ Overrides the competitive-verifier theme's toppage_body.html:
         {%- assign coverage_span = "" -%}
     {%- endif -%}
     {%- if top.type == "Library Files" and item.path contains ".test.cpp" -%}
-    <li><a href="{{ item.path | relative_url }}">🧪 {{ link_title | xml_escape }}</a></li>
+    <li class="index-unittest"><a href="{{ item.path | relative_url }}">🧪 {{ link_title | xml_escape }}</a></li>
     {%- else -%}
     <li><a href="{{ item.path | relative_url }}">{{ site.icons[item.icon] }} {{ link_title | xml_escape }}</a>{{ coverage_span }}</li>
     {%- endif -%}
