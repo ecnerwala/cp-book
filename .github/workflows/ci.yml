@@ -275,12 +275,14 @@ jobs:
           staged = 0
           for f in result_files:
               stem = pathlib.PurePosixPath(f).name.removesuffix(".cpp")
+              dest = stage / f  # unique subdir per solution: same-basename files can't collide
               for v in manifest.get(f, {}).get("verification", []):
                   bindir = pathlib.Path(v["command"]).parent
                   for ext in (".gcno", ".gcda"):
                       p = bindir / f"a-{stem}{ext}"
                       if p.exists():
-                          shutil.copy2(p, stage / p.name)
+                          dest.mkdir(parents=True, exist_ok=True)
+                          shutil.copy2(p, dest / p.name)
                           staged += 1
                       else:
                           print(f"::warning::missing counter file {p}")
