@@ -2062,23 +2062,12 @@ template <fft::conv_engine E> struct online_multiplier {
 	}
 };
 
-// Non-commutative rings can't fold the two cross products f_lo*f_hi and f_hi*f_lo,
-// so the general squarer is just the multiplier fed the same stream on both sides.
+// Online squaring: same block schedule as the multiplier, but one stream, so each
+// block/window is transformed once. When the ring commutes each cross block is
+// computed once and doubled (f_i f_j + f_j f_i = 2 f_i f_j); otherwise both orders
+// are pointwise products of the same two transforms, sharing one inverse transform
+// via multiply_add2 -- only the second pointwise mul is extra.
 template <fft::conv_engine E> struct online_squarer {
-	using T = typename E::value_type;
-	online_multiplier<E> m;
-
-	online_squarer(int N_) : m(N_) {}
-
-	T peek() { return m.peek(); }
-	void push(T v_f) { m.push(v_f, v_f); }
-	T back() { return m.back(); }
-};
-
-// Commutative fast path: each cross block is computed once and doubled
-// (f_i f_j + f_j f_i = 2 f_i f_j), halving the block products.
-template <fft::conv_engine E> requires (E::commutative)
-struct online_squarer<E> {
 	using T = typename E::value_type;
 	int N; int i;
 	std::vector<T> f;
@@ -2097,12 +2086,14 @@ struct online_squarer<E> {
 		if (i == 0) {
 			res[0] += v_f * v_f;
 		} else {
-			res[i] += (v_f + v_f) * f[0];
+			if constexpr (E::commutative) res[i] += (v_f + v_f) * f[0];
+			else res[i] += v_f * f[0] + f[0] * v_f;
 			for (int p = 1, k = 0; (i & (p-1)) == (p-1); p <<= 1, k++) {
 				int lo1 = p;
 				int lo2 = i + 1 - p;
 				int s = 2*p - 1;
 				auto fb = std::span<const T>(f).subspan(p, p);
+				auto fw = std::span<const T>(f).subspan(lo2, p);
 				auto out = std::span<T>(res).subspan(lo1 + lo2, s);
 				if (i == 2*p-1) {
 					f_blocks.emplace_back();
@@ -2110,8 +2101,13 @@ struct online_squarer<E> {
 					break;
 				}
 				fft::fft_cache<E> cw;
-				fft::multiply<E>(fb, f_blocks[k], std::span<const T>(f).subspan(lo2, p), cw,
-						out, fft::add_twice_op{});
+				if constexpr (E::commutative) {
+					fft::multiply<E>(fb, f_blocks[k], fw, cw, out, fft::add_twice_op{});
+				} else {
+					// f_hi * f_lo + f_lo * f_hi from the same two transforms
+					fft::multiply_add2<E>(fb, f_blocks[k], fw, cw,
+							fw, cw, fb, f_blocks[k], out, fft::add_op{});
+				}
 			}
 		}
 		i++;
