@@ -745,11 +745,160 @@ struct crt_engine {
 	}
 };
 
+// Small NxN matrix over num, row-major. Multiplication does not commute.
+template <typename num, int N> struct mat {
+	std::array<num, size_t(N) * N> a{};
+	num& operator()(int r, int c) { return a[size_t(r) * N + c]; }
+	const num& operator()(int r, int c) const { return a[size_t(r) * N + c]; }
+	num* data() { return a.data(); }
+	const num* data() const { return a.data(); }
+	mat& operator+=(const mat& o) { for (int i = 0; i < N*N; i++) a[i] += o.a[i]; return *this; }
+	friend mat operator+(mat x, const mat& y) { x += y; return x; }
+	mat& operator-=(const mat& o) { for (int i = 0; i < N*N; i++) a[i] -= o.a[i]; return *this; }
+	friend mat operator-(mat x, const mat& y) { x -= y; return x; }
+	friend mat operator*(const mat& x, const mat& y) {
+		mat r;
+		for (int i = 0; i < N; i++) for (int k = 0; k < N; k++) for (int j = 0; j < N; j++)
+			r(i, j) += x(i, k) * y(k, j);
+		return r;
+	}
+	mat& operator*=(const mat& o) { return *this = *this * o; }
+	friend bool operator==(const mat&, const mat&) = default;
+};
+
+// Truncated polynomial in y mod y^N over num: products drop terms of degree >= N.
+// Commutative iff num is.
+template <typename num, int N> struct trunc_poly {
+	std::array<num, size_t(N)> a{};
+	num& operator[](int i) { return a[size_t(i)]; }
+	const num& operator[](int i) const { return a[size_t(i)]; }
+	num* data() { return a.data(); }
+	const num* data() const { return a.data(); }
+	trunc_poly& operator+=(const trunc_poly& o) { for (int i = 0; i < N; i++) a[i] += o.a[i]; return *this; }
+	friend trunc_poly operator+(trunc_poly x, const trunc_poly& y) { x += y; return x; }
+	trunc_poly& operator-=(const trunc_poly& o) { for (int i = 0; i < N; i++) a[i] -= o.a[i]; return *this; }
+	friend trunc_poly operator-(trunc_poly x, const trunc_poly& y) { x -= y; return x; }
+	friend trunc_poly operator*(const trunc_poly& x, const trunc_poly& y) {
+		trunc_poly r;
+		for (int i = 0; i < N; i++) for (int j = 0; j < N - i; j++) r[i + j] += x[i] * y[j];
+		return r;
+	}
+	trunc_poly& operator*=(const trunc_poly& o) { return *this = *this * o; }
+	friend bool operator==(const trunc_poly&, const trunc_poly&) = default;
+};
+
+// Plumbing shared by the wrapper engines: a value is a fixed tuple of L scalars
+// (exposed contiguously via data()), and transforms are componentwise-linear, so
+// the value transform is L independent inner-engine transforms. Only the pointwise
+// product differs per wrapper, so derived engines supply mul/sq (and commutative).
+// Requires an inner engine whose product is itself a transform (so componentwise
+// accumulation with E::add is unbounded); the inexact engines don't qualify.
+template <conv_engine E, typename V, int L>
+	requires std::same_as<typename E::product, typename E::transformed>
+struct componentwise_engine {
+	using S = typename E::value_type;
+	using value_type = V;
+	struct transformed {
+		std::array<typename E::transformed, size_t(L)> t;
+		int size() const { return t[0].size(); }
+	};
+	using product = transformed;
+
+	static transformed transform(std::span<const V> a, int n) {
+		transformed r;
+		auto buf = buffer_pool<S>::get(sz(a));
+		for (int c = 0; c < L; c++) {
+			for (int i = 0; i < sz(a); i++) buf[i] = a[i].data()[c];
+			r.t[c] = E::transform(std::span<const S>(buf.span()), n);
+		}
+		return r;
+	}
+	static void extend_to(transformed& t, int n, std::span<const V> coeffs) {
+		auto buf = buffer_pool<S>::get(sz(coeffs));
+		for (int c = 0; c < L; c++) {
+			for (int i = 0; i < sz(coeffs); i++) buf[i] = coeffs[i].data()[c];
+			E::extend_to(t.t[c], n, std::span<const S>(buf.span()));
+		}
+	}
+	static transformed even_half(const transformed& t, int n) {
+		transformed r;
+		for (int c = 0; c < L; c++) r.t[c] = E::even_half(t.t[c], n);
+		return r;
+	}
+	static transformed odd_half(const transformed& t, int n) {
+		transformed r;
+		for (int c = 0; c < L; c++) r.t[c] = E::odd_half(t.t[c], n);
+		return r;
+	}
+	static transformed negate_arg(const transformed& t, int n) {
+		transformed r;
+		for (int c = 0; c < L; c++) r.t[c] = E::negate_arg(t.t[c], n);
+		return r;
+	}
+	static transformed add(transformed&& a, const transformed& b) {
+		for (int c = 0; c < L; c++) a.t[c] = E::add(std::move(a.t[c]), b.t[c]);
+		return std::move(a);
+	}
+	template <typename Op = assign_op> static void finish(product&& p, std::span<V> out, Op op = {}) {
+		auto buf = buffer_pool<S>::get(sz(out));
+		for (int c = 0; c < L; c++) {
+			E::finish(std::move(p.t[c]), buf.span());
+			for (int i = 0; i < sz(out); i++) op(out[i].data()[c], buf[i]);
+		}
+	}
+};
+
+// Convolution of mat<num, N> sequences: componentwise transforms, and the pointwise
+// product is the N^3 matrix product of inner pointwise products, accumulated in the
+// transform domain (one inverse transform per entry).
+template <conv_engine E, int N>
+struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N * N> {
+	static constexpr bool commutative = false;
+	using base = componentwise_engine<E, mat<typename E::value_type, N>, N * N>;
+	using transformed = typename base::transformed;
+	using product = typename base::product;
+
+	static product mul(const transformed& a, const transformed& b, int n) {
+		product p;
+		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) {
+			auto& e = p.t[size_t(r) * N + c];
+			e = E::mul(a.t[size_t(r) * N], b.t[size_t(c)], n);
+			for (int k = 1; k < N; k++)
+				e = E::add(std::move(e), E::mul(a.t[size_t(r) * N + k], b.t[size_t(k) * N + c], n));
+		}
+		return p;
+	}
+	static product sq(const transformed& a, int n) { return mul(a, a, n); }
+};
+
+// Convolution of trunc_poly<num, N> sequences (bivariate multiplication truncated in
+// y): the pointwise product is the triangular sum over i + j < N.
+template <conv_engine E, int N>
+struct trunc_poly_engine : componentwise_engine<E, trunc_poly<typename E::value_type, N>, N> {
+	static constexpr bool commutative = E::commutative;
+	using base = componentwise_engine<E, trunc_poly<typename E::value_type, N>, N>;
+	using transformed = typename base::transformed;
+	using product = typename base::product;
+
+	static product mul(const transformed& a, const transformed& b, int n) {
+		product p;
+		for (int s = 0; s < N; s++) {
+			p.t[size_t(s)] = E::mul(a.t[0], b.t[size_t(s)], n);
+			for (int i = 1; i <= s; i++)
+				p.t[size_t(s)] = E::add(std::move(p.t[size_t(s)]), E::mul(a.t[size_t(i)], b.t[size_t(s - i)], n));
+		}
+		return p;
+	}
+	static product sq(const transformed& a, int n) { return mul(a, a, n); }
+};
+
 static_assert(conv_engine<fft_engine<modnum<998244353>>>);
 static_assert(conv_engine<fft_engine<mod_goldilocks>>);
 static_assert(conv_engine<fft_real_engine<double>>);
 static_assert(conv_engine<fft_split_engine<modnum<int(1e9)+7>>>);
 static_assert(conv_engine<crt_engine<modnum<int(1e9)+7>>>);
+static_assert(conv_engine<matrix_engine<fft_engine<modnum<998244353>>, 2>>);
+static_assert(conv_engine<trunc_poly_engine<fft_engine<modnum<998244353>>, 3>>);
 
 // The engine-level cached operand: a transform of a coefficient sequence plus its
 // logical length (which drives product sizes and the 2^k+1 cut). It does not own
@@ -2046,7 +2195,7 @@ template <fft::conv_engine E> struct online_multiplier {
 	std::vector<T> res;
 	std::vector<fft::fft_cache<E>> f_blocks, g_blocks; // level k: block [2^k, 2^{k+1})
 
-	online_multiplier(int N_) : N(N_), i(0), f(N, T{}), g(N, T{}), res(2*N+1, T(0)) {}
+	online_multiplier(int N_) : N(N_), i(0), f(N, T{}), g(N, T{}), res(2*N+1, T{}) {}
 
 	T peek() {
 		return res[i];
@@ -2102,7 +2251,7 @@ template <fft::conv_engine E> struct online_squarer {
 	std::vector<T> res;
 	std::vector<fft::fft_cache<E>> f_blocks;
 
-	online_squarer(int N_) : N(N_), i(0), f(N, T{}), res(2*N+1, T(0)) {}
+	online_squarer(int N_) : N(N_), i(0), f(N, T{}), res(2*N+1, T{}) {}
 
 	T peek() {
 		return res[i];

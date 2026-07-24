@@ -152,6 +152,64 @@ TEMPLATE_TEST_CASE("transform add", "[fft]", MOD_ENGINES) {
 	}
 }
 
+TEST_CASE("matrix engine", "[fft]") {
+	using num = modnum<998244353>;
+	constexpr int N = 2;
+	using M = mat<num, N>;
+	using E = matrix_engine<fft_engine<num>, N>;
+	mt19937 mt(Catch::getSeed());
+	auto rnd_mat = [&]() {
+		M m;
+		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) m(r, c) = num(mt());
+		return m;
+	};
+	for (int la : {1, 2, 3, 17, 33}) {
+		for (int lb : {1, 2, 16, 17}) {
+			vector<M> a(la), b(lb);
+			for (M& m : a) m = rnd_mat();
+			for (M& m : b) m = rnd_mat();
+			INFO("la = " << la << ", lb = " << lb);
+			REQUIRE(multiply<E>(a, b) == multiply_slow(a, b));
+		}
+	}
+	// square of a matrix sequence must keep both cross orders
+	int n = 33;
+	vector<M> f(n);
+	for (M& m : f) m = rnd_mat();
+	auto slow = multiply_slow(f, f);
+	slow.resize(2*n, M{});
+	vector<M> got(2*n - 1);
+	square<E>(span<const M>(f), span<M>(got));
+	REQUIRE(got == vector<M>(slow.begin(), slow.begin() + 2*n - 1));
+	online_squarer<E> os(n);
+	for (int i = 0; i < n; i++) {
+		os.push(f[i]);
+		REQUIRE(os.back() == slow[i]);
+	}
+}
+
+TEST_CASE("trunc_poly engine", "[fft]") {
+	using num = modnum<998244353>;
+	constexpr int N = 3;
+	using P = trunc_poly<num, N>;
+	using E = trunc_poly_engine<fft_engine<num>, N>;
+	mt19937 mt(Catch::getSeed());
+	auto rnd_p = [&]() {
+		P p;
+		for (int i = 0; i < N; i++) p[i] = num(mt());
+		return p;
+	};
+	for (int la : {1, 2, 3, 17, 33}) {
+		for (int lb : {1, 2, 16, 17}) {
+			vector<P> a(la), b(lb);
+			for (P& p : a) p = rnd_p();
+			for (P& p : b) p = rnd_p();
+			INFO("la = " << la << ", lb = " << lb);
+			REQUIRE(multiply<E>(a, b) == multiply_slow(a, b));
+		}
+	}
+}
+
 TEST_CASE("FFT double engine even/odd half", "[fft]") {
 	using E = fft_real_engine<double>;
 	mt19937 mt(Catch::getSeed());
