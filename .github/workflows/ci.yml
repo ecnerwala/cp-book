@@ -20,7 +20,7 @@ jobs:
   unit-tests:
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -28,7 +28,7 @@ jobs:
           key: ${{ runner.os }}-ccache
 
       - name: Cache CMake dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build/_deps
           key: ${{ runner.os }}-cmake-deps-${{ hashFiles('CMakeLists.txt') }}
@@ -45,7 +45,7 @@ jobs:
   setup:
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up competitive-verifier
         uses: competitive-verifier/actions/setup@v2
@@ -72,7 +72,7 @@ jobs:
           file: verify_files.json
 
       - name: Upload bundled
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Bundled-${{ runner.os }}
           path: .competitive-verifier/bundled
@@ -84,7 +84,7 @@ jobs:
     steps:
       # Full history: the prev-results skip logic compares each file's
       # last-commit time (git log -1) against the previous run's timestamps.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 2147483647
 
@@ -102,7 +102,7 @@ jobs:
           echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache testcases
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .competitive-verifier/cache
           key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/*.test.cpp') }}
@@ -111,7 +111,7 @@ jobs:
             testcases-
 
       - name: Restore previous results
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: .cv-prev-result
           key: verify-result-${{ github.ref }}-${{ github.run_id }}
@@ -139,13 +139,13 @@ jobs:
           cp "${{ runner.temp }}/result.json" .cv-prev-result/result.json
 
       - name: Cache results
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: .cv-prev-result
           key: verify-result-${{ github.ref }}-${{ github.run_id }}
 
       - name: Upload result artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Result-${{ runner.os }}
           path: ${{ runner.temp }}/result.json
@@ -156,7 +156,7 @@ jobs:
     steps:
       # Full history: the prev-results skip logic compares each file's
       # last-commit time (git log -1) against the previous run's timestamps.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 2147483647
 
@@ -171,7 +171,7 @@ jobs:
       # solutions overwrite theirs in place.
       - name: Restore coverage cache
         id: coverage-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             .competitive-verifier/cache
@@ -184,7 +184,7 @@ jobs:
       # Cold start: warm the testcase store from the verify job's cache.
       - name: Restore testcases (cold start)
         if: steps.coverage-cache.outputs.cache-matched-key == ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: .competitive-verifier/cache
           key: testcases-
@@ -223,7 +223,7 @@ jobs:
           cp "${{ runner.temp }}/coverage-result.json" .cv-coverage-result/result.json
 
       - name: Save coverage cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             .competitive-verifier/cache
@@ -241,7 +241,7 @@ jobs:
             .competitive-verifier/cache
 
       - name: Upload coverage tracefile
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CoverageTrace-verify
           path: ${{ runner.temp }}/coverage-verify.json
@@ -250,7 +250,7 @@ jobs:
   coverage-unit-tests:
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up ccache
         uses: hendrikmuhs/ccache-action@v1.2
@@ -258,7 +258,7 @@ jobs:
           key: ${{ runner.os }}-ccache-coverage
 
       - name: Cache CMake dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: build/_deps
           key: ${{ runner.os }}-cmake-deps-${{ hashFiles('CMakeLists.txt') }}
@@ -280,7 +280,7 @@ jobs:
             build
 
       - name: Upload coverage tracefile
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CoverageTrace-unit-tests
           path: ${{ runner.temp }}/coverage-unit-tests.json
@@ -297,7 +297,7 @@ jobs:
     outputs:
       upload-pages: ${{ steps.upload-pages.outcome == 'success' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 2147483647
 
@@ -334,7 +334,7 @@ jobs:
           write-summary: true
 
       - name: Setup Pages
-        uses: actions/configure-pages@v4
+        uses: actions/configure-pages@v6
       - name: Build with Jekyll
         uses: actions/jekyll-build-pages@v1
         with:
@@ -359,7 +359,7 @@ jobs:
         run: sudo cp -r coverage _site/coverage
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Coverage-${{ runner.os }}
           path: coverage/
@@ -367,14 +367,14 @@ jobs:
 
       - name: Comment coverage on PR
         if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: coverage
           path: coverage/summary.md
 
       - name: Upload artifact
         id: upload-pages
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -393,4 +393,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
