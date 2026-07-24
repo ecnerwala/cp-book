@@ -152,15 +152,20 @@ TEMPLATE_TEST_CASE("transform add", "[fft]", MOD_ENGINES) {
 	}
 }
 
-TEST_CASE("matrix engine", "[fft]") {
-	using num = modnum<998244353>;
-	constexpr int N = 2;
+TEMPLATE_TEST_CASE("matrix engine", "[fft]",
+		fft_engine<modnum<998244353>>,
+		fft_split_engine<modnum<int(1e9)+7>>,
+		crt_engine<modnum<int(1e9)+7>>) {
+	using IE = TestType;
+	using num = typename IE::value_type;
+	// the tracked engines' scale budget admits N = 2 (entries are N-addend sums)
+	constexpr int N = IE::unit_scale == 0 ? 3 : 2;
 	using M = mat<num, N>;
-	using E = matrix_engine<fft_engine<num>, N>;
+	using E = matrix_engine<IE, N>;
 	mt19937 mt(Catch::getSeed());
 	auto rnd_mat = [&]() {
 		M m;
-		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) m(r, c) = num(mt());
+		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) m(r, c) = rnd_val<num>(mt);
 		return m;
 	};
 	for (int la : {1, 2, 3, 17, 33}) {
@@ -181,22 +186,30 @@ TEST_CASE("matrix engine", "[fft]") {
 	vector<M> got(2*n - 1);
 	square<E>(span<const M>(f), span<M>(got));
 	REQUIRE(got == vector<M>(slow.begin(), slow.begin() + 2*n - 1));
-	online_squarer<E> os(n);
-	for (int i = 0; i < n; i++) {
-		os.push(f[i]);
-		REQUIRE(os.back() == slow[i]);
+	// the non-commutative online squarer accumulates two N-addend products per
+	// window (scale 2N), which exceeds the tracked engines' budget
+	if constexpr (IE::unit_scale == 0) {
+		online_squarer<E> os(n);
+		for (int i = 0; i < n; i++) {
+			os.push(f[i]);
+			REQUIRE(os.back() == slow[i]);
+		}
 	}
 }
 
-TEST_CASE("trunc_poly engine", "[fft]") {
-	using num = modnum<998244353>;
-	constexpr int N = 3;
+TEMPLATE_TEST_CASE("trunc_poly engine", "[fft]",
+		fft_engine<modnum<998244353>>,
+		fft_split_engine<modnum<int(1e9)+7>>,
+		crt_engine<modnum<int(1e9)+7>>) {
+	using IE = TestType;
+	using num = typename IE::value_type;
+	constexpr int N = IE::unit_scale == 0 ? 3 : 2;
 	using P = trunc_poly<num, N>;
-	using E = trunc_poly_engine<fft_engine<num>, N>;
+	using E = trunc_poly_engine<IE, N>;
 	mt19937 mt(Catch::getSeed());
 	auto rnd_p = [&]() {
 		P p;
-		for (int i = 0; i < N; i++) p[i] = num(mt());
+		for (int i = 0; i < N; i++) p[i] = rnd_val<num>(mt);
 		return p;
 	};
 	for (int la : {1, 2, 3, 17, 33}) {
