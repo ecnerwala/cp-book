@@ -129,6 +129,29 @@ TEMPLATE_TEST_CASE("FFT multiply sizes", "[fft]", ALL_ENGINES) {
 	}
 }
 
+TEMPLATE_TEST_CASE("transform add", "[fft]", MOD_ENGINES) {
+	// (a+b)*c via a transform-domain sum; for the inexact engines this exercises the
+	// scale-tracked transformed_t (add gives A=2, mul gives product<2>)
+	using E = TestType;
+	using num = typename E::value_type;
+	mt19937 mt(Catch::getSeed());
+	for (int n : {2, 16, 64}) {
+		vector<num> a(n), b(n), c(n);
+		fill_rnd(a, mt); fill_rnd(b, mt); fill_rnd(c, mt);
+		auto tab = E::add(E::transform(span<const num>(a), n), E::transform(span<const num>(b), n));
+		auto tc = E::transform(span<const num>(c), n);
+		vector<num> got(n);
+		E::finish(E::mul(tab, tc, n), span<num>(got));
+		vector<num> ab(n);
+		for (int i = 0; i < n; i++) ab[i] = a[i] + b[i];
+		auto want = multiply_slow(ab, c);
+		// compare mod x^n - 1 (circular)
+		for (int i = n; i < sz(want); i++) want[i - n] += want[i];
+		want.resize(n);
+		check_eq(got, want);
+	}
+}
+
 TEST_CASE("FFT double engine even/odd half", "[fft]") {
 	using E = fft_real_engine<double>;
 	mt19937 mt(Catch::getSeed());
