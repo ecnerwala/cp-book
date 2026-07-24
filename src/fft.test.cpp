@@ -217,7 +217,7 @@ TEMPLATE_TEST_CASE("matrix engine", "[fft]",
 }
 
 template <typename E, typename num, int N>
-void test_trunc_poly_engine(mt19937& mt) {
+void test_trunc_series_engine(mt19937& mt) {
 	using P = typename E::value_type;
 	auto rnd_p = [&]() {
 		P p;
@@ -235,7 +235,7 @@ void test_trunc_poly_engine(mt19937& mt) {
 	}
 }
 
-TEMPLATE_TEST_CASE("trunc_poly engine", "[fft]",
+TEMPLATE_TEST_CASE("trunc_series engine", "[fft]",
 		fft_engine<modnum<998244353>>,
 		fft_split_engine<modnum<int(1e9)+7>>,
 		crt_engine<modnum<int(1e9)+7>>) {
@@ -243,8 +243,8 @@ TEMPLATE_TEST_CASE("trunc_poly engine", "[fft]",
 	using num = typename IE::value_type;
 	constexpr int N = IE::unit_scale == 0 ? 3 : 2;
 	mt19937 mt(Catch::getSeed());
-	test_trunc_poly_engine<trunc_poly_engine<IE, N>, num, N>(mt);
-	test_trunc_poly_engine<trunc_poly_engine_stable<IE, 3>, num, 3>(mt);
+	test_trunc_series_engine<trunc_series_engine<IE, N>, num, N>(mt);
+	test_trunc_series_engine<trunc_series_engine_stable<IE, 3>, num, 3>(mt);
 }
 
 TEST_CASE("FFT double engine even/odd half", "[fft]") {

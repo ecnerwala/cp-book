@@ -809,23 +809,23 @@ template <typename num, int N> struct mat {
 
 // Truncated polynomial in y mod y^N over num: products drop terms of degree >= N.
 // Commutative iff num is.
-template <typename num, int N> struct trunc_poly {
+template <typename num, int N> struct trunc_series {
 	std::array<num, size_t(N)> a{};
 	num& operator[](int i) { return a[size_t(i)]; }
 	const num& operator[](int i) const { return a[size_t(i)]; }
 	num* data() { return a.data(); }
 	const num* data() const { return a.data(); }
-	trunc_poly& operator+=(const trunc_poly& o) { for (int i = 0; i < N; i++) a[i] += o.a[i]; return *this; }
-	friend trunc_poly operator+(trunc_poly x, const trunc_poly& y) { x += y; return x; }
-	trunc_poly& operator-=(const trunc_poly& o) { for (int i = 0; i < N; i++) a[i] -= o.a[i]; return *this; }
-	friend trunc_poly operator-(trunc_poly x, const trunc_poly& y) { x -= y; return x; }
-	friend trunc_poly operator*(const trunc_poly& x, const trunc_poly& y) {
-		trunc_poly r;
+	trunc_series& operator+=(const trunc_series& o) { for (int i = 0; i < N; i++) a[i] += o.a[i]; return *this; }
+	friend trunc_series operator+(trunc_series x, const trunc_series& y) { x += y; return x; }
+	trunc_series& operator-=(const trunc_series& o) { for (int i = 0; i < N; i++) a[i] -= o.a[i]; return *this; }
+	friend trunc_series operator-(trunc_series x, const trunc_series& y) { x -= y; return x; }
+	friend trunc_series operator*(const trunc_series& x, const trunc_series& y) {
+		trunc_series r;
 		for (int i = 0; i < N; i++) for (int j = 0; j < N - i; j++) r[i + j] += x[i] * y[j];
 		return r;
 	}
-	trunc_poly& operator*=(const trunc_poly& o) { return *this = *this * o; }
-	friend bool operator==(const trunc_poly&, const trunc_poly&) = default;
+	trunc_series& operator*=(const trunc_series& o) { return *this = *this * o; }
+	friend bool operator==(const trunc_series&, const trunc_series&) = default;
 };
 
 // Plumbing shared by the wrapper engines: a value is a fixed tuple of L scalars
@@ -957,13 +957,13 @@ struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
 };
 
-// Convolution of trunc_poly<num, N> sequences (bivariate multiplication truncated in
+// Convolution of trunc_series<num, N> sequences (bivariate multiplication truncated in
 // y): the pointwise product is the triangular sum over i + j < N. Entry s is an
 // (s+1)-addend sum, widened to the worst case N, so a wrapper product of scale K
 // holds inner products of scale K * N.
 template <conv_engine E, int N>
-struct trunc_poly_engine : componentwise_engine<E, trunc_poly<typename E::value_type, N>, N> {
-	using base = componentwise_engine<E, trunc_poly<typename E::value_type, N>, N>;
+struct trunc_series_engine : componentwise_engine<E, trunc_series<typename E::value_type, N>, N> {
+	using base = componentwise_engine<E, trunc_series<typename E::value_type, N>, N>;
 	static constexpr bool commutative = E::commutative;
 	static constexpr int unit_scale = base::unit_scale;
 	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
@@ -1021,16 +1021,16 @@ struct matrix_engine_stable
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
 };
 
-template <int N> constexpr std::array<int, size_t(N) + 1> trunc_poly_stable_ofs = [] {
+template <int N> constexpr std::array<int, size_t(N) + 1> trunc_series_stable_ofs = [] {
 	std::array<int, size_t(N) + 1> r{};
 	for (int i = 0; i <= N; i++) r[size_t(i)] = i * (i + 1) / 2;
 	return r;
 }();
 
 template <conv_engine E, int N>
-struct trunc_poly_engine_stable
-		: componentwise_engine<E, trunc_poly<typename E::value_type, N>, N, trunc_poly_stable_ofs<N>> {
-	using base = componentwise_engine<E, trunc_poly<typename E::value_type, N>, N, trunc_poly_stable_ofs<N>>;
+struct trunc_series_engine_stable
+		: componentwise_engine<E, trunc_series<typename E::value_type, N>, N, trunc_series_stable_ofs<N>> {
+	using base = componentwise_engine<E, trunc_series<typename E::value_type, N>, N, trunc_series_stable_ofs<N>>;
 	static constexpr bool commutative = E::commutative;
 	static constexpr int unit_scale = base::unit_scale;
 	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
@@ -1042,7 +1042,7 @@ struct trunc_poly_engine_stable
 	static product_t<A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
 		product_t<A * B> p;
 		for (int s = 0; s < N; s++) for (int i = 0; i <= s; i++)
-			p.t[size_t(trunc_poly_stable_ofs<N>[size_t(s)] + i)] = E::mul(a.t[size_t(i)], b.t[size_t(s - i)], n);
+			p.t[size_t(trunc_series_stable_ofs<N>[size_t(s)] + i)] = E::mul(a.t[size_t(i)], b.t[size_t(s - i)], n);
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
@@ -1054,13 +1054,13 @@ static_assert(conv_engine<fft_real_engine<double>>);
 static_assert(conv_engine<fft_split_engine<modnum<int(1e9)+7>>>);
 static_assert(conv_engine<crt_engine<modnum<int(1e9)+7>>>);
 static_assert(conv_engine<matrix_engine<fft_engine<modnum<998244353>>, 2>>);
-static_assert(conv_engine<trunc_poly_engine<fft_engine<modnum<998244353>>, 3>>);
+static_assert(conv_engine<trunc_series_engine<fft_engine<modnum<998244353>>, 3>>);
 // tracked inner engines work when the accumulated scale fits the budget (N <= 2)
 static_assert(conv_engine<matrix_engine<fft_split_engine<modnum<int(1e9)+7>>, 2>>);
-static_assert(conv_engine<trunc_poly_engine<crt_engine<modnum<int(1e9)+7>>, 2>>);
+static_assert(conv_engine<trunc_series_engine<crt_engine<modnum<int(1e9)+7>>, 2>>);
 // the stable variants keep tracked inner engines sound at any N
 static_assert(conv_engine<matrix_engine_stable<fft_split_engine<modnum<int(1e9)+7>>, 3>>);
-static_assert(conv_engine<trunc_poly_engine_stable<crt_engine<modnum<int(1e9)+7>>, 3>>);
+static_assert(conv_engine<trunc_series_engine_stable<crt_engine<modnum<int(1e9)+7>>, 3>>);
 
 // The engine-level cached operand: a transform of a coefficient sequence plus its
 // logical length (which drives product sizes and the 2^k+1 cut). It does not own
