@@ -890,8 +890,8 @@ struct componentwise_engine {
 
 // Convolution of mat<num, N> sequences: componentwise transforms, and the pointwise
 // product is the N^3 matrix product of inner pointwise products, accumulated in the
-// transform domain (one inverse transform per entry). With a tracked inner engine
-// the entries are N-addend sums, so the product scale is N * A * B (the inner
+// transform domain (one inverse transform per entry). Each entry is an N-addend sum,
+// so a wrapper product of scale K holds inner products of scale K * N (the inner
 // budget admits N = 2 at unit operand scales).
 template <conv_engine E, int N>
 struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N * N> {
@@ -899,9 +899,9 @@ struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N
 	static constexpr bool commutative = false;
 	static constexpr int unit_scale = base::unit_scale;
 	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
-	template <int K> using product_t = typename base::template product_t<K>;
+	template <int K> using product_t = typename base::template product_t<K * N>;
 	using transformed = typename base::transformed;
-	using product = product_t<N * unit_scale * unit_scale>;
+	using product = product_t<unit_scale * unit_scale>;
 
 	// right fold over k so a tracked inner engine's per-addend types line up
 	template <int A, int B, int k = 0>
@@ -911,8 +911,8 @@ struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N
 		else return E::add(std::move(e), entry<A, B, k + 1>(a, b, r, c, n));
 	}
 	template <int A, int B>
-	static product_t<N * A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
-		product_t<N * A * B> p;
+	static product_t<A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
+		product_t<A * B> p;
 		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++)
 			p.t[size_t(r) * N + c] = entry<A, B>(a, b, r, c, n);
 		return p;
@@ -922,16 +922,17 @@ struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N
 
 // Convolution of trunc_poly<num, N> sequences (bivariate multiplication truncated in
 // y): the pointwise product is the triangular sum over i + j < N. Entry s is an
-// (s+1)-addend sum; a tracked inner engine's entries widen to the worst case N.
+// (s+1)-addend sum, widened to the worst case N, so a wrapper product of scale K
+// holds inner products of scale K * N.
 template <conv_engine E, int N>
 struct trunc_poly_engine : componentwise_engine<E, trunc_poly<typename E::value_type, N>, N> {
 	using base = componentwise_engine<E, trunc_poly<typename E::value_type, N>, N>;
 	static constexpr bool commutative = E::commutative;
 	static constexpr int unit_scale = base::unit_scale;
 	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
-	template <int K> using product_t = typename base::template product_t<K>;
+	template <int K> using product_t = typename base::template product_t<K * N>;
 	using transformed = typename base::transformed;
-	using product = product_t<N * unit_scale * unit_scale>;
+	using product = product_t<unit_scale * unit_scale>;
 
 	template <int A, int B, int s, int i = 0>
 	static auto entry(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
@@ -940,8 +941,8 @@ struct trunc_poly_engine : componentwise_engine<E, trunc_poly<typename E::value_
 		else return E::add(std::move(e), entry<A, B, s, i + 1>(a, b, n));
 	}
 	template <int A, int B>
-	static product_t<N * A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
-		product_t<N * A * B> p;
+	static product_t<A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
+		product_t<A * B> p;
 		[&]<size_t... s_>(std::index_sequence<s_...>) {
 			((p.t[s_] = entry<A, B, int(s_)>(a, b, n)), ...);
 		}(std::make_index_sequence<size_t(N)>{});
