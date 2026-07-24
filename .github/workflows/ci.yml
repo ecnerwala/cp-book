@@ -82,7 +82,11 @@ jobs:
     runs-on: ubuntu-26.04
     needs: [setup]
     steps:
+      # Full history: the prev-results skip logic compares each file's
+      # last-commit time (git log -1) against the previous run's timestamps.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2147483647
 
       - name: Download verify_files.json
         uses: competitive-verifier/actions/download-verify-artifact@v2
