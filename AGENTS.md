@@ -91,7 +91,9 @@ Match the existing code exactly. In particular:
   non-type reference parameter, so declare it `static` and assign the size at
   runtime.
 - Unit tests (`src/*.test.cpp`) use Catch2 and are built by CMake; they are
-  not Library Checker verifications (they have no PROBLEM attribute).
+  not Library Checker verifications (they have no PROBLEM attribute). They
+  start with `// competitive-verifier: DISPLAY no-index` to keep them off
+  the docs site's front-page listing.
 
 ## When adding a verify solution
 

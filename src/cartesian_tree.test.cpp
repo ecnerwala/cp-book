@@ -1,3 +1,4 @@
+// competitive-verifier: DISPLAY no-index
 #include "cartesian_tree.hpp"
 
 #include <catch2/catch_test_macros.hpp>

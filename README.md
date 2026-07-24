@@ -1,7 +1,7 @@
 # ecnerwala's CP Book
 
 [![CI](https://github.com/ecnerwala/cp-book/actions/workflows/ci.yml/badge.svg)](https://github.com/ecnerwala/cp-book/actions/workflows/ci.yml)
-[![pages](https://img.shields.io/badge/verification-results-blue?logo=github)](https://ecnerwala.github.io/cp-book/)
+[![docs](https://img.shields.io/badge/docs-github.io-blue?logo=github)](https://ecnerwala.github.io/cp-book/)
 [![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fecnerwala.github.io%2Fcp-book%2Fcoverage%2Fbadge.json)](https://ecnerwala.github.io/cp-book/coverage/)
 
 This is my library of reference code for competitive programming. The goal is to

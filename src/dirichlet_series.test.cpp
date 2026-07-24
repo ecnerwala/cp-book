@@ -1,3 +1,4 @@
+// competitive-verifier: DISPLAY no-index
 #include "dirichlet_series.hpp"
 
 #include <catch2/catch_template_test_macros.hpp>

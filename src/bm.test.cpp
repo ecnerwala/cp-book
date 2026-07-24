@@ -1,3 +1,4 @@
+// competitive-verifier: DISPLAY no-index
 #include <catch2/catch_test_macros.hpp>
 
 #include "bm.hpp"

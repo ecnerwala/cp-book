@@ -1,3 +1,4 @@
+// competitive-verifier: DISPLAY no-index
 #include "alphabetic_huffman_code.hpp"
 
 #include <catch2/catch_test_macros.hpp>

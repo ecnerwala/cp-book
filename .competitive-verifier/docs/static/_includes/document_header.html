@@ -1,0 +1,43 @@
+{%- if page.title -%}
+    {%- capture page_title -%}{{page.title | xml_escape }} <small>({{ include.data.path | xml_escape }})</small>{%- endcapture -%}
+{%- else -%}
+    {%- capture page_title -%}{{include.data.path | xml_escape }}{%- endcapture -%}
+{%- endif -%}
+<h1>{{ site.icons[include.data.verificationStatus] }} {{ page_title | xml_escape }}</h1>
+
+<ul>
+    <li><a href="{{ site.github.repository_url }}/blob/{{ site.branch_name | default: "HEAD" }}/{{ site.basedir }}{{ include.data.path }}">View this file on GitHub</a></li>
+    {% if include.data.documentPath %}
+    <li><a href="{{ site.github.repository_url }}/blob/{{ site.branch_name | default: "HEAD" }}/{{ site.basedir }}{{ include.data.documentPath }}">View document part on GitHub</a></li>
+    {%- endif -%}
+    <li>Last update: {{ include.data.timestamp }}</li>
+    {% if include.data.attributes.PROBLEM %}
+    <li>Problem: <a href="{{ include.data.attributes.PROBLEM }}">{{ include.data.attributes.PROBLEM | xml_escape }}</a></li>
+    {%- endif -%}
+    {%- comment -%} Headers are included with bare names, resolved via -I src. {%- endcomment -%}
+    {% if include.data.pathExtension == "hpp" %}<li><a id="include-directive-anchor">Include: <code id="include-directive-code">#include "{{ include.data.path | remove_first: "src/" }}"</code></a></li>{%- endif -%}
+    {% if include.data.isFailed %}<li>Link: <a href="{{ site.github.repository_url }}/actions">{{ site.icons[include.data.verificationStatus] }} View error logs on GitHub Actions</a></li>{%- endif -%}
+    {%- for link in include.data.attributes.links -%}
+    {%- if link != include.data.attributes.PROBLEM -%}
+    <li>Link: <a href="{{ link | xml_escape }}">{{ link | xml_escape }}</a></li>
+    {%- endif -%}
+    {%- endfor -%}
+</ul>
+
+{% if include.data.pathExtension == "hpp" %}
+<script defer type="text/javascript">
+    // make the include directive clickable
+    (function() {
+        const anchor = document.getElementById('include-directive-anchor');
+        const code = document.getElementById('include-directive-code');
+        anchor.addEventListener('click', async function() {
+            const textContent = code.textContent;
+            navigator.clipboard.writeText(textContent)
+
+            code.textContent = "Copied!";
+            await new Promise(r => setTimeout(r, 300))
+            code.textContent = textContent;
+        });
+    })();
+</script>
+{%- endif -%}
