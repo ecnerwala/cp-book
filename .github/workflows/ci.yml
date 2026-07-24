@@ -4,9 +4,20 @@ on:
   push:
     branches: [master]
   pull_request:
+  workflow_dispatch:
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  unit-tests:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
@@ -30,3 +41,257 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  setup:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up competitive-verifier
+        uses: competitive-verifier/actions/setup@v2
+        with:
+          cache-pip: true
+
+      - name: oj-resolve
+        uses: competitive-verifier/actions/oj-resolve@v2
+        with:
+          output-path: verify_files.json
+          include: |
+            src
+            verify
+          exclude: |
+            third_party
+          config: .competitive-verifier/config.toml
+
+      - name: Bundle with library include path
+        run: python3 scripts/bundle.py --site verify_files.json
+
+      - name: Upload verify_files.json
+        uses: competitive-verifier/actions/upload-verify-artifact@v2
+        with:
+          file: verify_files.json
+
+      - name: Upload bundled
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bundled-${{ runner.os }}
+          path: .competitive-verifier/bundled
+          retention-days: 1
+
+  verify:
+    runs-on: ubuntu-26.04
+    needs: [setup]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download verify_files.json
+        uses: competitive-verifier/actions/download-verify-artifact@v2
+
+      - name: Set up competitive-verifier
+        uses: competitive-verifier/actions/setup@v2
+        with:
+          cache-pip: true
+
+      - name: Cache testcases
+        uses: actions/cache@v4
+        with:
+          path: .competitive-verifier/cache
+          key: testcases-${{ hashFiles('verify/*.test.cpp') }}
+          restore-keys: |
+            testcases-
+
+      - name: Restore previous results
+        uses: actions/cache/restore@v4
+        with:
+          path: .cv-prev-result
+          key: verify-result-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            verify-result-${{ github.ref }}-
+            verify-result-refs/heads/master-
+
+      - name: Check for previous result
+        id: prev-result
+        run: |
+          if test -f .cv-prev-result/result.json; then
+            echo "file=.cv-prev-result/result.json" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify
+        uses: competitive-verifier/actions/verify@v2
+        with:
+          destination: ${{ runner.temp }}/result.json
+          prev-result: ${{ steps.prev-result.outputs.file }}
+          timeout: 1800
+
+      - name: Save results for future runs
+        run: |
+          mkdir -p .cv-prev-result
+          cp "${{ runner.temp }}/result.json" .cv-prev-result/result.json
+
+      - name: Cache results
+        uses: actions/cache/save@v4
+        with:
+          path: .cv-prev-result
+          key: verify-result-${{ github.ref }}-${{ github.run_id }}
+
+      - name: Upload result artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Result-${{ runner.os }}
+          path: ${{ runner.temp }}/result.json
+          retention-days: 1
+
+  coverage:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up competitive-verifier
+        uses: competitive-verifier/actions/setup@v2
+        with:
+          cache-pip: true
+
+      - name: Cache testcases
+        uses: actions/cache@v4
+        with:
+          path: .competitive-verifier/cache
+          key: testcases-${{ hashFiles('verify/*.test.cpp') }}
+          restore-keys: |
+            testcases-
+
+      - name: oj-resolve (coverage environment)
+        uses: competitive-verifier/actions/oj-resolve@v2
+        with:
+          output-path: verify_files.json
+          include: |
+            src
+            verify
+          exclude: |
+            third_party
+          config: .competitive-verifier/config-coverage.toml
+
+      - name: Run verify solutions with coverage
+        uses: competitive-verifier/actions/verify@v2
+        with:
+          verify-files: verify_files.json
+          timeout: 1800
+          check: true
+
+      - name: Build and run unit tests with coverage
+        run: |
+          cmake -B build -DENABLE_COVERAGE=ON
+          cmake --build build -j
+          ctest --test-dir build --output-on-failure
+
+      - name: Install gcovr
+        run: pipx install gcovr
+
+      - name: Generate coverage report
+        run: |
+          mkdir -p coverage
+          gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
+            --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
+            --html-details coverage/index.html \
+            --cobertura coverage/coverage.xml \
+            --markdown-summary coverage/summary.md \
+            --print-summary \
+            build .competitive-verifier/cache
+          cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: Coverage-${{ runner.os }}
+          path: coverage/
+          retention-days: 7
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage
+          path: coverage/summary.md
+
+  docs-and-check:
+    runs-on: ubuntu-26.04
+    needs: [verify, coverage]
+    outputs:
+      upload-pages: ${{ steps.upload-pages.outcome == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2147483647
+
+      - name: Download verify_files.json and all artifacts
+        id: all-artifacts
+        uses: competitive-verifier/actions/download-verify-artifact@v2
+        with:
+          download-all: true
+          artifact-root: .artifacts/
+
+      - name: Extract bundled
+        shell: bash
+        run: |
+          rm -rf .competitive-verifier/bundled
+          if test -d "$SRCDIR"; then
+            mkdir -p .competitive-verifier/
+            mv "$SRCDIR" .competitive-verifier/bundled
+          else
+            echo "$SRCDIR does not exist."
+          fi
+        env:
+          SRCDIR: .artifacts/Bundled-${{ runner.os }}
+
+      - name: Set up competitive-verifier
+        uses: competitive-verifier/actions/setup@v2
+        with:
+          cache-pip: true
+
+      - name: Docs
+        uses: competitive-verifier/actions/docs@v2
+        with:
+          verify-result: ${{ steps.all-artifacts.outputs.artifacts-root }}/Result-*/result.json
+          destination: _jekyll
+          write-summary: true
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: _jekyll
+          destination: _site
+
+      - name: Download coverage report
+        uses: actions/download-artifact@v4
+        with:
+          name: Coverage-${{ runner.os }}
+          path: coverage-artifact
+      - name: Add coverage report to site
+        run: sudo cp -r coverage-artifact _site/coverage
+
+      - name: Upload artifact
+        id: upload-pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Check
+        uses: competitive-verifier/actions/check@v2
+        with:
+          verify-result: ${{ steps.all-artifacts.outputs.artifacts-root }}/Result-*/result.json
+
+  deploy:
+    if: (success() || failure()) && github.ref == 'refs/heads/master' && needs.docs-and-check.outputs.upload-pages == 'true'
+    needs: docs-and-check
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

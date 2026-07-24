@@ -98,5 +98,5 @@ Match the existing code exactly. In particular:
    be solved with book code, flag it instead of adding standalone code.
 2. `git add` it, then run the verification commands above; all testcases
    must be AC locally before pushing.
-3. Keep the CI workflow (`.github/workflows/verify.yml`) and README in sync
+3. Keep the CI workflow (`.github/workflows/ci.yml`) and README in sync
    if commands change.
