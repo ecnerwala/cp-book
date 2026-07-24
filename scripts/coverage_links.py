@@ -42,9 +42,14 @@ def main() -> int:
             continue
         href = pages.get(filename)
         link = f"{{{{ site.baseurl }}}}/coverage/{href}" if href else None
-        line = f"{f['line_percent']:.1f}% lines"
-        branch = f"{f['branch_percent']:.1f}% branches"
-        text = f"{line}, {branch}"
+        parts = []
+        for key, label in (("line_percent", "lines"), ("branch_percent", "branches")):
+            percent = f.get(key)
+            if percent is not None:
+                parts.append(f"{percent:.1f}% {label}")
+        if not parts:
+            continue
+        text = ", ".join(parts)
         body = f"[{text}]({link})" if link else text
         with page.open("a") as fp:
             fp.write(f"\n## Coverage\n\n{body}\n")
