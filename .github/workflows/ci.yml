@@ -85,6 +85,10 @@ jobs:
   verify:
     runs-on: ubuntu-26.04
     needs: [setup-verify]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4]
     steps:
       # Full history: the prev-results skip logic compares each file's
       # last-commit time (git log -1) against the previous run's timestamps.
@@ -114,6 +118,7 @@ jobs:
             testcases-${{ steps.problems-version.outputs.hash }}-
             testcases-
 
+      # The merged result from all shards, saved by docs-and-check.
       - name: Restore previous results
         uses: actions/cache/restore@v6
         with:
@@ -136,28 +141,23 @@ jobs:
         with:
           destination: ${{ runner.temp }}/result.json
           prev-result: ${{ steps.prev-result.outputs.file }}
+          split-size: 5
+          split-index: ${{ matrix.shard }}
           timeout: 1800
-
-      - name: Save results for future runs
-        run: |
-          mkdir -p .cv-prev-result
-          cp "${{ runner.temp }}/result.json" .cv-prev-result/result.json
-
-      - name: Cache results
-        uses: actions/cache/save@v6
-        with:
-          path: .cv-prev-result
-          key: verify-result-${{ github.ref }}-${{ github.run_id }}
 
       - name: Upload result artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Result-${{ runner.os }}
+          name: Result-${{ runner.os }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/result.json
           retention-days: 1
 
   coverage-verify:
     runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4]
     steps:
       # Full history: the prev-results skip logic compares each file's
       # last-commit time (git log -1) against the previous run's timestamps.
@@ -170,10 +170,12 @@ jobs:
         with:
           cache-pip: true
 
-      # Rolling cache: testcases + coverage counters (interleaved in the
-      # per-problem dirs) + the previous result.json used to skip unchanged
-      # solutions. Skipped solutions keep their old .gcda counters; re-run
-      # solutions overwrite theirs in place.
+      # Rolling per-shard cache: testcases + coverage counters (interleaved
+      # in the per-problem dirs) + the previous result.json used to skip
+      # unchanged solutions. Skipped solutions keep their old .gcda counters;
+      # re-run solutions overwrite theirs in place. The prev-result must stay
+      # per-shard: skipping a solution whose counters live in another shard's
+      # cache would silently drop its coverage.
       - name: Restore coverage cache
         id: coverage-cache
         uses: actions/cache/restore@v6
@@ -181,10 +183,10 @@ jobs:
           path: |
             .competitive-verifier/cache
             .cv-coverage-result
-          key: coverage-cache-${{ github.ref }}-${{ github.run_id }}
+          key: coverage-cache-${{ github.ref }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
-            coverage-cache-${{ github.ref }}-
-            coverage-cache-refs/heads/master-
+            coverage-cache-${{ github.ref }}-${{ matrix.shard }}-
+            coverage-cache-refs/heads/master-${{ matrix.shard }}-
 
       # Cold start: warm the testcase store from the verify job's cache.
       - name: Restore testcases (cold start)
@@ -221,7 +223,29 @@ jobs:
           verify-files: verify_files.json
           destination: ${{ runner.temp }}/coverage-result.json
           prev-result: ${{ steps.prev-result.outputs.file }}
+          split-size: 5
+          split-index: ${{ matrix.shard }}
           timeout: 1800
+
+      # Drop counters of solutions outside this shard's current result
+      # (removed files, or files that moved to another shard), so stale
+      # .gcda/.gcno from the rolling cache can't leak into the report.
+      - name: Reconcile stale coverage counters
+        run: |
+          python3 - <<'EOF'
+          import json, pathlib
+          stems = {
+              pathlib.PurePosixPath(f).name.removesuffix(".cpp")
+              for f in json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
+          }
+          removed = 0
+          for p in pathlib.Path(".competitive-verifier/cache").rglob("a-*.gc*"):
+              stem = p.name.removeprefix("a-").rsplit(".gc", 1)[0]
+              if stem not in stems:
+                  p.unlink()
+                  removed += 1
+          print(f"removed {removed} stale counter files")
+          EOF
 
       - name: Save results for future runs
         run: |
@@ -234,7 +258,7 @@ jobs:
           path: |
             .competitive-verifier/cache
             .cv-coverage-result
-          key: coverage-cache-${{ github.ref }}-${{ github.run_id }}
+          key: coverage-cache-${{ github.ref }}-${{ matrix.shard }}-${{ github.run_id }}
 
       # Opt-in counter selection: stage only the .gcno/.gcda of solutions in
       # the current result, so stale counters in the rolling cache (from
@@ -274,14 +298,14 @@ jobs:
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
             --exclude-lines-by-pattern '.*assert\(false\).*' \
             --exclude-throw-branches --exclude-noncode-lines \
-            --json ${{ runner.temp }}/coverage-verify.json \
+            --json ${{ runner.temp }}/coverage-verify-${{ matrix.shard }}.json \
             coverage-counters
 
       - name: Upload coverage tracefile
         uses: actions/upload-artifact@v7
         with:
-          name: CoverageTrace-verify
-          path: ${{ runner.temp }}/coverage-verify.json
+          name: CoverageTrace-verify-${{ matrix.shard }}
+          path: ${{ runner.temp }}/coverage-verify-${{ matrix.shard }}.json
           retention-days: 1
 
   coverage-unit-tests:
@@ -385,6 +409,25 @@ jobs:
           verify-result: ${{ steps.all-artifacts.outputs.artifacts-root }}/Result-*/result.json
           destination: _jekyll
           write-summary: true
+
+      # Merge the shard results into the single prev-result cache that the
+      # verify shards restore on the next run (shard-membership agnostic).
+      - name: Merge verify results
+        uses: competitive-verifier/actions/merge-result@v2
+        with:
+          result-files: ${{ steps.all-artifacts.outputs.artifacts-root }}/Result-*/result.json
+          output-path: ${{ runner.temp }}/merged-result.json
+
+      - name: Save merged results for future runs
+        run: |
+          mkdir -p .cv-prev-result
+          cp "${{ runner.temp }}/merged-result.json" .cv-prev-result/result.json
+
+      - name: Cache results
+        uses: actions/cache/save@v6
+        with:
+          path: .cv-prev-result
+          key: verify-result-${{ github.ref }}-${{ github.run_id }}
 
       - name: Install gcovr
         run: pipx install gcovr
