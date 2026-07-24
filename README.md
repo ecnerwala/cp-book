@@ -4,8 +4,9 @@
 [![docs](https://img.shields.io/badge/docs-github.io-blue?logo=github)](https://ecnerwala.github.io/cp-book/)
 [![coverage](https://img.shields.io/endpoint?url=https%3A%2F%2Fecnerwala.github.io%2Fcp-book%2Fcoverage%2Fbadge.json)](https://ecnerwala.github.io/cp-book/coverage/)
 
-My library of reference code for competitive programming: generic, fast, and
-clean algorithm implementations for contests like Codeforces or ICPC.
+This is my library of reference code for competitive programming. The goal is to
+write generic, fast, and clean algorithm implementations for use in contests
+like CodeForces or ICPC.
 
 The library lives in `src/` as standalone headers (`#include "fft.hpp"`,
 compiled with `-I src`). Browsable source, verification results, and coverage
