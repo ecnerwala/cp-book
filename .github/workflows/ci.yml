@@ -456,6 +456,11 @@ jobs:
       - name: Copy README into docs
         run: cp README.md _jekyll/README.md
 
+      # Map source files to their gcovr details pages so doc pages can link
+      # to per-file coverage reports.
+      - name: Link coverage pages
+        run: python3 scripts/coverage_page_links.py --coverage-dir coverage --jekyll-dir _jekyll
+
       - name: Write coverage badge
         run: |
           python3 - <<'EOF'
