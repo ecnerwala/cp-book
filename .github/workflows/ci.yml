@@ -157,29 +157,49 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      # Full history: the prev-results skip logic compares each file's
+      # last-commit time (git log -1) against the previous run's timestamps.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2147483647
 
       - name: Set up competitive-verifier
         uses: competitive-verifier/actions/setup@v2
         with:
           cache-pip: true
 
-      - name: Get library-checker-problems version
-        id: problems-version
-        run: |
-          echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+      # Rolling cache: testcases + coverage counters (interleaved in the
+      # per-problem dirs) + the previous result.json used to skip unchanged
+      # solutions. Skipped solutions keep their old .gcda counters; re-run
+      # solutions overwrite theirs in place.
+      - name: Restore coverage cache
+        id: coverage-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .competitive-verifier/cache
+            .cv-coverage-result
+          key: coverage-cache-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            coverage-cache-${{ github.ref }}-
+            coverage-cache-refs/heads/master-
 
-      - name: Cache testcases
-        uses: actions/cache@v4
+      # Cold start: warm the testcase store from the verify job's cache.
+      - name: Restore testcases (cold start)
+        if: steps.coverage-cache.outputs.cache-matched-key == ''
+        uses: actions/cache/restore@v4
         with:
           path: .competitive-verifier/cache
-          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/*.test.cpp') }}
+          key: testcases-
           restore-keys: |
-            testcases-${{ steps.problems-version.outputs.hash }}-
             testcases-
 
-      - name: Clean stale coverage counters
-        run: find .competitive-verifier/cache -name '*.gcda' -delete -o -name '*.gcno' -delete 2>/dev/null || true
+      - name: Check for previous result
+        id: prev-result
+        run: |
+          if test -f .cv-coverage-result/result.json; then
+            echo "file=.cv-coverage-result/result.json" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: oj-resolve (coverage environment)
         uses: competitive-verifier/actions/oj-resolve@v2
@@ -196,7 +216,22 @@ jobs:
         uses: competitive-verifier/actions/verify@v2
         with:
           verify-files: verify_files.json
+          destination: ${{ runner.temp }}/coverage-result.json
+          prev-result: ${{ steps.prev-result.outputs.file }}
           timeout: 1800
+
+      - name: Save results for future runs
+        run: |
+          mkdir -p .cv-coverage-result
+          cp "${{ runner.temp }}/coverage-result.json" .cv-coverage-result/result.json
+
+      - name: Save coverage cache
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .competitive-verifier/cache
+            .cv-coverage-result
+          key: coverage-cache-${{ github.ref }}-${{ github.run_id }}
 
       - name: Build and run unit tests with coverage
         run: |
