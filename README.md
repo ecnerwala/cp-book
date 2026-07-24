@@ -1,4 +1,4 @@
-# Competitive Programming Book
+# ecnerwala's Competitive Programming Book
 
 [![CI](https://github.com/ecnerwala/cp-book/actions/workflows/ci.yml/badge.svg)](https://github.com/ecnerwala/cp-book/actions/workflows/ci.yml)
 [![docs](https://img.shields.io/badge/docs-github.io-blue?logo=github)](https://ecnerwala.github.io/cp-book/)
