@@ -241,7 +241,7 @@ jobs:
 
       - name: Generate coverage tracefile
         run: |
-          gcovr --root . --filter 'src/' --filter 'verify/' \
+          gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
             --exclude-lines-by-pattern '.*assert\(false\).*' \
             --exclude-throw-branches --exclude-noncode-lines \
@@ -296,7 +296,7 @@ jobs:
 
       - name: Generate coverage tracefile
         run: |
-          gcovr --root . --filter 'src/' --filter 'verify/' \
+          gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
             --exclude-lines-by-pattern '.*assert\(false\).*' \
             --exclude-throw-branches --exclude-noncode-lines \
@@ -363,18 +363,12 @@ jobs:
       - name: Merge coverage reports
         run: |
           mkdir -p coverage
-          # Full report (library + test files) for browsing and per-page annotations
           gcovr --root . \
             --add-tracefile '${{ steps.all-artifacts.outputs.artifacts-root }}/CoverageTrace-*/coverage-*.json' \
             --html-details coverage/index.html \
             --cobertura coverage/coverage.xml \
-            --json-summary coverage/summary.json
-          # Summary totals over library headers only
-          gcovr --root . \
-            --add-tracefile '${{ steps.all-artifacts.outputs.artifacts-root }}/CoverageTrace-*/coverage-*.json' \
-            --filter 'src/' --exclude '.*\.test\.cpp' \
             --markdown-summary coverage/summary.md \
-            --json-summary coverage/summary-src.json \
+            --json-summary coverage/summary.json \
             --print-summary
           cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
 
@@ -382,7 +376,7 @@ jobs:
         run: |
           python3 - <<'EOF'
           import json
-          s = json.load(open("coverage/summary-src.json"))
+          s = json.load(open("coverage/summary.json"))
           pct = s["line_percent"]
           color = "brightgreen" if pct >= 90 else "green" if pct >= 75 else "yellow" if pct >= 50 else "red"
           json.dump({
