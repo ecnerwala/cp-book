@@ -9,20 +9,31 @@ Usage: coverage_links.py --coverage-dir coverage --jekyll-dir _jekyll
 """
 
 import argparse
+import hashlib
 import json
 import pathlib
 import re
 import sys
 
 
-def details_page_map(index_html: pathlib.Path) -> dict[str, str]:
-    """Map source path -> gcovr details page name, parsed from index.html."""
-    mapping: dict[str, str] = {}
-    for href, text in re.findall(
-        r'<a href="([^"]+\.html)"[^>]*>([^<]+)</a>', index_html.read_text()
-    ):
-        mapping[text.strip()] = href
-    return mapping
+def details_page(coverage_dir: pathlib.Path, filename: str) -> str | None:
+    """gcovr names details pages index.<basename>.<md5 of path>.html."""
+    digest = hashlib.md5(filename.encode()).hexdigest()
+    name = f"index.{pathlib.PurePosixPath(filename).name}.{digest}.html"
+    return name if (coverage_dir / name).exists() else None
+
+
+def ensure_title(page: pathlib.Path, filename: str) -> None:
+    """Set an explicit front matter title (the source path, matching the
+    default) so jekyll-titles-from-headings doesn't promote a body heading."""
+    content = page.read_text()
+    if not content.startswith("---\n"):
+        return
+    end = content.index("\n---", 4)
+    front_matter = content[4:end]
+    if re.search(r"^title\s*:", front_matter, re.MULTILINE):
+        return
+    page.write_text(f"---\ntitle: {json.dumps(filename)}\n{content[4:]}")
 
 
 def main() -> int:
@@ -32,7 +43,6 @@ def main() -> int:
     args = parser.parse_args()
 
     summary = json.loads((args.coverage_dir / "summary.json").read_text())
-    pages = details_page_map(args.coverage_dir / "index.html")
 
     count = 0
     for f in summary["files"]:
@@ -40,7 +50,7 @@ def main() -> int:
         page = args.jekyll_dir / (filename + ".md")
         if not page.exists():
             continue
-        href = pages.get(filename)
+        href = details_page(args.coverage_dir, filename)
         link = f"{{{{ site.baseurl }}}}/coverage/{href}" if href else None
         parts = []
         for key, label in (("line_percent", "lines"), ("branch_percent", "branches")):
@@ -51,8 +61,9 @@ def main() -> int:
             continue
         text = ", ".join(parts)
         body = f"[{text}]({link})" if link else text
+        ensure_title(page, filename)
         with page.open("a") as fp:
-            fp.write(f"\n**Coverage:** {body}\n")
+            fp.write(f"\n## Coverage\n\n{body}\n")
         count += 1
     print(f"coverage_links: annotated {count} pages", file=sys.stderr)
     return 0
