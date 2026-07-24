@@ -587,7 +587,7 @@ TEST_CASE("poly reversed storage and series interop", "[fft]") {
 	auto mp = middle_product(cv, ca);
 	auto naive = [&](int j) {
 		num r{};
-		for (int d = 0; d < 37; d++) r += pa[d] * vals[j + d];
+		for (int t = 0; t < 37; t++) r += pa[t] * vals[j + t];
 		return r;
 	};
 	for (int j = 0; j < sz(mp); j++) REQUIRE(mp[size_t(j)] == naive(j));

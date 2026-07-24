@@ -1775,6 +1775,8 @@ template <fft::conv_engine E> struct poly {
 	}
 
 	// logical (coefficient) order
+	auto begin() { return c.rbegin(); }
+	auto end() { return c.rend(); }
 	auto begin() const { return c.rbegin(); }
 	auto end() const { return c.rend(); }
 
@@ -1869,6 +1871,11 @@ struct linear_form {
 	int len() const { return c.len(); }
 	T& operator[](int i) { return c[len() - 1 - i]; }
 	const T& operator[](int i) const { return c[len() - 1 - i]; }
+	// logical (coefficient) order
+	auto begin() { return c.rbegin(); }
+	auto end() { return c.rend(); }
+	auto begin() const { return c.rbegin(); }
+	auto end() const { return c.rend(); }
 
 	// change the support to S_0..S_{n-1}, keeping the tail alignment: existing weights
 	// slide so the last one stays at S_{n-1}, padding or dropping at the storage front
