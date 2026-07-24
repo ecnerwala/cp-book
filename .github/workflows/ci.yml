@@ -333,14 +333,6 @@ jobs:
           destination: _jekyll
           write-summary: true
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v6
-      - name: Build with Jekyll
-        uses: actions/jekyll-build-pages@v1
-        with:
-          source: _jekyll
-          destination: _site
-
       - name: Install gcovr
         run: pipx install gcovr
 
@@ -352,8 +344,20 @@ jobs:
             --html-details coverage/index.html \
             --cobertura coverage/coverage.xml \
             --markdown-summary coverage/summary.md \
+            --json-summary coverage/summary.json \
             --print-summary
           cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Add coverage sections to docs pages
+        run: python3 scripts/coverage_links.py --coverage-dir coverage --jekyll-dir _jekyll
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: _jekyll
+          destination: _site
 
       - name: Add coverage report to site
         run: sudo cp -r coverage _site/coverage
