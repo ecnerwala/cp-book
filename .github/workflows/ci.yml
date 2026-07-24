@@ -236,6 +236,28 @@ jobs:
             .cv-coverage-result
           key: coverage-cache-${{ github.ref }}-${{ github.run_id }}
 
+      # Opt-in counter selection: stage only the .gcno/.gcda of solutions in
+      # the current result, so stale counters in the rolling cache (from
+      # removed or renamed files) can't leak into the report.
+      - name: Stage coverage counters
+        run: |
+          python3 - <<'EOF'
+          import json, pathlib, shutil
+          stems = {
+              pathlib.PurePosixPath(f).name.removesuffix(".cpp")
+              for f in json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
+          }
+          stage = pathlib.Path("coverage-counters")
+          stage.mkdir(exist_ok=True)
+          staged = 0
+          for p in pathlib.Path(".competitive-verifier/cache").rglob("a-*.gc*"):
+              stem = p.name.removeprefix("a-").rsplit(".gc", 1)[0]
+              if stem in stems:
+                  shutil.copy2(p, stage / p.name)
+                  staged += 1
+          print(f"staged {staged} counter files")
+          EOF
+
       - name: Install gcovr
         run: pipx install gcovr
 
@@ -246,7 +268,7 @@ jobs:
             --exclude-lines-by-pattern '.*assert\(false\).*' \
             --exclude-throw-branches --exclude-noncode-lines \
             --json ${{ runner.temp }}/coverage-verify.json \
-            .competitive-verifier/cache
+            coverage-counters
 
       - name: Upload coverage tracefile
         uses: actions/upload-artifact@v7
