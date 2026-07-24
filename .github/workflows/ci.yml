@@ -85,9 +85,6 @@ jobs:
             third_party
           config: .competitive-verifier/config-coverage.toml
 
-      - name: Bundle with library include path
-        run: python3 scripts/bundle.py --site verify_files.json
-
       - name: Upload verify_files.json
         uses: competitive-verifier/actions/upload-verify-artifact@v2
         with:
