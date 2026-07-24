@@ -178,7 +178,7 @@ TEMPLATE_TEST_CASE("matrix engine", "[fft]",
 	mt19937 mt(Catch::getSeed());
 	auto rnd_mat = [&]() {
 		M m;
-		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) m(r, c) = rnd_val<num>(mt);
+		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) m[{r, c}] = rnd_val<num>(mt);
 		return m;
 	};
 	for (int la : {1, 2, 3, 17, 33}) {
