@@ -51,8 +51,7 @@ scripts/bundle.py verify/convolution_mod.test.cpp > submission.cpp
 To run verification locally:
 
 ```sh
-uvx competitive-verifier oj-resolve --include src verify \
-    --exclude third_party 'src/*.test.cpp' \
+uvx competitive-verifier oj-resolve --include src verify --exclude third_party \
     --config .competitive-verifier/config.toml > verify_files.json
 uvx competitive-verifier verify --verify-json verify_files.json
 ```
