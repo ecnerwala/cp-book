@@ -9,29 +9,29 @@ int main() {
 
 	int N, Q; std::cin >> N >> Q;
 	seg_tree::in_order_layout layout(N);
-	std::vector<int64_t> tree(2*N);
+	std::vector<int64_t> seg(2*N);
 	for (int i = 0; i < N; i++) {
 		int64_t x; std::cin >> x;
-		tree[layout.get_point(i)] = x;
+		seg[layout.get_point(i)] = x;
 	}
-	for (int i = N-1; i >= 1; i--) {
-		tree[i] = tree[2*i] + tree[2*i+1];
+	for (seg_tree::point a(N-1); a >= 1; a--) {
+		seg[a] = seg[a.c(0)] + seg[a.c(1)];
 	}
 	for (int q = 0; q < Q; q++) {
-		int t; std::cin >> t;
-		if (t == 0) {
+		int op; std::cin >> op;
+		if (op == 0) {
 			int p; int64_t x; std::cin >> p >> x;
 			layout.get_point(p).for_each_up([&](seg_tree::point a) {
-				tree[a] += x;
+				seg[a] += x;
 			});
-		} else {
+		} else if (op == 1) {
 			int l, r; std::cin >> l >> r;
 			int64_t ans = 0;
 			layout.get_range(l, r).for_each([&](seg_tree::point a) {
-				ans += tree[a];
+				ans += seg[a];
 			});
 			std::cout << ans << '\n';
-		}
+		} else assert(false);
 	}
 
 	return 0;

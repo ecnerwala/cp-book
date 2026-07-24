@@ -11,11 +11,11 @@ int main() {
 	using E = ecnerwala::fft::fft_engine<num>;
 
 	int N, M; std::cin >> N >> M;
-	std::vector<num> a(N); for (auto& x : a) std::cin >> x;
-	std::vector<num> b(M); for (auto& x : b) std::cin >> x;
-	std::vector<num> c = ecnerwala::fft::multiply<E>(a, b);
+	std::vector<num> A(N); for (auto& x : A) std::cin >> x;
+	std::vector<num> B(M); for (auto& x : B) std::cin >> x;
+	std::vector<num> C = ecnerwala::fft::multiply<E>(A, B);
 	for (int i = 0; i < N+M-1; i++) {
-		std::cout << c[i] << " \n"[i+1==N+M-1];
+		std::cout << C[i] << " \n"[i+1==N+M-1];
 	}
 
 	return 0;
