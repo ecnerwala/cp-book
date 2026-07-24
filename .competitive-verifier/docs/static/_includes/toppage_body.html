@@ -2,9 +2,8 @@
 Overrides the competitive-verifier theme's toppage_body.html:
 - displays paths with the leading "src/" stripped (headers are included with
   bare names via -I src);
-- splits Catch2 unit tests (src/*.test.cpp) out of "Library Files" into
-  their own "Unit Tests" section (they are not verification files, so they
-  get a 🧪 marker instead of the not-verified warning icon).
+- Catch2 unit tests (src/*.test.cpp) are not verification files, so they get
+  a 🧪 marker instead of the not-verified warning icon.
 {%- endcomment -%}
 {%- for top in page.data.top -%}
 <h2>{{ top.type }}</h2>
@@ -13,46 +12,18 @@ Overrides the competitive-verifier theme's toppage_body.html:
 {%- if category_name != "" -%}<h3>{{ category_name }}</h3>{%- endif -%}
 <ul>
     {%- for item in category.pages -%}
-    {%- assign is_unittest = false -%}
+    {%- assign name = item.path | remove_first: "src/" -%}
+    {%- if item.title -%}
+        {%- capture link_title -%}{{item.title | xml_escape }} <small>({{ name | xml_escape }})</small>{%- endcapture -%}
+    {%- else -%}
+        {%- capture link_title -%}{{name | xml_escape }}{%- endcapture -%}
+    {%- endif -%}
     {%- if top.type == "Library Files" and item.path contains ".test.cpp" -%}
-        {%- assign is_unittest = true -%}
-    {%- endif -%}
-    {%- unless is_unittest -%}
-        {%- assign name = item.path | remove_first: "src/" -%}
-        {%- if item.title -%}
-            {%- capture link_title -%}{{item.title | xml_escape }} <small>({{ name | xml_escape }})</small>{%- endcapture -%}
-        {%- else -%}
-            {%- capture link_title -%}{{name | xml_escape }}{%- endcapture -%}
-        {%- endif -%}
-        <li><a href="{{ item.path | relative_url }}">{{ site.icons[item.icon] }} {{ link_title | xml_escape }}</a></li>
-    {%- endunless -%}
-    {%- endfor -%}
-</ul>
-{%- endfor -%}
-{%- if top.type == "Library Files" -%}
-<h2>Unit Tests</h2>
-{%- for category in top.categories -%}
-{%- assign category_name = category.name | remove_first: "src/" -%}
-{%- assign has_tests = false -%}
-{%- for item in category.pages -%}
-    {%- if item.path contains ".test.cpp" -%}{%- assign has_tests = true -%}{%- endif -%}
-{%- endfor -%}
-{%- if has_tests -%}
-{%- if category_name != "" -%}<h3>{{ category_name }}</h3>{%- endif -%}
-<ul>
-    {%- for item in category.pages -%}
-    {%- if item.path contains ".test.cpp" -%}
-        {%- assign name = item.path | remove_first: "src/" -%}
-        {%- if item.title -%}
-            {%- capture link_title -%}{{item.title | xml_escape }} <small>({{ name | xml_escape }})</small>{%- endcapture -%}
-        {%- else -%}
-            {%- capture link_title -%}{{name | xml_escape }}{%- endcapture -%}
-        {%- endif -%}
-        <li><a href="{{ item.path | relative_url }}">🧪 {{ link_title | xml_escape }}</a></li>
+    <li><a href="{{ item.path | relative_url }}">🧪 {{ link_title | xml_escape }}</a></li>
+    {%- else -%}
+    <li><a href="{{ item.path | relative_url }}">{{ site.icons[item.icon] }} {{ link_title | xml_escape }}</a></li>
     {%- endif -%}
     {%- endfor -%}
 </ul>
-{%- endif -%}
 {%- endfor -%}
-{%- endif -%}
 {%- endfor -%}
