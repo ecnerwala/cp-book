@@ -706,6 +706,30 @@ TEMPLATE_TEST_CASE("online squarer", "[fft]", MOD_ENGINES) {
 	}
 }
 
+// marker engine: same ring, but declared non-commutative so the squarer
+// must take the multiplier path (no cross-term doubling)
+struct nc_engine : fft_engine<modnum<998244353>> {
+	static constexpr bool commutative = false;
+};
+static_assert(fft::conv_engine<nc_engine>);
+
+TEST_CASE("online squarer non-commutative fallback", "[fft]") {
+	using num = modnum<998244353>;
+	mt19937 mt(Catch::getSeed());
+	for (int n : {1, 2, 3, 17, 64, 100}) {
+		INFO("n = " << n);
+		vector<num> f(n);
+		fill_rnd(f, mt);
+		auto slow = multiply_slow(f, f);
+		slow.resize(2*n, num(0));
+		online_squarer<nc_engine> os(n);
+		for (int i = 0; i < n; i++) {
+			os.push(f[i]);
+			REQUIRE(os.back() == slow[i]);
+		}
+	}
+}
+
 TEST_CASE("poly_ap_values eval", "[fft,poly_ap_values]") {
 	using num = modnum<998244353>;
 	using poly_vals = poly_ap_values<fft_engine<num>>;
