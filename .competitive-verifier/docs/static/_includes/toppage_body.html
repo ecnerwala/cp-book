@@ -18,10 +18,16 @@ Overrides the competitive-verifier theme's toppage_body.html:
     {%- else -%}
         {%- capture link_title -%}{{name | xml_escape }}{%- endcapture -%}
     {%- endif -%}
-    {%- if top.type == "Library Files" and item.path contains ".test.cpp" -%}
-    <li><a href="{{ item.path | relative_url }}">🧪 {{ link_title | xml_escape }}</a></li>
+    {%- if item.coverage -%}
+        {%- assign coverage_percent = item.coverage.rate | times: 100 -%}
+        {%- capture coverage_span -%}<span class="index-coverage"><span class="coverage-percent">{{ coverage_percent | round: 1 }}%</span><span class="coverage-bar"><span class="coverage-bar-fill{% if coverage_percent < 50 %} coverage-low{% elsif coverage_percent < 80 %} coverage-medium{% endif %}" style="width: {{ coverage_percent | round: 1 }}%"></span></span></span>{%- endcapture -%}
     {%- else -%}
-    <li><a href="{{ item.path | relative_url }}">{{ site.icons[item.icon] }} {{ link_title | xml_escape }}</a></li>
+        {%- assign coverage_span = "" -%}
+    {%- endif -%}
+    {%- if top.type == "Library Files" and item.path contains ".test.cpp" -%}
+    <li><a href="{{ item.path | relative_url }}">🧪 {{ link_title | xml_escape }}</a>{{ coverage_span }}</li>
+    {%- else -%}
+    <li><a href="{{ item.path | relative_url }}">{{ site.icons[item.icon] }} {{ link_title | xml_escape }}</a>{{ coverage_span }}</li>
     {%- endif -%}
     {%- endfor -%}
 </ul>
