@@ -92,12 +92,18 @@ jobs:
         with:
           cache-pip: true
 
+      - name: Get library-checker-problems version
+        id: problems-version
+        run: |
+          echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+
       - name: Cache testcases
         uses: actions/cache@v4
         with:
           path: .competitive-verifier/cache
-          key: testcases-${{ hashFiles('verify/*.test.cpp') }}
+          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/*.test.cpp') }}
           restore-keys: |
+            testcases-${{ steps.problems-version.outputs.hash }}-
             testcases-
 
       - name: Restore previous results
@@ -154,12 +160,18 @@ jobs:
         with:
           cache-pip: true
 
+      - name: Get library-checker-problems version
+        id: problems-version
+        run: |
+          echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+
       - name: Cache testcases
         uses: actions/cache@v4
         with:
           path: .competitive-verifier/cache
-          key: testcases-${{ hashFiles('verify/*.test.cpp') }}
+          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/*.test.cpp') }}
           restore-keys: |
+            testcases-${{ steps.problems-version.outputs.hash }}-
             testcases-
 
       - name: oj-resolve (coverage environment)
