@@ -1,0 +1,4 @@
+#!/bin/sh
+# Alias for the sanitizer verification environment so it gets a distinct
+# name in competitive-verifier results.
+exec g++ "$@"
