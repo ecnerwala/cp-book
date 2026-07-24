@@ -170,30 +170,35 @@ jobs:
         with:
           cache-pip: true
 
-      # Rolling cache: testcases + coverage counters (interleaved in the
-      # per-problem dirs) + the previous result.json used to skip unchanged
-      # solutions. Skipped solutions keep their old .gcda counters; re-run
-      # solutions overwrite theirs in place.
-      - name: Restore coverage cache
-        id: coverage-cache
+      # Slim rolling cache: only the staged counters of the previous run
+      # plus the result.json used to skip unchanged solutions (a few MB).
+      # Skipped solutions keep their previously staged counters; re-run
+      # solutions restage fresh ones. Testcases come from the verify job's
+      # shared content-keyed cache instead of being duplicated here.
+      - name: Restore coverage counters
         uses: actions/cache/restore@v6
         with:
           path: |
-            .competitive-verifier/cache
+            coverage-counters
             .cv-coverage-result
-          key: coverage-cache-${{ github.ref }}-${{ github.run_id }}
+          key: coverage-counters-${{ github.ref }}-${{ github.run_id }}
           restore-keys: |
-            coverage-cache-${{ github.ref }}-
-            coverage-cache-refs/heads/master-
+            coverage-counters-${{ github.ref }}-
+            coverage-counters-refs/heads/master-
 
-      # Cold start: warm the testcase store from the verify job's cache.
-      - name: Restore testcases (cold start)
-        if: steps.coverage-cache.outputs.cache-matched-key == ''
+      - name: Get library-checker-problems version
+        id: problems-version
+        run: |
+          echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+
+      # Restore-only: the verify job owns saving this cache.
+      - name: Restore testcases
         uses: actions/cache/restore@v6
         with:
           path: .competitive-verifier/cache
-          key: testcases-
+          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/*.test.cpp') }}
           restore-keys: |
+            testcases-${{ steps.problems-version.outputs.hash }}-
             testcases-
 
       - name: Check for previous result
@@ -223,25 +228,14 @@ jobs:
           prev-result: ${{ steps.prev-result.outputs.file }}
           timeout: 1800
 
-      - name: Save results for future runs
-        run: |
-          mkdir -p .cv-coverage-result
-          cp "${{ runner.temp }}/coverage-result.json" .cv-coverage-result/result.json
-
-      - name: Save coverage cache
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            .competitive-verifier/cache
-            .cv-coverage-result
-          key: coverage-cache-${{ github.ref }}-${{ github.run_id }}
-
       # Opt-in counter selection: stage only the .gcno/.gcda of solutions in
-      # the current result, so stale counters in the rolling cache (from
-      # removed or renamed files) can't leak into the report. Counter paths
-      # are constructed exactly (no globbing): gcc compiling `x.cpp` with
-      # `-o <dir>/a.out` writes `<dir>/a-x.gcno`/`.gcda`, and the binary dir
-      # comes from the manifest's verification command.
+      # the current result, so stale counters (from removed or renamed files)
+      # can't leak into the report. Counter paths are constructed exactly (no
+      # globbing): gcc compiling `x.cpp` with `-o <dir>/a.out` writes
+      # `<dir>/a-x.gcno`/`.gcda`, and the binary dir comes from the
+      # manifest's verification command. Freshly written counters win;
+      # solutions skipped via prev-result keep their restored staged
+      # counters. Staged files not in the current result are pruned.
       - name: Stage coverage counters
         run: |
           python3 - <<'EOF'
@@ -250,20 +244,41 @@ jobs:
           result_files = json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
           stage = pathlib.Path("coverage-counters")
           stage.mkdir(exist_ok=True)
-          staged = 0
+          fresh = kept = 0
+          expected: set[str] = set()
           for f in result_files:
               stem = pathlib.PurePosixPath(f).name.removesuffix(".cpp")
               for v in manifest.get(f, {}).get("verification", []):
                   bindir = pathlib.Path(v["command"]).parent
                   for ext in (".gcno", ".gcda"):
-                      p = bindir / f"a-{stem}{ext}"
+                      name = f"a-{stem}{ext}"
+                      expected.add(name)
+                      p = bindir / name
                       if p.exists():
-                          shutil.copy2(p, stage / p.name)
-                          staged += 1
+                          shutil.copy2(p, stage / name)
+                          fresh += 1
+                      elif (stage / name).exists():
+                          kept += 1
                       else:
                           print(f"::warning::missing counter file {p}")
-          print(f"staged {staged} counter files")
+          for p in stage.iterdir():
+              if p.name not in expected:
+                  p.unlink()
+          print(f"staged {fresh} fresh + {kept} kept counter files")
           EOF
+
+      - name: Save results for future runs
+        run: |
+          mkdir -p .cv-coverage-result
+          cp "${{ runner.temp }}/coverage-result.json" .cv-coverage-result/result.json
+
+      - name: Save coverage counters
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            coverage-counters
+            .cv-coverage-result
+          key: coverage-counters-${{ github.ref }}-${{ github.run_id }}
 
       - name: Install gcovr
         run: pipx install gcovr
