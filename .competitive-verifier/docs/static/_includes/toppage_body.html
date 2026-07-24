@@ -10,7 +10,7 @@ Overrides the competitive-verifier theme's toppage_body.html:
 {%- for category in top.categories -%}
 {%- assign category_name = category.name | remove_first: "src/" -%}
 {%- if category_name != "" -%}<h3>{{ category_name }}</h3>{%- endif -%}
-<ul>
+<ul class="index-files">
     {%- for item in category.pages -%}
     {%- assign name = item.path | remove_first: "src/" -%}
     {%- if item.title -%}
