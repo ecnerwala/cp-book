@@ -52,6 +52,10 @@ jobs:
         with:
           cache-pip: true
 
+      # Alias so the sanitizer environment gets a distinct name in results.
+      - name: Set up g++-sanitizer alias
+        run: sudo ln -sf "$(which g++)" /usr/local/bin/g++-sanitizer
+
       - name: oj-resolve
         uses: competitive-verifier/actions/oj-resolve@v2
         with:
@@ -125,6 +129,9 @@ jobs:
           if test -f .cv-prev-result/result.json; then
             echo "file=.cv-prev-result/result.json" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Set up g++-sanitizer alias
+        run: sudo ln -sf "$(which g++)" /usr/local/bin/g++-sanitizer
 
       - name: Verify
         uses: competitive-verifier/actions/verify@v2

@@ -22,7 +22,9 @@ programming reference library).
 cmake -B build && cmake --build build -j && ctest --test-dir build
 
 # Library Checker verification (note: oj-resolve only sees git-tracked files,
-# so `git add` new verify files first)
+# so `git add` new verify files first). The second (sanitizer) environment
+# uses a `g++-sanitizer` alias so results are distinguishable; create it with:
+#   sudo ln -sf "$(which g++)" /usr/local/bin/g++-sanitizer
 uvx competitive-verifier oj-resolve --include src verify --exclude third_party \
     --config .competitive-verifier/config.toml > verify_files.json
 uvx competitive-verifier verify --verify-json verify_files.json
