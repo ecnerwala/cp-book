@@ -16,23 +16,37 @@ names via -I src), including in the include directive.
 <h1>{{ site.icons[include.data.verificationStatus] }} {{ page_title | xml_escape }}</h1>
 {%- endif -%}
 
-<ul>
-    <li><a href="{{ site.github.repository_url }}/blob/{{ site.branch_name | default: "HEAD" }}/{{ site.basedir }}{{ include.data.path }}">View this file on GitHub</a></li>
-    {% if include.data.documentPath %}
-    <li><a href="{{ site.github.repository_url }}/blob/{{ site.branch_name | default: "HEAD" }}/{{ site.basedir }}{{ include.data.documentPath }}">View document part on GitHub</a></li>
-    {%- endif -%}
-    <li>Last update: {{ include.data.timestamp }}</li>
+<div class="page-meta">
+    <p class="page-meta-row">
+        <a href="{{ site.github.repository_url }}/blob/{{ site.branch_name | default: "HEAD" }}/{{ site.basedir }}{{ include.data.path }}">View this file on GitHub</a>
+        {%- if include.data.documentPath %}<span class="meta-sep">&middot;</span>
+        <a href="{{ site.github.repository_url }}/blob/{{ site.branch_name | default: "HEAD" }}/{{ site.basedir }}{{ include.data.documentPath }}">View document part on GitHub</a>{% endif %}
+        <span class="meta-sep">&middot;</span>
+        <span>Last update: {{ include.data.timestamp }}</span>
+        {%- if include.data.isFailed %}<span class="meta-sep">&middot;</span>
+        <a href="{{ site.github.repository_url }}/actions">{{ site.icons[include.data.verificationStatus] }} View error logs on GitHub Actions</a>{% endif %}
+    </p>
     {% if include.data.attributes.PROBLEM %}
-    <li>Problem: <a href="{{ include.data.attributes.PROBLEM }}">{{ include.data.attributes.PROBLEM | xml_escape }}</a></li>
+    <p class="page-meta-row">Problem: <a href="{{ include.data.attributes.PROBLEM }}">{{ include.data.attributes.PROBLEM | xml_escape }}</a></p>
     {%- endif -%}
-    {% if include.data.pathExtension == "hpp" %}<li><a id="include-directive-anchor">Include: <code id="include-directive-code">#include "{{ display_path }}"</code></a></li>{%- endif -%}
-    {% if include.data.isFailed %}<li>Link: <a href="{{ site.github.repository_url }}/actions">{{ site.icons[include.data.verificationStatus] }} View error logs on GitHub Actions</a></li>{%- endif -%}
+    {% if include.data.pathExtension == "hpp" %}
+    <p class="page-meta-row"><a id="include-directive-anchor">Include: <code id="include-directive-code">#include "{{ display_path }}"</code></a></p>
+    {%- endif -%}
+    {%- assign reference_links = "" | split: "" -%}
     {%- for link in include.data.attributes.links -%}
     {%- if link != include.data.attributes.PROBLEM -%}
-    <li>Link: <a href="{{ link | xml_escape }}">{{ link | xml_escape }}</a></li>
+    {%- assign reference_links = reference_links | push: link -%}
     {%- endif -%}
     {%- endfor -%}
-</ul>
+    {%- if reference_links.size >= 1 -%}
+    <p class="page-meta-row">References:</p>
+    <ul class="page-meta-links">
+    {%- for link in reference_links -%}
+        <li><a href="{{ link | xml_escape }}">{{ link | xml_escape }}</a></li>
+    {%- endfor -%}
+    </ul>
+    {%- endif -%}
+</div>
 
 {% if include.data.pathExtension == "hpp" %}
 <script defer type="text/javascript">

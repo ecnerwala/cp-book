@@ -6,7 +6,7 @@ names via -I src). Links keep the full path.
 {%- for dep in include.data.dependencies -%}
 {%- if dep.files.size != 0 -%}
 <h2>{{dep.type}}</h2>
-<ul>
+<ul class="index-files">
     {%- for item in dep.files -%}
     {%- assign name = item.path | remove_first: "src/" -%}
     {%- if item.title -%}

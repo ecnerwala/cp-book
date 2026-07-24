@@ -25,7 +25,7 @@ Overrides the competitive-verifier theme's toppage_body.html:
         {%- assign coverage_span = "" -%}
     {%- endif -%}
     {%- if top.type == "Library Files" and item.path contains ".test.cpp" -%}
-    <li><a href="{{ item.path | relative_url }}">🧪 {{ link_title | xml_escape }}</a>{{ coverage_span }}</li>
+    <li><a href="{{ item.path | relative_url }}">🧪 {{ link_title | xml_escape }}</a></li>
     {%- else -%}
     <li><a href="{{ item.path | relative_url }}">{{ site.icons[item.icon] }} {{ link_title | xml_escape }}</a>{{ coverage_span }}</li>
     {%- endif -%}
