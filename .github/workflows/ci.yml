@@ -238,23 +238,30 @@ jobs:
 
       # Opt-in counter selection: stage only the .gcno/.gcda of solutions in
       # the current result, so stale counters in the rolling cache (from
-      # removed or renamed files) can't leak into the report.
+      # removed or renamed files) can't leak into the report. Counter paths
+      # are constructed exactly (no globbing): gcc compiling `x.cpp` with
+      # `-o <dir>/a.out` writes `<dir>/a-x.gcno`/`.gcda`, and the binary dir
+      # comes from the manifest's verification command.
       - name: Stage coverage counters
         run: |
           python3 - <<'EOF'
           import json, pathlib, shutil
-          stems = {
-              pathlib.PurePosixPath(f).name.removesuffix(".cpp")
-              for f in json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
-          }
+          manifest = json.load(open("verify_files.json"))["files"]
+          result_files = json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
           stage = pathlib.Path("coverage-counters")
           stage.mkdir(exist_ok=True)
           staged = 0
-          for p in pathlib.Path(".competitive-verifier/cache").rglob("a-*.gc*"):
-              stem = p.name.removeprefix("a-").rsplit(".gc", 1)[0]
-              if stem in stems:
-                  shutil.copy2(p, stage / p.name)
-                  staged += 1
+          for f in result_files:
+              stem = pathlib.PurePosixPath(f).name.removesuffix(".cpp")
+              for v in manifest.get(f, {}).get("verification", []):
+                  bindir = pathlib.Path(v["command"]).parent
+                  for ext in (".gcno", ".gcda"):
+                      p = bindir / f"a-{stem}{ext}"
+                      if p.exists():
+                          shutil.copy2(p, stage / p.name)
+                          staged += 1
+                      else:
+                          print(f"::warning::missing counter file {p}")
           print(f"staged {staged} counter files")
           EOF
 
