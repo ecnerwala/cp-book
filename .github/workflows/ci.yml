@@ -85,10 +85,12 @@ jobs:
   verify:
     runs-on: ubuntu-26.04
     needs: [setup-verify]
+    env:
+      SPLIT_SIZE: 5
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4]
+        shard: [0, 1, 2, 3, 4]  # 0..SPLIT_SIZE-1
     steps:
       # Full history: the prev-results skip logic compares each file's
       # last-commit time (git log -1) against the previous run's timestamps.
@@ -141,23 +143,25 @@ jobs:
         with:
           destination: ${{ runner.temp }}/result.json
           prev-result: ${{ steps.prev-result.outputs.file }}
-          split-size: 5
+          split-size: ${{ env.SPLIT_SIZE }}
           split-index: ${{ matrix.shard }}
           timeout: 1800
 
       - name: Upload result artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Result-${{ runner.os }}-${{ matrix.shard }}
+          name: Result-${{ runner.os }}-${{ env.SPLIT_SIZE }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/result.json
           retention-days: 1
 
   coverage-verify:
     runs-on: ubuntu-26.04
+    env:
+      SPLIT_SIZE: 5
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2, 3, 4]
+        shard: [0, 1, 2, 3, 4]  # 0..SPLIT_SIZE-1
     steps:
       # Full history: the prev-results skip logic compares each file's
       # last-commit time (git log -1) against the previous run's timestamps.
@@ -183,10 +187,10 @@ jobs:
           path: |
             .competitive-verifier/cache
             .cv-coverage-result
-          key: coverage-cache-${{ github.ref }}-${{ matrix.shard }}-${{ github.run_id }}
+          key: coverage-cache-${{ github.ref }}-${{ env.SPLIT_SIZE }}-${{ matrix.shard }}-${{ github.run_id }}
           restore-keys: |
-            coverage-cache-${{ github.ref }}-${{ matrix.shard }}-
-            coverage-cache-refs/heads/master-${{ matrix.shard }}-
+            coverage-cache-${{ github.ref }}-${{ env.SPLIT_SIZE }}-${{ matrix.shard }}-
+            coverage-cache-refs/heads/master-${{ env.SPLIT_SIZE }}-${{ matrix.shard }}-
 
       # Cold start: warm the testcase store from the verify job's cache.
       - name: Restore testcases (cold start)
@@ -223,28 +227,31 @@ jobs:
           verify-files: verify_files.json
           destination: ${{ runner.temp }}/coverage-result.json
           prev-result: ${{ steps.prev-result.outputs.file }}
-          split-size: 5
+          split-size: ${{ env.SPLIT_SIZE }}
           split-index: ${{ matrix.shard }}
           timeout: 1800
 
-      # Drop counters of solutions outside this shard's current result
-      # (removed files, or files that moved to another shard), so stale
-      # .gcda/.gcno from the rolling cache can't leak into the report.
-      - name: Reconcile stale coverage counters
+      # Opt-in counter selection: stage only the .gcno/.gcda of solutions in
+      # this shard's current result, so stale counters in the rolling cache
+      # (removed files, or files that moved to another shard) can't leak
+      # into the report.
+      - name: Stage coverage counters
         run: |
           python3 - <<'EOF'
-          import json, pathlib
+          import json, pathlib, shutil
           stems = {
               pathlib.PurePosixPath(f).name.removesuffix(".cpp")
               for f in json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
           }
-          removed = 0
+          stage = pathlib.Path("coverage-counters")
+          stage.mkdir(exist_ok=True)
+          staged = 0
           for p in pathlib.Path(".competitive-verifier/cache").rglob("a-*.gc*"):
               stem = p.name.removeprefix("a-").rsplit(".gc", 1)[0]
-              if stem not in stems:
-                  p.unlink()
-                  removed += 1
-          print(f"removed {removed} stale counter files")
+              if stem in stems:
+                  shutil.copy2(p, stage / p.name)
+                  staged += 1
+          print(f"staged {staged} counter files")
           EOF
 
       - name: Save results for future runs
@@ -304,7 +311,7 @@ jobs:
       - name: Upload coverage tracefile
         uses: actions/upload-artifact@v7
         with:
-          name: CoverageTrace-verify-${{ matrix.shard }}
+          name: CoverageTrace-verify-${{ env.SPLIT_SIZE }}-${{ matrix.shard }}
           path: ${{ runner.temp }}/coverage-verify-${{ matrix.shard }}.json
           retention-days: 1
 
