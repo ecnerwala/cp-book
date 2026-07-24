@@ -36,6 +36,7 @@ jobs:
             verify
           exclude: |
             third_party
+            src/*.test.cpp
           config: .competitive-verifier/config.toml
 
       - name: Bundle with library include path
