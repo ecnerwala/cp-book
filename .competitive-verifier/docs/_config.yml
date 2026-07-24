@@ -1,5 +1,7 @@
 # Merged into the generated Jekyll _config.yml by competitive-verifier's
 # docs builder.
+title: "ecnerwala's CP Book"
+description: Reference code for competitive programming.
 # github-pages enables jekyll-titles-from-headings by default, which promotes
 # a page's first h1-h3 to its title (rendering it as the page heading instead
 # of the file path). The plugin has no h1-only setting, so disable it.

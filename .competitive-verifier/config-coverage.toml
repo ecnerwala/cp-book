@@ -5,4 +5,4 @@ read_macros = false
 
 [[languages.cpp.environments]]
 CXX = "g++"
-CXXFLAGS = ["-std=c++26", "-O2", "-g", "--coverage", "-I", "src"]
+CXXFLAGS = ["-std=c++26", "-O1", "-g", "--coverage", "-I", "src"]

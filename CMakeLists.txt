@@ -23,10 +23,12 @@ target_compile_features(cp-book INTERFACE cxx_std_26)
 target_compile_options(cp-book INTERFACE -O2 -Wall -Wextra -pedantic -Wshadow -Wformat=2 -Wfloat-equal -Wconversion -Wlogical-op -Wshift-overflow=2 -Wduplicated-cond -Wcast-qual -Wcast-align -Wno-unused-result -Wno-sign-conversion -g -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fstack-protector -D_FORTIFY_SOURCE=2)
 target_link_options(cp-book INTERFACE -O2 -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fstack-protector)
 
+# -O1 keeps line/branch data close to the source (gcovr's recommendation);
+# it is appended after -O2 above, and the last -O flag wins.
 option(ENABLE_COVERAGE "Enable code coverage instrumentation" OFF)
 if(ENABLE_COVERAGE)
-  target_compile_options(cp-book INTERFACE --coverage)
-  target_link_options(cp-book INTERFACE --coverage)
+  target_compile_options(cp-book INTERFACE --coverage -O1)
+  target_link_options(cp-book INTERFACE --coverage -O1)
 endif()
 
 add_executable(tests "${TEST_SRC_FILES}")

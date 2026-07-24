@@ -417,6 +417,10 @@ jobs:
           destination: _jekyll
           write-summary: true
 
+      # The front page (docs/index.md) renders the README via include_relative.
+      - name: Copy README into docs
+        run: cp README.md _jekyll/README.md
+
       - name: Install gcovr
         run: pipx install gcovr
 
