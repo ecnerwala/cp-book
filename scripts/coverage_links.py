@@ -52,7 +52,7 @@ def main() -> int:
         text = ", ".join(parts)
         body = f"[{text}]({link})" if link else text
         with page.open("a") as fp:
-            fp.write(f"\n## Coverage\n\n{body}\n")
+            fp.write(f"\n**Coverage:** {body}\n")
         count += 1
     print(f"coverage_links: annotated {count} pages", file=sys.stderr)
     return 0
