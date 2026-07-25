@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/staticrmq
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "rmq.hpp"
 

@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/convolution_mod
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "fft.hpp"
 
