@@ -161,9 +161,9 @@ def cmd_submissions(args: argparse.Namespace) -> None:
     print(f"count: {resp['count']}")
     for s in resp["submissions"]:
         print(
-            f"#{s['id']:>7}  {s['status']:>9}  {s.get('time', 0):7.3f}s"
-            f"  {s.get('memory', 0) / 2**20:8.1f}MiB  {s['submission_time']}"
-            f"  {s['problem_name']}"
+            f"#{s.get('id', 0):>7}  {s.get('status', '?'):>9}  {s.get('time', 0):7.3f}s"
+            f"  {s.get('memory', 0) / 2**20:8.1f}MiB  {s.get('submission_time', '-'):>27}"
+            f"  {s.get('problem_name', '?')}"
         )
 
 
@@ -191,7 +191,7 @@ def cmd_submit(args: argparse.Namespace) -> None:
     while True:
         time.sleep(2)
         info = api_get(f"/submissions/{sub_id}")["overview"]
-        status = info["status"]
+        status = info.get("status", "WJ")
         print(f"  {status}")
         if not PENDING_RE.match(status):
             print(
