@@ -6,17 +6,20 @@ import http.server
 import json
 from pathlib import Path
 import re
+from typing import Any
 
 import make_prob as make_prob_mod
 
 LISTEN_PORT = 10046
 
+ProblemData = dict[str, Any]
+
 # Returns unmarshalled or None
-def listen_once(*, timeout=None):
-    json_data = None
+def listen_once(*, timeout: float | None = None) -> ProblemData | None:
+    json_data: ProblemData | None = None
 
     class CompetitiveCompanionHandler(http.server.BaseHTTPRequestHandler):
-        def do_POST(self):
+        def do_POST(self) -> None:
             nonlocal json_data
             json_data = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
             self.send_response(200)
@@ -32,21 +35,28 @@ def listen_once(*, timeout=None):
         print("Got no data")
     return json_data
 
-def listen_many(*, num_items=None, num_batches=None, timeout=None):
+def listen_many(
+    *,
+    num_items: int | None = None,
+    num_batches: int | None = None,
+    timeout: float | None = None,
+) -> list[ProblemData]:
     if num_items is not None:
         res = []
         for _ in range(num_items):
             cur = listen_once(timeout=None)
+            assert cur is not None
             res.append(cur)
         return res
 
     if num_batches is not None:
         res = []
 
-        batches = {}
+        batches: dict[str, list[int]] = {}
         while len(batches) < num_batches or any(need for need, tot in batches.values()):
             print(f"Waiting for {num_batches} batches:", batches)
             cur = listen_once(timeout=None)
+            assert cur is not None
             res.append(cur)
 
             cur_batch = cur['batch']
@@ -59,7 +69,9 @@ def listen_many(*, num_items=None, num_batches=None, timeout=None):
 
         return res
 
-    res = [listen_once(timeout=None)]
+    first = listen_once(timeout=None)
+    assert first is not None
+    res = [first]
     while True:
         cnd = listen_once(timeout=timeout)
         if cnd is None:
@@ -69,15 +81,18 @@ def listen_many(*, num_items=None, num_batches=None, timeout=None):
 
 NAME_PATTERN = re.compile(r'^(?:Problem )?([A-Z][0-9]*)\b')
 
-def get_prob_name(data):
+def get_prob_name(data: ProblemData) -> str:
     if 'USACO' in data['group']:
         if 'fileName' in data['input']:
-            names = [data['input']['fileName'].removesuffix('.in'), data['output']['fileName'].removesuffix('.out')]
+            names: list[str] = [
+                str(data['input']['fileName']).removesuffix('.in'),
+                str(data['output']['fileName']).removesuffix('.out'),
+            ]
             if len(set(names)) == 1:
                 return names[0]
 
     if 'url' in data and data['url'].startswith('https://www.codechef.com'):
-        return data['url'].rstrip('/').rsplit('/')[-1]
+        return str(data['url']).rstrip('/').rsplit('/')[-1]
 
     patternMatch = NAME_PATTERN.search(data['name'])
     if patternMatch is not None:
@@ -86,7 +101,7 @@ def get_prob_name(data):
     print(f"For data: {json.dumps(data, indent=2)}")
     return input("What name to give? ")
 
-def save_samples(data, prob_dir):
+def save_samples(data: ProblemData, prob_dir: Path) -> None:
     with open(prob_dir / 'problem.json', 'w') as f:
         json.dump(data, f)
 
@@ -97,7 +112,7 @@ def save_samples(data, prob_dir):
             f.write(t['output'])
 
 # Providing name = '.'
-def make_prob(data, name=None):
+def make_prob(data: ProblemData, name: str | None = None) -> None:
     if name is None:
         name = get_prob_name(data)
 
@@ -120,7 +135,7 @@ def make_prob(data, name=None):
 
     print()
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         '--echo', action='store_true', help='just echo received responses and exit',
@@ -147,7 +162,7 @@ def main():
         while True:
             print(listen_once())
     else:
-        def run_make_prob(*fn_args, **fn_kwargs):
+        def run_make_prob(*fn_args: Any, **fn_kwargs: Any) -> None:
             if args.dryrun:
                 print(f"make_prob(*args={fn_args}, **kwargs={fn_kwargs})")
                 return

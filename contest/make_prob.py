@@ -27,9 +27,9 @@ TEMPLATE_DIR = '.template'
 PARENT_FILE = '__PARENT__'
 
 
-def find_template_dirs(start=None):
+def find_template_dirs(start: Path | None = None) -> list[Path]:
     """Return template dirs from shallowest to deepest."""
-    dirs = []
+    dirs: list[Path] = []
     cur = (Path.cwd() if start is None else Path(start)).resolve()
     while True:
         template = cur / TEMPLATE_DIR
@@ -43,12 +43,12 @@ def find_template_dirs(start=None):
     return list(reversed(dirs))
 
 
-def substitute(text, mapping):
+def substitute(text: str, mapping: dict[str, str]) -> str:
     pattern = r'__(%s)__' % '|'.join(map(re.escape, mapping))
     return re.sub(pattern, lambda m: mapping[m.group(1)], text)
 
 
-def instantiate(template_dirs, prob_dir, mapping):
+def instantiate(template_dirs: list[Path], prob_dir: Path, mapping: dict[str, str]) -> None:
     prob_dir.mkdir(parents=True)
     for template in template_dirs:
         for src in sorted(template.rglob('*')):
@@ -68,7 +68,7 @@ def instantiate(template_dirs, prob_dir, mapping):
                 shutil.copystat(src, dst)
 
 
-def make_prob(name):
+def make_prob(name: str) -> bool:
     prob_dir = Path(name)
     prob_name = prob_dir.name
 
@@ -94,9 +94,10 @@ def make_prob(name):
     return True
 
 
-def main():
+def main() -> None:
     args = sys.argv[1:]
     if not args or args[0] in ('-h', '--help'):
+        assert __doc__ is not None
         print(__doc__.strip(), file=sys.stderr)
         sys.exit(0 if args else 1)
     ok = True
