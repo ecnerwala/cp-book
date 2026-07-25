@@ -131,7 +131,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .competitive-verifier/cache
-          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/*.test.cpp') }}
+          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/**/*.test.cpp') }}
           restore-keys: |
             testcases-${{ steps.problems-version.outputs.hash }}-
             testcases-
@@ -227,7 +227,7 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: .competitive-verifier/cache
-          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/*.test.cpp') }}
+          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/**/*.test.cpp') }}
           restore-keys: |
             testcases-${{ steps.problems-version.outputs.hash }}-
             testcases-

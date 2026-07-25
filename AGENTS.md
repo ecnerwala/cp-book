@@ -9,7 +9,9 @@ programming reference library).
   (`src/*.test.cpp`). Headers are included with bare names (`#include
   "fft.hpp"`), resolved via `-I src`.
 - `verify/`: Library Checker (https://judge.yosupo.jp/) solutions, one
-  `<problem_slug>.test.cpp` per problem, verified by competitive-verifier.
+  `<category>/<problem_slug>.test.cpp` per problem (categories mirror the
+  library-checker-problems repo, e.g. `data_structure/`, `tree/`,
+  `polynomial/`), verified by competitive-verifier.
 - `scripts/bundle.py`: inlines library headers to produce a single
   submittable file (the docs site's bundled views come from oj-resolve's
   builtin bundling).
@@ -31,7 +33,7 @@ uvx competitive-verifier oj-resolve --include src verify --exclude third_party \
 uvx competitive-verifier verify --verify-json verify_files.json
 
 # Single-file submission with headers inlined
-scripts/bundle.py verify/convolution_mod.test.cpp > submission.cpp
+scripts/bundle.py verify/convolution/convolution_mod.test.cpp > submission.cpp
 ```
 
 Compile a single file: `g++ -std=c++26 -O2 -I src file.cpp`.
@@ -96,9 +98,11 @@ Match the existing code exactly. In particular:
 
 ## When adding a verify solution
 
-1. Create `verify/<problem_slug>.test.cpp` following the template above,
-   using book headers (don't vendor code into the file). If a problem can't
-   be solved with book code, flag it instead of adding standalone code.
+1. Create `verify/<category>/<problem_slug>.test.cpp` (matching the
+   problem's directory in library-checker-problems) following the template
+   above, using book headers (don't vendor code into the file). If a
+   problem can't be solved with book code, flag it instead of adding
+   standalone code.
 2. `git add` it, then run the verification commands above; all testcases
    must be AC locally before pushing.
 3. Keep the CI workflow (`.github/workflows/ci.yml`) and README in sync
