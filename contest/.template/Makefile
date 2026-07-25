@@ -4,10 +4,15 @@
 # |                    |
 # +--------------------+
 
-PROBLEM_NAME := $PROBLEM_NAME
+PROBLEM_NAME := __PROBLEM_NAME__
 DEBUG := true
 ALLOW_FAILS := false
 LANG := cpp
+RUN_TARGET := __run_default
+
+# Local config overrides (e.g. from a layered .template); optional.
+# Included before the config is used, so it can override LANG, DEBUG, flags.
+-include config.mk
 
 ifeq ($(LANG),cpp)
 TARGET := $(PROBLEM_NAME)
@@ -17,8 +22,8 @@ else ifeq ($(LANG),python)
 TARGET := $(PROBLEM_NAME).py
 EXECUTE := python3 ./$(TARGET)
 CLEAN_TARGETS :=
-else
-$(error "Unknown language; please set TARGET, EXECUTE, and CLEAN_TARGETS manually")
+else ifeq ($(TARGET),)
+$(error "Unknown LANG '$(LANG)'; set TARGET, EXECUTE, and CLEAN_TARGETS (e.g. in config.mk)")
 endif
 
 CXX := g++
@@ -95,12 +100,15 @@ $(PCH_ROOT)/%.gch/$(PCH_FILENAME):
 
 export TIME=\n  real\t%es\n  user\t%Us\n  sys\t%Ss\n  mem\t%MKB
 
-run: $(TARGET)
+run: $(RUN_TARGET)
+.PHONY: run
+
+__run_default: $(TARGET)
 	\time $(EXECUTE)
 ifeq ($(DEBUG),true)
 	@echo "Built with DEBUG flags enabled, code may be slower than normal"
 endif
-.PHONY: run
+.PHONY: __run_default
 
 %.res: $(TARGET) %.in
 	\time $(EXECUTE) < $*.in > $*.res
@@ -123,10 +131,15 @@ CASES := $(sort $(basename $(wildcard *.in)))
 TESTS := $(sort $(basename $(wildcard *.out)))
 
 runs: $(patsubst %,%.res,$(CASES))
-.PHONY: run
+.PHONY: runs
 
 solve: runs
 .PHONY: solve
 
 test: $(patsubst %,__test_%,$(TESTS))
 .PHONY: test
+
+
+# Local rule additions/overrides (e.g. from a layered .template); optional.
+# Included last so extra rules don't change the default goal.
+-include local.mk

@@ -35,6 +35,16 @@ uvx competitive-verifier oj-resolve --include src verify --exclude third_party \
 uvx competitive-verifier verify --verify-json verify_files.json
 ```
 
+## Contest tooling
+
+`contest/` holds standalone tooling for contests: a problem-directory
+template (Makefile with sanitizers and precompiled headers), a layered
+`.template` instantiator (`make_prob.py`), and a
+[Competitive Companion](https://github.com/jmerle/competitive-companion)
+listener (`download_prob.py`). See [contest/README.md](contest/README.md).
+Contest programs are standalone; vendor book code in as needed (e.g. with
+`scripts/bundle.py`).
+
 ## License and attribution
 
 All code is written by me and CC0 licensed unless otherwise noted in the
