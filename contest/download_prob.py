@@ -6,6 +6,7 @@ import http.server
 import json
 from pathlib import Path
 import re
+import sys
 from typing import Any
 
 import make_prob as make_prob_mod
@@ -166,7 +167,10 @@ def main() -> None:
             if args.dryrun:
                 print(f"make_prob(*args={fn_args}, **kwargs={fn_kwargs})")
                 return
-            make_prob(*fn_args, **fn_kwargs)
+            try:
+                make_prob(*fn_args, **fn_kwargs)
+            except Exception as e:
+                print(f"make_prob failed: {e!r}", file=sys.stderr)
 
         if args.names:
             datas = listen_many(num_items=len(args.names))
