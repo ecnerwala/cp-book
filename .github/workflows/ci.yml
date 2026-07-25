@@ -245,7 +245,7 @@ jobs:
       # Direct invocation (the verify action has no input for
       # --prev-result-mode). Hash mode skips solutions whose transitive
       # sources, verification commands and Library Checker test data are
-      # unchanged; failures surface in docs-and-check like the action's
+      # unchanged; failures surface in the check job like the action's
       # default check: false. --split shards the post-filter remaining
       # files across the matrix jobs.
       - name: Verify
@@ -592,7 +592,7 @@ jobs:
           path: ${{ runner.temp }}/coverage-unit-tests.json
           retention-days: 1
 
-  docs-and-check:
+  docs:
     runs-on: ubuntu-26.04
     needs: [verify-merge, coverage-verify-merge, coverage-unit-tests]
     permissions:
@@ -725,14 +725,35 @@ jobs:
         with:
           path: _site
 
+  # Turns verification failures into a red job. Separate from docs so a
+  # failing solution doesn't abort the docs/pages build.
+  check:
+    runs-on: ubuntu-26.04
+    needs: [verify-merge]
+    steps:
+      - name: Set up competitive-verifier
+        uses: competitive-verifier/actions/setup@v2
+        with:
+          # Fork with cp-book integration patches (content-hash skip, docs
+          # coverage integration, bundler include paths); see the branch's
+          # log vs upstream main.
+          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
+          cache-pip: true
+
+      - name: Download result
+        uses: actions/download-artifact@v7
+        with:
+          name: Result-${{ runner.os }}
+          path: .result
+
       - name: Check
         uses: competitive-verifier/actions/check@v2
         with:
-          verify-result: ${{ steps.all-artifacts.outputs.artifacts-root }}/Result-*/result.json
+          verify-result: .result/result.json
 
-  deploy:
-    if: (success() || failure()) && github.ref == 'refs/heads/master' && needs.docs-and-check.outputs.upload-pages == 'true'
-    needs: docs-and-check
+  deploy-docs:
+    if: (success() || failure()) && github.ref == 'refs/heads/master' && needs.docs.outputs.upload-pages == 'true'
+    needs: docs
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
