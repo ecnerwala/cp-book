@@ -2550,7 +2550,27 @@ struct poly_ap_values : public std::vector<typename E::value_type> {
 			return poly_ap_values(osz, T(0));
 		}
 
-		// just assume there's no overlap; TODO: Fix this
+		// Check for overlaps. We're checking in linear time to avoid unpacking T, but it should be plenty fast.
+		// If the field is very very small and we wrap around several times, our runtime can be bad...
+		// but then something has already gone wrong, why are you evaluating so many points???
+		for (int i = -(len() - 1); i <= osz - 1; i++) {
+			if (k+i == T(0)) {
+				// everything from [i,i+len()-1) of the output is a match
+				poly_ap_values res; res.reserve(osz);
+				int lo = std::max(0, i);
+				int hi = std::min(i+len(), osz);
+				{
+					auto pref = eval_range(k, lo);
+					res.insert(res.end(), pref.begin(), pref.end());
+				}
+				res.insert(res.end(), this->begin() + (lo - i), this->begin() + (hi - i));
+				{
+					auto suff = eval_range(k + hi, osz - hi);
+					res.insert(res.end(), suff.begin(), suff.end());
+				}
+				return res;
+			}
+		}
 
 		std::vector<T> inps(*this);
 		{

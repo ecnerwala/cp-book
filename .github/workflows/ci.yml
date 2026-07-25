@@ -104,9 +104,79 @@ jobs:
           path: .competitive-verifier/bundled
           retention-days: 1
 
+      - name: Get library-checker-problems version
+        id: problems-version
+        run: |
+          echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+
+      # Generate all testcases once and save them here; the verify and
+      # coverage-verify shards restore this cache read-only, so every shard
+      # (and both environments) sees identical test data.
+      - name: Cache testcases
+        uses: actions/cache@v6
+        with:
+          path: .competitive-verifier/cache
+          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/**/*.test.cpp') }}
+          restore-keys: |
+            testcases-${{ steps.problems-version.outputs.hash }}-
+            testcases-
+
+      - name: Generate testcases
+        run: competitive-verifier download --verify-json verify_files.json
+
+      # Snapshot the previous results once and hand them to the shards as an
+      # artifact: all shards then filter against the same previous results,
+      # so the builtin --split sharding partitions the remaining files
+      # consistently (each shard restoring caches itself could race with
+      # concurrent saves and disagree). Scheduled runs skip this so every
+      # solution is re-verified from scratch.
+      - name: Restore previous verify results
+        if: github.event_name != 'schedule'
+        uses: actions/cache/restore@v6
+        with:
+          path: .cv-prev-result
+          key: verify-result-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            verify-result-${{ github.ref }}-
+            verify-result-refs/heads/master-
+
+      - name: Restore previous coverage results
+        if: github.event_name != 'schedule'
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            coverage-counters
+            .cv-coverage-result
+          key: coverage-counters-${{ github.ref }}-${{ github.run_id }}
+          restore-keys: |
+            coverage-counters-${{ github.ref }}-
+            coverage-counters-refs/heads/master-
+
+      - name: Upload previous verify result
+        if: github.event_name != 'schedule'
+        uses: actions/upload-artifact@v7
+        with:
+          name: prev-verify-result
+          path: .cv-prev-result/result.json
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: Upload previous coverage result
+        if: github.event_name != 'schedule'
+        uses: actions/upload-artifact@v7
+        with:
+          name: prev-coverage-result
+          path: .cv-coverage-result/result.json
+          if-no-files-found: ignore
+          retention-days: 1
+
   verify:
     runs-on: ubuntu-26.04
     needs: [setup-verify]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@v7
 
@@ -127,8 +197,9 @@ jobs:
         run: |
           echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache testcases
-        uses: actions/cache@v6
+      # Restore-only: setup-verify owns generating and saving this cache.
+      - name: Restore testcases
+        uses: actions/cache/restore@v6
         with:
           path: .competitive-verifier/cache
           key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/**/*.test.cpp') }}
@@ -136,37 +207,76 @@ jobs:
             testcases-${{ steps.problems-version.outputs.hash }}-
             testcases-
 
-      - name: Restore previous results
-        uses: actions/cache/restore@v6
+      # continue-on-error: the artifact doesn't exist on scheduled runs or
+      # when setup-verify found no previous results.
+      - name: Download previous result
+        if: github.event_name != 'schedule'
+        continue-on-error: true
+        uses: actions/download-artifact@v7
         with:
-          path: .cv-prev-result
-          key: verify-result-${{ github.ref }}-${{ github.run_id }}
-          restore-keys: |
-            verify-result-${{ github.ref }}-
-            verify-result-refs/heads/master-
+          name: prev-verify-result
+          path: prev-result
 
       - name: Check for previous result
         id: prev-result
-        if: github.event_name != 'schedule'
         run: |
-          if test -f .cv-prev-result/result.json; then
-            echo "file=.cv-prev-result/result.json" >> "$GITHUB_OUTPUT"
+          if test -f prev-result/result.json; then
+            echo "file=prev-result/result.json" >> "$GITHUB_OUTPUT"
           fi
 
       # Direct invocation (the verify action has no input for
       # --prev-result-mode). Hash mode skips solutions whose transitive
       # sources, verification commands and Library Checker test data are
       # unchanged; failures surface in docs-and-check like the action's
-      # default check: false.
+      # default check: false. --split shards the post-filter remaining
+      # files across the matrix jobs.
       - name: Verify
         run: |
           competitive-verifier verify --check-error \
             --timeout 1800 \
             --prev-result-mode hash \
+            --split '${{ strategy.job-total }}' \
+            --split-index '${{ matrix.shard }}' \
             ${PREV_RESULT:+--prev-result "$PREV_RESULT"} \
             --output '${{ runner.temp }}/result.json' || true
         env:
           PREV_RESULT: ${{ steps.prev-result.outputs.file }}
+
+      - name: Upload shard result
+        uses: actions/upload-artifact@v7
+        with:
+          name: VerifyResult-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/result.json
+          retention-days: 1
+
+  verify-merge:
+    runs-on: ubuntu-26.04
+    needs: [verify]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up competitive-verifier
+        uses: competitive-verifier/actions/setup@v2
+        with:
+          # Fork with cp-book integration patches (content-hash skip, docs
+          # coverage integration, bundler include paths); see the branch's
+          # log vs upstream main.
+          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
+          cache-pip: true
+
+      - name: Download shard results
+        uses: actions/download-artifact@v7
+        with:
+          pattern: VerifyResult-shard-*
+          path: .shard-results
+
+      # Each shard's result carries fresh (newest: true) entries for the
+      # files it ran plus copies of the previous results for the rest;
+      # merge-result keeps the newest entry per file.
+      - name: Merge shard results
+        run: |
+          competitive-verifier merge-result .shard-results/VerifyResult-shard-*/result.json \
+            > '${{ runner.temp }}/result.json'
 
       - name: Save results for future runs
         run: |
@@ -189,6 +299,116 @@ jobs:
   coverage-verify:
     runs-on: ubuntu-26.04
     needs: [setup-verify]
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up competitive-verifier
+        uses: competitive-verifier/actions/setup@v2
+        with:
+          # Fork with cp-book integration patches (content-hash skip, docs
+          # coverage integration, bundler include paths); see the branch's
+          # log vs upstream main.
+          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
+          cache-pip: true
+
+      - name: Get library-checker-problems version
+        id: problems-version
+        run: |
+          echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+
+      # Restore-only: setup-verify owns generating and saving this cache.
+      - name: Restore testcases
+        uses: actions/cache/restore@v6
+        with:
+          path: .competitive-verifier/cache
+          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/**/*.test.cpp') }}
+          restore-keys: |
+            testcases-${{ steps.problems-version.outputs.hash }}-
+            testcases-
+
+      # continue-on-error: the artifact doesn't exist on scheduled runs or
+      # when setup-verify found no previous results.
+      - name: Download previous result
+        if: github.event_name != 'schedule'
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: prev-coverage-result
+          path: prev-result
+
+      - name: Check for previous result
+        id: prev-result
+        run: |
+          if test -f prev-result/result.json; then
+            echo "file=prev-result/result.json" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download verify_files-coverage.json
+        uses: actions/download-artifact@v7
+        with:
+          name: verify_files-coverage
+
+      - name: Run verify solutions with coverage
+        run: |
+          competitive-verifier verify --check-error \
+            --timeout 1800 \
+            --prev-result-mode hash \
+            --split '${{ strategy.job-total }}' \
+            --split-index '${{ matrix.shard }}' \
+            ${PREV_RESULT:+--prev-result "$PREV_RESULT"} \
+            --output '${{ runner.temp }}/coverage-result.json' || true
+        env:
+          PREV_RESULT: ${{ steps.prev-result.outputs.file }}
+          COMPETITIVE_VERIFY_FILES_PATH: verify_files-coverage.json
+
+      # Ship only this shard's freshly written counters (newest: true
+      # entries are the ones this shard actually ran); coverage-verify-merge
+      # overlays them onto the rolling staged-counter cache. Counter paths
+      # are constructed exactly (no globbing): gcc compiling `x.cpp` with
+      # `-o <dir>/a.out` writes `<dir>/a-x.gcno`/`.gcda`, and the binary
+      # dir comes from the manifest's verification command.
+      - name: Collect fresh coverage counters
+        run: |
+          python3 - <<'EOF'
+          import json, pathlib, shutil
+          manifest = json.load(open("verify_files-coverage.json"))["files"]
+          result_files = json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
+          out = pathlib.Path("shard-out/counters")
+          out.mkdir(parents=True, exist_ok=True)
+          fresh = 0
+          for f, r in result_files.items():
+              if not r.get("newest"):
+                  continue  # skipped via prev-result or run on another shard
+              stem = pathlib.PurePosixPath(f).name.removesuffix(".cpp")
+              for v in manifest.get(f, {}).get("verification", []):
+                  bindir = pathlib.Path(v["command"]).parent
+                  for ext in (".gcno", ".gcda"):
+                      p = bindir / f"a-{stem}{ext}"
+                      if p.exists():
+                          shutil.copy2(p, out / p.name)
+                          fresh += 1
+                      else:
+                          print(f"::warning::missing counter file {p}")
+          print(f"collected {fresh} fresh counter files")
+          EOF
+
+      - name: Copy result into shard output
+        run: cp "${{ runner.temp }}/coverage-result.json" shard-out/result.json
+
+      - name: Upload shard output
+        uses: actions/upload-artifact@v7
+        with:
+          name: CoverageShard-${{ matrix.shard }}
+          path: shard-out
+          retention-days: 1
+
+  coverage-verify-merge:
+    runs-on: ubuntu-26.04
+    needs: [coverage-verify]
     steps:
       - uses: actions/checkout@v7
 
@@ -204,8 +424,7 @@ jobs:
       # Slim rolling cache: only the staged counters of the previous run
       # plus the result.json used to skip unchanged solutions (a few MB).
       # Skipped solutions keep their previously staged counters; re-run
-      # solutions restage fresh ones. Testcases come from the verify job's
-      # shared content-keyed cache instead of being duplicated here.
+      # solutions get fresh ones from the shard artifacts.
       - name: Restore coverage counters
         uses: actions/cache/restore@v6
         with:
@@ -217,53 +436,30 @@ jobs:
             coverage-counters-${{ github.ref }}-
             coverage-counters-refs/heads/master-
 
-      - name: Get library-checker-problems version
-        id: problems-version
-        run: |
-          echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
-
-      # Restore-only: the verify job owns saving this cache.
-      - name: Restore testcases
-        uses: actions/cache/restore@v6
-        with:
-          path: .competitive-verifier/cache
-          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/**/*.test.cpp') }}
-          restore-keys: |
-            testcases-${{ steps.problems-version.outputs.hash }}-
-            testcases-
-
-      - name: Check for previous result
-        id: prev-result
-        if: github.event_name != 'schedule'
-        run: |
-          if test -f .cv-coverage-result/result.json; then
-            echo "file=.cv-coverage-result/result.json" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Download verify_files-coverage.json
         uses: actions/download-artifact@v7
         with:
           name: verify_files-coverage
 
-      - name: Run verify solutions with coverage
+      - name: Download shard outputs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: CoverageShard-*
+          path: .shards
+
+      # Each shard's result carries fresh (newest: true) entries for the
+      # files it ran plus copies of the previous results for the rest;
+      # merge-result keeps the newest entry per file.
+      - name: Merge shard results
         run: |
-          competitive-verifier verify --check-error \
-            --timeout 1800 \
-            --prev-result-mode hash \
-            ${PREV_RESULT:+--prev-result "$PREV_RESULT"} \
-            --output '${{ runner.temp }}/coverage-result.json' || true
-        env:
-          PREV_RESULT: ${{ steps.prev-result.outputs.file }}
-          COMPETITIVE_VERIFY_FILES_PATH: verify_files-coverage.json
+          competitive-verifier merge-result .shards/CoverageShard-*/result.json \
+            > '${{ runner.temp }}/coverage-result.json'
 
       # Opt-in counter selection: stage only the .gcno/.gcda of solutions in
-      # the current result, so stale counters (from removed or renamed files)
-      # can't leak into the report. Counter paths are constructed exactly (no
-      # globbing): gcc compiling `x.cpp` with `-o <dir>/a.out` writes
-      # `<dir>/a-x.gcno`/`.gcda`, and the binary dir comes from the
-      # manifest's verification command. Freshly written counters win;
-      # solutions skipped via prev-result keep their restored staged
-      # counters. Staged files not in the current result are pruned.
+      # the merged result, so stale counters (from removed or renamed files)
+      # can't leak into the report. Fresh shard counters win; solutions
+      # skipped via prev-result keep their restored staged counters. Staged
+      # files not in the current result are pruned.
       - name: Stage coverage counters
         run: |
           python3 - <<'EOF'
@@ -272,27 +468,28 @@ jobs:
           result_files = json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
           stage = pathlib.Path("coverage-counters")
           stage.mkdir(exist_ok=True)
-          fresh = kept = 0
+          fresh_names: set[str] = set()
+          for p in sorted(pathlib.Path(".shards").glob("CoverageShard-*/counters/*")):
+              shutil.copy2(p, stage / p.name)
+              fresh_names.add(p.name)
+          kept = 0
           expected: set[str] = set()
           for f in result_files:
               stem = pathlib.PurePosixPath(f).name.removesuffix(".cpp")
               for v in manifest.get(f, {}).get("verification", []):
-                  bindir = pathlib.Path(v["command"]).parent
                   for ext in (".gcno", ".gcda"):
                       name = f"a-{stem}{ext}"
                       expected.add(name)
-                      p = bindir / name
-                      if p.exists():
-                          shutil.copy2(p, stage / name)
-                          fresh += 1
-                      elif (stage / name).exists():
+                      if name in fresh_names:
+                          continue
+                      if (stage / name).exists():
                           kept += 1
                       else:
-                          print(f"::warning::missing counter file {p}")
+                          print(f"::warning::missing counter file {name}")
           for p in stage.iterdir():
               if p.name not in expected:
                   p.unlink()
-          print(f"staged {fresh} fresh + {kept} kept counter files")
+          print(f"staged {len(fresh_names)} fresh + {kept} kept counter files")
           EOF
 
       - name: Save results for future runs
@@ -384,7 +581,7 @@ jobs:
 
   docs-and-check:
     runs-on: ubuntu-26.04
-    needs: [verify, coverage-verify, coverage-unit-tests]
+    needs: [verify-merge, coverage-verify-merge, coverage-unit-tests]
     permissions:
       contents: read
       pages: write
