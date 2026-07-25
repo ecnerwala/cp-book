@@ -95,6 +95,10 @@ def get_prob_name(data: ProblemData) -> str:
     if 'url' in data and data['url'].startswith('https://www.codechef.com'):
         return str(data['url']).rstrip('/').rsplit('/')[-1]
 
+    LIBRARY_CHECKER_PREFIX = 'https://judge.yosupo.jp/problem/'
+    if 'url' in data and data['url'].startswith(LIBRARY_CHECKER_PREFIX):
+        return data['url'].rstrip('/').removeprefix(LIBRARY_CHECKER_PREFIX)
+
     patternMatch = NAME_PATTERN.search(data['name'])
     if patternMatch is not None:
         return patternMatch.group(1)
