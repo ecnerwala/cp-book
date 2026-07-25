@@ -419,7 +419,10 @@ jobs:
                   continue  # skipped via prev-result or run on another shard
               stem = pathlib.PurePosixPath(f).name.removesuffix(".cpp")
               for v in manifest.get(f, {}).get("verification", []):
-                  bindir = pathlib.Path(v["command"]).parent
+                  cmd = v.get("command")
+                  if cmd is None:
+                      continue  # const verification (e.g. IGNOREd file), no binary
+                  bindir = pathlib.Path(cmd).parent
                   for ext in (".gcno", ".gcda"):
                       p = bindir / f"a-{stem}{ext}"
                       if p.exists():
@@ -511,6 +514,8 @@ jobs:
           for f in result_files:
               stem = pathlib.PurePosixPath(f).name.removesuffix(".cpp")
               for v in manifest.get(f, {}).get("verification", []):
+                  if "command" not in v:
+                      continue  # const verification (e.g. IGNOREd file), no binary
                   for ext in (".gcno", ".gcda"):
                       name = f"a-{stem}{ext}"
                       expected.add(name)
