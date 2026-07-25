@@ -39,7 +39,6 @@ public:
 			nodes[cur].r = i-1;
 			nodes[cur].m = i-1;
 			nodes[cur].c = {-1, -1};
-			nodes[cur].p = -1;
 			while (!stk.empty() && (i == int(v.size()) || comp(v[i], v[nodes[stk.back()].m]))) {
 				int nxt = stk.back(); stk.pop_back();
 				nodes[cur].p = nxt;
@@ -57,6 +56,7 @@ public:
 			nodes[2*i+1].c[0] = cur;
 			stk.push_back(2*i+1);
 		}
+		nodes[root].p = -1;
 		return {std::move(nodes), root};
 	}
 
