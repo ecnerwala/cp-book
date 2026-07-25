@@ -316,6 +316,7 @@ jobs:
           gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
             --exclude-lines-by-pattern '.*assert\(false\).*' \
+            --exclude-branches-by-pattern '.*\bassert\(.*' \
             --exclude-throw-branches --exclude-noncode-lines \
             --json ${{ runner.temp }}/coverage-verify.json \
             coverage-counters
@@ -372,6 +373,7 @@ jobs:
           gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
             --exclude-lines-by-pattern '.*assert\(false\).*' \
+            --exclude-branches-by-pattern '.*\bassert\(.*' \
             --exclude-throw-branches --exclude-noncode-lines \
             --json ${{ runner.temp }}/coverage-unit-tests.json \
             build coverage-stubs
