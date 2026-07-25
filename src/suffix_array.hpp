@@ -466,13 +466,13 @@ private:
 
 class SuffixArrayRMQ : public SuffixArrayRMQBase<SuffixArrayRMQ> {};
 
-class PrefixArray : private SuffixArrayRMQ {
-	PrefixArray(const SuffixArrayRMQ& sa_) : SuffixArrayRMQ(sa_) {}
-	PrefixArray(SuffixArrayRMQ&& sa_) : SuffixArrayRMQ(std::move(sa_)) {}
+class PrefixArrayRMQ : private SuffixArrayRMQ {
+	PrefixArrayRMQ(const SuffixArrayRMQ& sa_) : SuffixArrayRMQ(sa_) {}
+	PrefixArrayRMQ(SuffixArrayRMQ&& sa_) : SuffixArrayRMQ(std::move(sa_)) {}
 public:
-	PrefixArray() {}
-	template <typename String> static PrefixArray construct_raw(const String& S, int sigma) {
-		return PrefixArray(SuffixArrayRMQ::construct_raw(String(S.rbegin(), S.rend()), sigma));
+	PrefixArrayRMQ() {}
+	template <typename String> static PrefixArrayRMQ construct_raw(const String& S, int sigma) {
+		return PrefixArrayRMQ(SuffixArrayRMQ::construct_raw(String(S.rbegin(), S.rend()), sigma));
 	}
 
 	// TODO: Fill in other constructors
