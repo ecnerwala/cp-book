@@ -132,11 +132,24 @@ jobs:
           EOF
           )" >> "$GITHUB_OUTPUT"
 
+      # An exact key hit means the saved entry was fully generated for this
+      # problem set + upstream version, so setup doesn't need the cache
+      # itself (only the shards do): check existence without downloading,
+      # and only restore + generate + save on a miss.
+      - name: Check testcases cache
+        id: testcases-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: .competitive-verifier/cache
+          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ steps.problems-set.outputs.hash }}
+          lookup-only: true
+
       # Generate all testcases once and save them here; the verify and
       # coverage-verify shards restore this cache read-only, so every shard
       # (and both environments) sees identical test data.
-      - name: Cache testcases
-        uses: actions/cache@v6
+      - name: Restore testcases
+        if: steps.testcases-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6
         with:
           path: .competitive-verifier/cache
           key: testcases-${{ steps.problems-version.outputs.hash }}-${{ steps.problems-set.outputs.hash }}
@@ -145,7 +158,15 @@ jobs:
             testcases-
 
       - name: Generate testcases
+        if: steps.testcases-cache.outputs.cache-hit != 'true'
         run: competitive-verifier download --verify-json verify_files.json
+
+      - name: Save testcases
+        if: steps.testcases-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .competitive-verifier/cache
+          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ steps.problems-set.outputs.hash }}
 
       # Snapshot the previous results once and hand them to the shards as an
       # artifact: all shards then filter against the same previous results,
