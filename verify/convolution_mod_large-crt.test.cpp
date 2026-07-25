@@ -1,3 +1,4 @@
+// competitive-verifier: IGNORE (the testcases are 5GB, too big for CI)
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/convolution_mod_large
 
 #include <bits/stdc++.h>
