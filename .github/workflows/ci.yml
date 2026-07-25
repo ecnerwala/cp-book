@@ -351,7 +351,8 @@ jobs:
 
       # Never-run instrumented stubs so untouched headers appear in coverage
       # denominators as 0% instead of being invisible (uninstantiated
-      # templates still can't be counted: they emit no code).
+      # templates emit no code even here; coverage_fill_missing.py fills
+      # those in later).
       - name: Instrument untouched headers
         run: |
           mkdir -p coverage-stubs
@@ -442,11 +443,15 @@ jobs:
             --print-summary
           cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
 
-      # Headers absent from the gcov data (template-only headers emit no code
-      # even in the instrumented stubs) get zero-coverage entries so the docs
-      # show them as 0% instead of omitting them. The badge/summary above stay
-      # based on real gcov data only.
-      - name: Add uncovered headers to coverage.json
+      # Code absent from the gcov data (uninstantiated templates emit no code
+      # even in the instrumented stubs) gets zero-coverage entries — both
+      # whole template-only headers and individual uninstantiated functions —
+      # so the docs show it as uncovered instead of omitting it. The
+      # badge/summary above stay based on real gcov data only.
+      - name: Install universal-ctags
+        run: sudo apt-get install -y universal-ctags
+
+      - name: Add uncovered code to coverage.json
         run: python3 scripts/coverage_fill_missing.py coverage/coverage.json
 
       # Run the docs CLI directly (rather than competitive-verifier/actions/docs)
