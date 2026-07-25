@@ -27,7 +27,7 @@ verified in CI with
 
 ```sh
 # Single submittable file with headers inlined
-scripts/bundle.py verify/convolution_mod.test.cpp > submission.cpp
+scripts/bundle.py verify/convolution/convolution_mod.test.cpp > submission.cpp
 
 # Run verification locally
 uvx competitive-verifier oj-resolve --include src verify --exclude third_party \
