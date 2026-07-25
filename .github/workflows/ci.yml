@@ -366,7 +366,7 @@ jobs:
           COMPETITIVE_VERIFY_FILES_PATH: verify_files-coverage.json
 
       # Ship only this shard's freshly written counters (newest: true
-      # entries are the ones this shard actually ran); coverage-merge
+      # entries are the ones this shard actually ran); coverage-verify-merge
       # overlays them onto the rolling staged-counter cache. Counter paths
       # are constructed exactly (no globbing): gcc compiling `x.cpp` with
       # `-o <dir>/a.out` writes `<dir>/a-x.gcno`/`.gcda`, and the binary
@@ -406,7 +406,7 @@ jobs:
           path: shard-out
           retention-days: 1
 
-  coverage-merge:
+  coverage-verify-merge:
     runs-on: ubuntu-26.04
     needs: [coverage-verify]
     steps:
@@ -581,7 +581,7 @@ jobs:
 
   docs-and-check:
     runs-on: ubuntu-26.04
-    needs: [verify-merge, coverage-merge, coverage-unit-tests]
+    needs: [verify-merge, coverage-verify-merge, coverage-unit-tests]
     permissions:
       contents: read
       pages: write
