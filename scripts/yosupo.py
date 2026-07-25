@@ -200,7 +200,7 @@ def source_freshness(
     for d in difflib.unified_diff(remote, local, n=0):
         added += d.startswith("+") and not d.startswith("+++")
         removed += d.startswith("-") and not d.startswith("---")
-    return yellow(f"differs from #{sub_id} ({green(f'+{added}')}{yellow('/')}{red(f'-{removed}')}{yellow(' lines)')}")
+    return yellow(f"differs from #{sub_id} (+{added}/-{removed} lines)")
 
 
 def cmd_login(args: argparse.Namespace) -> None:
