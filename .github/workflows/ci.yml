@@ -526,6 +526,7 @@ jobs:
           gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
             --exclude-lines-by-pattern '.*assert\(false\).*' \
+            --exclude-branches-by-pattern '.*\bassert\(.*' \
             --exclude-throw-branches --exclude-noncode-lines \
             --json ${{ runner.temp }}/coverage-verify.json \
             coverage-counters
@@ -561,7 +562,8 @@ jobs:
 
       # Never-run instrumented stubs so untouched headers appear in coverage
       # denominators as 0% instead of being invisible (uninstantiated
-      # templates still can't be counted: they emit no code).
+      # templates emit no code even here; coverage_fill_missing.py fills
+      # those in later).
       - name: Instrument untouched headers
         run: |
           mkdir -p coverage-stubs
@@ -581,6 +583,7 @@ jobs:
           gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
             --exclude-lines-by-pattern '.*assert\(false\).*' \
+            --exclude-branches-by-pattern '.*\bassert\(.*' \
             --exclude-throw-branches --exclude-noncode-lines \
             --json ${{ runner.temp }}/coverage-unit-tests.json \
             build coverage-stubs
@@ -639,25 +642,34 @@ jobs:
       - name: Install gcovr
         run: pipx install gcovr
 
+      - name: Install tree-sitter
+        run: pip install tree_sitter tree_sitter_cpp
+
       - name: Merge coverage reports
         run: |
           mkdir -p coverage
           gcovr --root . \
             --add-tracefile '${{ steps.all-artifacts.outputs.artifacts-root }}/CoverageTrace-*/coverage-*.json' \
+            --json coverage/coverage.json
+
+      # Code absent from the gcov data (uninstantiated templates emit no code
+      # even in the instrumented stubs) gets zero-coverage entries — both
+      # whole template-only headers and individual uninstantiated functions —
+      # so it counts as uncovered instead of being omitted. All reports below
+      # (docs, HTML, summary, badge) include these filled lines.
+      - name: Add uncovered code to coverage.json
+        run: python3 scripts/coverage_fill_missing.py coverage/coverage.json
+
+      - name: Generate coverage reports
+        run: |
+          gcovr --root . \
+            --add-tracefile coverage/coverage.json \
             --html-details coverage/index.html \
             --cobertura coverage/coverage.xml \
-            --json coverage/coverage.json \
             --markdown-summary coverage/summary.md \
             --json-summary coverage/summary.json \
             --print-summary
           cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
-
-      # Headers absent from the gcov data (template-only headers emit no code
-      # even in the instrumented stubs) get zero-coverage entries so the docs
-      # show them as 0% instead of omitting them. The badge/summary above stay
-      # based on real gcov data only.
-      - name: Add uncovered headers to coverage.json
-        run: python3 scripts/coverage_fill_missing.py coverage/coverage.json
 
       # Run the docs CLI directly (rather than competitive-verifier/actions/docs)
       # to pass --coverage-json, which renders per-page coverage summaries and
