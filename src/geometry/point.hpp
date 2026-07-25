@@ -82,16 +82,27 @@ public:
 	friend bool is_reflex(const Point& a, const Point& b) { auto c = cross(a,b); return c ? (c < 0) : (dot(a, b) < 0); }
 
 	// operator < (s,t) for angles in [base,base+2pi)
-	friend bool angle_less(const Point& base, const Point& s, const Point& t) {
+	friend bool angle_less_from(const Point& base, const Point& s, const Point& t) {
 		int r = is_reflex(base, s) - is_reflex(base, t);
 		return r ? (r < 0) : (0 < cross(s, t));
 	}
-
-	friend auto angle_cmp(const Point& base) {
-		return [base](const Point& s, const Point& t) { return angle_less(base, s, t); };
+	// operator < (s,t) for angles in (base,base+2pi]
+	friend bool angle_less_upto(const Point& base, const Point& s, const Point& t) {
+		int r = is_reflex(t, base) - is_reflex(s, base);
+		return r ? (r < 0) : (0 < cross(s, t));
 	}
-	friend auto angle_cmp_center(const Point& center, const Point& dir) {
-		return [center, dir](const Point& s, const Point& t) -> bool { return angle_less(dir, s-center, t-center); };
+
+	friend auto angle_cmp_from(const Point& base) {
+		return [base](const Point& s, const Point& t) { return angle_less_from(base, s, t); };
+	}
+	friend auto angle_cmp_upto(const Point& base) {
+		return [base](const Point& s, const Point& t) { return angle_less_upto(base, s, t); };
+	}
+	friend auto angle_cmp_center_from(const Point& center, const Point& dir) {
+		return [center, dir](const Point& s, const Point& t) -> bool { return angle_less_from(dir, s-center, t-center); };
+	}
+	friend auto angle_cmp_center_upto(const Point& center, const Point& dir) {
+		return [center, dir](const Point& s, const Point& t) -> bool { return angle_less_upto(dir, s-center, t-center); };
 	}
 
 	// is p in [s,t] taken ccw? 1/0/-1 for in/border/out
