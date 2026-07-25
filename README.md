@@ -38,6 +38,7 @@ uvx competitive-verifier verify --verify-json verify_files.json
 # list submissions, and submit bundled solutions
 scripts/yosupo.py login
 scripts/yosupo.py status --compare   # also diff local bundles vs. your AC submissions
+scripts/yosupo.py table --todo       # all judge problems by category, unsolved ones
 scripts/yosupo.py diff verify/convolution_mod.test.cpp
 scripts/yosupo.py submissions --problem convolution_mod
 scripts/yosupo.py submit verify/convolution_mod.test.cpp --wait

@@ -194,6 +194,32 @@ def cmd_status(args: argparse.Namespace) -> None:
             print(f"{solved[slug]:>9}  {slug}")
 
 
+def cmd_table(args: argparse.Namespace) -> None:
+    user = args.user or default_user()
+    if not user:
+        raise SystemExit("Pass --user or run `scripts/yosupo.py login` first.")
+    solved: dict[str, str] = api_get(f"/users/{user}/statistics")["solved_map"]
+    categories = api_get("/categories")["categories"]
+    local = local_problems()
+
+    for cat in categories:
+        rows = []
+        for slug in cat["problems"]:
+            paths = local.get(slug, [])
+            judge = solved.get(slug, "")
+            if args.todo and paths and judge:
+                continue
+            files = ", ".join(str(p) for p in paths)
+            rows.append((slug, "x" if paths else "", judge, files))
+        if not rows:
+            continue
+        print(f"\n## {cat['title']}")
+        width = max(len(r[0]) for r in rows)
+        print(f"{'problem':<{width}}  local  judge      file")
+        for slug, has_local, judge, files in rows:
+            print(f"{slug:<{width}}  {has_local:<5}  {judge:<9}  {files}")
+
+
 def cmd_diff(args: argparse.Namespace) -> None:
     path = args.path.resolve()
     m = PROBLEM_RE.search(path.read_text())
@@ -289,6 +315,11 @@ def main() -> None:
     )
     p.add_argument("--depth", type=int, default=5, help="how many recent ACs to compare against (default 5)")
     p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("table", help="all judge problems by category, with local/judge solved status")
+    p.add_argument("--user")
+    p.add_argument("--todo", action="store_true", help="only show problems missing a local file or a judge AC")
+    p.set_defaults(func=cmd_table)
 
     p = sub.add_parser("diff", help="diff a local bundle against your latest AC submission")
     p.add_argument("path", type=pathlib.Path)

@@ -15,7 +15,8 @@ programming reference library).
   builtin bundling).
 - `scripts/yosupo.py`: Library Checker judge helpers — `status` (compare
   verify/ files against judge AC status; `--compare` also diffs local
-  bundles against recent AC submission sources), `diff`, `submissions`,
+  bundles against recent AC submission sources), `table` (all judge
+  problems by category with local/judge solved status), `diff`, `submissions`,
   and `submit` (bundle and post a solution; requires `login` once).
 - `.competitive-verifier/config.toml`: compiler settings for verification
   (g++, `-std=c++26`, `-I src`, `read_macros = false`).
