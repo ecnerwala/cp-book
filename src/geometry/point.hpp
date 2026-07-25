@@ -108,6 +108,6 @@ public:
 	// is p in [s,t] taken ccw? 1/0/-1 for in/border/out
 	friend int angle_between(const Point& s, const Point& t, const Point& p) {
 		if (same_dir(p, s) || same_dir(p, t)) return 0;
-		return angle_less(s, p, t) ? 1 : -1;
+		return angle_less_from(s, p, t) ? 1 : -1;
 	}
 };
