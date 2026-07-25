@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/multipoint_evaluation
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "fft.hpp"
 

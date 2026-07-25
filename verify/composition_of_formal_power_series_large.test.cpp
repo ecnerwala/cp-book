@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/composition_of_formal_power_series_large
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "fft.hpp"
 

@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/suffixarray
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "suffix_array.hpp"
 

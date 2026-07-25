@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/lca
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "static_tree.hpp"
 

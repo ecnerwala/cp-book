@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/range_affine_point_get
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "seg_tree.hpp"
 #include "modnum.hpp"

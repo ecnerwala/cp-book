@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/jump_on_tree
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "level_ancestor.hpp"
 
