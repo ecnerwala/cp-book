@@ -48,6 +48,8 @@ jobs:
 
   setup-verify:
     runs-on: ubuntu-26.04
+    outputs:
+      testcases-key: testcases-${{ steps.problems-version.outputs.hash }}-${{ steps.problems-set.outputs.hash }}
     steps:
       - uses: actions/checkout@v7
 
@@ -109,6 +111,27 @@ jobs:
         run: |
           echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
 
+      # Key on the set of referenced problem URLs, not solution contents:
+      # cache entries are immutable, so a fresh (multi-GB) entry should only
+      # be saved when the test data can actually differ — a problem is added
+      # or upstream library-checker-problems changes — not on every edit to
+      # a verify solution.
+      - name: Compute problem-set hash
+        id: problems-set
+        run: |
+          echo "hash=$(python3 - <<'EOF'
+          import hashlib, json
+          files = json.load(open("verify_files.json"))["files"]
+          urls = sorted({
+              v["problem"]
+              for f in files.values()
+              for v in f.get("verification", [])
+              if "problem" in v
+          })
+          print(hashlib.sha256("\n".join(urls).encode()).hexdigest())
+          EOF
+          )" >> "$GITHUB_OUTPUT"
+
       # Generate all testcases once and save them here; the verify and
       # coverage-verify shards restore this cache read-only, so every shard
       # (and both environments) sees identical test data.
@@ -116,7 +139,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .competitive-verifier/cache
-          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/**/*.test.cpp') }}
+          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ steps.problems-set.outputs.hash }}
           restore-keys: |
             testcases-${{ steps.problems-version.outputs.hash }}-
             testcases-
@@ -192,19 +215,14 @@ jobs:
           package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
           cache-pip: true
 
-      - name: Get library-checker-problems version
-        id: problems-version
-        run: |
-          echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
-
-      # Restore-only: setup-verify owns generating and saving this cache.
+      # Restore-only: setup-verify owns generating and saving this cache,
+      # and exports the exact key it saved under.
       - name: Restore testcases
         uses: actions/cache/restore@v6
         with:
           path: .competitive-verifier/cache
-          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/**/*.test.cpp') }}
+          key: ${{ needs.setup-verify.outputs.testcases-key }}
           restore-keys: |
-            testcases-${{ steps.problems-version.outputs.hash }}-
             testcases-
 
       # continue-on-error: the artifact doesn't exist on scheduled runs or
@@ -315,19 +333,19 @@ jobs:
           package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
           cache-pip: true
 
-      - name: Get library-checker-problems version
-        id: problems-version
-        run: |
-          echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
+      - name: Download verify_files-coverage.json
+        uses: actions/download-artifact@v7
+        with:
+          name: verify_files-coverage
 
-      # Restore-only: setup-verify owns generating and saving this cache.
+      # Restore-only: setup-verify owns generating and saving this cache,
+      # and exports the exact key it saved under.
       - name: Restore testcases
         uses: actions/cache/restore@v6
         with:
           path: .competitive-verifier/cache
-          key: testcases-${{ steps.problems-version.outputs.hash }}-${{ hashFiles('verify/**/*.test.cpp') }}
+          key: ${{ needs.setup-verify.outputs.testcases-key }}
           restore-keys: |
-            testcases-${{ steps.problems-version.outputs.hash }}-
             testcases-
 
       # continue-on-error: the artifact doesn't exist on scheduled runs or
@@ -346,11 +364,6 @@ jobs:
           if test -f prev-result/result.json; then
             echo "file=prev-result/result.json" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Download verify_files-coverage.json
-        uses: actions/download-artifact@v7
-        with:
-          name: verify_files-coverage
 
       - name: Run verify solutions with coverage
         run: |
