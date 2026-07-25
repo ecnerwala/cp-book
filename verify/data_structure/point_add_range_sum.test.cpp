@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/point_add_range_sum
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "seg_tree.hpp"
 

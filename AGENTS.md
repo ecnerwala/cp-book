@@ -52,6 +52,7 @@ Match the existing code exactly. In particular:
   // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/<slug>
 
   #include <bits/stdc++.h>
+  #include <cassert>
 
   #include "some_header.hpp"
 
@@ -64,8 +65,11 @@ Match the existing code exactly. In particular:
   }
   ```
 
-  - Start with `#include <bits/stdc++.h>`, then a blank line, then the
-    library includes (bare names, never `../src/...`).
+  - Start with `#include <bits/stdc++.h>`, then `#include <cassert>`, then a
+    blank line, then the library includes (bare names, never `../src/...`).
+  - Always include `<cassert>` right after `<bits/stdc++.h>`, for
+    consistency: it is not included in `<bits/stdc++.h>` in recent versions
+    of g++, and ecnerwala loves `assert()`s.
   - Use the `// competitive-verifier: PROBLEM <url>` comment form, not
     `#define PROBLEM`.
 - **Capitalize input variables** (`N`, `Q`, `A`, `B`, `S`, `F`, `G`...);

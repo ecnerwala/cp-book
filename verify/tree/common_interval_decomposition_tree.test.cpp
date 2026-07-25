@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/common_interval_decomposition_tree
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "perm_tree.hpp"
 

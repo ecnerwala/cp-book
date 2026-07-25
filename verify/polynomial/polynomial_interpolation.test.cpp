@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/polynomial_interpolation
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "fft.hpp"
 

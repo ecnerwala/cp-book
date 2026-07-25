@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/point_set_range_composite
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "seg_tree.hpp"
 #include "modnum.hpp"

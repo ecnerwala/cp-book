@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/dirichlet_inverse_and_prefix_sums
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "dirichlet_series.hpp"
 #include "modnum.hpp"

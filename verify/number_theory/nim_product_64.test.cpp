@@ -1,6 +1,7 @@
 // competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/nim_product_64
 
 #include <bits/stdc++.h>
+#include <cassert>
 
 #include "nim_prod.hpp"
 
