@@ -96,10 +96,13 @@ def make_prob(name: str) -> bool:
 
 def main() -> None:
     args = sys.argv[1:]
-    if not args or args[0] in ('-h', '--help'):
+    if args and args[0] in ('-h', '--help'):
         assert __doc__ is not None
-        print(__doc__.strip(), file=sys.stderr)
-        sys.exit(0 if args else 1)
+        print(__doc__.strip())
+        sys.exit(0)
+    if not args:
+        print("usage: make_prob.py <name>...", file=sys.stderr)
+        sys.exit(1)
     ok = True
     for name in args:
         ok &= make_prob(name)
