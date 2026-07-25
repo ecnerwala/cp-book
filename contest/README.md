@@ -51,7 +51,9 @@ customization:
 
 For sub-file customization of the Makefile, deeper `.template`s can ship two
 optional hook files that the base Makefile `-include`s: `config.mk` (included
-first; override `LANG`, `DEBUG`, flags) and `local.mk` (included last; add or
+first; override `LANG`, `DEBUG`, flags — e.g. `EXTRA_CXXFLAGS := -I ...` is
+appended to `CXXFLAGS`, and a later `-std=` there overrides the default) and
+`local.mk` (included last; add or
 override rules without changing the default goal). For custom languages, set
 `TARGET`, `EXECUTE`, and `CLEAN_TARGETS` in `config.mk` and provide the build
 rule in `local.mk`; to change what `make run` does, point `RUN_TARGET` at your
