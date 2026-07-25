@@ -20,6 +20,7 @@ import concurrent.futures
 import difflib
 import getpass
 import json
+import os
 import pathlib
 import re
 import sys
@@ -41,6 +42,56 @@ DEFAULT_USER = "ecnerwala"
 PROBLEM_RE = re.compile(
     r"competitive-verifier:\s*PROBLEM\s+https://judge\.yosupo\.jp/problem/(\S+)"
 )
+
+USE_COLOR = bool(os.environ.get("FORCE_COLOR")) or (
+    sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+)
+
+
+def sgr(code: str, text: str) -> str:
+    return f"\033[{code}m{text}\033[0m" if USE_COLOR and text else text
+
+
+def green(text: str) -> str:
+    return sgr("32", text)
+
+
+def yellow(text: str) -> str:
+    return sgr("33", text)
+
+
+def red(text: str) -> str:
+    return sgr("31", text)
+
+
+def dim(text: str) -> str:
+    return sgr("2", text)
+
+
+def bold(text: str) -> str:
+    return sgr("1", text)
+
+
+def pad(text: str, width: int) -> str:
+    """Left-justify by visible width (ignoring SGR escapes)."""
+    visible = len(re.sub(r"\033\[[0-9;]*m", "", text))
+    return text + " " * max(0, width - visible)
+
+
+def judge_str(status: str) -> str:
+    if status == "LATEST_AC":
+        return green("LATEST_AC")
+    if status == "AC":
+        return yellow("AC")
+    return dim(status or "--")
+
+
+def status_str(status: str) -> str:
+    if status == "AC":
+        return green(status)
+    if PENDING_RE.match(status):
+        return yellow(status)
+    return red(status)
 
 
 def http_json(
@@ -140,16 +191,16 @@ def source_freshness(
     local = normalize_source(bundle_mod.bundle(ROOT / path).decode())
     subs = ac_sources(user, slug, limit)
     if not subs:
-        return "no AC submissions"
+        return dim("no AC submissions")
     for sub_id, remote in subs:
         if remote == local:
-            return f"up-to-date (matches #{sub_id})"
+            return green(f"up-to-date (matches #{sub_id})")
     sub_id, remote = subs[0]
     added = removed = 0
     for d in difflib.unified_diff(remote, local, n=0):
         added += d.startswith("+") and not d.startswith("+++")
         removed += d.startswith("-") and not d.startswith("---")
-    return f"differs from #{sub_id} (+{added}/-{removed} lines)"
+    return yellow(f"differs from #{sub_id} ({green(f'+{added}')}{yellow('/')}{red(f'-{removed}')}{yellow(' lines)')}")
 
 
 def cmd_login(args: argparse.Namespace) -> None:
@@ -178,19 +229,20 @@ def cmd_status(args: argparse.Namespace) -> None:
     local = local_problems()
 
     nfiles = sum(len(v) for v in local.values())
-    print(f"== verify/ files ({nfiles}) vs. judge status for {user} ==")
+    print(bold(f"== verify/ files ({nfiles}) vs. judge status for {user} =="))
+    width = max((len(s) for s in local), default=0)
     for slug, paths in local.items():
         for path in paths:
-            line = f"{solved.get(slug, '--'):>9}  {slug}  ({path})"
+            line = f"{pad(judge_str(solved.get(slug, '')), 9)}  {pad(slug, width)}  {dim(str(path))}"
             if args.compare and slug in solved:
-                line += f"  [{source_freshness(path, user, slug, args.depth)}]"
+                line += f"  {source_freshness(path, user, slug, args.depth)}"
             print(line)
 
     extra = sorted(set(solved) - set(local))
     if extra and not args.local_only:
-        print(f"\n== solved on judge but no verify/ file ({len(extra)}) ==")
+        print(bold(f"\n== solved on judge but no verify/ file ({len(extra)}) =="))
         for slug in extra:
-            print(f"{solved[slug]:>9}  {slug}")
+            print(f"{pad(judge_str(solved[slug]), 9)}  {slug}")
 
 
 def cmd_table(args: argparse.Namespace) -> None:
@@ -206,15 +258,16 @@ def cmd_table(args: argparse.Namespace) -> None:
             judge = solved.get(slug, "")
             if args.todo and paths and judge:
                 continue
-            files = ", ".join(str(p) for p in paths)
-            rows.append((slug, "x" if paths else "", judge, files))
+            files = dim(", ".join(str(p) for p in paths))
+            rows.append((slug, green("\u2713") if paths else dim("\u00b7"), judge_str(judge), files))
         if not rows:
             continue
-        print(f"\n## {cat['title']}")
+        print()
+        print(bold(f"## {cat['title']}"))
         width = max(len(r[0]) for r in rows)
-        print(f"{'problem':<{width}}  local  judge      file")
+        print(dim(f"{'problem':<{width}}  local  judge      file"))
         for slug, has_local, judge, files in rows:
-            print(f"{slug:<{width}}  {has_local:<5}  {judge:<9}  {files}")
+            print(f"{slug:<{width}}  {pad(has_local, 5)}  {pad(judge, 9)}  {files}")
 
 
 def cmd_diff(args: argparse.Namespace) -> None:
@@ -236,7 +289,14 @@ def cmd_diff(args: argparse.Namespace) -> None:
     for line in difflib.unified_diff(
         remote, local, f"submission #{sub_id}", str(args.path), lineterm=""
     ):
-        print(line)
+        if line.startswith("+"):
+            print(green(line))
+        elif line.startswith("-"):
+            print(red(line))
+        elif line.startswith("@@"):
+            print(yellow(line))
+        else:
+            print(line)
 
 
 def cmd_submissions(args: argparse.Namespace) -> None:
@@ -245,11 +305,13 @@ def cmd_submissions(args: argparse.Namespace) -> None:
         "/submissions",
         params={"user": user, "problem": args.problem, "limit": args.limit, "skip": args.skip},
     )
-    print(f"count: {resp['count']}")
+    print(dim(f"count: {resp['count']}"))
     for s in resp["submissions"]:
+        status = s.get("status", "?")
+        when = f"{s.get('submission_time', '-'):>27}"
         print(
-            f"#{s.get('id', 0):>7}  {s.get('status', '?'):>9}  {s.get('time', 0):7.3f}s"
-            f"  {s.get('memory', 0) / 2**20:8.1f}MiB  {s.get('submission_time', '-'):>27}"
+            f"#{s.get('id', 0):>7}  {pad(status_str(status), 9)}  {s.get('time', 0):7.3f}s"
+            f"  {s.get('memory', 0) / 2**20:8.1f}MiB  {dim(when)}"
             f"  {s.get('problem_name', '?')}"
         )
 
@@ -279,7 +341,7 @@ def cmd_submit(args: argparse.Namespace) -> None:
         time.sleep(2)
         info = api_get(f"/submissions/{sub_id}")["overview"]
         status = info.get("status", "WJ")
-        print(f"  {status}")
+        print(f"  {status_str(status)}")
         if not PENDING_RE.match(status):
             print(
                 f"{status}: {info.get('time', 0):.3f}s,"
