@@ -450,8 +450,8 @@ jobs:
       # whole template-only headers and individual uninstantiated functions —
       # so the docs show it as uncovered instead of omitting it. The
       # badge/summary above stay based on real gcov data only.
-      - name: Install universal-ctags
-        run: sudo apt-get install -y universal-ctags
+      - name: Install tree-sitter
+        run: pip install tree_sitter tree_sitter_cpp
 
       - name: Add uncovered code to coverage.json
         run: python3 scripts/coverage_fill_missing.py coverage/coverage.json
