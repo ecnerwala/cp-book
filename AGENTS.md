@@ -64,6 +64,8 @@ Match the existing code exactly. In particular:
 
   - Start with `#include <bits/stdc++.h>`, then a blank line, then the
     library includes (bare names, never `../src/...`).
+  - `<cassert>` is not included in `<bits/stdc++.h>` in recent versions of
+    g++, so include it explicitly if you use `assert`.
   - Use the `// competitive-verifier: PROBLEM <url>` comment form, not
     `#define PROBLEM`.
 - **Capitalize input variables** (`N`, `Q`, `A`, `B`, `S`, `F`, `G`...);
