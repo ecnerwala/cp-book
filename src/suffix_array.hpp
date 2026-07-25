@@ -15,32 +15,27 @@
 
 template<class T> int sz(T&& arg) { using std::size; return int(size(std::forward<T>(arg))); }
 
-class SuffixArray {
+// Layered suffix array: SuffixArrayBase computes just sa/rank, each further
+// layer statically opts into one more derived structure. Use the leaf classes
+// SuffixArray, SuffixArrayLCP, or SuffixArrayRMQ; the named constructors on
+// each return that type.
+template <typename Self> class SuffixArrayBase {
 public:
 	using index_t = int;
 	int N;
 	std::vector<index_t> sa;
 	std::vector<index_t> rank;
-	// lcp[i] = get_lcp(sa[i], sa[i+1])
-	std::vector<index_t> lcp;
-	RangeMinQuery<std::pair<index_t, index_t>> rmq;
 
-	SuffixArray() {}
+	SuffixArrayBase() : N(0) {}
 
-	template <typename String> static SuffixArray construct_raw(const String& S, index_t sigma) {
-		int N = sz(S);
-		SuffixArray sa(N);
-
-		sa.build_sa(S, sigma);
-		sa.build_rank();
-		sa.build_lcp(S);
-		sa.build_rmq();
-
-		return sa;
+	template <typename String> static Self construct_raw(const String& S, index_t sigma) {
+		Self res;
+		res.build(S, sigma);
+		return res;
 	}
 
 	// Pass a function which returns a value in [0, sigma)
-	template <typename String, typename F> static SuffixArray map_and_construct(const String& S, const F& f, int sigma) {
+	template <typename String, typename F> static Self map_and_construct(const String& S, const F& f, int sigma) {
 		std::vector<decltype((f(S[0])))> mapped(sz(S));
 		for (int i = 0; i < sz(S); i++) {
 			mapped[i] = f(S[i]);
@@ -50,7 +45,7 @@ public:
 	}
 
 	// Sorts the elements of S and then runs suffix array. This takes O(N log N) time with no dependence on sigma.
-	template <typename String> static SuffixArray sort_and_construct(const String& S) {
+	template <typename String> static Self sort_and_construct(const String& S) {
 		using std::begin;
 		using std::end;
 		using value_type = typename std::iterator_traits<decltype(begin(S))>::value_type;
@@ -77,7 +72,7 @@ public:
 	}
 
 	// Shifts the elements so that sigma = max(S) - min(S) + 1
-	template <typename String> static SuffixArray shift_and_construct(const String& S) {
+	template <typename String> static Self shift_and_construct(const String& S) {
 		using std::begin;
 		using std::end;
 		using value_type = typename std::iterator_traits<decltype(begin(S))>::value_type;
@@ -103,7 +98,7 @@ public:
 
 	// Renumber/filter to only the used elements with bucket sorting. Still takes O(max(S) - min(S) + 1) memory/time,
 	// but should be less memory than `shift_and_construct` when sigma ~ N and max(S) - min(S) + 1 > N.
-	template <typename String> static SuffixArray bucket_and_construct(const String& S) {
+	template <typename String> static Self bucket_and_construct(const String& S) {
 		using std::begin;
 		using std::end;
 		using value_type = typename std::iterator_traits<decltype(begin(S))>::value_type;
@@ -139,29 +134,20 @@ public:
 		return construct_raw(compressed_s, sigma);
 	}
 
-	index_t get_lcp(index_t a, index_t b) const {
-		if (a == b) return N-a;
-		a = rank[a], b = rank[b];
-		if (a > b) std::swap(a, b);
-		return rmq.query(a, b-1).first;
-	}
-
-	// Get the split in the suffix tree, using half-open intervals
-	// Returns len, idx
-	std::pair<index_t, index_t> get_split(index_t l, index_t r) const {
-		assert(r - l > 1);
-		return rmq.query(l, r-2);
+protected:
+	template <typename String> void build(const String& S, index_t sigma) {
+		N = sz(S);
+		build_sa(S, sigma);
+		build_rank();
 	}
 
 private:
-	explicit SuffixArray(int N_) : N(N_) {}
-
 	template <typename String> void build_sa(const String& S, index_t sigma) {
 		sa = std::vector<index_t>(N+1);
 		assert(sigma >= 0);
 		for (auto s : S) assert(0 <= index_t(s) && index_t(s) < sigma);
 		std::vector<index_t> tmp(sigma + std::max(N, sigma));
-		SuffixArray::sais<String>(N, S, sa.data(), sigma, tmp.data());
+		SuffixArrayBase::sais<String>(N, S, sa.data(), sigma, tmp.data());
 	}
 
 	template <typename String> static void sais(int N, const String& S, index_t* sa, int sigma, index_t* tmp) {
@@ -405,8 +391,28 @@ private:
 		rank = std::vector<index_t>(N+1);
 		for (int i = 0; i <= N; i++) rank[sa[i]] = i;
 	}
+};
 
+class SuffixArray : public SuffixArrayBase<SuffixArray> {};
+
+template <typename Self> class SuffixArrayLCPBase : public SuffixArrayBase<Self> {
+public:
+	using index_t = typename SuffixArrayBase<Self>::index_t;
+	// lcp[i] = lcp(sa[i], sa[i+1])
+	std::vector<index_t> lcp;
+
+protected:
+	friend SuffixArrayBase<Self>;
+	template <typename String> void build(const String& S, index_t sigma) {
+		SuffixArrayBase<Self>::build(S, sigma);
+		build_lcp(S);
+	}
+
+private:
 	template <typename String> void build_lcp(const String& S) {
+		int N = this->N;
+		const auto& sa = this->sa;
+		const auto& rank = this->rank;
 		assert(sz(S) == N);
 		lcp = std::vector<index_t>(N);
 		for (int i = 0, k = 0; i < N - 1; i++) {
@@ -416,8 +422,40 @@ private:
 			if (k) --k;
 		}
 	}
+};
 
+class SuffixArrayLCP : public SuffixArrayLCPBase<SuffixArrayLCP> {};
+
+template <typename Self> class SuffixArrayRMQBase : public SuffixArrayLCPBase<Self> {
+public:
+	using index_t = typename SuffixArrayLCPBase<Self>::index_t;
+	RangeMinQuery<std::pair<index_t, index_t>> rmq;
+
+	index_t get_lcp(index_t a, index_t b) const {
+		if (a == b) return this->N-a;
+		a = this->rank[a], b = this->rank[b];
+		if (a > b) std::swap(a, b);
+		return rmq.query(a, b-1).first;
+	}
+
+	// Get the split in the suffix tree, using half-open intervals
+	// Returns len, idx
+	std::pair<index_t, index_t> get_split(index_t l, index_t r) const {
+		assert(r - l > 1);
+		return rmq.query(l, r-2);
+	}
+
+protected:
+	friend SuffixArrayBase<Self>;
+	template <typename String> void build(const String& S, index_t sigma) {
+		SuffixArrayLCPBase<Self>::build(S, sigma);
+		build_rmq();
+	}
+
+private:
 	void build_rmq() {
+		int N = this->N;
+		const auto& lcp = this->lcp;
 		std::vector<std::pair<index_t, index_t>> lcp_idx(N);
 		for (int i = 0; i < N; i++) {
 			lcp_idx[i] = {lcp[i], i+1};
@@ -426,18 +464,20 @@ private:
 	}
 };
 
-class PrefixArray : private SuffixArray {
-	PrefixArray(const SuffixArray& sa_) : SuffixArray(sa_) {}
-	PrefixArray(SuffixArray&& sa_) : SuffixArray(std::move(sa_)) {}
+class SuffixArrayRMQ : public SuffixArrayRMQBase<SuffixArrayRMQ> {};
+
+class PrefixArrayRMQ : private SuffixArrayRMQ {
+	PrefixArrayRMQ(const SuffixArrayRMQ& sa_) : SuffixArrayRMQ(sa_) {}
+	PrefixArrayRMQ(SuffixArrayRMQ&& sa_) : SuffixArrayRMQ(std::move(sa_)) {}
 public:
-	PrefixArray() {}
-	template <typename String> static PrefixArray construct_raw(const String& S, int sigma) {
-		return PrefixArray(SuffixArray::construct_raw(String(S.rbegin(), S.rend())), sigma);
+	PrefixArrayRMQ() {}
+	template <typename String> static PrefixArrayRMQ construct_raw(const String& S, int sigma) {
+		return PrefixArrayRMQ(SuffixArrayRMQ::construct_raw(String(S.rbegin(), S.rend()), sigma));
 	}
 
 	// TODO: Fill in other constructors
 
 	int get_lcs(int a, int b) const {
-		return SuffixArray::get_lcp(SuffixArray::N - a, SuffixArray::N - b);
+		return SuffixArrayRMQ::get_lcp(N - a, N - b);
 	}
 };
