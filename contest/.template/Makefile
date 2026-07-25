@@ -4,10 +4,14 @@
 # |                    |
 # +--------------------+
 
-PROBLEM_NAME := $PROBLEM_NAME
+PROBLEM_NAME := __PROBLEM_NAME__
 DEBUG := true
 ALLOW_FAILS := false
 LANG := cpp
+
+# Local config overrides (e.g. from a layered .template); optional.
+# Included before the config is used, so it can override LANG, DEBUG, flags.
+-include config.mk
 
 ifeq ($(LANG),cpp)
 TARGET := $(PROBLEM_NAME)
@@ -123,10 +127,15 @@ CASES := $(sort $(basename $(wildcard *.in)))
 TESTS := $(sort $(basename $(wildcard *.out)))
 
 runs: $(patsubst %,%.res,$(CASES))
-.PHONY: run
+.PHONY: runs
 
 solve: runs
 .PHONY: solve
 
 test: $(patsubst %,__test_%,$(TESTS))
 .PHONY: test
+
+
+# Local rule additions/overrides (e.g. from a layered .template); optional.
+# Included last so extra rules don't change the default goal.
+-include local.mk
