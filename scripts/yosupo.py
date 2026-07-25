@@ -16,6 +16,8 @@ logging in if you pass --user; submitting requires `login` first.
 """
 
 import argparse
+import concurrent.futures
+import difflib
 import getpass
 import json
 import pathlib
@@ -102,14 +104,51 @@ def default_user() -> str | None:
     return creds.get("user_name") if creds else None
 
 
-def local_problems() -> dict[str, pathlib.Path]:
-    """Map problem slug -> verify/ file, from PROBLEM comments."""
-    out: dict[str, pathlib.Path] = {}
+def local_problems() -> dict[str, list[pathlib.Path]]:
+    """Map problem slug -> verify/ files, from PROBLEM comments."""
+    out: dict[str, list[pathlib.Path]] = {}
     for path in sorted((ROOT / "verify").glob("*.test.cpp")):
         m = PROBLEM_RE.search(path.read_text())
         if m:
-            out[m.group(1)] = path.relative_to(ROOT)
+            out.setdefault(m.group(1), []).append(path.relative_to(ROOT))
     return out
+
+
+def normalize_source(source: str) -> list[str]:
+    """Source lines modulo #line directives and trailing whitespace."""
+    lines = [l.rstrip() for l in source.splitlines()]
+    return [l for l in lines if l and not l.startswith("#line ")]
+
+
+def ac_sources(user: str, slug: str, limit: int) -> list[tuple[int, list[str]]]:
+    """(id, normalized source) of the user's most recent AC submissions."""
+    resp = api_get(
+        "/submissions",
+        params={"user": user, "problem": slug, "status": "AC", "limit": limit},
+    )
+    ids = [s["id"] for s in resp["submissions"]]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+        infos = list(ex.map(lambda i: api_get(f"/submissions/{i}"), ids))
+    return [(i, normalize_source(info["source"])) for i, info in zip(ids, infos)]
+
+
+def source_freshness(
+    path: pathlib.Path, user: str, slug: str, limit: int
+) -> str:
+    """Compare the local bundle against recent AC submissions for slug."""
+    local = normalize_source(bundle_mod.bundle(ROOT / path).decode())
+    subs = ac_sources(user, slug, limit)
+    if not subs:
+        return "no AC submissions"
+    for sub_id, remote in subs:
+        if remote == local:
+            return f"up-to-date (matches #{sub_id})"
+    sub_id, remote = subs[0]
+    added = removed = 0
+    for d in difflib.unified_diff(remote, local, n=0):
+        added += d.startswith("+") and not d.startswith("+++")
+        removed += d.startswith("-") and not d.startswith("---")
+    return f"differs from #{sub_id} (+{added}/-{removed} lines)"
 
 
 def cmd_login(args: argparse.Namespace) -> None:
@@ -139,15 +178,44 @@ def cmd_status(args: argparse.Namespace) -> None:
     solved: dict[str, str] = api_get(f"/users/{user}/statistics")["solved_map"]
     local = local_problems()
 
-    print(f"== verify/ files ({len(local)}) vs. judge status for {user} ==")
-    for slug, path in local.items():
-        print(f"{solved.get(slug, '--'):>9}  {slug}  ({path})")
+    nfiles = sum(len(v) for v in local.values())
+    print(f"== verify/ files ({nfiles}) vs. judge status for {user} ==")
+    for slug, paths in local.items():
+        for path in paths:
+            line = f"{solved.get(slug, '--'):>9}  {slug}  ({path})"
+            if args.compare and slug in solved:
+                line += f"  [{source_freshness(path, user, slug, args.depth)}]"
+            print(line)
 
     extra = sorted(set(solved) - set(local))
     if extra and not args.local_only:
         print(f"\n== solved on judge but no verify/ file ({len(extra)}) ==")
         for slug in extra:
             print(f"{solved[slug]:>9}  {slug}")
+
+
+def cmd_diff(args: argparse.Namespace) -> None:
+    path = args.path.resolve()
+    m = PROBLEM_RE.search(path.read_text())
+    if not m:
+        raise SystemExit("No PROBLEM comment found in file.")
+    slug = m.group(1)
+    local = normalize_source(bundle_mod.bundle(path).decode())
+    if args.submission:
+        sub_id = args.submission
+        remote = normalize_source(api_get(f"/submissions/{sub_id}")["source"])
+    else:
+        user = args.user or default_user()
+        if not user:
+            raise SystemExit("Pass --user or run `scripts/yosupo.py login` first.")
+        subs = ac_sources(user, slug, 1)
+        if not subs:
+            raise SystemExit(f"No AC submissions by {user} for {slug}.")
+        sub_id, remote = subs[0]
+    for line in difflib.unified_diff(
+        remote, local, f"submission #{sub_id}", str(args.path), lineterm=""
+    ):
+        print(line)
 
 
 def cmd_submissions(args: argparse.Namespace) -> None:
@@ -214,7 +282,19 @@ def main() -> None:
     p = sub.add_parser("status", help="compare verify/ files against judge AC status")
     p.add_argument("--user")
     p.add_argument("--local-only", action="store_true", help="skip listing solved-but-missing problems")
+    p.add_argument(
+        "--compare",
+        action="store_true",
+        help="also compare each local bundle against your recent AC submission sources",
+    )
+    p.add_argument("--depth", type=int, default=5, help="how many recent ACs to compare against (default 5)")
     p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("diff", help="diff a local bundle against your latest AC submission")
+    p.add_argument("path", type=pathlib.Path)
+    p.add_argument("--user")
+    p.add_argument("--submission", type=int, help="diff against this submission id instead")
+    p.set_defaults(func=cmd_diff)
 
     p = sub.add_parser("submissions", help="list your submissions")
     p.add_argument("--user")
