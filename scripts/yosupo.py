@@ -36,6 +36,7 @@ import bundle as bundle_mod
 API_URL = "https://v3.api.judge.yosupo.jp"
 FIREBASE_API_KEY = "AIzaSyCmpkoMVbKRDm2H0MJHB0iZ43uQtSqiLV0"
 CRED_PATH = pathlib.Path.home() / ".config" / "yosupo" / "credentials.json"
+DEFAULT_USER = "ecnerwala"
 
 PROBLEM_RE = re.compile(
     r"competitive-verifier:\s*PROBLEM\s+https://judge\.yosupo\.jp/problem/(\S+)"
@@ -99,9 +100,9 @@ def id_token() -> str:
     return creds["id_token"]
 
 
-def default_user() -> str | None:
+def default_user() -> str:
     creds = load_creds()
-    return creds.get("user_name") if creds else None
+    return (creds.get("user_name") if creds else None) or DEFAULT_USER
 
 
 def local_problems() -> dict[str, list[pathlib.Path]]:
@@ -173,8 +174,6 @@ def cmd_login(args: argparse.Namespace) -> None:
 
 def cmd_status(args: argparse.Namespace) -> None:
     user = args.user or default_user()
-    if not user:
-        raise SystemExit("Pass --user or run `scripts/yosupo.py login` first.")
     solved: dict[str, str] = api_get(f"/users/{user}/statistics")["solved_map"]
     local = local_problems()
 
@@ -196,8 +195,6 @@ def cmd_status(args: argparse.Namespace) -> None:
 
 def cmd_table(args: argparse.Namespace) -> None:
     user = args.user or default_user()
-    if not user:
-        raise SystemExit("Pass --user or run `scripts/yosupo.py login` first.")
     solved: dict[str, str] = api_get(f"/users/{user}/statistics")["solved_map"]
     categories = api_get("/categories")["categories"]
     local = local_problems()
@@ -232,8 +229,6 @@ def cmd_diff(args: argparse.Namespace) -> None:
         remote = normalize_source(api_get(f"/submissions/{sub_id}")["source"])
     else:
         user = args.user or default_user()
-        if not user:
-            raise SystemExit("Pass --user or run `scripts/yosupo.py login` first.")
         subs = ac_sources(user, slug, 1)
         if not subs:
             raise SystemExit(f"No AC submissions by {user} for {slug}.")
@@ -246,8 +241,6 @@ def cmd_diff(args: argparse.Namespace) -> None:
 
 def cmd_submissions(args: argparse.Namespace) -> None:
     user = args.user or default_user()
-    if not user:
-        raise SystemExit("Pass --user or run `scripts/yosupo.py login` first.")
     resp = api_get(
         "/submissions",
         params={"user": user, "problem": args.problem, "limit": args.limit, "skip": args.skip},
