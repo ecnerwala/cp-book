@@ -153,12 +153,20 @@ jobs:
             echo "file=.cv-prev-result/result.json" >> "$GITHUB_OUTPUT"
           fi
 
+      # Direct invocation (the verify action has no input for
+      # --prev-result-mode). Hash mode skips solutions whose transitive
+      # sources, verification commands and Library Checker test data are
+      # unchanged; failures surface in docs-and-check like the action's
+      # default check: false.
       - name: Verify
-        uses: competitive-verifier/actions/verify@v2
-        with:
-          destination: ${{ runner.temp }}/result.json
-          prev-result: ${{ steps.prev-result.outputs.file }}
-          timeout: 1800
+        run: |
+          competitive-verifier verify --check-error \
+            --timeout 1800 \
+            --prev-result-mode hash \
+            ${PREV_RESULT:+--prev-result "$PREV_RESULT"} \
+            --output '${{ runner.temp }}/result.json' || true
+        env:
+          PREV_RESULT: ${{ steps.prev-result.outputs.file }}
 
       - name: Save results for future runs
         run: |
@@ -238,12 +246,15 @@ jobs:
           name: verify_files-coverage
 
       - name: Run verify solutions with coverage
-        uses: competitive-verifier/actions/verify@v2
-        with:
-          verify-files: verify_files-coverage.json
-          destination: ${{ runner.temp }}/coverage-result.json
-          prev-result: ${{ steps.prev-result.outputs.file }}
-          timeout: 1800
+        run: |
+          competitive-verifier verify --check-error \
+            --timeout 1800 \
+            --prev-result-mode hash \
+            ${PREV_RESULT:+--prev-result "$PREV_RESULT"} \
+            --output '${{ runner.temp }}/coverage-result.json' || true
+        env:
+          PREV_RESULT: ${{ steps.prev-result.outputs.file }}
+          COMPETITIVE_VERIFY_FILES_PATH: verify_files-coverage.json
 
       # Opt-in counter selection: stage only the .gcno/.gcda of solutions in
       # the current result, so stale counters (from removed or renamed files)
