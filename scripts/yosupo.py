@@ -251,7 +251,16 @@ def cmd_table(args: argparse.Namespace) -> None:
     categories = api_get("/categories")["categories"]
     local = local_problems()
 
+    # Like the website: problems not in any category form a "New" section.
+    all_problems = [p["name"] for p in api_get("/problems")["problems"]]
+    categorized = {slug for cat in categories for slug in cat["problems"]}
+    new = [slug for slug in all_problems if slug not in categorized]
+    if new:
+        categories.insert(0, {"title": "New", "problems": new})
+
     for cat in categories:
+        if args.category and args.category.lower() not in cat["title"].lower():
+            continue
         rows = []
         for slug in cat["problems"]:
             paths = local.get(slug, [])
@@ -374,6 +383,7 @@ def main() -> None:
     p = sub.add_parser("table", help="all judge problems by category, with local/judge solved status")
     p.add_argument("--user")
     p.add_argument("--todo", action="store_true", help="only show problems missing a local file or a judge AC")
+    p.add_argument("--category", help="only show categories whose title contains this (case-insensitive)")
     p.set_defaults(func=cmd_table)
 
     p = sub.add_parser("diff", help="diff a local bundle against your latest AC submission")
