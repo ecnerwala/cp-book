@@ -1,4 +1,4 @@
-// competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/convolution_mod
+// competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/convolution_mod_1000000007
 
 #include <bits/stdc++.h>
 
@@ -7,8 +7,8 @@
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
-	using num = modnum<998244353>;
-	using E = ecnerwala::fft::fft_engine<num>;
+	using num = modnum<int(1e9)+7>;
+	using E = ecnerwala::fft::fft_split_engine<num>;
 	using pse = ecnerwala::power_series_exact<E>;
 
 	int N, M; std::cin >> N >> M;
