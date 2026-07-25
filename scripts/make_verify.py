@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Create a new verify/*.test.cpp stub.
 
-Usage: scripts/new_verify.py <[folder/]problem[-tag]>
+Usage: scripts/make_verify.py <[folder/]problem[-tag]>
 
 Creates verify/<arg>.test.cpp from contest/.template/__PROBLEM_NAME__.cpp
 with the competitive-verifier PROBLEM header prepended. The last path
