@@ -33,6 +33,13 @@ scripts/bundle.py verify/convolution_mod.test.cpp > submission.cpp
 uvx competitive-verifier oj-resolve --include src verify --exclude third_party \
     --config .competitive-verifier/config.toml > verify_files.json
 uvx competitive-verifier verify --verify-json verify_files.json
+
+# Judge helpers: compare verify/ files against your judge AC status,
+# list submissions, and submit bundled solutions
+scripts/yosupo.py login
+scripts/yosupo.py status
+scripts/yosupo.py submissions --problem convolution_mod
+scripts/yosupo.py submit verify/convolution_mod.test.cpp --wait
 ```
 
 ## Contest tooling
