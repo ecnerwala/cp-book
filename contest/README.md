@@ -52,7 +52,10 @@ customization:
 For sub-file customization of the Makefile, deeper `.template`s can ship two
 optional hook files that the base Makefile `-include`s: `config.mk` (included
 first; override `LANG`, `DEBUG`, flags) and `local.mk` (included last; add or
-override rules without changing the default goal). If a variant diverges
+override rules without changing the default goal). For custom languages, set
+`TARGET`, `EXECUTE`, and `CLEAN_TARGETS` in `config.mk` and provide the build
+rule in `local.mk`; to change what `make run` does, point `RUN_TARGET` at your
+own target instead of redefining `run`. If a variant diverges
 heavily, just ship a full replacement `Makefile` instead.
 
 `__PROBLEM_NAME__` is substituted in file names and contents; nothing else

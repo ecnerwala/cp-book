@@ -8,6 +8,7 @@ PROBLEM_NAME := __PROBLEM_NAME__
 DEBUG := true
 ALLOW_FAILS := false
 LANG := cpp
+RUN_TARGET := __run_default
 
 # Local config overrides (e.g. from a layered .template); optional.
 # Included before the config is used, so it can override LANG, DEBUG, flags.
@@ -99,12 +100,15 @@ $(PCH_ROOT)/%.gch/$(PCH_FILENAME):
 
 export TIME=\n  real\t%es\n  user\t%Us\n  sys\t%Ss\n  mem\t%MKB
 
-run: $(TARGET)
+run: $(RUN_TARGET)
+.PHONY: run
+
+__run_default: $(TARGET)
 	\time $(EXECUTE)
 ifeq ($(DEBUG),true)
 	@echo "Built with DEBUG flags enabled, code may be slower than normal"
 endif
-.PHONY: run
+.PHONY: __run_default
 
 %.res: $(TARGET) %.in
 	\time $(EXECUTE) < $*.in > $*.res
