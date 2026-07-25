@@ -10,6 +10,7 @@ public:
 	struct Node {
 		int l, m, r; // inclusive ranges
 		std::array<int, 2> c;
+		int p;
 	};
 	std::vector<Node> nodes;
 	int root = -1;
@@ -38,8 +39,10 @@ public:
 			nodes[cur].r = i-1;
 			nodes[cur].m = i-1;
 			nodes[cur].c = {-1, -1};
+			nodes[cur].p = -1;
 			while (!stk.empty() && (i == int(v.size()) || comp(v[i], v[nodes[stk.back()].m]))) {
 				int nxt = stk.back(); stk.pop_back();
+				nodes[cur].p = nxt;
 				nodes[nxt].c[1] = cur;
 				nodes[nxt].r = nodes[cur].r;
 				cur = nxt;
@@ -50,6 +53,7 @@ public:
 			}
 			nodes[2*i+1].l = nodes[cur].l;
 			nodes[2*i+1].m = i;
+			nodes[cur].p = 2*i+1;
 			nodes[2*i+1].c[0] = cur;
 			stk.push_back(2*i+1);
 		}
