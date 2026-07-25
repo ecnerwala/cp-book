@@ -1,0 +1,25 @@
+// competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/shift_of_sampling_points_of_polynomial
+
+#include <bits/stdc++.h>
+#include <cassert>
+
+#include "fft.hpp"
+#include "modnum.hpp"
+
+int main() {
+	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
+
+	using num = modnum<998244353>;
+	using E = ecnerwala::fft::fft_engine<num>;
+	using ap_vals = ecnerwala::poly_ap_values<E>;
+
+	int N, M; num C; std::cin >> N >> M >> C;
+	ap_vals F(N);
+	for (auto& v : F) std::cin >> v;
+	ap_vals res = F.eval_range(C, M);
+	for (int i = 0; i < M; i++) {
+		std::cout << res[i] << " \n"[i+1==M];
+	}
+
+	return 0;
+}
