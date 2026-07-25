@@ -21,8 +21,13 @@ int main() {
 		auto res = make_st_dag(adj, S, T);
 		if (int(res.size()) == N) {
 			std::cout << "Yes" << '\n';
+
+			std::vector<int> pos(N);
 			for (int i = 0; i < N; i++) {
-				std::cout << res[i] << " \n"[i+1==N];
+				pos[res[i]] = i;
+			}
+			for (int i = 0; i < N; i++) {
+				std::cout << pos[i] << " \n"[i+1==N];
 			}
 		} else {
 			std::cout << "No" << '\n';
