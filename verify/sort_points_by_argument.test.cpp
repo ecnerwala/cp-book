@@ -14,6 +14,9 @@ int main() {
 	std::vector<pt_t> P(N);
 	for (auto& p : P) std::cin >> p;
 	std::ranges::sort(P, angle_cmp_upto(pt_t(-1, 0)));
+	for (auto p : P) {
+		std::cout << p.x << ' ' << p.y << '\n';
+	}
 
 	return 0;
 }
