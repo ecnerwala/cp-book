@@ -21,8 +21,8 @@ else ifeq ($(LANG),python)
 TARGET := $(PROBLEM_NAME).py
 EXECUTE := python3 ./$(TARGET)
 CLEAN_TARGETS :=
-else
-$(error "Unknown language; please set TARGET, EXECUTE, and CLEAN_TARGETS manually")
+else ifeq ($(TARGET),)
+$(error "Unknown LANG '$(LANG)'; set TARGET, EXECUTE, and CLEAN_TARGETS (e.g. in config.mk)")
 endif
 
 CXX := g++
