@@ -35,6 +35,9 @@ uvx competitive-verifier oj-resolve --include src verify --exclude third_party \
 uvx competitive-verifier verify --verify-json verify_files.json
 ```
 
+`scripts/yosupo.py` has judge helpers (submission status, diffs, submitting);
+see `scripts/yosupo.py --help`.
+
 ## Contest tooling
 
 `contest/` holds standalone tooling for contests: a problem-directory
