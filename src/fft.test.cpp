@@ -457,7 +457,7 @@ TEMPLATE_TEST_CASE("negate_arg transforms", "[fft]", ALL_ENGINES) {
 	}
 }
 
-TEMPLATE_TEST_CASE("Bostan-Mori kth_term", "[fft]", MOD_ENGINES) {
+TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_rational_function", "[fft]", MOD_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
@@ -478,7 +478,7 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term", "[fft]", MOD_ENGINES) {
 		power_series_exact<E> xp(p.begin(), p.end()), xq(q.begin(), q.end());
 		for (uint64_t k : {uint64_t(0), uint64_t(1), uint64_t(7), uint64_t(100), uint64_t(299)}) {
 			INFO("d = " << d << ", k = " << k);
-			REQUIRE(kth_term<E>(xp, xq, k) == ser[k]);
+			REQUIRE(kth_term_of_rational_function<E>(xp, xq, k) == ser[k]);
 		}
 	}
 }
