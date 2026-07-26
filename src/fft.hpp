@@ -1134,6 +1134,37 @@ void multiply_add2(std::span<const typename E::value_type> a1, transformed<E>& t
 	detail::emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
 }
 
+// As multiply_add2, but also outputs the summed pointwise product as a reusable
+// transform of the (full-length) result, like multiply_cached.
+template <conv_engine E>
+void multiply_add2_cached(
+		std::span<const typename E::value_type> a1, transformed<E>& ta1,
+		std::span<const typename E::value_type> b1, transformed<E>& tb1,
+		std::span<const typename E::value_type> a2, transformed<E>& ta2,
+		std::span<const typename E::value_type> b2, transformed<E>& tb2,
+		std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
+	using T = typename E::value_type;
+	assert(sz(a1) > 0 && sz(b1) > 0 && sz(a2) > 0 && sz(b2) > 0);
+	int s = sz(a1) + sz(b1) - 1;
+	assert(sz(a2) + sz(b2) - 1 == s);
+	coeffs.assign(size_t(s), T{});
+	t = transformed<E>{};
+	if constexpr (std::same_as<typename E::product, transformed<E>>) {
+		auto [n, cut] = detail::conv_size_for(s);
+		T c0 = a1[0] * b1[0] + a2[0] * b2[0];
+		E::extend_to(ta1, n, a1); E::extend_to(tb1, n, b1);
+		E::extend_to(ta2, n, a2); E::extend_to(tb2, n, b2);
+		auto p = E::add(E::mul(ta1, tb1, n), E::mul(ta2, tb2, n));
+		auto tp = p;
+		auto buf = buffer_pool<T>::get(n);
+		E::finish(std::move(p), buf.span());
+		detail::emit_linear<T>(buf.span(), n, s, cut, c0, std::span<T>(coeffs), assign_op{});
+		t = std::move(tp);
+	} else {
+		multiply_add2<E>(a1, ta1, b1, tb1, a2, ta2, b2, tb2, std::span<T>(coeffs));
+	}
+}
+
 // This helper also accepts an output transform which will be populated if it is cheap to do so
 template <conv_engine E>
 void multiply_cached(std::span<const typename E::value_type> a, transformed<E>& ta,
@@ -1850,6 +1881,33 @@ auto square(const A& a) {
 	}
 }
 
+// a*b + c*d, all exact; returns whole_cached, adopting the summed pointwise
+// product as the result's transform when the engine supports it. Reuses each
+// operand's whole cache. Requires a*b and c*d to have equal length.
+template <series_like A, series_like B, series_like C, series_like D>
+	requires same_engine<A, B> && same_engine<A, C> && same_engine<A, D>
+		&& A::exact_v && B::exact_v && C::exact_v && D::exact_v
+whole_cached_power_series<typename A::engine_t> multiply_add2(
+		const A& a, const B& b, const C& c, const D& d) {
+	using E = typename A::engine_t;
+	using T = typename E::value_type;
+	power_series_span<E, true> av = a.underlying(), bv = b.underlying();
+	power_series_span<E, true> cv = c.underlying(), dv = d.underlying();
+	fft::transformed<E> ta_, tb_, tc_, td_;
+	std::vector<T> coeffs;
+	fft::transformed<E> f;
+	fft::multiply_add2_cached<E>(
+		av.coeffs(), detail::whole_cache_or(a, ta_),
+		bv.coeffs(), detail::whole_cache_or(b, tb_),
+		cv.coeffs(), detail::whole_cache_or(c, tc_),
+		dv.coeffs(), detail::whole_cache_or(d, td_),
+		coeffs, f
+	);
+	whole_cached_power_series<E> w(power_series_exact<E>(std::move(coeffs)));
+	w.cache() = std::move(f);
+	return w;
+}
+
 // coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0
 template <series_like A, series_like B> requires same_engine<A, B>
 std::vector<typename A::engine_t::value_type> middle_product(const A& a, const B& b) {
@@ -2187,6 +2245,14 @@ template <poly_like A>
 whole_cached_poly<typename A::engine_t> square(const A& a) {
 	return whole_cached_poly<typename A::engine_t>::from_rev_series(square(a.rev_series()));
 }
+// rev(a*b + c*d) = rev(a)*rev(b) + rev(c)*rev(d)
+template <poly_like A, poly_like B, poly_like C, poly_like D>
+	requires same_engine<A, B> && same_engine<A, C> && same_engine<A, D>
+whole_cached_poly<typename A::engine_t> multiply_add2(
+		const A& a, const B& b, const C& c, const D& d) {
+	return whole_cached_poly<typename A::engine_t>::from_rev_series(
+			multiply_add2(a.rev_series(), b.rev_series(), c.rev_series(), d.rev_series()));
+}
 template <poly_like A, poly_like B> requires same_engine<A, B>
 bool operator==(const A& a, const B& b) {
 	return a.rev_series() == b.rev_series();
@@ -2299,29 +2365,22 @@ struct subproduct_tree {
 			// the form's kernel transform serves both children's middle products
 			down[2*i+0] = down[i].composed_with(nodes[2*i+1]);
 			down[2*i+1] = down[i].composed_with(nodes[2*i+0]);
+			down[i] = linear_form<E>{}; // done with the parent; free it early
 		}
 		std::vector<T> out(size_t(N), T{});
 		for (int i = 0; i < N; i++) out[i] = down[N + i].rev_series()[0];
 		return out;
 	}
 
-	// Compute sum_i leaf_vals[i] prod_{j!=i} (1-a[j] x) (transpose of pushdown)
-	power_series_exact<E> combine_up(std::span<const T> leaf_vals) const {
+	// Compute sum_i leaf_vals[i] prod_{j!=i} (x - a[j]) (transpose of pushdown)
+	whole_cached_poly<E> combine_up(std::span<const T> leaf_vals) const {
 		assert(sz(leaf_vals) == N);
-		std::vector<power_series_exact<E>> up(size_t(2) * N);
+		std::vector<whole_cached_poly<E>> up(size_t(2) * N);
 		for (int i = 0; i < N; i++) {
-			up[N + i] = power_series_exact<E>{leaf_vals[i]};
+			up[N + i] = poly<E>{leaf_vals[i]};
 		}
 		for (int i = N - 1; i > 0; i--) {
-			power_series_exact<E> r(size_t(size(i)), T{});
-			fft::transformed<E> cl, cr;
-			fft::multiply_add2<E>(
-					std::span<const T>(up[2*i+0]), cl,
-					std::span<const T>(nodes[2*i+1].rev_series().underlying()), nodes[2*i+1].rev_series().cache(),
-					std::span<const T>(up[2*i+1]), cr,
-					std::span<const T>(nodes[2*i+0].rev_series().underlying()), nodes[2*i+0].rev_series().cache(),
-					std::span<T>(r));
-			up[i] = std::move(r);
+			up[i] = multiply_add2(up[2*i+0], nodes[2*i+1], up[2*i+1], nodes[2*i+0]);
 		}
 		return std::move(up[1]);
 	}
@@ -2366,7 +2425,7 @@ poly<E> poly_interpolate(
 
 	std::vector<T> leaf_vals(size_t(N), T{});
 	for (int i = 0; i < N; i++) leaf_vals[i] = vals[i] / denoms[i];
-	return poly<E>::from_rev_series(tree.combine_up(std::span<const T>(leaf_vals)));
+	return tree.combine_up(std::span<const T>(leaf_vals));
 }
 
 // ==== online multiplication ====
