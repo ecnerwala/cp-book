@@ -287,12 +287,13 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //
 //   Additionally, we have APIs to take advantage of linearity in both transformed and product space:
 //      add(transformed_t<A>, transformed_t<B>) -> transformed_t<A+B>
-//      add(product_t<A>, product_t<B>) -> product_t<A+B>
+//      add(product_t<K1>, product_t<K2>) -> product_t<K1+K2>
 //
 //   Finally, we expose some additional fast-transform optimization paths.
-//   These only operate on transformed_t<unit_scale> (engine users can check if product == transformed for optimizations).
+//   extend_to only operates on transformed_t<unit_scale>; the others are scale-generic.
+//   downsample is also defined on product_t (halving before finish saves inverse-transform work).
 //      extend_to       grow a transform by repeated doubling using the base engine's extend_to()
-//      even/odd_half   compute the half-sized transform of just the even/odd terms of the input
+//      downsample      compute the half-sized transform/product of just the even (odd = false) or odd terms of the input
 //      negate_arg      size n transform of A(-x)
 template <typename E>
 concept conv_engine = requires(
@@ -301,21 +302,23 @@ concept conv_engine = requires(
 	typename E::transformed& t,
 	const typename E::transformed& ct,
 	typename E::product& p,
+	const typename E::product& cp,
 	int n
 ) {
 	typename E::value_type;
 	{ E::transform(in, n) } -> std::same_as<typename E::transformed>;
 	{ ct.size() } -> std::same_as<int>;
 	E::extend_to(t, n, in);
-	{ E::even_half(ct, n) } -> std::same_as<typename E::transformed>;
-	{ E::odd_half(ct, n) } -> std::same_as<typename E::transformed>;
+	{ E::downsample(ct, n, false) } -> std::same_as<typename E::transformed>;
+	{ E::downsample(cp, n, false) } -> std::same_as<typename E::product>;
 	{ E::negate_arg(ct, n) } -> std::same_as<typename E::transformed>;
 	{ E::mul(ct, ct, n) } -> std::same_as<typename E::product>;
 	{ E::sq(ct, n) } -> std::same_as<typename E::product>;
 	E::finish(std::move(p), out);
 	E::finish(std::move(p), out, add_op{});
 	E::finish(E::add(std::move(p), std::move(p)), out);
-	E::add(E::transform(in, n), ct);
+	{ E::add(E::transform(in, n), ct) } -> std::same_as<typename E::template transformed_t<2 * E::unit_scale>>;
+	{ E::add(std::move(p), std::move(p)) } -> std::same_as<typename E::template product_t<2 * E::unit_scale>>;
 	requires std::same_as<std::remove_cvref_t<decltype(E::commutative)>, bool>;
 	requires std::same_as<std::remove_cvref_t<decltype(E::unit_scale)>, int>;
 };
@@ -350,14 +353,10 @@ template <typename num> struct fft_engine {
 			core::extend(std::span<num>(t.v), coeffs);
 		}
 	}
-	static transformed even_half(const transformed& t, int n) {
+	static transformed downsample(const transformed& t, int n, bool odd) {
 		transformed r; r.v.resize(n);
-		core::even_half(std::span<const num>(t.v), std::span<num>(r.v));
-		return r;
-	}
-	static transformed odd_half(const transformed& t, int n) {
-		transformed r; r.v.resize(n);
-		core::odd_half(std::span<const num>(t.v), std::span<num>(r.v));
+		if (odd) core::odd_half(std::span<const num>(t.v), std::span<num>(r.v));
+		else core::even_half(std::span<const num>(t.v), std::span<num>(r.v));
 		return r;
 	}
 	static transformed negate_arg(const transformed& t, int n) {
@@ -446,8 +445,7 @@ template <typename dbl = double> struct fft_real_engine {
 			core::extend(std::span<cnum>(t.v), std::span<const cnum>(buf.span()));
 		}
 	}
-	static transformed even_half(const transformed& t, int n) { return half(t, n, false); }
-	static transformed odd_half(const transformed& t, int n) { return half(t, n, true); }
+	static transformed downsample(const transformed& t, int n, bool odd) { return half(t, n, odd); }
 	// A(-x) negates the odd (imaginary-slot) coefficients, i.e. conjugates the packed
 	// sequence; the transform of a conjugated sequence is the conjugate at w^(-k).
 	static transformed negate_arg(const transformed& t, int n) {
@@ -556,14 +554,19 @@ template <typename mnum> struct fft_split_engine {
 			core::extend(std::span<cnum>(t.v), std::span<const cnum>(buf.span()));
 		}
 	}
-	template <int A> static transformed_t<A> even_half(const transformed_t<A>& t, int n) {
+	static void downsample_core(std::span<const cnum> in, std::span<cnum> out, bool odd) {
+		if (odd) core::odd_half(in, out);
+		else core::even_half(in, out);
+	}
+	template <int A> static transformed_t<A> downsample(const transformed_t<A>& t, int n, bool odd) {
 		transformed_t<A> r; r.v.resize(n);
-		core::even_half(std::span<const cnum>(t.v), std::span<cnum>(r.v));
+		downsample_core(std::span<const cnum>(t.v), std::span<cnum>(r.v), odd);
 		return r;
 	}
-	template <int A> static transformed_t<A> odd_half(const transformed_t<A>& t, int n) {
-		transformed_t<A> r; r.v.resize(n);
-		core::odd_half(std::span<const cnum>(t.v), std::span<cnum>(r.v));
+	template <int K> static product_t<K> downsample(const product_t<K>& p, int n, bool odd) {
+		product_t<K> r; r.lo.resize(n); r.hi.resize(n);
+		downsample_core(std::span<const cnum>(p.lo), std::span<cnum>(r.lo), odd);
+		downsample_core(std::span<const cnum>(p.hi), std::span<cnum>(r.hi), odd);
 		return r;
 	}
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {
@@ -687,11 +690,11 @@ struct crt_engine {
 		E1::extend_to(t.t1, n, std::span<const num1>(b1.span()));
 		E2::extend_to(t.t2, n, std::span<const num2>(b2.span()));
 	}
-	template <int A> static transformed_t<A> even_half(const transformed_t<A>& t, int n) {
-		return transformed_t<A>{E1::even_half(t.t1, n), E2::even_half(t.t2, n)};
+	template <int A> static transformed_t<A> downsample(const transformed_t<A>& t, int n, bool odd) {
+		return transformed_t<A>{E1::downsample(t.t1, n, odd), E2::downsample(t.t2, n, odd)};
 	}
-	template <int A> static transformed_t<A> odd_half(const transformed_t<A>& t, int n) {
-		return transformed_t<A>{E1::odd_half(t.t1, n), E2::odd_half(t.t2, n)};
+	template <int K> static product_t<K> downsample(const product_t<K>& p, int n, bool odd) {
+		return product_t<K>{E1::downsample(p.p1, n, odd), E2::downsample(p.p2, n, odd)};
 	}
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {
 		return transformed_t<A>{E1::negate_arg(t.t1, n), E2::negate_arg(t.t2, n)};
@@ -842,14 +845,14 @@ struct componentwise_engine {
 			E::extend_to(t.t[c], n, std::span<const S>(buf.span()));
 		}
 	}
-	template <int A> static transformed_t<A> even_half(const transformed_t<A>& t, int n) {
+	template <int A> static transformed_t<A> downsample(const transformed_t<A>& t, int n, bool odd) {
 		transformed_t<A> r;
-		for (int c = 0; c < L; c++) r.t[c] = E::even_half(t.t[c], n);
+		for (int c = 0; c < L; c++) r.t[c] = E::downsample(t.t[c], n, odd);
 		return r;
 	}
-	template <int A> static transformed_t<A> odd_half(const transformed_t<A>& t, int n) {
-		transformed_t<A> r;
-		for (int c = 0; c < L; c++) r.t[c] = E::odd_half(t.t[c], n);
+	template <int K> static product_t<K> downsample(const product_t<K>& p, int n, bool odd) {
+		product_t<K> r;
+		for (int c = 0; c < P; c++) r.t[c] = E::downsample(p.t[c], n, odd);
 		return r;
 	}
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {
@@ -1764,7 +1767,7 @@ power_series<E, ea && eb> operator*(const power_series<E, ea>& a, const power_se
 // p.len() < q.len(). Each level uses p(x) q(-x) (keeping the parity-of-k half) and
 // q(x) q(-x) (even, giving the next q in x^2); q(-x)'s transform is negate_arg of q's,
 // so a level costs 2 forward and 2 inverse transforms.
-// TODO: even_half/odd_half optimization
+// TODO: downsample optimization
 // TODO: support the kth_term_of_linear_recurrence(power_series_trunc, power_series_exact) form
 template <fft::conv_engine E>
 typename E::value_type kth_term_of_rational_function(

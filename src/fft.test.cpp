@@ -247,7 +247,7 @@ TEMPLATE_TEST_CASE("trunc_series engine", "[fft]",
 	test_trunc_series_engine<trunc_series_engine_stable<IE, 3>, num, 3>(mt);
 }
 
-TEST_CASE("FFT double engine even/odd half", "[fft]") {
+TEST_CASE("FFT double engine downsample", "[fft]") {
 	using E = fft_real_engine<double>;
 	mt19937 mt(Catch::getSeed());
 	int n = 64;
@@ -261,12 +261,34 @@ TEST_CASE("FFT double engine even/odd half", "[fft]") {
 	fill_rnd(b, mt);
 	auto tb = E::transform(span<const double>(b), n);
 	for (bool odd : {false, true}) {
-		auto th = odd ? E::odd_half(t, n) : E::even_half(t, n);
+		auto th = E::downsample(t, n, odd);
 		auto& h = odd ? odds : evens;
 		vector<double> got(n), want(n);
 		E::finish(E::mul(th, tb, n), span<double>(got));
 		multiply_circular<E>(span<const double>(h), span<const double>(b), span<double>(want), n);
 		check_eq(got, want);
+	}
+}
+
+TEMPLATE_TEST_CASE("product downsample", "[fft]", ALL_ENGINES) {
+	using E = TestType;
+	using num = typename E::value_type;
+	mt19937 mt(Catch::getSeed());
+	for (int n : {2, 16, 64}) {
+		vector<num> a(2*n), b(2*n);
+		fill_rnd(a, mt);
+		fill_rnd(b, mt);
+		auto p = E::mul(E::transform(span<const num>(a), 2*n), E::transform(span<const num>(b), 2*n), 2*n);
+		vector<num> full(2*n);
+		E::finish(auto(p), span<num>(full));
+		for (bool odd : {false, true}) {
+			auto ph = E::downsample(p, n, odd);
+			vector<num> got(n);
+			E::finish(std::move(ph), span<num>(got));
+			vector<num> want(n);
+			for (int i = 0; i < n; i++) want[i] = full[2*i + odd];
+			check_eq(got, want);
+		}
 	}
 }
 
