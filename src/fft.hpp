@@ -1903,7 +1903,7 @@ template <series_like S>
 auto product_operand(const S& s, int prec, int other_len, fft::fft_cache<typename S::engine_t>& tmp) {
 	using E = typename S::engine_t;
 	if constexpr (prefix_cached<S>) {
-		return s.prefix(nextPow2(std::max(prec - 1, 1)));
+		return s.prefix(nextPow2(prec));
 	} else {
 		power_series_span<E, S::exact_v> v = s.underlying();
 		int used = std::min(s.len(), prec);
@@ -2020,8 +2020,9 @@ typename E::value_type kth_term_of_rational_function(
 	return p[0] * inv(q[0]);
 }
 
-// Wrapper around power_series_trunc which caches transform(s[:2^k+1]) for all k.
-// TODO: Rework this: make them easy to generate from exp or inverse, which probably means 2^k instead of 2^k+1.
+// Wrapper around power_series_trunc which caches transform(s[:2^k]) for all k,
+// matching the doubling shape of inverse/exp so they can populate the caches.
+// TODO: make inverse/exp populate these
 template <fft::conv_engine E, bool exact = false>
 struct prefix_cached_power_series {
 	using T = typename E::value_type;
@@ -2046,25 +2047,23 @@ struct prefix_cached_power_series {
 		s.insert(s.end(), tail.begin(), tail.end());
 	}
 
-	// the length-min(n+1, len) prefix borrowed together with its cache
+	// the length-min(n, len) prefix borrowed together with its cache
 	cached_power_series_span<E, exact> prefix(int n) const {
 		return {
-			power_series_span<E, exact>(std::span<const T>(s).first(std::min(n + 1, len()))),
+			power_series_span<E, exact>(std::span<const T>(s).first(std::min(n, len()))),
 			prefix_cache(n)
 		};
 	}
-	// cache over the prefix of length min(n + 1, len()); n a power of two
+	// cache over the prefix of length min(n, len()); n a power of two
 	fft::fft_cache<E>& prefix_cache(int n) const {
 		assert(n > 0 && !(n & (n-1)));
 		int k = __builtin_ctz(unsigned(n));
 		if (k >= sz(caches)) caches.resize(size_t(k) + 1);
 		auto& c = caches[k];
-		int e = std::min(n + 1, len());
+		int e = std::min(n, len());
 		if (c.len() != e) c = fft::fft_cache<E>(std::span<const T>(s).first(e), 2 * n);
 		return c;
 	}
-	// the prefix covering a precision-k product: k <= n + 1 with n = nextPow2(k - 1),
-	// so precision 2^j + 1 still fits at scale 2^j thanks to the +1 prefix term
 
 private:
 	power_series<E, exact> s;
