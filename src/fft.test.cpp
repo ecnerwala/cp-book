@@ -270,6 +270,28 @@ TEST_CASE("FFT double engine even/odd half", "[fft]") {
 	}
 }
 
+TEMPLATE_TEST_CASE("product even/odd half", "[fft]", ALL_ENGINES) {
+	using E = TestType;
+	using num = typename E::value_type;
+	mt19937 mt(Catch::getSeed());
+	for (int n : {2, 16, 64}) {
+		vector<num> a(2*n), b(2*n);
+		fill_rnd(a, mt);
+		fill_rnd(b, mt);
+		auto p = E::mul(E::transform(span<const num>(a), 2*n), E::transform(span<const num>(b), 2*n), 2*n);
+		vector<num> full(2*n);
+		E::finish(auto(p), span<num>(full));
+		for (bool odd : {false, true}) {
+			auto ph = odd ? E::odd_half(p, n) : E::even_half(p, n);
+			vector<num> got(n);
+			E::finish(std::move(ph), span<num>(got));
+			vector<num> want(n);
+			for (int i = 0; i < n; i++) want[i] = full[2*i + odd];
+			check_eq(got, want);
+		}
+	}
+}
+
 TEMPLATE_TEST_CASE("FFT Square", "[fft]", ALL_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;

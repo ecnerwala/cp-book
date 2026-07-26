@@ -287,12 +287,13 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //
 //   Additionally, we have APIs to take advantage of linearity in both transformed and product space:
 //      add(transformed_t<A>, transformed_t<B>) -> transformed_t<A+B>
-//      add(product_t<A>, product_t<B>) -> product_t<A+B>
+//      add(product_t<K1>, product_t<K2>) -> product_t<K1+K2>
 //
 //   Finally, we expose some additional fast-transform optimization paths.
-//   These only operate on transformed_t<unit_scale> (engine users can check if product == transformed for optimizations).
+//   extend_to only operates on transformed_t<unit_scale>; the others are scale-generic.
+//   even/odd_half are also defined on product_t (halving before finish saves inverse-transform work).
 //      extend_to       grow a transform by repeated doubling using the base engine's extend_to()
-//      even/odd_half   compute the half-sized transform of just the even/odd terms of the input
+//      even/odd_half   compute the half-sized transform/product of just the even/odd terms of the input
 //      negate_arg      size n transform of A(-x)
 template <typename E>
 concept conv_engine = requires(
@@ -301,6 +302,7 @@ concept conv_engine = requires(
 	typename E::transformed& t,
 	const typename E::transformed& ct,
 	typename E::product& p,
+	const typename E::product& cp,
 	int n
 ) {
 	typename E::value_type;
@@ -309,13 +311,16 @@ concept conv_engine = requires(
 	E::extend_to(t, n, in);
 	{ E::even_half(ct, n) } -> std::same_as<typename E::transformed>;
 	{ E::odd_half(ct, n) } -> std::same_as<typename E::transformed>;
+	{ E::even_half(cp, n) } -> std::same_as<typename E::product>;
+	{ E::odd_half(cp, n) } -> std::same_as<typename E::product>;
 	{ E::negate_arg(ct, n) } -> std::same_as<typename E::transformed>;
 	{ E::mul(ct, ct, n) } -> std::same_as<typename E::product>;
 	{ E::sq(ct, n) } -> std::same_as<typename E::product>;
 	E::finish(std::move(p), out);
 	E::finish(std::move(p), out, add_op{});
 	E::finish(E::add(std::move(p), std::move(p)), out);
-	E::add(E::transform(in, n), ct);
+	{ E::add(E::transform(in, n), ct) } -> std::same_as<typename E::template transformed_t<2 * E::unit_scale>>;
+	{ E::add(std::move(p), std::move(p)) } -> std::same_as<typename E::template product_t<2 * E::unit_scale>>;
 	requires std::same_as<std::remove_cvref_t<decltype(E::commutative)>, bool>;
 	requires std::same_as<std::remove_cvref_t<decltype(E::unit_scale)>, int>;
 };
@@ -566,6 +571,18 @@ template <typename mnum> struct fft_split_engine {
 		core::odd_half(std::span<const cnum>(t.v), std::span<cnum>(r.v));
 		return r;
 	}
+	template <int K> static product_t<K> even_half(const product_t<K>& p, int n) {
+		product_t<K> r; r.lo.resize(n); r.hi.resize(n);
+		core::even_half(std::span<const cnum>(p.lo), std::span<cnum>(r.lo));
+		core::even_half(std::span<const cnum>(p.hi), std::span<cnum>(r.hi));
+		return r;
+	}
+	template <int K> static product_t<K> odd_half(const product_t<K>& p, int n) {
+		product_t<K> r; r.lo.resize(n); r.hi.resize(n);
+		core::odd_half(std::span<const cnum>(p.lo), std::span<cnum>(r.lo));
+		core::odd_half(std::span<const cnum>(p.hi), std::span<cnum>(r.hi));
+		return r;
+	}
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {
 		assert(n >= 2 && t.size() >= n);
 		transformed_t<A> r; r.v.resize(n);
@@ -692,6 +709,12 @@ struct crt_engine {
 	}
 	template <int A> static transformed_t<A> odd_half(const transformed_t<A>& t, int n) {
 		return transformed_t<A>{E1::odd_half(t.t1, n), E2::odd_half(t.t2, n)};
+	}
+	template <int K> static product_t<K> even_half(const product_t<K>& p, int n) {
+		return product_t<K>{E1::even_half(p.p1, n), E2::even_half(p.p2, n)};
+	}
+	template <int K> static product_t<K> odd_half(const product_t<K>& p, int n) {
+		return product_t<K>{E1::odd_half(p.p1, n), E2::odd_half(p.p2, n)};
 	}
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {
 		return transformed_t<A>{E1::negate_arg(t.t1, n), E2::negate_arg(t.t2, n)};
@@ -850,6 +873,16 @@ struct componentwise_engine {
 	template <int A> static transformed_t<A> odd_half(const transformed_t<A>& t, int n) {
 		transformed_t<A> r;
 		for (int c = 0; c < L; c++) r.t[c] = E::odd_half(t.t[c], n);
+		return r;
+	}
+	template <int K> static product_t<K> even_half(const product_t<K>& p, int n) {
+		product_t<K> r;
+		for (int c = 0; c < P; c++) r.t[c] = E::even_half(p.t[c], n);
+		return r;
+	}
+	template <int K> static product_t<K> odd_half(const product_t<K>& p, int n) {
+		product_t<K> r;
+		for (int c = 0; c < P; c++) r.t[c] = E::odd_half(p.t[c], n);
 		return r;
 	}
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {
