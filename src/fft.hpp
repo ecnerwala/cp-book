@@ -2061,11 +2061,12 @@ struct linear_form {
 
 	int len() const { return c.len(); }
 
-	// Change the support to S_0..S_{n-1}, keeping the tail alignment:
-	// existing weights slide so the last one stays at S_{n-1}, padding or dropping at the storage front.
-	void resize(int n) {
-		if (n >= len()) c.insert(c.begin(), size_t(n - len()), T(0));
-		else c.erase(c.begin(), c.begin() + (len() - n));
+	// Restrict the form's domain: only valid against exact series of length n
+	linear_form for_length(int n) const {
+		linear_form r = *this;
+		if (n >= r.len()) r.c.insert(r.c.begin(), size_t(n - r.len()), T(0));
+		else r.c.erase(r.c.begin(), r.c.begin() + (r.len() - n));
+		return r;
 	}
 
 	// the functional p -> p(z) on polynomials of length up to len (weight z^i on [x^i])
@@ -2175,8 +2176,7 @@ std::vector<typename E::value_type> poly_evaluate(
 	power_series<E> q = tree.rev_prod(1);
 	q.resize(p.len()); // inverse precision must cover the form's window
 	linear_form<E> f = linear_form<E>::from_poly(p).composed_with(inverse(q));
-	f.resize(N);
-	return tree.pushdown(std::move(f));
+	return tree.pushdown(f.for_length(N));
 }
 
 template <fft::conv_engine E>
