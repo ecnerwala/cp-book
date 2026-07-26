@@ -509,11 +509,11 @@ TEST_CASE("power_series cached wrappers", "[fft]") {
 	using num = modnum<998244353>;
 	using E = fft_engine<num>;
 	mt19937 mt(Catch::getSeed());
-	// cached_power_series_exact works with the cached fft:: entry points
+	// whole_cached_power_series works with the cached fft:: entry points
 	power_series_exact<E> a(37), b(21);
 	fill_rnd(a, mt);
 	fill_rnd(b, mt);
-	cached_power_series_exact<E> ca(a), cb(b);
+	whole_cached_power_series<E> ca(a), cb(b);
 	power_series_exact<E> got(size_t(a.len() + b.len() - 1));
 	fft::multiply<E>(span<const num>(ca.underlying()), ca.cache(),
 			span<const num>(cb.underlying()), cb.cache(), span<num>(got));
@@ -547,8 +547,8 @@ TEST_CASE("power_series cached wrappers", "[fft]") {
 	pa2.insert(pa2.end(), tail.begin(), tail.end());
 	for (int p : {8, 16, 32, 64}) {
 		auto& pc = qa.prefix_cache(p);
-		REQUIRE(pc.len() == min(p + 1, qa.len()));
-		REQUIRE(qa.prefix(p)[0] == pa2[0]);
+		REQUIRE(pc.len() == min(p, qa.len()));
+		REQUIRE(qa.prefix(p).underlying()[0] == pa2[0]);
 	}
 	REQUIRE((qa * qb) == (pa2 * pb));
 	// products against many smaller operands reuse per-scale prefix caches
@@ -558,12 +558,14 @@ TEST_CASE("power_series cached wrappers", "[fft]") {
 		REQUIRE((qa * small) == (pa2 * small));
 		REQUIRE((small * qa) == (small * pa2));
 	}
-	// exact cached series give full products, mixing with truncated operands
-	prefix_cached_power_series<E, true> xqa(a), xqb(b);
-	REQUIRE((xqa * xqb) == (a * b));
-	REQUIRE((xqa * b) == (a * b));
-	REQUIRE((xqa * qb) == (a * pb));
-	REQUIRE((pb * xqa) == (pb * a));
+	// a whole cache also serves truncated products when the operand fits under
+	// the precision; oversized operands fall back to a truncated span
+	whole_cached_power_series<E, false> wt{power_series<E>(pa)};
+	power_series<E> big(100);
+	fill_rnd(big, mt);
+	REQUIRE((wt * big) == (pa * big));
+	REQUIRE((big * wt) == (big * pa));
+	REQUIRE((wt * pb) == (pa * pb));
 }
 
 TEST_CASE("linear_form evaluation and transposed multiplication", "[fft]") {
@@ -699,8 +701,8 @@ TEST_CASE("poly reversed storage and series interop", "[fft]") {
 	// the storage transform serves transposed products: middle product against rev_series()
 	std::vector<num> vals(60);
 	fill_rnd(vals, mt);
-	cached_power_series_exact<E> cv(power_series_exact<E>(vals.begin(), vals.end()));
-	cached_power_series_exact<E> ca(a.rev_series());
+	whole_cached_power_series<E> cv(power_series_exact<E>(vals.begin(), vals.end()));
+	whole_cached_power_series<E> ca(a.rev_series());
 	auto mp = middle_product(cv, ca);
 	auto naive = [&](int j) {
 		num r{};
