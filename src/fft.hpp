@@ -1097,9 +1097,9 @@ void emit_linear(std::span<T> buf, int n, int s, bool cut, T c0, std::span<T> ou
 // finish + emit_linear fused: write the finished product directly into out,
 // avoiding the scratch buffer and its extra pass when the correction can be
 // applied in place.
-template <conv_engine E, typename Op = assign_op>
+template <conv_engine E, typename P, typename Op = assign_op>
 void finish_linear(
-	typename E::product&& p, int n, int s, bool cut,
+	P&& p, int n, int s, bool cut,
 	typename E::value_type c0, std::span<typename E::value_type> out, Op op = {}
 ) {
 	using T = typename E::value_type;
@@ -1121,7 +1121,7 @@ void finish_linear(
 
 // a1 * b1 + a2 * b2, in one pass if the engine provides mul2.
 template <conv_engine E>
-typename E::product mul2(
+auto mul2(
 	const fft::transformed<E>& a1, const fft::transformed<E>& b1,
 	const fft::transformed<E>& a2, const fft::transformed<E>& b2,
 	int n
