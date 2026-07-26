@@ -548,7 +548,7 @@ TEST_CASE("power_series cached wrappers", "[fft]") {
 	for (int p : {8, 16, 32, 64}) {
 		auto& pc = qa.prefix_cache(p);
 		REQUIRE(pc.len() == min(p + 1, qa.len()));
-		REQUIRE(qa.prefix(p)[0] == pa2[0]);
+		REQUIRE(qa.prefix(p).underlying()[0] == pa2[0]);
 	}
 	REQUIRE((qa * qb) == (pa2 * pb));
 	// products against many smaller operands reuse per-scale prefix caches
