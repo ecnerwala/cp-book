@@ -509,11 +509,11 @@ TEST_CASE("power_series cached wrappers", "[fft]") {
 	using num = modnum<998244353>;
 	using E = fft_engine<num>;
 	mt19937 mt(Catch::getSeed());
-	// cached_power_series_exact works with the cached fft:: entry points
+	// whole_cached_power_series works with the cached fft:: entry points
 	power_series_exact<E> a(37), b(21);
 	fill_rnd(a, mt);
 	fill_rnd(b, mt);
-	cached_power_series_exact<E> ca(a), cb(b);
+	whole_cached_power_series<E> ca(a), cb(b);
 	power_series_exact<E> got(size_t(a.len() + b.len() - 1));
 	fft::multiply<E>(span<const num>(ca.underlying()), ca.cache(),
 			span<const num>(cb.underlying()), cb.cache(), span<num>(got));
@@ -699,8 +699,8 @@ TEST_CASE("poly reversed storage and series interop", "[fft]") {
 	// the storage transform serves transposed products: middle product against rev_series()
 	std::vector<num> vals(60);
 	fill_rnd(vals, mt);
-	cached_power_series_exact<E> cv(power_series_exact<E>(vals.begin(), vals.end()));
-	cached_power_series_exact<E> ca(a.rev_series());
+	whole_cached_power_series<E> cv(power_series_exact<E>(vals.begin(), vals.end()));
+	whole_cached_power_series<E> ca(a.rev_series());
 	auto mp = middle_product(cv, ca);
 	auto naive = [&](int j) {
 		num r{};
