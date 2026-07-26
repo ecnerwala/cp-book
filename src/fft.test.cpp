@@ -712,6 +712,35 @@ TEST_CASE("poly reversed storage and series interop", "[fft]") {
 	for (int j = 0; j < sz(mp); j++) REQUIRE(mp[size_t(j)] == naive(j));
 }
 
+TEST_CASE("whole_cached_poly products", "[fft]") {
+	using num = modnum<998244353>;
+	using E = fft_engine<num>;
+	mt19937 mt(Catch::getSeed());
+	vector<num> pa(37), pb(23);
+	fill_rnd(pa, mt);
+	fill_rnd(pb, mt);
+	poly<E> a((span<const num>(pa))), b((span<const num>(pb)));
+	// poly products return whole_cached_poly, adopting the product transform
+	auto p = a * b;
+	static_assert(std::is_same_v<decltype(p), whole_cached_poly<E>>);
+	REQUIRE(p.rev_series().cache().size() > 0);
+	poly<E> pp = a * b; // naming the plain type moves out and drops the transform
+	check_eq(vector<num>(pp.begin(), pp.end()), multiply_slow(pa, pb));
+	// cached operands reuse and chain; results compare across representations
+	whole_cached_poly<E> ca(a), cb(b);
+	REQUIRE(ca == a);
+	REQUIRE(ca * cb == p);
+	REQUIRE(ca * b == p);
+	auto sq = square(ca);
+	static_assert(std::is_same_v<decltype(sq), whole_cached_poly<E>>);
+	REQUIRE(sq == a * a);
+	num x = num(mt());
+	REQUIRE(p(x) == ca(x) * cb(x));
+	// moving out drops down to a plain mutable poly
+	poly<E> q = std::move(ca);
+	REQUIRE(q == a);
+}
+
 TEST_CASE("power_series log/exp/pow", "[fft]") {
 	using num = modnum<998244353>;
 	using ps = power_series<fft_engine<num>>;

@@ -1134,6 +1134,37 @@ void multiply_add2(std::span<const typename E::value_type> a1, transformed<E>& t
 	detail::emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
 }
 
+// As multiply_add2, but also outputs the summed pointwise product as a reusable
+// transform of the (full-length) result, like multiply_cached.
+template <conv_engine E>
+void multiply_add2_cached(
+		std::span<const typename E::value_type> a1, transformed<E>& ta1,
+		std::span<const typename E::value_type> b1, transformed<E>& tb1,
+		std::span<const typename E::value_type> a2, transformed<E>& ta2,
+		std::span<const typename E::value_type> b2, transformed<E>& tb2,
+		std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
+	using T = typename E::value_type;
+	assert(sz(a1) > 0 && sz(b1) > 0 && sz(a2) > 0 && sz(b2) > 0);
+	int s = sz(a1) + sz(b1) - 1;
+	assert(sz(a2) + sz(b2) - 1 == s);
+	coeffs.assign(size_t(s), T{});
+	t = transformed<E>{};
+	if constexpr (std::same_as<typename E::product, transformed<E>>) {
+		auto [n, cut] = detail::conv_size_for(s);
+		T c0 = a1[0] * b1[0] + a2[0] * b2[0];
+		E::extend_to(ta1, n, a1); E::extend_to(tb1, n, b1);
+		E::extend_to(ta2, n, a2); E::extend_to(tb2, n, b2);
+		auto p = E::add(E::mul(ta1, tb1, n), E::mul(ta2, tb2, n));
+		auto tp = p;
+		auto buf = buffer_pool<T>::get(n);
+		E::finish(std::move(p), buf.span());
+		detail::emit_linear<T>(buf.span(), n, s, cut, c0, std::span<T>(coeffs), assign_op{});
+		t = std::move(tp);
+	} else {
+		multiply_add2<E>(a1, ta1, b1, tb1, a2, ta2, b2, tb2, std::span<T>(coeffs));
+	}
+}
+
 // This helper also accepts an output transform which will be populated if it is cheap to do so
 template <conv_engine E>
 void multiply_cached(std::span<const typename E::value_type> a, transformed<E>& ta,
@@ -1184,6 +1215,31 @@ void square(std::span<const typename E::value_type> a, transformed<E>& ta,
 	auto buf = buffer_pool<T>::get(n);
 	E::finish(E::sq(ta, n), buf.span());
 	detail::emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
+}
+
+// As square, but also outputs the pointwise product as a reusable transform of
+// the result (empty when the engine's product isn't a transform).
+template <conv_engine E>
+void square_cached(std::span<const typename E::value_type> a, transformed<E>& ta,
+		std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
+	using T = typename E::value_type;
+	coeffs.assign(size_t(sz(a) ? 2 * sz(a) - 1 : 0), T{});
+	t = transformed<E>{};
+	if (coeffs.empty()) return;
+	int s = sz(coeffs);
+	if constexpr (std::same_as<typename E::product, transformed<E>>) {
+		auto [n, cut] = detail::conv_size_for(s);
+		T c0 = a[0] * a[0];
+		E::extend_to(ta, n, a);
+		auto p = E::sq(ta, n);
+		auto tp = p;
+		auto buf = buffer_pool<T>::get(n);
+		E::finish(std::move(p), buf.span());
+		detail::emit_linear<T>(buf.span(), n, s, cut, c0, std::span<T>(coeffs), assign_op{});
+		t = std::move(tp);
+	} else {
+		square<E>(a, ta, std::span<T>(coeffs));
+	}
 }
 
 template <conv_engine E> vector<typename E::value_type> multiply(
@@ -1462,46 +1518,6 @@ struct power_series : public std::vector<typename E::value_type> {
 		return r;
 	}
 
-	// mixed-exactness binary operators (hidden friends: found by ADL on either operand)
-	template <bool oe>
-	friend power_series<E, exact && oe> operator + (const power_series& a, const power_series<E, oe>& b) {
-		int n = (exact && oe) ? std::max(a.len(), b.len())
-			: exact ? b.len() : oe ? a.len() : std::min(a.len(), b.len());
-		power_series<E, exact && oe> r(size_t(n), T(0));
-		for (int i = 0; i < n; i++) {
-			r[i] = (i < a.len() ? a[i] : T(0)) + (i < b.len() ? b[i] : T(0));
-		}
-		return r;
-	}
-	template <bool oe>
-	friend power_series<E, exact && oe> operator - (const power_series& a, const power_series<E, oe>& b) {
-		int n = (exact && oe) ? std::max(a.len(), b.len())
-			: exact ? b.len() : oe ? a.len() : std::min(a.len(), b.len());
-		power_series<E, exact && oe> r(size_t(n), T(0));
-		for (int i = 0; i < n; i++) {
-			r[i] = (i < a.len() ? a[i] : T(0)) - (i < b.len() ? b[i] : T(0));
-		}
-		return r;
-	}
-	template <bool oe>
-	friend power_series<E, exact && oe> operator * (const power_series& a, const power_series<E, oe>& b) {
-		if constexpr (exact && oe) {
-			if (a.len() == 0 || b.len() == 0) return {};
-			power_series<E, true> r(size_t(a.len() + b.len() - 1), T(0));
-			fft::multiply<E>(std::span<const T>(a), std::span<const T>(b), std::span<T>(r));
-			return r;
-		} else {
-			int prec = exact ? b.len() : oe ? a.len() : std::min(a.len(), b.len());
-			power_series<E, false> r(size_t(prec), T(0));
-			if (prec == 0 || a.len() == 0 || b.len() == 0) return r;
-			fft::multiply<E>(
-				std::span<const T>(a).first(std::min(a.len(), prec)),
-				std::span<const T>(b).first(std::min(b.len(), prec)),
-				std::span<T>(r)
-			);
-			return r;
-		}
-	}
 
 	power_series& operator *= (const power_series& o) {
 		return *this = (*this) * o;
@@ -1844,15 +1860,52 @@ fft::transformed<typename S::engine_t>& whole_cache_or(const S& s, fft::transfor
 // Both consume whole-sequence transforms by nature (the full span always
 // participates), so only whole caches apply, never prefix caches.
 template <series_like A>
-power_series<typename A::engine_t, A::exact_v> square(const A& a) {
+auto square(const A& a) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
-	if (a.len() == 0) return {};
 	power_series_span<E, A::exact_v> av = a.underlying();
-	power_series<E, A::exact_v> r(size_t(A::exact_v ? 2 * a.len() - 1 : a.len()), T{});
 	fft::transformed<E> ta_;
-	fft::square<E>(av.coeffs(), detail::whole_cache_or(a, ta_), std::span<T>(r));
-	return r;
+	if constexpr (A::exact_v) {
+		// like operator*, an exact square returns whole_cached, adopting the
+		// pointwise product as the result's transform when the engine supports it
+		std::vector<T> coeffs;
+		fft::transformed<E> f;
+		fft::square_cached<E>(av.coeffs(), detail::whole_cache_or(a, ta_), coeffs, f);
+		whole_cached_power_series<E, true> w(power_series_exact<E>(std::move(coeffs)));
+		w.cache() = std::move(f);
+		return w;
+	} else {
+		power_series<E, false> r(size_t(a.len()), T{});
+		fft::square<E>(av.coeffs(), detail::whole_cache_or(a, ta_), std::span<T>(r));
+		return r;
+	}
+}
+
+// a*b + c*d, all exact; returns whole_cached, adopting the summed pointwise
+// product as the result's transform when the engine supports it. Reuses each
+// operand's whole cache. Requires a*b and c*d to have equal length.
+template <series_like A, series_like B, series_like C, series_like D>
+	requires same_engine<A, B> && same_engine<A, C> && same_engine<A, D>
+		&& A::exact_v && B::exact_v && C::exact_v && D::exact_v
+whole_cached_power_series<typename A::engine_t> multiply_add2(
+		const A& a, const B& b, const C& c, const D& d) {
+	using E = typename A::engine_t;
+	using T = typename E::value_type;
+	power_series_span<E, true> av = a.underlying(), bv = b.underlying();
+	power_series_span<E, true> cv = c.underlying(), dv = d.underlying();
+	fft::transformed<E> ta_, tb_, tc_, td_;
+	std::vector<T> coeffs;
+	fft::transformed<E> f;
+	fft::multiply_add2_cached<E>(
+		av.coeffs(), detail::whole_cache_or(a, ta_),
+		bv.coeffs(), detail::whole_cache_or(b, tb_),
+		cv.coeffs(), detail::whole_cache_or(c, tc_),
+		dv.coeffs(), detail::whole_cache_or(d, td_),
+		coeffs, f
+	);
+	whole_cached_power_series<E> w(power_series_exact<E>(std::move(coeffs)));
+	w.cache() = std::move(f);
+	return w;
 }
 
 // coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0
@@ -2065,9 +2118,9 @@ private:
 // This representation should be internal-only:
 // all accesses/constructors use the logical order though: P[k] = [x^k] P.
 // To use the representation, use rev_series() / from_rev_series()
-// TODO: This guy also needs caching integration
 template <fft::conv_engine E> struct poly {
 	using T = typename E::value_type;
+	using engine_t = E;
 	power_series_exact<E> c;
 
 	poly() = default;
@@ -2136,20 +2189,74 @@ template <fft::conv_engine E> struct poly {
 	friend poly operator*(poly a, const T& n) { a *= n; return a; }
 	friend poly operator*(const T& n, poly a) { a *= n; return a; }
 
-	friend poly operator*(const poly& a, const poly& b) {
-		if (a.len() == 0 || b.len() == 0) return {};
-		poly r(a.len() + b.len() - 1);
-		fft::multiply<E>(std::span<const T>(a.c), std::span<const T>(b.c), std::span<T>(r.c));
-		return r;
-	}
 	poly& operator*=(const poly& o) { return *this = (*this) * o; }
-	friend poly square(const poly& a) {
-		if (a.len() == 0) return {};
-		poly r(2 * a.len() - 1);
-		fft::square<E>(std::span<const T>(a.c), std::span<T>(r.c));
+};
+
+// any polynomial representation exposing its reversed coefficient series
+template <typename P>
+concept poly_like = requires(const P& p) {
+	typename P::engine_t;
+	{ p.len() } -> std::same_as<int>;
+	p.rev_series();
+	requires series_like<std::remove_cvref_t<decltype(p.rev_series())>>;
+	requires std::remove_cvref_t<decltype(p.rev_series())>::exact_v;
+};
+
+// immutable polynomial carrying the whole-sequence transform of its rev_series
+template <fft::conv_engine E>
+struct whole_cached_poly {
+	using T = typename E::value_type;
+	using engine_t = E;
+
+	whole_cached_poly() = default;
+	// moving coefficients in or out is free: implicit on rvalues, explicit copy otherwise
+	whole_cached_poly(poly<E>&& p) : c(std::move(p.c)) {}
+	explicit whole_cached_poly(const poly<E>& p) : c(p.c) {}
+	operator poly<E>() && { return poly<E>::from_rev_series(std::move(c)); }
+
+	const whole_cached_power_series<E>& rev_series() const { return c; }
+	static whole_cached_poly from_rev_series(whole_cached_power_series<E> s) {
+		whole_cached_poly r;
+		r.c = std::move(s);
 		return r;
 	}
+
+	int len() const { return c.len(); }
+	int degree() const { return len() - 1; }
+	const T& operator[](int i) const { return c[len() - 1 - i]; }
+	T leading() const { return c[0]; }
+
+	T operator()(const T& x) const {
+		T r{};
+		for (const T& v : c) r = r * x + v;
+		return r;
+	}
+
+private:
+	whole_cached_power_series<E> c;
 };
+
+// rev(a*b) = rev(a)*rev(b); the series product reuses/adopts transforms
+template <poly_like A, poly_like B> requires same_engine<A, B>
+whole_cached_poly<typename A::engine_t> operator*(const A& a, const B& b) {
+	return whole_cached_poly<typename A::engine_t>::from_rev_series(a.rev_series() * b.rev_series());
+}
+template <poly_like A>
+whole_cached_poly<typename A::engine_t> square(const A& a) {
+	return whole_cached_poly<typename A::engine_t>::from_rev_series(square(a.rev_series()));
+}
+// rev(a*b + c*d) = rev(a)*rev(b) + rev(c)*rev(d)
+template <poly_like A, poly_like B, poly_like C, poly_like D>
+	requires same_engine<A, B> && same_engine<A, C> && same_engine<A, D>
+whole_cached_poly<typename A::engine_t> multiply_add2(
+		const A& a, const B& b, const C& c, const D& d) {
+	return whole_cached_poly<typename A::engine_t>::from_rev_series(
+			multiply_add2(a.rev_series(), b.rev_series(), c.rev_series(), d.rev_series()));
+}
+template <poly_like A, poly_like B> requires same_engine<A, B>
+bool operator==(const A& a, const B& b) {
+	return a.rev_series() == b.rev_series();
+}
 
 // finite-support linear form
 // These are one side of the pairing <poly P, power_series S> = [x^0] P(1/x) S(x).
@@ -2165,28 +2272,30 @@ template <fft::conv_engine E> struct poly {
 template <fft::conv_engine E>
 struct linear_form {
 	using T = typename E::value_type;
-	power_series_exact<E> c; // coeffs of S in <*, S>
+	// coeffs of S in <*, S>; always whole-cached: the kernel transform is
+	// what repeated middle products against the same form reuse
+	whole_cached_power_series<E> c;
 
 	linear_form() = default;
-	explicit linear_form(int len) : c(size_t(len), T{}) {}
+	explicit linear_form(int len) : c(power_series_exact<E>(size_t(len), T{})) {}
 	// We don't provide coefficient-list constructors, to avoid ordering confusion.
 
-	const power_series_exact<E>& rev_series() const { return c; }
-	static linear_form from_rev_series(power_series_exact<E> s) {
+	const whole_cached_power_series<E>& rev_series() const { return c; }
+	static linear_form from_rev_series(whole_cached_power_series<E> s) {
 		linear_form r;
 		r.c = std::move(s);
 		return r;
 	}
-	static linear_form from_poly(const poly<E>& p) { return from_rev_series(p.rev_series()); }
+	static linear_form from_poly(const poly<E>& p) { return from_rev_series(whole_cached_power_series<E>(p.rev_series())); }
 
 	int len() const { return c.len(); }
 
 	// Restrict the form's domain: only valid against exact series of length n
 	linear_form for_length(int n) const {
-		linear_form r = *this;
-		if (n >= r.len()) r.c.insert(r.c.begin(), size_t(n - r.len()), T(0));
-		else r.c.erase(r.c.begin(), r.c.begin() + (r.len() - n));
-		return r;
+		power_series_exact<E> r(c.underlying());
+		if (n >= len()) r.insert(r.begin(), size_t(n - len()), T(0));
+		else r.erase(r.begin(), r.begin() + (len() - n));
+		return from_rev_series(std::move(r));
 	}
 
 	// the functional p -> p(z) on polynomials of length up to len (weight z^i on [x^i])
@@ -2197,7 +2306,8 @@ struct linear_form {
 		return from_rev_series(std::move(k));
 	}
 
-	T operator()(const poly<E>& p) const {
+	template <poly_like P>
+	T operator()(const P& p) const {
 		assert(p.len() <= len());
 		T r{};
 		for (int i = 0; i < p.len(); i++) r += c[i] * p[i]; // weights multiply from the left
@@ -2205,17 +2315,17 @@ struct linear_form {
 	}
 
 	// <*, S> -> <q x *, S>
-	linear_form composed_with(const poly<E>& q) const {
+	template <poly_like P>
+	linear_form composed_with(const P& q) const {
 		assert(q.len() > 0 && q.len() <= len());
-		return from_rev_series(power_series_exact<E>(fft::middle_product<E>(
-				std::span<const T>(c), std::span<const T>(q.rev_series()))));
+		return from_rev_series(power_series_exact<E>(middle_product(c, q.rev_series())));
 	}
 
 	// <P, *> -> <P, s x *>
-	template <bool eb>
-	linear_form composed_with(const power_series<E, eb>& s) const {
-		if constexpr (!eb) assert(s.len() >= len());
-		power_series<E, eb> r = c * s;
+	template <series_like S> requires std::same_as<typename S::engine_t, E>
+	linear_form composed_with(const S& s) const {
+		if constexpr (!S::exact_v) assert(s.len() >= len());
+		power_series<E, S::exact_v> r = c * s;
 		r.resize(size_t(len()));
 		return from_rev_series(power_series_exact<E>(std::move(r)));
 	}
@@ -2224,17 +2334,17 @@ struct linear_form {
 // ==== multipoint evaluation / interpolation ====
 
 // Subproduct tree over points a[0:N]
-// BFS-order tree, each node holds prod (1 - a[i] x) with caches.
+// BFS-order tree, each node holds prod (x - a[i]) as a cached poly.
 template <fft::conv_engine E>
 struct subproduct_tree {
 	using T = typename E::value_type;
 	int N;
-	std::vector<whole_cached_power_series<E>> nodes;
+	std::vector<whole_cached_poly<E>> nodes;
 
 	explicit subproduct_tree(std::span<const T> pts) : N(sz(pts)), nodes(size_t(2) * N) {
 		assert(N > 0);
 		for (int i = 0; i < N; i++) {
-			nodes[N + i] = whole_cached_power_series<E>(power_series_exact<E>{T(1), -pts[i]});
+			nodes[N + i] = poly<E>{-pts[i], T(1)};
 		}
 		for (int i = N - 1; i > 0; i--) {
 			nodes[i] = nodes[2*i] * nodes[2*i+1];
@@ -2244,7 +2354,7 @@ struct subproduct_tree {
 	// number of points under node i
 	int size(int i) const { return nodes[i].len() - 1; }
 	// rev(prod (x - z_j)) over node i's leaves; length size(i) + 1
-	const power_series_exact<E>& rev_prod(int i) const { return nodes[i].underlying(); }
+	const power_series_exact<E>& rev_prod(int i) const { return nodes[i].rev_series().underlying(); }
 
 	// Computes, for each i, f(product_{j != i} (1 - a[j] x)). Requires f.len() == N.
 	std::vector<T> pushdown(linear_form<E> f) const {
@@ -2252,36 +2362,27 @@ struct subproduct_tree {
 		std::vector<linear_form<E>> down(size_t(2) * N);
 		down[1] = std::move(f);
 		for (int i = 1; i < N; i++) {
-			// one transform of the kernel serves both children's middle products
-			std::span<const T> k(down[i].rev_series());
-			fft::transformed<E> ck;
-			down[2*i+0] = linear_form<E>::from_rev_series(power_series_exact<E>(fft::middle_product<E>(
-					k, ck, std::span<const T>(nodes[2*i+1].underlying()), nodes[2*i+1].cache())));
-			down[2*i+1] = linear_form<E>::from_rev_series(power_series_exact<E>(fft::middle_product<E>(
-					k, ck, std::span<const T>(nodes[2*i+0].underlying()), nodes[2*i+0].cache())));
+			// the form's kernel transform serves both children's middle products
+			down[2*i+0] = down[i].composed_with(nodes[2*i+1]);
+			down[2*i+1] = down[i].composed_with(nodes[2*i+0]);
+			down[i] = linear_form<E>{}; // done with the parent; free it early
 		}
 		std::vector<T> out(size_t(N), T{});
 		for (int i = 0; i < N; i++) out[i] = down[N + i].rev_series()[0];
 		return out;
 	}
 
-	// Compute sum_i leaf_vals[i] prod_{j!=i} (1-a[j] x) (transpose of pushdown)
-	power_series_exact<E> combine_up(std::span<const T> leaf_vals) const {
+	// Compute sum_i leaf_vals[i] prod_{j!=i} (x - a[j]) (transpose of pushdown)
+	whole_cached_poly<E> combine_up(std::span<const T> leaf_vals) const {
 		assert(sz(leaf_vals) == N);
-		std::vector<power_series_exact<E>> up(size_t(2) * N);
+		std::vector<whole_cached_poly<E>> up(size_t(2) * N);
 		for (int i = 0; i < N; i++) {
-			up[N + i] = power_series_exact<E>{leaf_vals[i]};
+			up[N + i] = poly<E>{leaf_vals[i]};
 		}
 		for (int i = N - 1; i > 0; i--) {
-			power_series_exact<E> r(size_t(size(i)), T{});
-			fft::transformed<E> cl, cr;
-			fft::multiply_add2<E>(
-					std::span<const T>(up[2*i+0]), cl,
-					std::span<const T>(nodes[2*i+1].underlying()), nodes[2*i+1].cache(),
-					std::span<const T>(up[2*i+1]), cr,
-					std::span<const T>(nodes[2*i+0].underlying()), nodes[2*i+0].cache(),
-					std::span<T>(r));
-			up[i] = std::move(r);
+			up[i] = multiply_add2(up[2*i+0], nodes[2*i+1], up[2*i+1], nodes[2*i+0]);
+			up[2*i+0] = whole_cached_poly<E>{};
+			up[2*i+1] = whole_cached_poly<E>{};
 		}
 		return std::move(up[1]);
 	}
@@ -2326,7 +2427,7 @@ poly<E> poly_interpolate(
 
 	std::vector<T> leaf_vals(size_t(N), T{});
 	for (int i = 0; i < N; i++) leaf_vals[i] = vals[i] / denoms[i];
-	return poly<E>::from_rev_series(tree.combine_up(std::span<const T>(leaf_vals)));
+	return tree.combine_up(std::span<const T>(leaf_vals));
 }
 
 // ==== online multiplication ====
