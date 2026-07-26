@@ -1018,15 +1018,14 @@ static_assert(conv_engine<trunc_series_engine<crt_engine<modnum<int(1e9)+7>>, 2>
 static_assert(conv_engine<matrix_engine_stable<fft_split_engine<modnum<int(1e9)+7>>, 3>>);
 static_assert(conv_engine<trunc_series_engine_stable<crt_engine<modnum<int(1e9)+7>>, 3>>);
 
-// Build (first call) or grow a transform to size m (a power of two); the owner
-// must feed the same coefficient sequence every time. First build happens at
-// max(m, nextPow2(len - 1)): a 2^k+1-length operand builds at 2^k (E::transform
-// folds the top coefficient circularly -- what the 2^k+1 cut consumes, and a
-// valid seed for later extension).
+// Build (first call) or grow a transform to size m (a power of two, with
+// sz(coeffs) <= 2 * m); the owner must feed the same coefficient sequence every
+// time. A first build with sz(coeffs) > m folds circularly -- what the 2^k+1
+// cut consumes, and a valid seed for later doubling.
 template <conv_engine E>
 void extend_transform(typename E::transformed& t, std::span<const typename E::value_type> coeffs, int m) {
-	assert(!(m & (m-1)));
-	if (t.size() == 0) t = E::transform(coeffs, max(m, nextPow2(max(sz(coeffs) - 1, 1))));
+	assert(!(m & (m-1)) && sz(coeffs) <= 2 * m);
+	if (t.size() == 0) t = E::transform(coeffs, m);
 	else if (t.size() < m) E::double_to(t, m, coeffs);
 }
 
