@@ -2154,7 +2154,6 @@ struct whole_cached_poly {
 	// moving coefficients in or out is free: implicit on rvalues, explicit copy otherwise
 	whole_cached_poly(poly<E>&& p) : c(std::move(p.c)) {}
 	explicit whole_cached_poly(const poly<E>& p) : c(p.c) {}
-	whole_cached_poly(whole_cached_power_series<E>&& s) : c(std::move(s)) {}
 	operator poly<E>() && { return poly<E>::from_rev_series(std::move(c)); }
 
 	const whole_cached_power_series<E>& rev_series() const { return c; }
@@ -2182,11 +2181,11 @@ private:
 // rev(a*b) = rev(a)*rev(b); the series product reuses/adopts transforms
 template <poly_like A, poly_like B> requires same_engine<A, B>
 whole_cached_poly<typename A::engine_t> operator*(const A& a, const B& b) {
-	return a.rev_series() * b.rev_series();
+	return whole_cached_poly<typename A::engine_t>::from_rev_series(a.rev_series() * b.rev_series());
 }
 template <poly_like A>
 whole_cached_poly<typename A::engine_t> square(const A& a) {
-	return square(a.rev_series());
+	return whole_cached_poly<typename A::engine_t>::from_rev_series(square(a.rev_series()));
 }
 template <poly_like A, poly_like B> requires same_engine<A, B>
 bool operator==(const A& a, const B& b) {
