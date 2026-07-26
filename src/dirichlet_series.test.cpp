@@ -11,9 +11,9 @@ namespace dirichlet_series {
 namespace test {
 
 div_vector_layout layout;
-template <typename T> using dv_values = dirichlet_series_values<layout, T>;
-template <typename T> using dv_prefix = dirichlet_series_prefix<layout, T>;
-template <typename T> using dv_bit = dirichlet_series_binary_indexed_tree<layout, T>;
+template <typename T> using dv_values = values<layout, T>;
+template <typename T> using dv_prefix = prefix<layout, T>;
+template <typename T> using dv_bit = bit<layout, T>;
 
 template <typename T>
 dv_values<T> multiply_slow(const dv_values<T>& a, const dv_values<T>& b) {
