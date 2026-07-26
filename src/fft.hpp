@@ -1741,6 +1741,63 @@ concept prefix_cached = series_like<S> && requires(const S& s, int n) {
 template <typename A, typename B>
 concept same_engine = std::same_as<typename A::engine_t, typename B::engine_t>;
 
+// Wrapper around power_series which caches the transform of the whole series.
+// Ops only exploit the cache at full (exact x exact) precision; a trunc series'
+// whole-sequence transform is still useful for middle products and repeated
+// full-precision use.
+template <fft::conv_engine E, bool exact = true>
+struct whole_cached_power_series {
+	using T = typename E::value_type;
+	using engine_t = E;
+	static constexpr bool exact_v = exact;
+
+	whole_cached_power_series() = default;
+	// moving coefficients in or out is free: implicit on rvalues, explicit copy otherwise
+	whole_cached_power_series(power_series<E, exact>&& s_) : s(std::move(s_)) {}
+	explicit whole_cached_power_series(const power_series<E, exact>& s_) : s(s_) {}
+	operator power_series<E, exact>() && { return std::move(s); }
+
+	int len() const { return s.len(); }
+	const power_series<E, exact>& underlying() const { return s; }
+	const T& operator[](int i) const { return s[size_t(i)]; }
+	auto begin() const { return s.cbegin(); }
+	auto end() const { return s.cend(); }
+	// the fft_cache over underlying(), fed to the cached fft:: entry points alongside it
+	fft::fft_cache<E>& cache() const { return f; }
+
+	template <series_like S>
+	friend bool operator==(const whole_cached_power_series& a, const S& b) {
+		return a.s == b.underlying();
+	}
+
+private:
+	power_series<E, exact> s;
+	mutable fft::fft_cache<E> f; // memoized transform: filling it is logically const
+};
+
+template <whole_cached A>
+power_series<typename A::engine_t, A::exact_v> square(const A& a) {
+	using T = typename A::engine_t::value_type;
+	if (a.len() == 0) return {};
+	power_series<typename A::engine_t, A::exact_v> r(size_t(A::exact_v ? 2 * a.len() - 1 : a.len()), T{});
+	if constexpr (A::exact_v) {
+		fft::square<typename A::engine_t>(std::span<const T>(a.underlying()), a.cache(), std::span<T>(r));
+	} else {
+		fft::square<typename A::engine_t>(std::span<const T>(a.underlying()), std::span<T>(r));
+	}
+	return r;
+}
+
+// coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0
+template <whole_cached A, whole_cached B> requires same_engine<A, B>
+std::vector<typename A::engine_t::value_type> middle_product(const A& a, const B& b) {
+	using T = typename A::engine_t::value_type;
+	return fft::middle_product<typename A::engine_t>(
+		std::span<const T>(a.underlying()), a.cache(),
+		std::span<const T>(b.underlying()), b.cache()
+	);
+}
+
 namespace detail {
 template <bool ea, bool eb> int product_prec(int la, int lb) {
 	if constexpr (ea && eb) return la > 0 && lb > 0 ? la + lb - 1 : 0;
@@ -1774,43 +1831,62 @@ power_series<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A
 // The single multiplication operator: picks the best transform reuse available.
 // Whole-sequence caches are only sound at full (exact x exact) precision;
 // prefix caches serve any precision.
+// An exact x exact product returns a whole_cached result: the cache starts empty
+// (lazy, free) except when both operands were whole-cached and the engine can adopt
+// the pointwise product as the result's transform (see fft::multiply_cached).
 template <series_like A, series_like B> requires same_engine<A, B>
-power_series<typename A::engine_t, A::exact_v && B::exact_v> operator * (const A& a, const B& b) {
+auto operator * (const A& a, const B& b) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
 	constexpr bool ea = A::exact_v, eb = B::exact_v;
-	int prec = detail::product_prec<ea, eb>(a.len(), b.len());
-	power_series<E, ea && eb> r(size_t(prec), T(0));
-	if (prec == 0 || a.len() == 0 || b.len() == 0) return r;
-	if constexpr (prefix_cached<A> && prefix_cached<B>) {
-		int n = nextPow2(std::max(prec - 1, 1));
-		fft::multiply<E>(a.prefix(n), a.prefix_cache(n), b.prefix(n), b.prefix_cache(n), std::span<T>(r));
-	} else if constexpr (prefix_cached<A>) {
-		int n = nextPow2(std::max(prec - 1, 1));
-		std::span<const T> bs = std::span<const T>(b.underlying()).first(std::min(prec, b.len()));
-		fft::fft_cache<E> bc(bs, 2 * n);
-		fft::multiply<E>(a.prefix(n), a.prefix_cache(n), bs, bc, std::span<T>(r));
-	} else if constexpr (prefix_cached<B>) {
-		int n = nextPow2(std::max(prec - 1, 1));
-		std::span<const T> as = std::span<const T>(a.underlying()).first(std::min(prec, a.len()));
-		fft::fft_cache<E> ac(as, 2 * n);
-		fft::multiply<E>(as, ac, b.prefix(n), b.prefix_cache(n), std::span<T>(r));
-	} else if constexpr (whole_cached<A> && whole_cached<B> && ea && eb) {
-		fft::multiply<E>(std::span<const T>(a.underlying()), a.cache(), std::span<const T>(b.underlying()), b.cache(), std::span<T>(r));
-	} else if constexpr (whole_cached<A> && ea && eb) {
-		fft::fft_cache<E> bc;
-		fft::multiply<E>(std::span<const T>(a.underlying()), a.cache(), std::span<const T>(b.underlying()), bc, std::span<T>(r));
-	} else if constexpr (whole_cached<B> && ea && eb) {
-		fft::fft_cache<E> ac;
-		fft::multiply<E>(std::span<const T>(a.underlying()), ac, std::span<const T>(b.underlying()), b.cache(), std::span<T>(r));
-	} else {
-		fft::multiply<E>(
-			std::span<const T>(a.underlying()).first(std::min(a.len(), prec)),
-			std::span<const T>(b.underlying()).first(std::min(b.len(), prec)),
-			std::span<T>(r)
+	if constexpr (ea && eb && whole_cached<A> && whole_cached<B>) {
+		std::vector<T> coeffs;
+		fft::fft_cache<E> f;
+		fft::multiply_cached<E>(
+			std::span<const T>(a.underlying()), a.cache(),
+			std::span<const T>(b.underlying()), b.cache(),
+			coeffs, f
 		);
+		whole_cached_power_series<E, true> w(power_series_exact<E>(std::move(coeffs)));
+		w.cache() = std::move(f);
+		return w;
+	} else {
+		int prec = detail::product_prec<ea, eb>(a.len(), b.len());
+		power_series<E, ea && eb> r(size_t(prec), T(0));
+		if (prec > 0 && a.len() > 0 && b.len() > 0) {
+			if constexpr (prefix_cached<A> && prefix_cached<B>) {
+				int n = nextPow2(std::max(prec - 1, 1));
+				fft::multiply<E>(a.prefix(n), a.prefix_cache(n), b.prefix(n), b.prefix_cache(n), std::span<T>(r));
+			} else if constexpr (prefix_cached<A>) {
+				int n = nextPow2(std::max(prec - 1, 1));
+				std::span<const T> bs = std::span<const T>(b.underlying()).first(std::min(prec, b.len()));
+				fft::fft_cache<E> bc(bs, 2 * n);
+				fft::multiply<E>(a.prefix(n), a.prefix_cache(n), bs, bc, std::span<T>(r));
+			} else if constexpr (prefix_cached<B>) {
+				int n = nextPow2(std::max(prec - 1, 1));
+				std::span<const T> as = std::span<const T>(a.underlying()).first(std::min(prec, a.len()));
+				fft::fft_cache<E> ac(as, 2 * n);
+				fft::multiply<E>(as, ac, b.prefix(n), b.prefix_cache(n), std::span<T>(r));
+			} else if constexpr (whole_cached<A> && ea && eb) {
+				fft::fft_cache<E> bc;
+				fft::multiply<E>(std::span<const T>(a.underlying()), a.cache(), std::span<const T>(b.underlying()), bc, std::span<T>(r));
+			} else if constexpr (whole_cached<B> && ea && eb) {
+				fft::fft_cache<E> ac;
+				fft::multiply<E>(std::span<const T>(a.underlying()), ac, std::span<const T>(b.underlying()), b.cache(), std::span<T>(r));
+			} else {
+				fft::multiply<E>(
+					std::span<const T>(a.underlying()).first(std::min(a.len(), prec)),
+					std::span<const T>(b.underlying()).first(std::min(b.len(), prec)),
+					std::span<T>(r)
+				);
+			}
+		}
+		if constexpr (ea && eb) {
+			return whole_cached_power_series<E, true>(std::move(r));
+		} else {
+			return r;
+		}
 	}
-	return r;
 }
 
 // [x^k] p(x)/q(x) (Bostan-Mori) for an exact rational function. Requires q[0] != 0 and
@@ -1858,9 +1934,10 @@ struct prefix_cached_power_series {
 	static constexpr bool exact_v = exact;
 
 	prefix_cached_power_series() = default;
-	// moving coefficients in is the common, free construction: implicit
+	// moving coefficients in or out is free: implicit on rvalues, explicit copy otherwise
 	prefix_cached_power_series(power_series<E, exact>&& s_) : s(std::move(s_)) {}
 	explicit prefix_cached_power_series(const power_series<E, exact>& s_) : s(s_) {}
+	operator power_series<E, exact>() && { return std::move(s); }
 
 	int len() const { return s.len(); }
 	const power_series<E, exact>& underlying() const { return s; }
@@ -1895,70 +1972,7 @@ private:
 	mutable std::vector<fft::fft_cache<E>> caches; // memoized transforms: logically const
 };
 
-// Wrapper around power_series which caches the transform of the whole series.
-// Ops only exploit the cache at full (exact x exact) precision; a trunc series'
-// whole-sequence transform is still useful for middle products and repeated
-// full-precision use.
-template <fft::conv_engine E, bool exact = true>
-struct whole_cached_power_series {
-	using T = typename E::value_type;
-	using engine_t = E;
-	static constexpr bool exact_v = exact;
 
-	whole_cached_power_series() = default;
-	// moving coefficients in is the common, free construction: implicit
-	whole_cached_power_series(power_series<E, exact>&& s_) : s(std::move(s_)) {}
-	explicit whole_cached_power_series(const power_series<E, exact>& s_) : s(s_) {}
-
-	int len() const { return s.len(); }
-	const power_series<E, exact>& underlying() const { return s; }
-	const T& operator[](int i) const { return s[size_t(i)]; }
-	auto begin() const { return s.cbegin(); }
-	auto end() const { return s.cend(); }
-	// the fft_cache over underlying(), fed to the cached fft:: entry points alongside it
-	fft::fft_cache<E>& cache() const { return f; }
-
-private:
-	power_series<E, exact> s;
-	mutable fft::fft_cache<E> f; // memoized transform: filling it is logically const
-};
-
-template <whole_cached A>
-power_series<typename A::engine_t, A::exact_v> square(const A& a) {
-	using T = typename A::engine_t::value_type;
-	if (a.len() == 0) return {};
-	power_series<typename A::engine_t, A::exact_v> r(size_t(A::exact_v ? 2 * a.len() - 1 : a.len()), T{});
-	if constexpr (A::exact_v) {
-		fft::square<typename A::engine_t>(std::span<const T>(a.underlying()), a.cache(), std::span<T>(r));
-	} else {
-		fft::square<typename A::engine_t>(std::span<const T>(a.underlying()), std::span<T>(r));
-	}
-	return r;
-}
-
-// coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0
-template <whole_cached A, whole_cached B> requires same_engine<A, B>
-std::vector<typename A::engine_t::value_type> middle_product(const A& a, const B& b) {
-	using T = typename A::engine_t::value_type;
-	return fft::middle_product<typename A::engine_t>(
-		std::span<const T>(a.underlying()), a.cache(),
-		std::span<const T>(b.underlying()), b.cache()
-	);
-}
-
-// full product of two cached operands, retaining the pointwise product transform
-// when the engine supports it (see fft::multiply_cached)
-template <whole_cached A, whole_cached B> requires (same_engine<A, B> && A::exact_v && B::exact_v)
-whole_cached_power_series<typename A::engine_t, true> multiply_cached(const A& a, const B& b) {
-	using E = typename A::engine_t;
-	using T = typename E::value_type;
-	std::vector<T> coeffs;
-	fft::fft_cache<E> f;
-	fft::multiply_cached<E>(std::span<const T>(a.underlying()), a.cache(), std::span<const T>(b.underlying()), b.cache(), coeffs, f);
-	whole_cached_power_series<E, true> r(power_series_exact<E>(std::move(coeffs)));
-	r.cache() = std::move(f);
-	return r;
-}
 
 // polynomial class
 // As above, we represent polynomials by a power_series_exact containing the coefficients in reverse order.
@@ -2115,7 +2129,7 @@ struct linear_form {
 	template <bool eb>
 	linear_form composed_with(const power_series<E, eb>& s) const {
 		if constexpr (!eb) assert(s.len() >= len());
-		auto r = c * s;
+		power_series<E, eb> r = c * s;
 		r.resize(size_t(len()));
 		return from_rev_series(power_series_exact<E>(std::move(r)));
 	}
@@ -2137,7 +2151,7 @@ struct subproduct_tree {
 			nodes[N + i] = whole_cached_power_series<E>(power_series_exact<E>{T(1), -pts[i]});
 		}
 		for (int i = N - 1; i > 0; i--) {
-			nodes[i] = multiply_cached(nodes[2*i], nodes[2*i+1]);
+			nodes[i] = nodes[2*i] * nodes[2*i+1];
 		}
 	}
 
