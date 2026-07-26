@@ -1531,12 +1531,6 @@ struct power_series : public std::vector<typename E::value_type> {
 	power_series& operator *= (const power_series& o) {
 		return *this = (*this) * o;
 	}
-	friend power_series square(const power_series& a) {
-		if (sz(a) == 0) return {};
-		power_series r(size_t(exact ? 2 * a.len() - 1 : a.len()));
-		fft::square<E>(std::span<const T>(a), std::span<T>(r));
-		return r;
-	}
 
 	// Newton inversion: 1/a mod x^a.len(). Generic over any engine; per doubling step
 	// n -> m = 2n this is 5 transforms of size m, reusing b's transform for both circular
@@ -1864,26 +1858,39 @@ private:
 	mutable fft::fft_cache<E> f; // memoized transform: filling it is logically const
 };
 
-template <whole_cached A>
+namespace detail {
+// the operand's whole cache if it carries one, else the caller's throwaway cache
+template <series_like S>
+fft::fft_cache<typename S::engine_t>& whole_cache_or(const S& s, fft::fft_cache<typename S::engine_t>& tmp) {
+	if constexpr (whole_cached<S>) return s.cache(); else return tmp;
+}
+/* namespace detail */ }
+
+// Both consume whole-sequence transforms by nature (the full span always
+// participates), so only whole caches apply, never prefix caches.
+template <series_like A>
 power_series<typename A::engine_t, A::exact_v> square(const A& a) {
-	using T = typename A::engine_t::value_type;
+	using E = typename A::engine_t;
+	using T = typename E::value_type;
 	if (a.len() == 0) return {};
-	power_series_span<typename A::engine_t, A::exact_v> av = a.underlying();
-	power_series<typename A::engine_t, A::exact_v> r(size_t(A::exact_v ? 2 * a.len() - 1 : a.len()), T{});
-	if constexpr (A::exact_v) {
-		fft::square<typename A::engine_t>(av.coeffs(), a.cache(), std::span<T>(r));
-	} else {
-		fft::square<typename A::engine_t>(av.coeffs(), std::span<T>(r));
-	}
+	power_series_span<E, A::exact_v> av = a.underlying();
+	power_series<E, A::exact_v> r(size_t(A::exact_v ? 2 * a.len() - 1 : a.len()), T{});
+	fft::fft_cache<E> ta_;
+	fft::square<E>(av.coeffs(), detail::whole_cache_or(a, ta_), std::span<T>(r));
 	return r;
 }
 
 // coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0
-template <whole_cached A, whole_cached B> requires same_engine<A, B>
+template <series_like A, series_like B> requires same_engine<A, B>
 std::vector<typename A::engine_t::value_type> middle_product(const A& a, const B& b) {
-	power_series_span<typename A::engine_t, A::exact_v> av = a.underlying();
-	power_series_span<typename A::engine_t, B::exact_v> bv = b.underlying();
-	return fft::middle_product<typename A::engine_t>(av.coeffs(), a.cache(), bv.coeffs(), b.cache());
+	using E = typename A::engine_t;
+	power_series_span<E, A::exact_v> av = a.underlying();
+	power_series_span<E, B::exact_v> bv = b.underlying();
+	fft::fft_cache<E> ta_, tb_;
+	return fft::middle_product<E>(
+		av.coeffs(), detail::whole_cache_or(a, ta_),
+		bv.coeffs(), detail::whole_cache_or(b, tb_)
+	);
 }
 
 namespace detail {
