@@ -2381,6 +2381,8 @@ struct subproduct_tree {
 		}
 		for (int i = N - 1; i > 0; i--) {
 			up[i] = multiply_add2(up[2*i+0], nodes[2*i+1], up[2*i+1], nodes[2*i+0]);
+			up[2*i+0] = whole_cached_poly<E>{};
+			up[2*i+1] = whole_cached_poly<E>{};
 		}
 		return std::move(up[1]);
 	}
