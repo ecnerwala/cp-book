@@ -281,6 +281,7 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //   The basic multiplication API is
 //      transform(span<const value_type> in, int n) -> transformed_t<unit_scale>
 //      mul(transformed_t<A>, transformed_t<B>, int n) -> product_t<A*B>
+//      mul2(a1, b1, a2, b2, int n) -> product_t<A1*B1 + A2*B2>, computing a1*b1 + a2*b2 in one pass
 //      finish(product_t<A>, span<value_type>& out, Op) -> void
 //
 //   Input span can be length up to 2n.
@@ -321,6 +322,7 @@ concept conv_engine = requires(
 	{ E::negate_arg(ct, n) } -> std::same_as<typename E::transformed>;
 	{ E::mul(ct, ct, n) } -> std::same_as<typename E::product>;
 	{ E::sq(ct, n) } -> std::same_as<typename E::product>;
+	{ E::mul2(ct, ct, ct, ct, n) } -> std::same_as<typename E::template product_t<2 * E::unit_scale>>;
 	E::finish(std::move(p), out);
 	E::finish(std::move(p), out, add_op{});
 	E::finish(E::add(std::move(p), std::move(p)), out);
@@ -508,6 +510,28 @@ template <typename dbl = double> struct fft_real_engine {
 		return p;
 	}
 	static product sq(const transformed& a, int n) { return mul(a, a, n); }
+	static product mul2(
+		const transformed& a1, const transformed& b1,
+		const transformed& a2, const transformed& b2,
+		int n
+	) {
+		int m = packed_size(n);
+		assert(a1.size() >= n && b1.size() >= n && a2.size() >= n && b2.size() >= n);
+		core::init(2 * m);
+		product p; p.v.resize(m);
+		for (int t = 0; t < m; t++) {
+			int k = core::brev(t, m);
+			cnum w = core::rt[m + k];
+			cnum xa1 = part(a1, t, false), ya1 = part(a1, t, true);
+			cnum xb1 = part(b1, t, false), yb1 = part(b1, t, true);
+			cnum xa2 = part(a2, t, false), ya2 = part(a2, t, true);
+			cnum xb2 = part(b2, t, false), yb2 = part(b2, t, true);
+			cnum p0 = (xa1 + w * ya1) * (xb1 + w * yb1) + (xa2 + w * ya2) * (xb2 + w * yb2);
+			cnum p1 = (xa1 - w * ya1) * (xb1 - w * yb1) + (xa2 - w * ya2) * (xb2 - w * yb2);
+			p.v[t] = retangle(p0, p1, m, k);
+		}
+		return p;
+	}
 	static product add(product&& a, const product& b) {
 		assert(a.size() == b.size());
 		for (int i = 0; i < sz(a.v); i++) a.v[i] = a.v[i] + b.v[i];
@@ -611,7 +635,7 @@ template <typename mnum> struct fft_split_engine {
 	// Unpacks b's transform into transforms of its low/high halves via conjugate
 	// symmetry, then multiplies both against a's (still packed) transform. The scale
 	// parameter only affects the bookkeeping, so the body is a shared untyped impl.
-	static void mul_impl(const vector<cnum>& a, const vector<cnum>& b, vector<cnum>& lo, vector<cnum>& hi, int n) {
+	static void mul_impl(const vector<cnum>& a, const vector<cnum>& b, vector<cnum>& lo, vector<cnum>& hi, int n, bool acc = false) {
 		core::init(n);
 		lo.resize(n); hi.resize(n);
 		for (int i = 0; i < n; i++) {
@@ -619,8 +643,13 @@ template <typename mnum> struct fft_split_engine {
 			cnum g0 = (b[i] + conj(b[ci])) * cnum(0.5);
 			cnum t = (b[i] - conj(b[ci])) * cnum(0.5);
 			cnum g1 = cnum(t.y, -t.x);
-			lo[i] = a[i] * g0;
-			hi[i] = a[i] * g1;
+			if (acc) {
+				lo[i] = lo[i] + a[i] * g0;
+				hi[i] = hi[i] + a[i] * g1;
+			} else {
+				lo[i] = a[i] * g0;
+				hi[i] = a[i] * g1;
+			}
 		}
 	}
 	template <int A, int B> static product_t<A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
@@ -630,6 +659,18 @@ template <typename mnum> struct fft_split_engine {
 		return p;
 	}
 	template <int A> static product_t<A * A> sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int A1, int B1, int A2, int B2>
+	static product_t<A1 * B1 + A2 * B2> mul2(
+		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
+		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
+		int n
+	) {
+		assert(a1.size() >= n && b1.size() >= n && a2.size() >= n && b2.size() >= n);
+		product_t<A1 * B1 + A2 * B2> p;
+		mul_impl(a1.v, b1.v, p.lo, p.hi, n);
+		mul_impl(a2.v, b2.v, p.lo, p.hi, n, true);
+		return p;
+	}
 	static void add_into(vector<cnum>& a, const vector<cnum>& b) {
 		assert(sz(a) == sz(b));
 		for (int i = 0; i < sz(a); i++) a[i] = a[i] + b[i];
@@ -736,6 +777,17 @@ struct crt_engine {
 		return product_t<A * B>{E1::mul(a.t1, b.t1, n), E2::mul(a.t2, b.t2, n)};
 	}
 	template <int A> static product_t<A * A> sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int A1, int B1, int A2, int B2>
+	static product_t<A1 * B1 + A2 * B2> mul2(
+		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
+		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
+		int n
+	) {
+		return product_t<A1 * B1 + A2 * B2>{
+			E1::mul2(a1.t1, b1.t1, a2.t1, b2.t1, n),
+			E2::mul2(a1.t2, b1.t2, a2.t2, b2.t2, n),
+		};
+	}
 	template <int K1, int K2> static product_t<K1 + K2> add(product_t<K1>&& a, product_t<K2>&& b) {
 		return product_t<K1 + K2>{E1::add(std::move(a.p1), b.p1), E2::add(std::move(a.p2), b.p2)};
 	}
@@ -950,6 +1002,31 @@ struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int A1, int B1, int A2, int B2, int k = 0>
+	static auto entry2(
+		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
+		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
+		int r, int c, int n
+	) {
+		auto e = E::mul2(
+			a1.t[size_t(r) * N + k], b1.t[size_t(k) * N + c],
+			a2.t[size_t(r) * N + k], b2.t[size_t(k) * N + c],
+			n
+		);
+		if constexpr (k + 1 == N) return e;
+		else return E::add(std::move(e), entry2<A1, B1, A2, B2, k + 1>(a1, b1, a2, b2, r, c, n));
+	}
+	template <int A1, int B1, int A2, int B2>
+	static product_t<A1 * B1 + A2 * B2> mul2(
+		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
+		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
+		int n
+	) {
+		product_t<A1 * B1 + A2 * B2> p;
+		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++)
+			p.t[size_t(r) * N + c] = entry2<A1, B1, A2, B2>(a1, b1, a2, b2, r, c, n);
+		return p;
+	}
 };
 
 // Convolve trunc_series<num, N> (power series truncated at N), with accumulation in product space
@@ -978,6 +1055,28 @@ struct trunc_series_engine : componentwise_engine<E, trunc_series<typename E::va
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int A1, int B1, int A2, int B2, int s, int i = 0>
+	static auto entry2(
+		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
+		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
+		int n
+	) {
+		auto e = E::mul2(a1.t[size_t(i)], b1.t[size_t(s - i)], a2.t[size_t(i)], b2.t[size_t(s - i)], n);
+		if constexpr (i == s) return e;
+		else return E::add(std::move(e), entry2<A1, B1, A2, B2, s, i + 1>(a1, b1, a2, b2, n));
+	}
+	template <int A1, int B1, int A2, int B2>
+	static product_t<A1 * B1 + A2 * B2> mul2(
+		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
+		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
+		int n
+	) {
+		product_t<A1 * B1 + A2 * B2> p;
+		[&]<size_t... s_>(std::index_sequence<s_...>) {
+			((p.t[s_] = entry2<A1, B1, A2, B2, int(s_)>(a1, b1, a2, b2, n)), ...);
+		}(std::make_index_sequence<size_t(N)>{});
+		return p;
+	}
 };
 
 // Stable variants of the wrapper engines: do not accumulate in product space.
@@ -1009,6 +1108,21 @@ struct matrix_engine_stable
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int A1, int B1, int A2, int B2>
+	static product_t<A1 * B1 + A2 * B2> mul2(
+		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
+		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
+		int n
+	) {
+		product_t<A1 * B1 + A2 * B2> p;
+		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) for (int k = 0; k < N; k++)
+			p.t[(size_t(r) * N + c) * N + k] = E::mul2(
+				a1.t[size_t(r) * N + k], b1.t[size_t(k) * N + c],
+				a2.t[size_t(r) * N + k], b2.t[size_t(k) * N + c],
+				n
+			);
+		return p;
+	}
 };
 
 template <int N> constexpr std::array<int, size_t(N) + 1> trunc_series_stable_ofs = [] {
@@ -1036,6 +1150,21 @@ struct trunc_series_engine_stable
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int A1, int B1, int A2, int B2>
+	static product_t<A1 * B1 + A2 * B2> mul2(
+		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
+		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
+		int n
+	) {
+		product_t<A1 * B1 + A2 * B2> p;
+		for (int s = 0; s < N; s++) for (int i = 0; i <= s; i++)
+			p.t[size_t(trunc_series_stable_ofs<N>[size_t(s)] + i)] = E::mul2(
+				a1.t[size_t(i)], b1.t[size_t(s - i)],
+				a2.t[size_t(i)], b2.t[size_t(s - i)],
+				n
+			);
+		return p;
+	}
 };
 
 static_assert(conv_engine<fft_engine<modnum<998244353>>>);
@@ -1141,19 +1270,6 @@ void finish_linear(
 	}
 }
 
-// a1 * b1 + a2 * b2, in one pass if the engine provides mul2.
-template <conv_engine E>
-auto mul2(
-	const fft::transformed<E>& a1, const fft::transformed<E>& b1,
-	const fft::transformed<E>& a2, const fft::transformed<E>& b2,
-	int n
-) {
-	if constexpr (requires { E::mul2(a1, b1, a2, b2, n); }) {
-		return E::mul2(a1, b1, a2, b2, n);
-	} else {
-		return E::add(E::mul(a1, b1, n), E::mul(a2, b2, n));
-	}
-}
 }
 
 template <conv_engine E, typename Op = assign_op>
@@ -1197,7 +1313,7 @@ void multiply_add2(std::span<const typename E::value_type> a1, transformed<E>& t
 	T c0 = a1[0] * b1[0] + a2[0] * b2[0];
 	E::extend_to(ta1, n, a1); E::extend_to(tb1, n, b1);
 	E::extend_to(ta2, n, a2); E::extend_to(tb2, n, b2);
-	detail::finish_linear<E>(detail::mul2<E>(ta1, tb1, ta2, tb2, n), n, s, cut, c0, out, op);
+	detail::finish_linear<E>(E::mul2(ta1, tb1, ta2, tb2, n), n, s, cut, c0, out, op);
 }
 
 // As multiply_add2, but also outputs the summed pointwise product as a reusable
@@ -1220,7 +1336,7 @@ void multiply_add2_cached(
 		T c0 = a1[0] * b1[0] + a2[0] * b2[0];
 		E::extend_to(ta1, n, a1); E::extend_to(tb1, n, b1);
 		E::extend_to(ta2, n, a2); E::extend_to(tb2, n, b2);
-		auto p = detail::mul2<E>(ta1, tb1, ta2, tb2, n);
+		auto p = E::mul2(ta1, tb1, ta2, tb2, n);
 		auto tp = p;
 		detail::finish_linear<E>(std::move(p), n, s, cut, c0, std::span<T>(coeffs));
 		t = std::move(tp);
