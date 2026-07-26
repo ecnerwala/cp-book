@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <cassert>
 #include <concepts>
+#include <functional>
 
 #include "modnum.hpp"
 
@@ -1772,11 +1773,11 @@ struct cached_power_series_span {
 	static constexpr bool exact_v = exact;
 
 	power_series_span<E, exact> s;
-	fft::fft_cache<E>* f;
+	std::reference_wrapper<fft::fft_cache<E>> f;
 
 	int len() const { return s.len(); }
 	power_series_span<E, exact> underlying() const { return s; }
-	fft::fft_cache<E>& cache() const { return *f; }
+	fft::fft_cache<E>& cache() const { return f; }
 };
 
 // carries transforms of power-of-two prefixes, usable at any precision:
@@ -1868,10 +1869,10 @@ auto product_operand(const S& s, int prec, int other_len, fft::fft_cache<typenam
 		if constexpr (whole_cached<S>) {
 			if (s.len() == used || fft::detail::conv_size_for(s.len() + other_len - 1).n
 					== fft::detail::conv_size_for(used + other_len - 1).n) {
-				return cached_power_series_span<E, S::exact_v>{v, &s.cache()};
+				return cached_power_series_span<E, S::exact_v>{v, s.cache()};
 			}
 		}
-		return cached_power_series_span<E, S::exact_v>{v.first(used), &tmp};
+		return cached_power_series_span<E, S::exact_v>{v.first(used), tmp};
 	}
 }
 /* namespace detail */ }
@@ -2008,7 +2009,7 @@ struct prefix_cached_power_series {
 	cached_power_series_span<E, exact> prefix(int n) const {
 		return {
 			power_series_span<E, exact>(std::span<const T>(s).first(std::min(n + 1, len()))),
-			&prefix_cache(n)
+			prefix_cache(n)
 		};
 	}
 	// cache over the prefix of length min(n + 1, len()); n a power of two
