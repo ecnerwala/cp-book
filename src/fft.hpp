@@ -1822,14 +1822,15 @@ struct cached_power_series_span {
 };
 
 // carries transforms of power-of-two prefixes, usable at any precision:
-// prefix(n) borrows the length-min(n+1, len) prefix with its cache
+// prefix(n) borrows the length-min(n, len) prefix with its cache.
+// Trunc-only: an exact operand participates whole, so whole_cached covers it.
 template <typename S>
-concept prefix_cached = series_like<S> && requires(const S& s, int n) {
+concept prefix_cached = series_like<S> && !S::exact_v && requires(const S& s, int n) {
 	{ s.prefix(n) } -> whole_cached;
 };
 
 // Wrapper around power_series which caches the transform of the whole series.
-// Ops only exploit the cache at full (exact x exact) precision; a trunc series'
+// Ops exploit the cache whenever the whole span participates; a trunc series'
 // whole-sequence transform is still useful for middle products and repeated
 // full-precision use.
 template <fft::conv_engine E, bool exact = true>
@@ -2023,21 +2024,21 @@ typename E::value_type kth_term_of_rational_function(
 // Wrapper around power_series_trunc which caches transform(s[:2^k]) for all k,
 // matching the doubling shape of inverse/exp so they can populate the caches.
 // TODO: make inverse/exp populate these
-template <fft::conv_engine E, bool exact = false>
+template <fft::conv_engine E>
 struct prefix_cached_power_series {
 	using T = typename E::value_type;
 
 	using engine_t = E;
-	static constexpr bool exact_v = exact;
+	static constexpr bool exact_v = false;
 
 	prefix_cached_power_series() = default;
 	// moving coefficients in or out is free: implicit on rvalues, explicit copy otherwise
-	prefix_cached_power_series(power_series<E, exact>&& s_) : s(std::move(s_)) {}
-	explicit prefix_cached_power_series(const power_series<E, exact>& s_) : s(s_) {}
-	operator power_series<E, exact>() && { return std::move(s); }
+	prefix_cached_power_series(power_series<E, false>&& s_) : s(std::move(s_)) {}
+	explicit prefix_cached_power_series(const power_series<E, false>& s_) : s(s_) {}
+	operator power_series<E, false>() && { return std::move(s); }
 
 	int len() const { return s.len(); }
-	const power_series<E, exact>& underlying() const { return s; }
+	const power_series<E, false>& underlying() const { return s; }
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
@@ -2048,9 +2049,9 @@ struct prefix_cached_power_series {
 	}
 
 	// the length-min(n, len) prefix borrowed together with its cache
-	cached_power_series_span<E, exact> prefix(int n) const {
+	cached_power_series_span<E, false> prefix(int n) const {
 		return {
-			power_series_span<E, exact>(std::span<const T>(s).first(std::min(n, len()))),
+			power_series_span<E, false>(std::span<const T>(s).first(std::min(n, len()))),
 			prefix_cache(n)
 		};
 	}
@@ -2066,7 +2067,7 @@ struct prefix_cached_power_series {
 	}
 
 private:
-	power_series<E, exact> s;
+	power_series<E, false> s;
 	mutable std::vector<fft::fft_cache<E>> caches; // memoized transforms: logically const
 };
 

@@ -566,12 +566,6 @@ TEST_CASE("power_series cached wrappers", "[fft]") {
 	REQUIRE((wt * big) == (pa * big));
 	REQUIRE((big * wt) == (big * pa));
 	REQUIRE((wt * pb) == (pa * pb));
-	// exact cached series give full products, mixing with truncated operands
-	prefix_cached_power_series<E, true> xqa(a), xqb(b);
-	REQUIRE((xqa * xqb) == (a * b));
-	REQUIRE((xqa * b) == (a * b));
-	REQUIRE((xqa * qb) == (a * pb));
-	REQUIRE((pb * xqa) == (pb * a));
 }
 
 TEST_CASE("linear_form evaluation and transposed multiplication", "[fft]") {
