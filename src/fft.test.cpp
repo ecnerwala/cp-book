@@ -329,7 +329,7 @@ TEMPLATE_TEST_CASE("FFT cached multiply", "[fft]", ALL_ENGINES) {
 	fill_rnd(b, mt);
 	fill_rnd(c, mt);
 	// caller-owned coefficients + lazily built transforms
-	typename E::transformed ca, cb, cc;
+	fft::transformed<E> ca, cb, cc;
 	{
 		vector<num> out(a.size() + b.size() - 1);
 		multiply<E>(span<const num>(a), ca, span<const num>(b), cb, span<num>(out));
@@ -356,7 +356,7 @@ TEMPLATE_TEST_CASE("FFT cached multiply", "[fft]", ALL_ENGINES) {
 		// multiply_cached: coefficients match, and the seeded (or lazily built)
 		// transform is directly usable in further products, including after extend
 		vector<num> ab;
-		typename E::transformed cab;
+		fft::transformed<E> cab;
 		multiply_cached<E>(span<const num>(a), ca, span<const num>(b), cb, ab, cab);
 		check_eq(ab, multiply_slow(a, b));
 		vector<num> out(ab.size() + c.size() - 1);
@@ -368,7 +368,7 @@ TEMPLATE_TEST_CASE("FFT cached multiply", "[fft]", ALL_ENGINES) {
 		vector<num> d(33), e(1);
 		fill_rnd(d, mt);
 		fill_rnd(e, mt);
-		typename E::transformed cd, ce;
+		fft::transformed<E> cd, ce;
 		vector<num> out(33);
 		multiply<E>(span<const num>(d), cd, span<const num>(e), ce, span<num>(out));
 		check_eq(out, multiply_slow(d, e));
@@ -382,9 +382,9 @@ TEMPLATE_TEST_CASE("FFT cached multiply", "[fft]", ALL_ENGINES) {
 		vector<num> d(33), e(33);
 		fill_rnd(d, mt);
 		fill_rnd(e, mt);
-		typename E::transformed cd, ce;
+		fft::transformed<E> cd, ce;
 		vector<num> de;
-		typename E::transformed cde;
+		fft::transformed<E> cde;
 		multiply_cached<E>(span<const num>(d), cd, span<const num>(e), ce, de, cde);
 		check_eq(de, multiply_slow(d, e));
 		vector<num> out(de.size() + c.size() - 1);
@@ -408,7 +408,7 @@ TEMPLATE_TEST_CASE("FFT multiply_add2", "[fft]", ALL_ENGINES) {
 		vector<num> want = multiply_slow(a1, b1);
 		vector<num> p2 = multiply_slow(a2, b2);
 		for (int i = 0; i < sz(p2); i++) want[i] += p2[i];
-		typename E::transformed ca1, cb1, ca2, cb2;
+		fft::transformed<E> ca1, cb1, ca2, cb2;
 		vector<num> got(want.size());
 		multiply_add2<E>(span<const num>(a1), ca1, span<const num>(b1), cb1,
 				span<const num>(a2), ca2, span<const num>(b2), cb2, span<num>(got));
@@ -522,7 +522,7 @@ TEST_CASE("power_series cached wrappers", "[fft]") {
 	REQUIRE(middle_product(ca, cb) == fft::middle_product<E>(a, b));
 	REQUIRE(square(ca) == square(a));
 	// the same transform serves multiply and square of the same coefficients
-	typename E::transformed fa, fb;
+	fft::transformed<E> fa, fb;
 	power_series_exact<E> got2(size_t(a.len() + b.len() - 1));
 	fft::multiply<E>(span<const num>(a), fa, span<const num>(b), fb, span<num>(got2));
 	REQUIRE(got2 == a * b);
