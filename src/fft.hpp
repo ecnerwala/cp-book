@@ -29,7 +29,8 @@
  *                   power_series_exact<E> - exact (finite-support) power series
  *                   power_series_trunc<E> - truncated prefix of an (infinite) power series
  *
- *                   polynomials - R[x]. We identify reversed polynomials with Laurent/power series (R[1/x] <-> R((x)) <-> R[[x]])
+ *                   polynomials - R[x]. Under x -> 1/x a polynomial becomes a Laurent polynomial in 1/x;
+ *                                 shifting by x^{deg P} (reversal) lands it in R[[x]], and we store that exact series.
  *                   poly<E> - polynomial type, supporting natural indexing
  *                   linear_form<E> - finite-support linear forms, via the pairing <P, S> = [x^0] P(1/x) S(x)
  *                                    a linear form is one side of this pairing, applied to the other
