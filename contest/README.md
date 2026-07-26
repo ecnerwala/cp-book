@@ -11,7 +11,7 @@ Copy the base template to the root of your contests tree (copy-once; no live
 dependency on this repo):
 
 ```sh
-cp -r contest/.template ~/contests/.template
+cp -r contest/template ~/contests/.template
 ```
 
 Put `download_prob.py` and `make_prob.py` somewhere on your `PATH` (or invoke
