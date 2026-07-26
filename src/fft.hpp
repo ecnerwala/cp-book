@@ -382,6 +382,16 @@ template <typename num> struct fft_engine {
 		return p;
 	}
 	static product sq(const transformed& a, int n) { return mul(a, a, n); }
+	static product mul2(
+		const transformed& a1, const transformed& b1,
+		const transformed& a2, const transformed& b2,
+		int n
+	) {
+		assert(a1.size() >= n && b1.size() >= n && a2.size() >= n && b2.size() >= n);
+		product p; p.v.resize(n);
+		for (int i = 0; i < n; i++) p.v[i] = a1.v[i] * b1.v[i] + a2.v[i] * b2.v[i];
+		return p;
+	}
 	static product add(product&& a, const product& b) {
 		assert(a.size() == b.size());
 		for (int i = 0; i < a.size(); i++) a.v[i] += b.v[i];
@@ -1083,6 +1093,45 @@ void emit_linear(std::span<T> buf, int n, int s, bool cut, T c0, std::span<T> ou
 	for (int i = 0; i < lim; i++) op(out[i], buf[i]);
 	if (cut && sz(out) >= s) op(out[s-1], cn);
 }
+
+// finish + emit_linear fused: write the finished product directly into out,
+// avoiding the scratch buffer and its extra pass when the correction can be
+// applied in place.
+template <conv_engine E, typename Op = assign_op>
+void finish_linear(
+	typename E::product&& p, int n, int s, bool cut,
+	typename E::value_type c0, std::span<typename E::value_type> out, Op op = {}
+) {
+	using T = typename E::value_type;
+	if (sz(out) == 0) return;
+	if (!cut || std::same_as<Op, assign_op>) {
+		int lim = min(sz(out), min(s, n));
+		E::finish(std::move(p), out.subspan(0, lim), op);
+		if (cut) {
+			T cn = out[0] - c0;
+			out[0] = c0;
+			if (sz(out) >= s) out[s-1] = cn;
+		}
+	} else {
+		auto buf = buffer_pool<T>::get(n);
+		E::finish(std::move(p), buf.span());
+		emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
+	}
+}
+
+// a1 * b1 + a2 * b2, in one pass if the engine provides mul2.
+template <conv_engine E>
+typename E::product mul2(
+	const fft::transformed<E>& a1, const fft::transformed<E>& b1,
+	const fft::transformed<E>& a2, const fft::transformed<E>& b2,
+	int n
+) {
+	if constexpr (requires { E::mul2(a1, b1, a2, b2, n); }) {
+		return E::mul2(a1, b1, a2, b2, n);
+	} else {
+		return E::add(E::mul(a1, b1, n), E::mul(a2, b2, n));
+	}
+}
 }
 
 template <conv_engine E, typename Op = assign_op>
@@ -1109,9 +1158,7 @@ void multiply(std::span<const typename E::value_type> a, transformed<E>& ta,
 	T c0 = a[0] * b[0];
 	E::extend_to(ta, n, a);
 	E::extend_to(tb, n, b);
-	auto buf = buffer_pool<T>::get(n);
-	E::finish(E::mul(ta, tb, n), buf.span());
-	detail::emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
+	detail::finish_linear<E>(E::mul(ta, tb, n), n, s, cut, c0, out, op);
 }
 
 template <conv_engine E, typename Op = assign_op>
@@ -1128,10 +1175,7 @@ void multiply_add2(std::span<const typename E::value_type> a1, transformed<E>& t
 	T c0 = a1[0] * b1[0] + a2[0] * b2[0];
 	E::extend_to(ta1, n, a1); E::extend_to(tb1, n, b1);
 	E::extend_to(ta2, n, a2); E::extend_to(tb2, n, b2);
-	auto p = E::add(E::mul(ta1, tb1, n), E::mul(ta2, tb2, n));
-	auto buf = buffer_pool<T>::get(n);
-	E::finish(std::move(p), buf.span());
-	detail::emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
+	detail::finish_linear<E>(detail::mul2<E>(ta1, tb1, ta2, tb2, n), n, s, cut, c0, out, op);
 }
 
 // As multiply_add2, but also outputs the summed pointwise product as a reusable
@@ -1154,11 +1198,9 @@ void multiply_add2_cached(
 		T c0 = a1[0] * b1[0] + a2[0] * b2[0];
 		E::extend_to(ta1, n, a1); E::extend_to(tb1, n, b1);
 		E::extend_to(ta2, n, a2); E::extend_to(tb2, n, b2);
-		auto p = E::add(E::mul(ta1, tb1, n), E::mul(ta2, tb2, n));
+		auto p = detail::mul2<E>(ta1, tb1, ta2, tb2, n);
 		auto tp = p;
-		auto buf = buffer_pool<T>::get(n);
-		E::finish(std::move(p), buf.span());
-		detail::emit_linear<T>(buf.span(), n, s, cut, c0, std::span<T>(coeffs), assign_op{});
+		detail::finish_linear<E>(std::move(p), n, s, cut, c0, std::span<T>(coeffs));
 		t = std::move(tp);
 	} else {
 		multiply_add2<E>(a1, ta1, b1, tb1, a2, ta2, b2, tb2, std::span<T>(coeffs));
@@ -1182,9 +1224,7 @@ void multiply_cached(std::span<const typename E::value_type> a, transformed<E>& 
 		E::extend_to(tb, n, b);
 		auto p = E::mul(ta, tb, n);
 		auto tp = p;
-		auto buf = buffer_pool<T>::get(n);
-		E::finish(std::move(p), buf.span());
-		detail::emit_linear<T>(buf.span(), n, s, cut, c0, std::span<T>(coeffs), assign_op{});
+		detail::finish_linear<E>(std::move(p), n, s, cut, c0, std::span<T>(coeffs));
 		t = std::move(tp);
 	} else {
 		multiply<E>(a, ta, b, tb, std::span<T>(coeffs));
@@ -1212,9 +1252,7 @@ void square(std::span<const typename E::value_type> a, transformed<E>& ta,
 	auto [n, cut] = detail::conv_size_for(s);
 	T c0 = a[0] * a[0];
 	E::extend_to(ta, n, a);
-	auto buf = buffer_pool<T>::get(n);
-	E::finish(E::sq(ta, n), buf.span());
-	detail::emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
+	detail::finish_linear<E>(E::sq(ta, n), n, s, cut, c0, out, op);
 }
 
 // As square, but also outputs the pointwise product as a reusable transform of
@@ -1233,9 +1271,7 @@ void square_cached(std::span<const typename E::value_type> a, transformed<E>& ta
 		E::extend_to(ta, n, a);
 		auto p = E::sq(ta, n);
 		auto tp = p;
-		auto buf = buffer_pool<T>::get(n);
-		E::finish(std::move(p), buf.span());
-		detail::emit_linear<T>(buf.span(), n, s, cut, c0, std::span<T>(coeffs), assign_op{});
+		detail::finish_linear<E>(std::move(p), n, s, cut, c0, std::span<T>(coeffs));
 		t = std::move(tp);
 	} else {
 		square<E>(a, ta, std::span<T>(coeffs));
