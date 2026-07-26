@@ -297,10 +297,7 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //   Finally, we expose some additional fast-transform optimization paths.
 //   extend_to only operates on transformed_t<unit_scale>; the others are scale-generic.
 //   downsample is also defined on product_t (halving before finish saves inverse-transform work).
-//      extend_to       build (if empty) or grow a transform to size m by repeated doubling; the
-//                      owner must feed the same coefficient sequence (sz <= 2m) every time. A
-//                      first build with sz(coeffs) > m folds circularly -- what the 2^k+1 cut
-//                      consumes, and a valid seed for later doubling.
+//      extend_to       build (if empty) or grow a transform to size m by repeated doubling; feed the same coefficients (sz <= 2m) every time
 //      downsample      compute the half-sized transform/product of just the even (odd = false) or odd terms of the input
 //      negate_arg      size n transform of A(-x)
 template <typename E>
