@@ -85,6 +85,55 @@ Match the existing code exactly. In particular:
 - Prefer library idioms over raw loops when the library provides them (e.g.
   `seg_tree::point a(N-1); a >= 1; a--` with `a.c(0)` / `a.c(1)` children).
 - Keep `main` minimal — all real logic belongs in `src/` headers.
+- **Never skip braces** on loops/branches, with one exception: the body may
+  be brace-less when it sits on the same line as the loop/branch and is the
+  entire rest of that line (e.g.
+  `for (int i = 0; i < n; i++) out[i] = a[i] + b[i];`).
+- **Hanging indents use `(` then a newline**: when a declaration or call
+  doesn't fit on one line, break immediately after the opening paren, put
+  the arguments on following lines indented one extra tab, and close with
+  `)` back at the outer indentation level. This keeps all indentation at
+  whole multiples of tab (no aligning to the paren column):
+
+  ```cpp
+  template <fft::conv_engine E>
+  std::vector<typename E::value_type> poly_evaluate(
+  	const poly<E>& p,
+  	std::span<const typename E::value_type> pts
+  ) {
+  ```
+
+## Comment style
+
+Comments exist for the reader of the code as it stands — to understand it and
+use it correctly. Concretely:
+
+- **Describe the code as-is, never the change.** When editing, don't write
+  comments that narrate what changed or contrast with previous behavior; that
+  context belongs in the commit/PR message. (Occasionally a change embodies an
+  important design decision worth recording — record the decision, not the
+  diff.) Most implementation details are self-evident from the code and need
+  no comment at all.
+- **State a convention once, where it's established**, then rely on it —
+  don't re-explain it at every use site. E.g. the bit-reversed transform
+  convention and the span length rules are stated in the `fft_core` /
+  `conv_engine` preambles, and later functions just use them.
+- **Contracts over prose.** Prefer short statements of what a function
+  computes and requires (`Requires f.len() == N.`, allowed span lengths,
+  aliasing rules) to paragraphs of explanation. Derivations/proofs, if worth
+  keeping, go inside the function body next to the relevant code.
+- **Start each sentence/clause on a new line** — this makes comments easier
+  to read and edit in a line-based editor. Don't rewrap them into paragraphs.
+- Plain inline math notation: `R[[x]]`, `2^k`, `omega`, `<P, S> = [x^0]
+  P(1/x) S(x)`, half-open ranges `[Ofs[c], Ofs[c+1])`, python-style slices
+  `prod[Ofs[c]:Ofs[c+1]]`. No LaTeX ceremony outside the file header.
+- First-person-plural voice for design narration is fine ("We take the
+  bit-reverse convention...", "We will store Q as a packed buffer...").
+- Open design questions are recorded inline as `// TODO:` next to the code
+  they concern. Leave existing TODOs alone unless you're resolving them.
+- Avoid hand-aligned comment columns/tables unless the alignment clearly
+  aids readability (e.g. the layer table in the fft.hpp header); aligned
+  blocks are costly to maintain. No trailing whitespace.
 
 ## Library notes
 

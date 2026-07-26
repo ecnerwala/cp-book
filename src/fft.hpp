@@ -18,24 +18,25 @@
  * For integers rounding works if $(|a| + |b|)\max(a, b) < \mathtt{\sim} 10^9$, or in theory maybe $10^6$.
  *
  * Abstraction layers:
- *   fft_core<num>   FFT itself and other ops on domains with omega_{2^k}. We use bit-reversed indexing in frequency-domain.
+ *   fft_core<num>   FFT itself and other ops on rings with 2^k-th roots of unity. We use bit-reversed indexing in the frequency domain.
  *
  *   conv_engines    Engines for packing/unpacking arbitrary rings for convolution.
- *                   Still exposes (opaque) transform-domain objects for caching/fusion.
+ *                   Still expose (opaque) transform-domain objects for caching/fusion.
  *
- *   multiply layer  Wrappers for convolving bounded sequences: tracks length/truncation.
+ *   multiply layer  Wrappers for convolving bounded sequences: track length/truncation.
  *
  *   value types     power_series - R[[x]]
  *                   power_series_exact<E> - exact (finite-support) power series
  *                   power_series_trunc<E> - truncated prefix of an (infinite) power series
  *
- *                   polynomials - R[x]. We identify reversed polynomials with Laurent/power series (R[1/x] <-> R((x)) <-> R[[x]])
+ *                   polynomials - R[x]. Under x -> 1/x a polynomial becomes a Laurent polynomial in 1/x;
+ *                                 shifting by x^{deg P} (reversal) lands it in R[[x]], and we store that exact series.
  *                   poly<E> - polynomial type, supporting natural indexing
  *                   linear_form<E> - finite-support linear forms, via the pairing <P, S> = [x^0] P(1/x) S(x)
  *                                    a linear form is one side of this pairing, applied to the other
  *
  *                   online_multiplier<E> - online (relaxed) multiplication of 2 sequences in n log^2 n time
- *                   poly_ap_values<E> - A polynomial stored as its evaluations on an arithmetic progression;
+ *                   poly_ap_values<E> - a polynomial stored as its evaluations on an arithmetic progression
  */
 
 namespace ecnerwala {
@@ -136,14 +137,14 @@ template <typename T> struct buffer_pool {
 	static handle get(int n) { return handle(n); }
 };
 
-// We take the bit-reverse convention: the coefficient of a[i] -> b[j] is omega(i*bit_reverse(j)).
+// We take the bit-reverse convention: the coefficient of a[i] -> b[j] is omega^{i * bit_reverse(j)}.
 // This means that the size 2^{k-1} transform is the prefix of the size 2^k transform (wrapping the input).
 //
 // We mostly work with spans here:
 //   spans of transforms are expected to have length exactly 2^k
 //   spans of inputs/outputs are expected to have length [0, 2^{k+1})
 //
-// Inputs/ouputs are treated mod x^{2^k} - 1.
+// Inputs/outputs are treated mod x^{2^k} - 1.
 // Their length is allowed to be bigger than 2^k mostly to perform ops on sequences of size n+1 with only transforms of size n.
 // The upper bound of 2^{k+1} is arbitrary: we could tighten it to 2^k + 1 or loosen it to infinity, this is just a "defensive" choice.
 template <typename num> struct fft_core {
@@ -172,7 +173,7 @@ template <typename num> struct fft_core {
 		}
 	}
 
-	// bit-reversal of i as a n-bit number
+	// bit-reversal of i as a log2(n)-bit number
 	static int brev(int i, int n) {
 		int s = __builtin_ctz(unsigned(sz(rev)/n));
 		return rev[i] >> s;
@@ -258,7 +259,7 @@ struct sub_op { template <typename T> void operator()(T& d, T v) const { d -= v;
 struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d += v + v; } };
 
 // `conv_engine` contract
-//   conv_engine represents a way of packing/unpacking sequences of arbitrary ring into FFT-style transforms.
+//   conv_engine represents a way of packing/unpacking sequences over an arbitrary ring into FFT-style transforms.
 //   We expect transforms/products of transforms to be linear but potentially lossy/imprecise, so we'll track precision
 //   at compile-time as a template parameter.
 //
@@ -281,7 +282,7 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //   Output spans can be length up to n; only the prefix that exists is filled.
 //   Transforms can be longer than necessary, and only the relevant prefix is used.
 //
-//   For non-exact engines, there's some subtletly whether we wrap before or after packing.
+//   For non-exact engines, there's some subtlety in whether we wrap before or after packing.
 //   We will choose to wrap *after* packing, which hurts error bounds but makes the prefix condition more uniform.
 //
 //   Additionally, we have APIs to take advantage of linearity in both transformed and product space:
@@ -289,7 +290,7 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //      add(product_t<A>, product_t<B>) -> product_t<A+B>
 //
 //   Finally, we expose some additional fast-transform optimization paths.
-//   These are only operate on transformed_t<unit_scale> (engine users can check if product == transformed for optimizations).
+//   These only operate on transformed_t<unit_scale> (engine users can check if product == transformed for optimizations).
 //      extend_to       grow a transform by repeated doubling using the base engine's extend_to()
 //      even/odd_half   compute the half-sized transform of just the even/odd terms of the input
 //      negate_arg      size n transform of A(-x)
@@ -782,14 +783,14 @@ template <typename num, int N> struct trunc_series {
 
 // componentwise_engine
 
-// These are "componentwise engines" which model vector-spaces/algebras of the underlying ring.
+// These are "componentwise engines" which model free modules/algebras over the underlying ring.
 // Matrices are the canonical example: we can take entry-wise transforms, then multiply/add in transformed space.
 //
 // We start with a shared `componentwise_engine` base class which handles all linear ops, i.e. not mul.
 //
-// If the underlying has unit_scale = 1, may need to avoid accumulation of sums in transformed space;
+// If the underlying has unit_scale = 1, we may need to avoid accumulation of sums in transformed space;
 // then, the product and the transformed data may have different dimensions.
-// We'll represent this by an array Ofs which maps which ranges of product-space dimensions maps to each input/transform-space dimension.
+// We'll represent this by an array Ofs of prefix offsets mapping each input/transform-space dimension to a range of product-space dimensions.
 // Specifically, out[c] = sum prod[Ofs[c]:Ofs[c+1]]
 
 template <int L> constexpr std::array<int, size_t(L) + 1> componentwise_iota = [] {
@@ -905,7 +906,7 @@ struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
 };
 
-// Convolve of trunc_series<num, N> (power series truncated at N), with accumulation in product space
+// Convolve trunc_series<num, N> (power series truncated at N), with accumulation in product space
 template <conv_engine E, int N>
 struct trunc_series_engine : componentwise_engine<E, trunc_series<typename E::value_type, N>, N> {
 	using base = componentwise_engine<E, trunc_series<typename E::value_type, N>, N>;
@@ -1051,7 +1052,7 @@ template <conv_engine E> struct fft_cache {
 // Output spans may alias one of the input spans.
 // Output spans may be shorter than expected; the output will just be truncated.
 //
-// Some functions may also take fft_cache& objects associate with the input spans.
+// Some functions may also take fft_cache& objects associated with the input spans.
 // These will be lazily filled and used if available.
 
 // Circular convolution mod n (power of 2)
@@ -1083,7 +1084,7 @@ inline conv_size conv_size_for(int s) {
 	return {cut ? n / 2 : n, cut};
 }
 
-// Call op while lazily apply the correction if necessary
+// Call op while lazily applying the correction if necessary
 template <typename T, typename Op>
 void emit_linear(std::span<T> buf, int n, int s, bool cut, T c0, std::span<T> out, Op op) {
 	T cn{};
@@ -1345,7 +1346,7 @@ template <conv_engine E> vector<typename E::value_type> inverse(const vector<typ
 
 // Helper packed bivariate buffer for Kinoshita-Li composition (arXiv:2404.05177).
 //
-// The motiviation is performing Bostan-Mori (root-squaring) to compute
+// The motivation is performing Bostan-Mori (Graeffe root-squaring) to compute
 // something like [x^n] P / Q_0(x, y) with deg_y(Q_0) = 1 and deg_x(Q_0) = n.
 //
 // In each step, we want to compute Q_{i+1}(x^2, y) = Q_i(x, y) * Q_i(-x, y).
@@ -1392,7 +1393,7 @@ template <fft::conv_engine E> struct packed_bivariate {
 	}
 };
 
-// `power_series` represents both exact (finite) power series (F[x]) and prefixes of infinite power series (F[[x]]), depending on the flag.
+// `power_series` represents both exact (finite) power series (R[x]) and prefixes of infinite power series (R[[x]]), depending on the flag.
 // `power_series_exact` and `power_series_trunc` are aliases.
 //
 // Operators here are typically permissive: they will accept combinations of unequal types and lengths.
@@ -1886,7 +1887,7 @@ power_series<E, ea && eb> operator*(const power_series<E, ea>& a, const prefix_c
 }
 
 // Wrapper around power_series_exact which caches the transform of the whole series
-// TODO: Rework this to be more ergonomic to create. 
+// TODO: Rework this to be more ergonomic to create.
 // Allow this for power_series_trunc too, since sometimes we will only do ops against the whole series.
 template <fft::conv_engine E>
 struct cached_power_series_exact {
@@ -2040,8 +2041,8 @@ template <fft::conv_engine E> struct poly {
 //
 // Some use cases of this pairing:
 // <P, 1/(1-ax)> = P(a)
-// if we represent P as a "polynomial" of the differential operator D (x^k = k! D^k):
-// <P, e^aD> = P(a)
+// if we represent P as a "polynomial" in the differential operator D (x^k = k! D^k):
+// <P, e^{aD}> = P(a)
 template <fft::conv_engine E>
 struct linear_form {
 	using T = typename E::value_type;
@@ -2049,7 +2050,7 @@ struct linear_form {
 
 	linear_form() = default;
 	explicit linear_form(int len) : c(size_t(len), T{}) {}
-	// Don't have any constructors to avoid confusion.
+	// We don't provide coefficient-list constructors, to avoid ordering confusion.
 
 	const power_series_exact<E>& rev_series() const { return c; }
 	static linear_form from_rev_series(power_series_exact<E> s) {
@@ -2060,6 +2061,14 @@ struct linear_form {
 	static linear_form from_poly(const poly<E>& p) { return from_rev_series(p.rev_series()); }
 
 	int len() const { return c.len(); }
+
+	// Restrict the form's domain: only valid against exact series of length n
+	linear_form for_length(int n) const {
+		linear_form r = *this;
+		if (n >= r.len()) r.c.insert(r.c.begin(), size_t(n - r.len()), T(0));
+		else r.c.erase(r.c.begin(), r.c.begin() + (r.len() - n));
+		return r;
+	}
 
 	// the functional p -> p(z) on polynomials of length up to len (weight z^i on [x^i])
 	static linear_form polynomial_evaluation(T z, int len) {
@@ -2116,7 +2125,7 @@ struct subproduct_tree {
 	// rev(prod (x - z_j)) over node i's leaves; length size(i) + 1
 	const power_series_exact<E>& rev_prod(int i) const { return nodes[i].underlying(); }
 
-	// Computes, for each i, f(product_{j != i} (1 - a[j] x)). Require deg(f) == N-1.
+	// Computes, for each i, f(product_{j != i} (1 - a[j] x)). Requires f.len() == N.
 	std::vector<T> pushdown(linear_form<E> f) const {
 		assert(f.len() == N);
 		std::vector<linear_form<E>> down(size_t(2) * N);
@@ -2168,8 +2177,7 @@ std::vector<typename E::value_type> poly_evaluate(
 	power_series<E> q = tree.rev_prod(1);
 	q.resize(p.len()); // inverse precision must cover the form's window
 	linear_form<E> f = linear_form<E>::from_poly(p).composed_with(inverse(q));
-	f.resize(N);
-	return tree.pushdown(std::move(f));
+	return tree.pushdown(f.for_length(N));
 }
 
 template <fft::conv_engine E>
