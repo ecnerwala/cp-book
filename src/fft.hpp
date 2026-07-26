@@ -21,19 +21,19 @@
  * Abstraction layers:
  *   fft_core<num>   FFT itself and other ops on rings with 2^k-th roots of unity. We use bit-reversed indexing in the frequency domain.
  *
- *   conv_engines    Engines for packing/unpacking arbitrary rings for convolution.
+ *   engines         Engines for packing/unpacking arbitrary rings for convolution (the `engine` concept).
  *                   Still expose (opaque) transform-domain objects for caching/fusion.
  *
  *   multiply layer  Wrappers for convolving bounded sequences: track length/truncation.
  *
- *   value types     power_series - R[[x]]
- *                   power_series_exact<E> - exact (finite-support) power series
- *                   power_series_trunc<E> - truncated prefix of an (infinite) power series
+ *   value types     series::vec<E> - R[[x]]
+ *                   series::exact<E> - exact (finite-support) power series
+ *                   series::trunc<E> - truncated prefix of an (infinite) power series
  *
  *                   polynomials - R[x]. Under x -> 1/x a polynomial becomes a Laurent polynomial in 1/x;
  *                                 shifting by x^{deg P} (reversal) lands it in R[[x]], and we store that exact series.
- *                   poly<E> - polynomial type, supporting natural indexing
- *                   linear_form<E> - finite-support linear forms, via the pairing <P, S> = [x^0] P(1/x) S(x)
+ *                   poly::vec<E> - polynomial type, supporting natural indexing
+ *                   poly::form<E> - finite-support linear forms, via the pairing <P, S> = [x^0] P(1/x) S(x)
  *                                    a linear form is one side of this pairing, applied to the other
  *
  *                   online_multiplier<E> - online (relaxed) multiplication of 2 sequences in n log^2 n time
@@ -263,8 +263,8 @@ struct add_op { template <typename T> void operator()(T& d, T v) const { d += v;
 struct sub_op { template <typename T> void operator()(T& d, T v) const { d -= v; } };
 struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d += v + v; } };
 
-// `conv_engine` contract
-//   conv_engine represents a way of packing/unpacking sequences over an arbitrary ring into FFT-style transforms.
+// `engine` contract
+//   engine represents a way of packing/unpacking sequences over an arbitrary ring into FFT-style transforms.
 //   We expect transforms/products of transforms to be linear but potentially lossy/imprecise, so we'll track precision
 //   at compile-time as a template parameter.
 //
@@ -304,7 +304,7 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //      downsample      compute the half-sized transform/product of just the even (odd = false) or odd terms of the input
 //      negate_arg      size n transform of A(-x)
 template <typename E>
-concept conv_engine = requires(
+concept engine = requires(
 	std::span<const typename E::value_type> in,
 	std::span<typename E::value_type> out,
 	typename E::transformed& t,
@@ -334,7 +334,9 @@ concept conv_engine = requires(
 
 // ==== scalar engines ====
 
-template <typename num> struct fft_engine {
+namespace engines {
+
+template <typename num> struct ntt {
 	using value_type = num;
 	static constexpr bool commutative = true;
 	using core = fft_core<num>;
@@ -414,7 +416,7 @@ template <typename num> struct fft_engine {
 //   a'[t] = a[2t] + i * a[2t+1]
 // We use conjugate symmetry to untangle/retangle the two.
 // TODO: Add type bounds?
-template <typename dbl = double> struct fft_real_engine {
+template <typename dbl = double> struct real {
 	using value_type = dbl;
 	static constexpr bool commutative = true;
 	using cnum = cplx<dbl>;
@@ -550,7 +552,7 @@ template <typename dbl = double> struct fft_real_engine {
 // [-2^14, 2^14], from the balanced representative |v| <= MOD/2) packed into one complex
 // transform per operand.
 // TODO: Add type bounds?
-template <typename mnum> struct fft_split_engine {
+template <typename mnum> struct split {
 	using value_type = mnum;
 	static constexpr bool commutative = true;
 	static constexpr int unit_scale = 1;
@@ -684,7 +686,7 @@ template <typename mnum> struct fft_split_engine {
 	template <int K = 1, typename Op = assign_op> static void finish(product_t<K>&& p, std::span<mnum> out, Op op = {}) {
 		// The fp error budget is divided by the accumulated scale; K <= 2 is very
 		// conservative (balanced limbs already left ~2x headroom at max lengths).
-		static_assert(K <= 2, "fft_split_engine: accumulated scale too large");
+		static_assert(K <= 2, "split: accumulated scale too large");
 		int n = p.size();
 		assert(sz(out) <= n);
 		core::inverse(std::span<cnum>(p.lo));
@@ -708,12 +710,12 @@ template <typename mnum> struct fft_split_engine {
 // Inputs use balanced representatives (|v| <= MOD/2), so the true integer coefficients
 // are bounded by n (MOD/2)^2.
 template <typename mnum, typename num1 = mod_goldilocks, typename num2 = modnum<(15 << 27) + 1>>
-struct crt_engine {
+struct crt {
 	using value_type = mnum;
 	static constexpr bool commutative = true;
 	static constexpr int unit_scale = 1;
-	using E1 = fft_engine<num1>;
-	using E2 = fft_engine<num2>;
+	using E1 = ntt<num1>;
+	using E2 = ntt<num2>;
 	template <int A = 1> struct transformed_t {
 		typename E1::transformed t1;
 		typename E2::transformed t2;
@@ -795,7 +797,7 @@ struct crt_engine {
 		// The reconstruction needs |c| < whole/2; balanced inputs bound each addend's
 		// true coefficients by n (MOD/2)^2, so the safe length is divided by the
 		// accumulated scale. K <= 2 is very conservative (~2^35 even for MOD ~ 2^30).
-		static_assert(K <= 2, "crt_engine: accumulated scale too large");
+		static_assert(K <= 2, "crt: accumulated scale too large");
 		int n = p.size();
 		assert(sz(out) <= n);
 		auto o1 = buffer_pool<num1>::get(sz(out));
@@ -867,12 +869,12 @@ template <typename num, int N> struct trunc_series {
 	friend bool operator==(const trunc_series&, const trunc_series&) = default;
 };
 
-// componentwise_engine
+// componentwise
 
 // These are "componentwise engines" which model free modules/algebras over the underlying ring.
 // Matrices are the canonical example: we can take entry-wise transforms, then multiply/add in transformed space.
 //
-// We start with a shared `componentwise_engine` base class which handles all linear ops, i.e. not mul.
+// We start with a shared `componentwise` base class which handles all linear ops, i.e. not mul.
 //
 // If the underlying has unit_scale = 1, we may need to avoid accumulation of sums in transformed space;
 // then, the product and the transformed data may have different dimensions.
@@ -885,8 +887,8 @@ template <int L> constexpr std::array<int, size_t(L) + 1> componentwise_iota = [
 	return r;
 }();
 
-template <conv_engine E, typename V, int L, std::array<int, size_t(L) + 1> Ofs = componentwise_iota<L>>
-struct componentwise_engine {
+template <engine E, typename V, int L, std::array<int, size_t(L) + 1> Ofs = componentwise_iota<L>>
+struct componentwise {
 	using S = typename E::value_type;
 	using value_type = V;
 	static constexpr int P = Ofs[size_t(L)];  // total product components
@@ -977,9 +979,9 @@ struct componentwise_engine {
 };
 
 // Convolve mat<N> (NxN matrices), with accumulation in product space
-template <conv_engine E, int N>
-struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N * N> {
-	using base = componentwise_engine<E, mat<typename E::value_type, N>, N * N>;
+template <engine E, int N>
+struct matrix : componentwise<E, mat<typename E::value_type, N>, N * N> {
+	using base = componentwise<E, mat<typename E::value_type, N>, N * N>;
 	static constexpr bool commutative = false;
 	static constexpr int unit_scale = base::unit_scale;
 	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
@@ -1030,9 +1032,9 @@ struct matrix_engine : componentwise_engine<E, mat<typename E::value_type, N>, N
 };
 
 // Convolve trunc_series<num, N> (power series truncated at N), with accumulation in product space
-template <conv_engine E, int N>
-struct trunc_series_engine : componentwise_engine<E, trunc_series<typename E::value_type, N>, N> {
-	using base = componentwise_engine<E, trunc_series<typename E::value_type, N>, N>;
+template <engine E, int N>
+struct trunc : componentwise<E, trunc_series<typename E::value_type, N>, N> {
+	using base = componentwise<E, trunc_series<typename E::value_type, N>, N>;
 	static constexpr bool commutative = E::commutative;
 	static constexpr int unit_scale = base::unit_scale;
 	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
@@ -1088,10 +1090,10 @@ template <int N> constexpr std::array<int, size_t(N) * N + 1> matrix_stable_ofs 
 	return r;
 }();
 
-template <conv_engine E, int N>
-struct matrix_engine_stable
-		: componentwise_engine<E, mat<typename E::value_type, N>, N * N, matrix_stable_ofs<N>> {
-	using base = componentwise_engine<E, mat<typename E::value_type, N>, N * N, matrix_stable_ofs<N>>;
+template <engine E, int N>
+struct matrix_stable
+		: componentwise<E, mat<typename E::value_type, N>, N * N, matrix_stable_ofs<N>> {
+	using base = componentwise<E, mat<typename E::value_type, N>, N * N, matrix_stable_ofs<N>>;
 	static constexpr bool commutative = false;
 	static constexpr int unit_scale = base::unit_scale;
 	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
@@ -1131,10 +1133,10 @@ template <int N> constexpr std::array<int, size_t(N) + 1> trunc_series_stable_of
 	return r;
 }();
 
-template <conv_engine E, int N>
-struct trunc_series_engine_stable
-		: componentwise_engine<E, trunc_series<typename E::value_type, N>, N, trunc_series_stable_ofs<N>> {
-	using base = componentwise_engine<E, trunc_series<typename E::value_type, N>, N, trunc_series_stable_ofs<N>>;
+template <engine E, int N>
+struct trunc_stable
+		: componentwise<E, trunc_series<typename E::value_type, N>, N, trunc_series_stable_ofs<N>> {
+	using base = componentwise<E, trunc_series<typename E::value_type, N>, N, trunc_series_stable_ofs<N>>;
 	static constexpr bool commutative = E::commutative;
 	static constexpr int unit_scale = base::unit_scale;
 	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
@@ -1167,22 +1169,24 @@ struct trunc_series_engine_stable
 	}
 };
 
-static_assert(conv_engine<fft_engine<modnum<998244353>>>);
-static_assert(conv_engine<fft_engine<mod_goldilocks>>);
-static_assert(conv_engine<fft_real_engine<double>>);
-static_assert(conv_engine<fft_split_engine<modnum<int(1e9)+7>>>);
-static_assert(conv_engine<crt_engine<modnum<int(1e9)+7>>>);
-static_assert(conv_engine<matrix_engine<fft_engine<modnum<998244353>>, 2>>);
-static_assert(conv_engine<trunc_series_engine<fft_engine<modnum<998244353>>, 3>>);
+static_assert(engine<ntt<modnum<998244353>>>);
+static_assert(engine<ntt<mod_goldilocks>>);
+static_assert(engine<real<double>>);
+static_assert(engine<split<modnum<int(1e9)+7>>>);
+static_assert(engine<crt<modnum<int(1e9)+7>>>);
+static_assert(engine<matrix<ntt<modnum<998244353>>, 2>>);
+static_assert(engine<trunc<ntt<modnum<998244353>>, 3>>);
 // tracked inner engines work when the accumulated scale fits the budget (N <= 2)
-static_assert(conv_engine<matrix_engine<fft_split_engine<modnum<int(1e9)+7>>, 2>>);
-static_assert(conv_engine<trunc_series_engine<crt_engine<modnum<int(1e9)+7>>, 2>>);
+static_assert(engine<matrix<split<modnum<int(1e9)+7>>, 2>>);
+static_assert(engine<trunc<crt<modnum<int(1e9)+7>>, 2>>);
 // the stable variants keep tracked inner engines sound at any N
-static_assert(conv_engine<matrix_engine_stable<fft_split_engine<modnum<int(1e9)+7>>, 3>>);
-static_assert(conv_engine<trunc_series_engine_stable<crt_engine<modnum<int(1e9)+7>>, 3>>);
+static_assert(engine<matrix_stable<split<modnum<int(1e9)+7>>, 3>>);
+static_assert(engine<trunc_stable<crt<modnum<int(1e9)+7>>, 3>>);
+
+/* namespace engines */ }
 
 // short spelling for E::transformed at use sites
-template <conv_engine E> using transformed = typename E::transformed;
+template <engine E> using transformed = typename E::transformed;
 
 // ==== multiply layer ====
 // These are free functions to convolve spans.
@@ -1195,7 +1199,7 @@ template <conv_engine E> using transformed = typename E::transformed;
 // spans. These will be lazily filled (see E::extend_to) and used if available.
 
 // Circular convolution mod n (power of 2)
-template <conv_engine E, typename Op = assign_op>
+template <engine E, typename Op = assign_op>
 void multiply_circular(std::span<const typename E::value_type> a, std::span<const typename E::value_type> b,
 		std::span<typename E::value_type> out, int n, Op op = {}) {
 	assert(!(n & (n-1)));
@@ -1204,7 +1208,7 @@ void multiply_circular(std::span<const typename E::value_type> a, std::span<cons
 	E::finish(E::mul(ta, tb, n), out, op);
 }
 
-template <conv_engine E, typename Op = assign_op>
+template <engine E, typename Op = assign_op>
 void square_circular(std::span<const typename E::value_type> a, std::span<typename E::value_type> out, int n, Op op = {}) {
 	assert(!(n & (n-1)));
 	auto ta = E::transform(a, n);
@@ -1253,7 +1257,7 @@ struct cut_op {
 
 // finish + emit_linear fused: write the finished product directly into out,
 // applying the cut correction in place.
-template <conv_engine E, typename P, typename Op = assign_op>
+template <engine E, typename P, typename Op = assign_op>
 void finish_linear(
 	P&& p, int n, int s, bool cut,
 	typename E::value_type c0, std::span<typename E::value_type> out, Op op = {}
@@ -1272,7 +1276,7 @@ void finish_linear(
 
 }
 
-template <conv_engine E, typename Op = assign_op>
+template <engine E, typename Op = assign_op>
 void multiply(std::span<const typename E::value_type> a, std::span<const typename E::value_type> b,
 		std::span<typename E::value_type> out, Op op = {}) {
 	using T = typename E::value_type;
@@ -1285,7 +1289,7 @@ void multiply(std::span<const typename E::value_type> a, std::span<const typenam
 	detail::emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
 }
 
-template <conv_engine E, typename Op = assign_op>
+template <engine E, typename Op = assign_op>
 void multiply(std::span<const typename E::value_type> a, transformed<E>& ta,
 		std::span<const typename E::value_type> b, transformed<E>& tb,
 		std::span<typename E::value_type> out, Op op = {}) {
@@ -1299,7 +1303,7 @@ void multiply(std::span<const typename E::value_type> a, transformed<E>& ta,
 	detail::finish_linear<E>(E::mul(ta, tb, n), n, s, cut, c0, out, op);
 }
 
-template <conv_engine E, typename Op = assign_op>
+template <engine E, typename Op = assign_op>
 void multiply_add2(std::span<const typename E::value_type> a1, transformed<E>& ta1,
 		std::span<const typename E::value_type> b1, transformed<E>& tb1,
 		std::span<const typename E::value_type> a2, transformed<E>& ta2,
@@ -1318,7 +1322,7 @@ void multiply_add2(std::span<const typename E::value_type> a1, transformed<E>& t
 
 // As multiply_add2, but also outputs the summed pointwise product as a reusable
 // transform of the (full-length) result, like multiply_cached.
-template <conv_engine E>
+template <engine E>
 void multiply_add2_cached(
 		std::span<const typename E::value_type> a1, transformed<E>& ta1,
 		std::span<const typename E::value_type> b1, transformed<E>& tb1,
@@ -1346,7 +1350,7 @@ void multiply_add2_cached(
 }
 
 // This helper also accepts an output transform which will be populated if it is cheap to do so
-template <conv_engine E>
+template <engine E>
 void multiply_cached(std::span<const typename E::value_type> a, transformed<E>& ta,
 		std::span<const typename E::value_type> b, transformed<E>& tb,
 		std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
@@ -1369,7 +1373,7 @@ void multiply_cached(std::span<const typename E::value_type> a, transformed<E>& 
 	}
 }
 
-template <conv_engine E, typename Op = assign_op>
+template <engine E, typename Op = assign_op>
 void square(std::span<const typename E::value_type> a, std::span<typename E::value_type> out, Op op = {}) {
 	using T = typename E::value_type;
 	if (sz(a) == 0) return;
@@ -1381,7 +1385,7 @@ void square(std::span<const typename E::value_type> a, std::span<typename E::val
 	detail::emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
 }
 
-template <conv_engine E, typename Op = assign_op>
+template <engine E, typename Op = assign_op>
 void square(std::span<const typename E::value_type> a, transformed<E>& ta,
 		std::span<typename E::value_type> out, Op op = {}) {
 	using T = typename E::value_type;
@@ -1395,7 +1399,7 @@ void square(std::span<const typename E::value_type> a, transformed<E>& ta,
 
 // As square, but also outputs the pointwise product as a reusable transform of
 // the result (empty when the engine's product isn't a transform).
-template <conv_engine E>
+template <engine E>
 void square_cached(std::span<const typename E::value_type> a, transformed<E>& ta,
 		std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
 	using T = typename E::value_type;
@@ -1416,7 +1420,7 @@ void square_cached(std::span<const typename E::value_type> a, transformed<E>& ta
 	}
 }
 
-template <conv_engine E> vector<typename E::value_type> multiply(
+template <engine E> vector<typename E::value_type> multiply(
 		const vector<typename E::value_type>& a, const vector<typename E::value_type>& b) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return {};
@@ -1425,7 +1429,7 @@ template <conv_engine E> vector<typename E::value_type> multiply(
 	return r;
 }
 
-template <conv_engine E> vector<typename E::value_type> square(const vector<typename E::value_type>& a) {
+template <engine E> vector<typename E::value_type> square(const vector<typename E::value_type>& a) {
 	using T = typename E::value_type;
 	if (sz(a) == 0) return {};
 	vector<T> r(2 * sz(a) - 1);
@@ -1451,7 +1455,7 @@ void emit_middle(std::span<T> buf, bool cut, int la, int lb, T c0, T ctop, std::
 
 // Middle product (the transposed multiplication): takes only coefficients of a * b which include terms from all of b.
 // Must have len(a) >= len(b)
-template <conv_engine E, typename Op = assign_op>
+template <engine E, typename Op = assign_op>
 void middle_product(std::span<const typename E::value_type> a, std::span<const typename E::value_type> b,
 		std::span<typename E::value_type> out, Op op = {}) {
 	using T = typename E::value_type;
@@ -1475,7 +1479,7 @@ void middle_product(std::span<const typename E::value_type> a, std::span<const t
 // TODO: Let's decide whether to keep vector<> returning forms or not; this
 // largely depends on whether we think these functions are a public interface or
 // merely convenience for value type implementors.
-template <conv_engine E> vector<typename E::value_type> middle_product(
+template <engine E> vector<typename E::value_type> middle_product(
 		std::span<const typename E::value_type> a, std::span<const typename E::value_type> b) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return {};
@@ -1485,7 +1489,7 @@ template <conv_engine E> vector<typename E::value_type> middle_product(
 	return r;
 }
 
-template <conv_engine E, typename Op = assign_op>
+template <engine E, typename Op = assign_op>
 void middle_product(std::span<const typename E::value_type> a, transformed<E>& ta,
 		std::span<const typename E::value_type> b, transformed<E>& tb,
 		std::span<typename E::value_type> out, Op op = {}) {
@@ -1509,7 +1513,7 @@ void middle_product(std::span<const typename E::value_type> a, transformed<E>& t
 			a[0] * b[0], a[sz(a) - 1] * b[sz(b) - 1], out, op);
 }
 
-template <conv_engine E>
+template <engine E>
 vector<typename E::value_type> middle_product(std::span<const typename E::value_type> a, transformed<E>& ta,
 		std::span<const typename E::value_type> b, transformed<E>& tb) {
 	using T = typename E::value_type;
@@ -1536,7 +1540,7 @@ vector<typename E::value_type> middle_product(std::span<const typename E::value_
 // We will store Q as a packed buffer with x as the inner dimension to facilitate easy Q(-x) substitution.
 // The inner span will be 2*deg(x), and the outer span will be 2*deg(y).
 // As we advance, we will also return the cached transform of Q_i(-x, y) for the caller to use in the numerator.
-template <fft::conv_engine E> struct packed_bivariate {
+template <fft::engine E> struct packed_bivariate {
 	using T = typename E::value_type;
 	int L, l;
 	std::vector<T> c;
@@ -1573,58 +1577,63 @@ template <fft::conv_engine E> struct packed_bivariate {
 	}
 };
 
+template <typename A, typename B>
+concept same_engine = std::same_as<typename A::engine_t, typename B::engine_t>;
+
+namespace series {
+
 // Non-owning view of power series coefficients: the span pattern (contiguous
 // window + series semantics), borrowed from an owning series-like type.
-template <fft::conv_engine E, bool exact = false>
-struct power_series_span {
+template <fft::engine E, bool exact = false>
+struct span {
 	using T = typename E::value_type;
 	using engine_t = E;
 	static constexpr bool exact_v = exact;
 
-	power_series_span() = default;
-	explicit power_series_span(std::span<const T> s_) : s(s_) {}
+	span() = default;
+	explicit span(std::span<const T> s_) : s(s_) {}
 
 	int len() const { return sz(s); }
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.begin(); }
 	auto end() const { return s.end(); }
 	std::span<const T> coeffs() const { return s; }
-	power_series_span underlying() const { return *this; }
-	power_series_span first(int n) const { return power_series_span(s.first(size_t(n))); }
+	span underlying() const { return *this; }
+	span first(int n) const { return span(s.first(size_t(n))); }
 
 private:
 	std::span<const T> s;
 };
 
-// `power_series` represents both exact (finite) power series (R[x]) and prefixes of infinite power series (R[[x]]), depending on the flag.
-// `power_series_exact` and `power_series_trunc` are aliases.
+// `vec` represents both exact (finite) power series (R[x]) and prefixes of infinite power series (R[[x]]), depending on the flag.
+// `exact` and `trunc` are aliases.
 //
 // Operators here are typically permissive: they will accept combinations of unequal types and lengths.
-template <fft::conv_engine E, bool exact = false>
-struct power_series : public std::vector<typename E::value_type> {
+template <fft::engine E, bool exact = false>
+struct vec : public std::vector<typename E::value_type> {
 	using T = typename E::value_type;
 	using engine_t = E;
 	static constexpr bool exact_v = exact;
 	using std::vector<T>::vector;
 
-	const power_series& underlying() const { return *this; }
+	const vec& underlying() const { return *this; }
 	// a free const borrow of the coefficients: implicit
-	operator power_series_span<E, exact>() const {
-		return power_series_span<E, exact>(std::span<const T>(*this));
+	operator span<E, exact>() const {
+		return span<E, exact>(std::span<const T>(*this));
 	}
 
 	// exact -> trunc is implicit, trunc -> exact is explicit
 	template <bool oe> requires (oe && !exact)
-	power_series(const power_series<E, oe>& p) : std::vector<T>(p) {}
+	vec(const vec<E, oe>& p) : std::vector<T>(p) {}
 	template <bool oe> requires (oe && !exact)
-	power_series(power_series<E, oe>&& p) : std::vector<T>(std::move(p)) {}
+	vec(vec<E, oe>&& p) : std::vector<T>(std::move(p)) {}
 	template <bool oe> requires (!oe && exact)
-	explicit power_series(const power_series<E, oe>& p) : std::vector<T>(p) {}
+	explicit vec(const vec<E, oe>& p) : std::vector<T>(p) {}
 	template <bool oe> requires (!oe && exact)
-	explicit power_series(power_series<E, oe>&& p) : std::vector<T>(std::move(p)) {}
+	explicit vec(vec<E, oe>&& p) : std::vector<T>(std::move(p)) {}
 
 	// adopt a plain coefficient vector
-	explicit power_series(std::vector<T> v) : std::vector<T>(std::move(v)) {}
+	explicit vec(std::vector<T> v) : std::vector<T>(std::move(v)) {}
 
 	int len() const {
 		return int(this->size());
@@ -1655,7 +1664,7 @@ struct power_series : public std::vector<typename E::value_type> {
 
 	// in-place forms require that the result's exactness/length must equal this operand's
 	template <bool oe> requires (oe || !exact)
-	power_series& operator += (const power_series<E, oe>& o) {
+	vec& operator += (const vec<E, oe>& o) {
 		if constexpr (exact) { if (o.len() > len()) this->resize(o.len()); }
 		else if constexpr (!oe) { if (o.len() < len()) this->resize(o.len()); }
 		for (int i = 0; i < std::min(len(), o.len()); i++) {
@@ -1664,7 +1673,7 @@ struct power_series : public std::vector<typename E::value_type> {
 		return *this;
 	}
 	template <bool oe> requires (oe || !exact)
-	power_series& operator -= (const power_series<E, oe>& o) {
+	vec& operator -= (const vec<E, oe>& o) {
 		if constexpr (exact) { if (o.len() > len()) this->resize(o.len()); }
 		else if constexpr (!oe) { if (o.len() < len()) this->resize(o.len()); }
 		for (int i = 0; i < std::min(len(), o.len()); i++) {
@@ -1673,19 +1682,19 @@ struct power_series : public std::vector<typename E::value_type> {
 		return *this;
 	}
 
-	power_series& operator *= (const T& n) {
+	vec& operator *= (const T& n) {
 		for (auto& v : *this) v *= n;
 		return *this;
 	}
-	friend power_series operator * (const power_series& a, const T& n) {
-		power_series r(a.size());
+	friend vec operator * (const vec& a, const T& n) {
+		vec r(a.size());
 		for (int i = 0; i < a.len(); i++) {
 			r[i] = a[i] * n;
 		}
 		return r;
 	}
-	friend power_series operator * (const T& n, const power_series& a) {
-		power_series r(a.size());
+	friend vec operator * (const T& n, const vec& a) {
+		vec r(a.size());
 		for (int i = 0; i < a.len(); i++) {
 			r[i] = n * a[i];
 		}
@@ -1693,7 +1702,7 @@ struct power_series : public std::vector<typename E::value_type> {
 	}
 
 
-	power_series& operator *= (const power_series& o) {
+	vec& operator *= (const vec& o) {
 		return *this = (*this) * o;
 	}
 
@@ -1703,8 +1712,8 @@ struct power_series : public std::vector<typename E::value_type> {
 	// which are already known.
 	//
 	// This is correct for non-commutative rings.
-	friend power_series inverse(const power_series& a) requires (!exact) {
-		power_series r(a.size());
+	friend vec ps_inv(const vec& a) requires (!exact) {
+		vec r(a.size());
 		if (a.len() == 0) return r;
 		int s = nextPow2(a.len());
 		std::vector<T> b(size_t(s), T{});
@@ -1726,23 +1735,23 @@ struct power_series : public std::vector<typename E::value_type> {
 		std::copy(b.begin(), b.begin() + a.len(), r.begin());
 		return r;
 	}
-	// TODO: operator / can be done slightly faster than inverse:
-	// we only need the n/2 terms of inverse(), and can do the last Newton step directly on the quotient
+	// TODO: operator / can be done slightly faster than ps_inv:
+	// we only need the n/2 terms of ps_inv(), and can do the last Newton step directly on the quotient
 
-	friend power_series stretch(const power_series& a, int n) {
-		power_series r(a.size());
+	friend vec stretch(const vec& a, int n) {
+		vec r(a.size());
 		for (int i = 0; i*n < int(a.size()); i++) {
 			r[i*n] = a[i];
 		}
 		return r;
 	}
-	friend power_series deriv_shift(power_series a) {
+	friend vec deriv_shift(vec a) {
 		for (int i = 0; i < a.len(); i++) {
 			a[i] *= i;
 		}
 		return a;
 	}
-	friend power_series integ_shift(power_series a) {
+	friend vec integ_shift(vec a) {
 		assert(a[0] == 0);
 		T f = 1;
 		for (int i = 1; i < int(a.size()); i++) {
@@ -1756,7 +1765,7 @@ struct power_series : public std::vector<typename E::value_type> {
 		}
 		return a;
 	}
-	friend power_series integ_shift_offset(power_series a, int offset) {
+	friend vec integ_shift_offset(vec a, int offset) {
 		T f = 1;
 		for (int i = 0; i < int(a.size()); i++) {
 			a[i] *= f;
@@ -1770,29 +1779,29 @@ struct power_series : public std::vector<typename E::value_type> {
 		}
 		return a;
 	}
-	friend power_series deriv_shift_log(power_series a) requires (!exact) {
+	friend vec deriv_shift_log(vec a) requires (!exact) {
 		auto r = deriv_shift(a);
-		return r * inverse(a);
+		return r * ps_inv(a);
 	}
-	friend power_series poly_log(power_series a) requires (!exact) {
+	friend vec ps_log(vec a) requires (!exact) {
 		assert(a[0] == 1);
 		return integ_shift(deriv_shift_log(std::move(a)));
 	}
-	friend power_series poly_exp(power_series a) requires (!exact) {
+	friend vec ps_exp(vec a) requires (!exact) {
 		// See https://mathexp.eu/bostan/publications/BoSc09a.pdf for details
 		assert(a.size() >= 1);
 		assert(a[0] == 0);
-		power_series r(1, T(1)); r.reserve(a.size());
-		power_series invR(1, T(1)); invR.reserve(a.size());
+		vec r(1, T(1)); r.reserve(a.size());
+		vec invR(1, T(1)); invR.reserve(a.size());
 		while (r.size() < a.size()) {
 			int o_sz = int(r.size());
 			int n_sz = std::min(o_sz * 2, int(a.size()));
-			power_series t = deriv_shift(power_series(a.begin(), a.begin() + o_sz));
+			vec t = deriv_shift(vec(a.begin(), a.begin() + o_sz));
 			fft::multiply_circular<E>(std::span<const T>(t), std::span<const T>(r).first(o_sz), std::span<T>(t), o_sz);
 			t = deriv_shift(r) - t;
 			t *= invR;
 			t.resize(n_sz - o_sz);
-			power_series v(a.begin() + o_sz, a.begin() + n_sz);
+			vec v(a.begin() + o_sz, a.begin() + n_sz);
 			v -= integ_shift_offset(t, o_sz);
 			v *= r;
 			r.resize(n_sz);
@@ -1802,7 +1811,7 @@ struct power_series : public std::vector<typename E::value_type> {
 				assert(int(r.size()) == 2 * int(invR.size()));
 				int n = int(invR.size());
 				int nn = int(r.size());
-				power_series tmp(4 * n);
+				vec tmp(4 * n);
 				fft::square<E>(std::span<const T>(invR).first(n), std::span<T>(tmp));
 				fft::multiply<E>(std::span<const T>(tmp).first(nn), std::span<const T>(r).first(nn), std::span<T>(tmp));
 				invR.resize(nn);
@@ -1811,18 +1820,18 @@ struct power_series : public std::vector<typename E::value_type> {
 		}
 		return r;
 	}
-	friend power_series poly_pow_monic(power_series a, T k) requires (!exact) {
+	friend vec ps_pow_monic(vec a, T k) requires (!exact) {
 		if (a.empty()) return a;
 		assert(a.size() >= 1);
 		assert(a[0] == 1);
-		a = poly_log(a);
+		a = ps_log(a);
 		a *= k;
-		return poly_exp(a);
+		return ps_exp(a);
 	}
-	friend power_series poly_pow(power_series a, int64_t k) requires (!exact) {
+	friend vec ps_pow(vec a, int64_t k) requires (!exact) {
 		assert(k >= 0);
 		if (k == 0) {
-			power_series r(a.len(), T(0));
+			vec r(a.len(), T(0));
 			if (r.len() > 0) r[0] = T(1);
 			return r;
 		}
@@ -1831,35 +1840,35 @@ struct power_series : public std::vector<typename E::value_type> {
 		while (st < a.len() && a[st] == 0) st++;
 
 		if (st > 0 && k > (a.len() - 1) / st) {
-			return power_series(a.len(), T(0));
+			return vec(a.len(), T(0));
 		}
 
-		power_series r(a.begin() + st, a.end() - (st * (k-1)));
+		vec r(a.begin() + st, a.end() - (st * (k-1)));
 		T leading_coeff = r[0];
 		r *= inv(leading_coeff);
-		r = poly_pow_monic(r, T(k));
+		r = ps_pow_monic(r, T(k));
 		r *= power(leading_coeff, k);
 		r.insert(r.begin(), st * k, T(0));
 		assert(r.len() == a.len());
 		return r;
 	}
 
-	friend power_series to_newton_sums(const power_series& a, int deg) requires (!exact) {
+	friend vec to_newton_sums(const vec& a, int deg) requires (!exact) {
 		auto r = deriv_shift_log(a);
 		r[0] = deg;
 		for (int i = 1; i < int(r.size()); i++) r[i] = -r[i];
 		return r;
 	}
-	friend power_series from_newton_sums(power_series S, int deg) requires (!exact) {
+	friend vec from_newton_sums(vec S, int deg) requires (!exact) {
 		assert(S[0] == int(deg));
 		S[0] = 0;
 		for (int i = 1; i < int(S.size()); i++) S[i] = -S[i];
-		return poly_exp(integ_shift(std::move(S)));
+		return ps_exp(integ_shift(std::move(S)));
 	}
 
 	// Calculates prod 1/(1-x^i)^{a[i]}
-	friend power_series euler_transform(const power_series& a) requires (!exact) {
-		power_series r = deriv_shift(a);
+	friend vec euler_transform(const vec& a) requires (!exact) {
+		vec r = deriv_shift(a);
 		std::vector<bool> is_prime(a.size(), true);
 		for (int p = 2; p < int(a.size()); p++) {
 			if (!is_prime[p]) continue;
@@ -1868,10 +1877,10 @@ struct power_series : public std::vector<typename E::value_type> {
 				is_prime[i*p] = false;
 			}
 		}
-		return poly_exp(integ_shift(r));
+		return ps_exp(integ_shift(r));
 	}
-	friend power_series inverse_euler_transform(const power_series& a) requires (!exact) {
-		power_series r = deriv_shift(poly_log(a));
+	friend vec inverse_euler_transform(const vec& a) requires (!exact) {
+		vec r = deriv_shift(ps_log(a));
 		std::vector<bool> is_prime(a.size(), true);
 		for (int p = 2; p < int(a.size()); p++) {
 			if (!is_prime[p]) continue;
@@ -1884,7 +1893,7 @@ struct power_series : public std::vector<typename E::value_type> {
 	}
 
 	// Calculates f(g(x)) mod x^n where deg(g) == n
-	friend power_series poly_compose(const power_series& f, const power_series& g) requires (!exact) {
+	friend vec ps_compose(const vec& f, const vec& g) requires (!exact) {
 		if (sz(g) == 0) return {};
 
 		int m = int(f.size());
@@ -1906,16 +1915,16 @@ struct power_series : public std::vector<typename E::value_type> {
 		std::vector<fft::transformed<E>> tneg;
 		tneg.reserve(L);
 		for (int l = 1; l <= L; l++) tneg.push_back(Q.advance());
-		power_series P;
+		vec P;
 		{
 			P = f;
 			std::reverse(P.begin(), P.end());
-			power_series QL((1 << L) + 1);
+			vec QL((1 << L) + 1);
 			for (int i = 0; i <= (1 << L); i++) {
 				QL[i] = Q.c[2 * i];
 			}
 			QL.resize(m, T(0));
-			P *= inverse(QL);
+			P *= ps_inv(QL);
 			std::reverse(P.begin(), P.end());
 			P.resize(1 << L, T(0));
 			std::reverse(P.begin(), P.end());
@@ -1939,134 +1948,132 @@ struct power_series : public std::vector<typename E::value_type> {
 				P[(2 << L) + i] = T(0);
 			}
 		}
-		return power_series(P.begin(), P.begin() + n);
+		return vec(P.begin(), P.begin() + n);
 	}
 };
 
-template <fft::conv_engine E> using power_series_exact = power_series<E, true>;
-template <fft::conv_engine E> using power_series_trunc = power_series<E, false>;
+template <fft::engine E> using exact = vec<E, true>;
+template <fft::engine E> using trunc = vec<E, false>;
 
 // Series-like concepts: the binary operators below are written once as constrained
 // templates and dispatch on which memoized transforms an operand carries.
 // A series-like type exposes its engine/exactness and its coefficients as a
-// power_series_span borrow; cached wrappers additionally expose their transform
+// span borrow; cached wrappers additionally expose their transform
 // caches (filling them is logically const).
 template <typename S>
-concept series_like = fft::conv_engine<typename S::engine_t> && requires(const S& s) {
+concept like = fft::engine<typename S::engine_t> && requires(const S& s) {
 	{ S::exact_v } -> std::convertible_to<bool>;
 	{ s.len() } -> std::same_as<int>;
-	{ s.underlying() } -> std::convertible_to<power_series_span<typename S::engine_t, S::exact_v>>;
+	{ s.underlying() } -> std::convertible_to<span<typename S::engine_t, S::exact_v>>;
 };
 // carries one extendable transform of the whole coefficient sequence
 template <typename S>
-concept whole_cached = series_like<S> && requires(const S& s) {
+concept has_cache = like<S> && requires(const S& s) {
 	{ s.cache() } -> std::same_as<fft::transformed<typename S::engine_t>&>;
 };
-template <typename A, typename B>
-concept same_engine = std::same_as<typename A::engine_t, typename B::engine_t>;
 
 // A borrowed series paired with the transform serving it: the
-// normalized operand form fed to the cached fft:: entry points. Models whole_cached.
-template <fft::conv_engine E, bool exact>
-struct cached_power_series_span {
+// normalized operand form fed to the cached fft:: entry points. Models has_cache.
+template <fft::engine E, bool exact>
+struct cached_span {
 	using engine_t = E;
 	static constexpr bool exact_v = exact;
 
-	power_series_span<E, exact> s;
+	span<E, exact> s;
 	std::reference_wrapper<fft::transformed<E>> f;
 
 	int len() const { return s.len(); }
-	power_series_span<E, exact> underlying() const { return s; }
+	span<E, exact> underlying() const { return s; }
 	fft::transformed<E>& cache() const { return f; }
 };
 
 // carries transforms of power-of-two prefixes, usable at any precision:
 // prefix(n) borrows the length-min(n, len) prefix with its cache.
-// Trunc-only: an exact operand participates whole, so whole_cached covers it.
+// Trunc-only: an exact operand participates whole, so has_cache covers it.
 template <typename S>
-concept prefix_cached = series_like<S> && !S::exact_v && requires(const S& s, int n) {
-	{ s.prefix(n) } -> whole_cached;
+concept has_prefix_cache = like<S> && !S::exact_v && requires(const S& s, int n) {
+	{ s.prefix(n) } -> has_cache;
 };
 
-// Wrapper around power_series which caches the transform of the whole series.
+// Wrapper around vec which caches the transform of the whole series.
 // Ops exploit the cache whenever the whole span participates; a trunc series'
 // whole-sequence transform is still useful for middle products and repeated
 // full-precision use.
-template <fft::conv_engine E, bool exact = true>
-struct whole_cached_power_series {
+template <fft::engine E, bool exact = true>
+struct cached {
 	using T = typename E::value_type;
 	using engine_t = E;
 	static constexpr bool exact_v = exact;
 
-	whole_cached_power_series() = default;
+	cached() = default;
 	// moving coefficients in or out is free: implicit on rvalues, explicit copy otherwise
-	whole_cached_power_series(power_series<E, exact>&& s_) : s(std::move(s_)) {}
-	explicit whole_cached_power_series(const power_series<E, exact>& s_) : s(s_) {}
-	operator power_series<E, exact>() && { return std::move(s); }
+	cached(vec<E, exact>&& s_) : s(std::move(s_)) {}
+	explicit cached(const vec<E, exact>& s_) : s(s_) {}
+	operator vec<E, exact>() && { return std::move(s); }
 
 	int len() const { return s.len(); }
-	const power_series<E, exact>& underlying() const { return s; }
+	const vec<E, exact>& underlying() const { return s; }
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
 	// the transform of underlying(), fed to the cached fft:: entry points alongside it
 	fft::transformed<E>& cache() const { return f; }
 
-	template <series_like S>
-	friend bool operator==(const whole_cached_power_series& a, const S& b) {
-		power_series_span<E, S::exact_v> bs = b.underlying();
+	template <like S>
+	friend bool operator==(const cached& a, const S& b) {
+		span<E, S::exact_v> bs = b.underlying();
 		return a.len() == bs.len() && std::equal(a.s.begin(), a.s.end(), bs.begin());
 	}
 
 private:
-	power_series<E, exact> s;
+	vec<E, exact> s;
 	mutable fft::transformed<E> f; // memoized transform: filling it is logically const
 };
 
 namespace detail {
 // the operand's whole cache if it carries one, else the caller's throwaway cache
-template <series_like S>
+template <like S>
 fft::transformed<typename S::engine_t>& whole_cache_or(const S& s, fft::transformed<typename S::engine_t>& tmp) {
-	if constexpr (whole_cached<S>) return s.cache(); else return tmp;
+	if constexpr (has_cache<S>) return s.cache(); else return tmp;
 }
 /* namespace detail */ }
 
 // Both consume whole-sequence transforms by nature (the full span always
 // participates), so only whole caches apply, never prefix caches.
-template <series_like A>
+template <like A>
 auto square(const A& a) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
-	power_series_span<E, A::exact_v> av = a.underlying();
+	span<E, A::exact_v> av = a.underlying();
 	fft::transformed<E> ta_;
 	if constexpr (A::exact_v) {
-		// like operator*, an exact square returns whole_cached, adopting the
+		// like operator*, an exact square returns has_cache, adopting the
 		// pointwise product as the result's transform when the engine supports it
 		std::vector<T> coeffs;
 		fft::transformed<E> f;
 		fft::square_cached<E>(av.coeffs(), detail::whole_cache_or(a, ta_), coeffs, f);
-		whole_cached_power_series<E, true> w(power_series_exact<E>(std::move(coeffs)));
+		cached<E, true> w(exact<E>(std::move(coeffs)));
 		w.cache() = std::move(f);
 		return w;
 	} else {
-		power_series<E, false> r(size_t(a.len()), T{});
+		vec<E, false> r(size_t(a.len()), T{});
 		fft::square<E>(av.coeffs(), detail::whole_cache_or(a, ta_), std::span<T>(r));
 		return r;
 	}
 }
 
-// a*b + c*d, all exact; returns whole_cached, adopting the summed pointwise
+// a*b + c*d, all exact; returns has_cache, adopting the summed pointwise
 // product as the result's transform when the engine supports it. Reuses each
 // operand's whole cache. Requires a*b and c*d to have equal length.
-template <series_like A, series_like B, series_like C, series_like D>
+template <like A, like B, like C, like D>
 	requires same_engine<A, B> && same_engine<A, C> && same_engine<A, D>
 		&& A::exact_v && B::exact_v && C::exact_v && D::exact_v
-whole_cached_power_series<typename A::engine_t> multiply_add2(
+cached<typename A::engine_t> multiply_add2(
 		const A& a, const B& b, const C& c, const D& d) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
-	power_series_span<E, true> av = a.underlying(), bv = b.underlying();
-	power_series_span<E, true> cv = c.underlying(), dv = d.underlying();
+	span<E, true> av = a.underlying(), bv = b.underlying();
+	span<E, true> cv = c.underlying(), dv = d.underlying();
 	fft::transformed<E> ta_, tb_, tc_, td_;
 	std::vector<T> coeffs;
 	fft::transformed<E> f;
@@ -2077,17 +2084,17 @@ whole_cached_power_series<typename A::engine_t> multiply_add2(
 		dv.coeffs(), detail::whole_cache_or(d, td_),
 		coeffs, f
 	);
-	whole_cached_power_series<E> w(power_series_exact<E>(std::move(coeffs)));
+	cached<E> w(exact<E>(std::move(coeffs)));
 	w.cache() = std::move(f);
 	return w;
 }
 
 // coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0
-template <series_like A, series_like B> requires same_engine<A, B>
+template <like A, like B> requires same_engine<A, B>
 std::vector<typename A::engine_t::value_type> middle_product(const A& a, const B& b) {
 	using E = typename A::engine_t;
-	power_series_span<E, A::exact_v> av = a.underlying();
-	power_series_span<E, B::exact_v> bv = b.underlying();
+	span<E, A::exact_v> av = a.underlying();
+	span<E, B::exact_v> bv = b.underlying();
 	fft::transformed<E> ta_, tb_;
 	return fft::middle_product<E>(
 		av.coeffs(), detail::whole_cache_or(a, ta_),
@@ -2109,46 +2116,46 @@ template <bool ea, bool eb> int product_prec(int la, int lb) {
 // necessarily trunc, operand's span at exactly prec) is only worth using when
 // the untruncated span doesn't grow the transform size: a 2x'd inverse
 // transform costs more than the saved forward transform.
-template <series_like S>
+template <like S>
 auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t>& tmp) {
 	using E = typename S::engine_t;
-	if constexpr (prefix_cached<S>) {
+	if constexpr (has_prefix_cache<S>) {
 		return s.prefix(nextPow2(prec));
 	} else {
-		power_series_span<E, S::exact_v> v = s.underlying();
+		span<E, S::exact_v> v = s.underlying();
 		int used = std::min(s.len(), prec);
-		if constexpr (whole_cached<S>) {
+		if constexpr (has_cache<S>) {
 			if (s.len() <= prec || fft::detail::conv_size_for(s.len() + prec - 1).n
 					== fft::detail::conv_size_for(2 * prec - 1).n) {
-				return cached_power_series_span<E, S::exact_v>{v, s.cache()};
+				return cached_span<E, S::exact_v>{v, s.cache()};
 			}
 		}
-		return cached_power_series_span<E, S::exact_v>{v.first(used), tmp};
+		return cached_span<E, S::exact_v>{v.first(used), tmp};
 	}
 }
 /* namespace detail */ }
 
-template <series_like A, series_like B> requires same_engine<A, B>
-power_series<typename A::engine_t, A::exact_v && B::exact_v> operator + (const A& a, const B& b) {
+template <like A, like B> requires same_engine<A, B>
+vec<typename A::engine_t, A::exact_v && B::exact_v> operator + (const A& a, const B& b) {
 	using T = typename A::engine_t::value_type;
-	power_series_span<typename A::engine_t, A::exact_v> av = a.underlying();
-	power_series_span<typename A::engine_t, B::exact_v> bv = b.underlying();
+	span<typename A::engine_t, A::exact_v> av = a.underlying();
+	span<typename A::engine_t, B::exact_v> bv = b.underlying();
 	int n = (A::exact_v && B::exact_v) ? std::max(a.len(), b.len())
 		: A::exact_v ? b.len() : B::exact_v ? a.len() : std::min(a.len(), b.len());
-	power_series<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
+	vec<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
 	for (int i = 0; i < n; i++) {
 		r[i] = (i < av.len() ? av[i] : T(0)) + (i < bv.len() ? bv[i] : T(0));
 	}
 	return r;
 }
-template <series_like A, series_like B> requires same_engine<A, B>
-power_series<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A& a, const B& b) {
+template <like A, like B> requires same_engine<A, B>
+vec<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A& a, const B& b) {
 	using T = typename A::engine_t::value_type;
-	power_series_span<typename A::engine_t, A::exact_v> av = a.underlying();
-	power_series_span<typename A::engine_t, B::exact_v> bv = b.underlying();
+	span<typename A::engine_t, A::exact_v> av = a.underlying();
+	span<typename A::engine_t, B::exact_v> bv = b.underlying();
 	int n = (A::exact_v && B::exact_v) ? std::max(a.len(), b.len())
 		: A::exact_v ? b.len() : B::exact_v ? a.len() : std::min(a.len(), b.len());
-	power_series<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
+	vec<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
 	for (int i = 0; i < n; i++) {
 		r[i] = (i < av.len() ? av[i] : T(0)) - (i < bv.len() ? bv[i] : T(0));
 	}
@@ -2157,18 +2164,18 @@ power_series<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A
 
 // The single multiplication operator: each operand is normalized to a borrowed
 // series + whole cache (see detail::product_operand), then multiplied once.
-// An exact x exact product returns a whole_cached result, going through
+// An exact x exact product returns a has_cache result, going through
 // fft::multiply_cached so the pointwise product is adopted as the result's
 // transform whenever the engine supports it.
-template <series_like A, series_like B> requires same_engine<A, B>
+template <like A, like B> requires same_engine<A, B>
 auto operator * (const A& a, const B& b) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
 	constexpr bool ea = A::exact_v, eb = B::exact_v;
 	int prec = detail::product_prec<ea, eb>(a.len(), b.len());
 	if (prec == 0 || a.len() == 0 || b.len() == 0) {
-		if constexpr (ea && eb) return whole_cached_power_series<E, true>{};
-		else return power_series<E, false>(size_t(prec), T(0));
+		if constexpr (ea && eb) return cached<E, true>{};
+		else return vec<E, false>(size_t(prec), T(0));
 	}
 	fft::transformed<E> ta_, tb_;
 	auto va = detail::product_operand(a, prec, ta_);
@@ -2181,11 +2188,11 @@ auto operator * (const A& a, const B& b) {
 			vb.underlying().coeffs(), vb.cache(),
 			coeffs, f
 		);
-		whole_cached_power_series<E, true> w(power_series_exact<E>(std::move(coeffs)));
+		cached<E, true> w(exact<E>(std::move(coeffs)));
 		w.cache() = std::move(f);
 		return w;
 	} else {
-		power_series<E, false> r(size_t(prec), T(0));
+		vec<E, false> r(size_t(prec), T(0));
 		fft::multiply<E>(
 			va.underlying().coeffs(), va.cache(),
 			vb.underlying().coeffs(), vb.cache(),
@@ -2200,11 +2207,11 @@ auto operator * (const A& a, const B& b) {
 // q(x) q(-x) (even, giving the next q in x^2); q(-x)'s transform is negate_arg of q's,
 // so a level costs 2 forward and 2 inverse transforms.
 // TODO: downsample optimization
-// TODO: support the kth_term_of_linear_recurrence(power_series_trunc, power_series_exact) form
-template <fft::conv_engine E>
+// TODO: support the kth_term_of_linear_recurrence(trunc, exact) form
+template <fft::engine E>
 typename E::value_type kth_term_of_rational_function(
-	power_series_exact<E> p,
-	power_series_exact<E> q,
+	exact<E> p,
+	exact<E> q,
 	uint64_t k
 ) {
 	using T = typename E::value_type;
@@ -2230,24 +2237,24 @@ typename E::value_type kth_term_of_rational_function(
 	return p[0] * inv(q[0]);
 }
 
-// Wrapper around power_series_trunc which caches transform(s[:2^k]) for all k,
-// matching the doubling shape of inverse/exp so they can populate the caches.
-// TODO: make inverse/exp populate these
-template <fft::conv_engine E>
-struct prefix_cached_power_series {
+// Wrapper around trunc which caches transform(s[:2^k]) for all k,
+// matching the doubling shape of ps_inv/exp so they can populate the caches.
+// TODO: make ps_inv/exp populate these
+template <fft::engine E>
+struct prefix_cached {
 	using T = typename E::value_type;
 
 	using engine_t = E;
 	static constexpr bool exact_v = false;
 
-	prefix_cached_power_series() = default;
+	prefix_cached() = default;
 	// moving coefficients in or out is free: implicit on rvalues, explicit copy otherwise
-	prefix_cached_power_series(power_series<E, false>&& s_) : s(std::move(s_)) {}
-	explicit prefix_cached_power_series(const power_series<E, false>& s_) : s(s_) {}
-	operator power_series<E, false>() && { return std::move(s); }
+	prefix_cached(vec<E, false>&& s_) : s(std::move(s_)) {}
+	explicit prefix_cached(const vec<E, false>& s_) : s(s_) {}
+	operator vec<E, false>() && { return std::move(s); }
 
 	int len() const { return s.len(); }
-	const power_series<E, false>& underlying() const { return s; }
+	const vec<E, false>& underlying() const { return s; }
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
@@ -2258,9 +2265,9 @@ struct prefix_cached_power_series {
 	}
 
 	// the length-min(n, len) prefix borrowed together with its cache
-	cached_power_series_span<E, false> prefix(int n) const {
+	cached_span<E, false> prefix(int n) const {
 		return {
-			power_series_span<E, false>(std::span<const T>(s).first(std::min(n, len()))),
+			span<E, false>(std::span<const T>(s).first(std::min(n, len()))),
 			prefix_cache(n)
 		};
 	}
@@ -2279,41 +2286,43 @@ struct prefix_cached_power_series {
 	}
 
 private:
-	power_series<E, false> s;
+	vec<E, false> s;
 	// memoized transforms: logically const; len tracks how much of s each covers
 	struct entry { fft::transformed<E> t; int len = 0; };
 	mutable std::vector<entry> caches;
 };
 
+/* namespace series */ }
 
+namespace poly {
 
 // polynomial class
-// As above, we represent polynomials by a power_series_exact containing the coefficients in reverse order.
+// As above, we represent polynomials by a series::exact containing the coefficients in reverse order.
 // This representation should be internal-only:
 // all accesses/constructors use the logical order though: P[k] = [x^k] P.
 // To use the representation, use rev_series() / from_rev_series()
-template <fft::conv_engine E> struct poly {
+template <fft::engine E> struct vec {
 	using T = typename E::value_type;
 	using engine_t = E;
-	power_series_exact<E> c;
+	series::exact<E> c;
 
-	poly() = default;
+	vec() = default;
 	// zero polynomial with `len` coefficient slots
-	explicit poly(int len) : c(size_t(len), T{}) {}
+	explicit vec(int len) : c(size_t(len), T{}) {}
 	// coefficient (x^0-first) order
-	poly(std::initializer_list<T> coeffs) : c(std::rbegin(coeffs), std::rend(coeffs)) {}
-	explicit poly(std::span<const T> coeffs) : c(coeffs.rbegin(), coeffs.rend()) {}
+	vec(std::initializer_list<T> coeffs) : c(std::rbegin(coeffs), std::rend(coeffs)) {}
+	explicit vec(std::span<const T> coeffs) : c(coeffs.rbegin(), coeffs.rend()) {}
 
-	const power_series_exact<E>& rev_series() const { return c; }
-	static poly from_rev_series(power_series_exact<E> s) {
-		poly r;
+	const series::exact<E>& rev_series() const { return c; }
+	static vec from_rev_series(series::exact<E> s) {
+		vec r;
 		r.c = std::move(s);
 		return r;
 	}
 
 	// This should rarely be used
-	power_series<E> unrev_series(int n) const {
-		power_series<E> r(size_t(n), T{});
+	series::vec<E> unrev_series(int n) const {
+		series::vec<E> r(size_t(n), T{});
 		std::copy(begin(), begin() + std::min(n, len()), r.begin());
 		return r;
 	}
@@ -2345,52 +2354,52 @@ template <fft::conv_engine E> struct poly {
 		return r;
 	}
 
-	poly& operator+=(const poly& o) {
+	vec& operator+=(const vec& o) {
 		if (o.len() > len()) resize(o.len());
 		for (int i = 0; i < o.len(); i++) (*this)[i] += o[i];
 		return *this;
 	}
-	friend poly operator+(poly a, const poly& b) { a += b; return a; }
-	poly& operator-=(const poly& o) {
+	friend vec operator+(vec a, const vec& b) { a += b; return a; }
+	vec& operator-=(const vec& o) {
 		if (o.len() > len()) resize(o.len());
 		for (int i = 0; i < o.len(); i++) (*this)[i] -= o[i];
 		return *this;
 	}
-	friend poly operator-(poly a, const poly& b) { a -= b; return a; }
-	friend bool operator==(const poly& a, const poly& b) { return a.c == b.c; }
+	friend vec operator-(vec a, const vec& b) { a -= b; return a; }
+	friend bool operator==(const vec& a, const vec& b) { return a.c == b.c; }
 
-	poly& operator*=(const T& n) { for (T& v : c) v *= n; return *this; }
-	friend poly operator*(poly a, const T& n) { a *= n; return a; }
-	friend poly operator*(const T& n, poly a) { a *= n; return a; }
+	vec& operator*=(const T& n) { for (T& v : c) v *= n; return *this; }
+	friend vec operator*(vec a, const T& n) { a *= n; return a; }
+	friend vec operator*(const T& n, vec a) { a *= n; return a; }
 
-	poly& operator*=(const poly& o) { return *this = (*this) * o; }
+	vec& operator*=(const vec& o) { return *this = (*this) * o; }
 };
 
 // any polynomial representation exposing its reversed coefficient series
 template <typename P>
-concept poly_like = requires(const P& p) {
+concept like = requires(const P& p) {
 	typename P::engine_t;
 	{ p.len() } -> std::same_as<int>;
 	p.rev_series();
-	requires series_like<std::remove_cvref_t<decltype(p.rev_series())>>;
+	requires series::like<std::remove_cvref_t<decltype(p.rev_series())>>;
 	requires std::remove_cvref_t<decltype(p.rev_series())>::exact_v;
 };
 
 // immutable polynomial carrying the whole-sequence transform of its rev_series
-template <fft::conv_engine E>
-struct whole_cached_poly {
+template <fft::engine E>
+struct cached {
 	using T = typename E::value_type;
 	using engine_t = E;
 
-	whole_cached_poly() = default;
+	cached() = default;
 	// moving coefficients in or out is free: implicit on rvalues, explicit copy otherwise
-	whole_cached_poly(poly<E>&& p) : c(std::move(p.c)) {}
-	explicit whole_cached_poly(const poly<E>& p) : c(p.c) {}
-	operator poly<E>() && { return poly<E>::from_rev_series(std::move(c)); }
+	cached(vec<E>&& p) : c(std::move(p.c)) {}
+	explicit cached(const vec<E>& p) : c(p.c) {}
+	operator vec<E>() && { return vec<E>::from_rev_series(std::move(c)); }
 
-	const whole_cached_power_series<E>& rev_series() const { return c; }
-	static whole_cached_poly from_rev_series(whole_cached_power_series<E> s) {
-		whole_cached_poly r;
+	const series::cached<E>& rev_series() const { return c; }
+	static cached from_rev_series(series::cached<E> s) {
+		cached r;
 		r.c = std::move(s);
 		return r;
 	}
@@ -2407,33 +2416,34 @@ struct whole_cached_poly {
 	}
 
 private:
-	whole_cached_power_series<E> c;
+	series::cached<E> c;
 };
 
 // rev(a*b) = rev(a)*rev(b); the series product reuses/adopts transforms
-template <poly_like A, poly_like B> requires same_engine<A, B>
-whole_cached_poly<typename A::engine_t> operator*(const A& a, const B& b) {
-	return whole_cached_poly<typename A::engine_t>::from_rev_series(a.rev_series() * b.rev_series());
+template <like A, like B> requires same_engine<A, B>
+cached<typename A::engine_t> operator*(const A& a, const B& b) {
+	return cached<typename A::engine_t>::from_rev_series(a.rev_series() * b.rev_series());
 }
-template <poly_like A>
-whole_cached_poly<typename A::engine_t> square(const A& a) {
-	return whole_cached_poly<typename A::engine_t>::from_rev_series(square(a.rev_series()));
+template <like A>
+cached<typename A::engine_t> square(const A& a) {
+	return cached<typename A::engine_t>::from_rev_series(square(a.rev_series()));
 }
 // rev(a*b + c*d) = rev(a)*rev(b) + rev(c)*rev(d)
-template <poly_like A, poly_like B, poly_like C, poly_like D>
+template <like A, like B, like C, like D>
 	requires same_engine<A, B> && same_engine<A, C> && same_engine<A, D>
-whole_cached_poly<typename A::engine_t> multiply_add2(
+cached<typename A::engine_t> multiply_add2(
 		const A& a, const B& b, const C& c, const D& d) {
-	return whole_cached_poly<typename A::engine_t>::from_rev_series(
+	return cached<typename A::engine_t>::from_rev_series(
 			multiply_add2(a.rev_series(), b.rev_series(), c.rev_series(), d.rev_series()));
 }
-template <poly_like A, poly_like B> requires same_engine<A, B>
+template <like A, like B> requires same_engine<A, B>
 bool operator==(const A& a, const B& b) {
 	return a.rev_series() == b.rev_series();
 }
 
+
 // finite-support linear form
-// These are one side of the pairing <poly P, power_series S> = [x^0] P(1/x) S(x).
+// These are one side of the pairing <vec P, series::vec S> = [x^0] P(1/x) S(x).
 // (Strictly speaking, this is actually <>_d where we take polynomials of degree < d.)
 // The main point of this wrapper is that if we have <*, S> and want <P *, S>, that's a middle product by P.
 //
@@ -2443,44 +2453,44 @@ bool operator==(const A& a, const B& b) {
 // <P, 1/(1-ax)> = P(a)
 // if we represent P as a "polynomial" in the differential operator D (x^k = k! D^k):
 // <P, e^{aD}> = P(a)
-template <fft::conv_engine E>
-struct linear_form {
+template <fft::engine E>
+struct form {
 	using T = typename E::value_type;
 	// coeffs of S in <*, S>; always whole-cached: the kernel transform is
 	// what repeated middle products against the same form reuse
-	whole_cached_power_series<E> c;
+	series::cached<E> c;
 
-	linear_form() = default;
-	explicit linear_form(int len) : c(power_series_exact<E>(size_t(len), T{})) {}
+	form() = default;
+	explicit form(int len) : c(series::exact<E>(size_t(len), T{})) {}
 	// We don't provide coefficient-list constructors, to avoid ordering confusion.
 
-	const whole_cached_power_series<E>& rev_series() const { return c; }
-	static linear_form from_rev_series(whole_cached_power_series<E> s) {
-		linear_form r;
+	const series::cached<E>& rev_series() const { return c; }
+	static form from_rev_series(series::cached<E> s) {
+		form r;
 		r.c = std::move(s);
 		return r;
 	}
-	static linear_form from_poly(const poly<E>& p) { return from_rev_series(whole_cached_power_series<E>(p.rev_series())); }
+	static form from_poly(const vec<E>& p) { return from_rev_series(series::cached<E>(p.rev_series())); }
 
 	int len() const { return c.len(); }
 
 	// Restrict the form's domain: only valid against exact series of length n
-	linear_form for_length(int n) const {
-		power_series_exact<E> r(c.underlying());
+	form for_length(int n) const {
+		series::exact<E> r(c.underlying());
 		if (n >= len()) r.insert(r.begin(), size_t(n - len()), T(0));
 		else r.erase(r.begin(), r.begin() + (len() - n));
 		return from_rev_series(std::move(r));
 	}
 
 	// the functional p -> p(z) on polynomials of length up to len (weight z^i on [x^i])
-	static linear_form polynomial_evaluation(T z, int len) {
-		power_series_exact<E> k(size_t(len), T{});
+	static form polynomial_evaluation(T z, int len) {
+		series::exact<E> k(size_t(len), T{});
 		T p = T(1);
 		for (int i = 0; i < len; i++) { k[i] = p; p *= z; }
 		return from_rev_series(std::move(k));
 	}
 
-	template <poly_like P>
+	template <like P>
 	T operator()(const P& p) const {
 		assert(p.len() <= len());
 		T r{};
@@ -2489,36 +2499,36 @@ struct linear_form {
 	}
 
 	// <*, S> -> <q x *, S>
-	template <poly_like P>
-	linear_form composed_with(const P& q) const {
+	template <like P>
+	form composed_with(const P& q) const {
 		assert(q.len() > 0 && q.len() <= len());
-		return from_rev_series(power_series_exact<E>(middle_product(c, q.rev_series())));
+		return from_rev_series(series::exact<E>(middle_product(c, q.rev_series())));
 	}
 
 	// <P, *> -> <P, s x *>
-	template <series_like S> requires std::same_as<typename S::engine_t, E>
-	linear_form composed_with(const S& s) const {
+	template <series::like S> requires std::same_as<typename S::engine_t, E>
+	form composed_with(const S& s) const {
 		if constexpr (!S::exact_v) assert(s.len() >= len());
-		power_series<E, S::exact_v> r = c * s;
+		series::vec<E, S::exact_v> r = c * s;
 		r.resize(size_t(len()));
-		return from_rev_series(power_series_exact<E>(std::move(r)));
+		return from_rev_series(series::exact<E>(std::move(r)));
 	}
 };
 
 // ==== multipoint evaluation / interpolation ====
 
 // Subproduct tree over points a[0:N]
-// BFS-order tree, each node holds prod (x - a[i]) as a cached poly.
-template <fft::conv_engine E>
+// BFS-order tree, each node holds prod (x - a[i]) as a cached vec.
+template <fft::engine E>
 struct subproduct_tree {
 	using T = typename E::value_type;
 	int N;
-	std::vector<whole_cached_poly<E>> nodes;
+	std::vector<cached<E>> nodes;
 
 	explicit subproduct_tree(std::span<const T> pts) : N(sz(pts)), nodes(size_t(2) * N) {
 		assert(N > 0);
 		for (int i = 0; i < N; i++) {
-			nodes[N + i] = poly<E>{-pts[i], T(1)};
+			nodes[N + i] = vec<E>{-pts[i], T(1)};
 		}
 		for (int i = N - 1; i > 0; i--) {
 			nodes[i] = nodes[2*i] * nodes[2*i+1];
@@ -2528,18 +2538,18 @@ struct subproduct_tree {
 	// number of points under node i
 	int size(int i) const { return nodes[i].len() - 1; }
 	// rev(prod (x - z_j)) over node i's leaves; length size(i) + 1
-	const power_series_exact<E>& rev_prod(int i) const { return nodes[i].rev_series().underlying(); }
+	const series::exact<E>& rev_prod(int i) const { return nodes[i].rev_series().underlying(); }
 
 	// Computes, for each i, f(product_{j != i} (1 - a[j] x)). Requires f.len() == N.
-	std::vector<T> pushdown(linear_form<E> f) const {
+	std::vector<T> pushdown(form<E> f) const {
 		assert(f.len() == N);
-		std::vector<linear_form<E>> down(size_t(2) * N);
+		std::vector<form<E>> down(size_t(2) * N);
 		down[1] = std::move(f);
 		for (int i = 1; i < N; i++) {
 			// the form's kernel transform serves both children's middle products
 			down[2*i+0] = down[i].composed_with(nodes[2*i+1]);
 			down[2*i+1] = down[i].composed_with(nodes[2*i+0]);
-			down[i] = linear_form<E>{}; // done with the parent; free it early
+			down[i] = form<E>{}; // done with the parent; free it early
 		}
 		std::vector<T> out(size_t(N), T{});
 		for (int i = 0; i < N; i++) out[i] = down[N + i].rev_series()[0];
@@ -2547,37 +2557,37 @@ struct subproduct_tree {
 	}
 
 	// Compute sum_i leaf_vals[i] prod_{j!=i} (x - a[j]) (transpose of pushdown)
-	whole_cached_poly<E> combine_up(std::span<const T> leaf_vals) const {
+	cached<E> combine_up(std::span<const T> leaf_vals) const {
 		assert(sz(leaf_vals) == N);
-		std::vector<whole_cached_poly<E>> up(size_t(2) * N);
+		std::vector<cached<E>> up(size_t(2) * N);
 		for (int i = 0; i < N; i++) {
-			up[N + i] = poly<E>{leaf_vals[i]};
+			up[N + i] = vec<E>{leaf_vals[i]};
 		}
 		for (int i = N - 1; i > 0; i--) {
 			up[i] = multiply_add2(up[2*i+0], nodes[2*i+1], up[2*i+1], nodes[2*i+0]);
-			up[2*i+0] = whole_cached_poly<E>{};
-			up[2*i+1] = whole_cached_poly<E>{};
+			up[2*i+0] = cached<E>{};
+			up[2*i+1] = cached<E>{};
 		}
 		return std::move(up[1]);
 	}
 };
 
-template <fft::conv_engine E>
-std::vector<typename E::value_type> poly_evaluate(
-	const poly<E>& p,
+template <fft::engine E>
+std::vector<typename E::value_type> multipoint(
+	const vec<E>& p,
 	std::span<const typename E::value_type> pts
 ) {
 	if (pts.empty()) return {};
 	int N = sz(pts);
 	subproduct_tree<E> tree{pts};
-	power_series<E> q = tree.rev_prod(1);
+	series::vec<E> q = tree.rev_prod(1);
 	q.resize(p.len()); // inverse precision must cover the form's window
-	linear_form<E> f = linear_form<E>::from_poly(p).composed_with(inverse(q));
+	form<E> f = form<E>::from_poly(p).composed_with(ps_inv(q));
 	return tree.pushdown(f.for_length(N));
 }
 
-template <fft::conv_engine E>
-poly<E> poly_interpolate(
+template <fft::engine E>
+vec<E> interpolate(
 	std::span<const typename E::value_type> pts,
 	std::span<const typename E::value_type> vals
 ) {
@@ -2585,7 +2595,7 @@ poly<E> poly_interpolate(
 	assert(sz(pts) == sz(vals));
 	if (pts.empty()) return {};
 	int N = sz(pts);
-	using ps = power_series<E>;
+	using ps = series::vec<E>;
 	subproduct_tree<E> tree{pts};
 	ps root = tree.rev_prod(1);
 	root.shrink(N);
@@ -2596,7 +2606,7 @@ poly<E> poly_interpolate(
 		deriv_root[i] *= T(N - i);
 	}
 	std::vector<T> denoms = tree.pushdown(
-		linear_form<E>::from_rev_series(power_series_exact<E>(inverse(root) * deriv_root))
+		form<E>::from_rev_series(series::exact<E>(ps_inv(root) * deriv_root))
 	);
 
 	std::vector<T> leaf_vals(size_t(N), T{});
@@ -2604,10 +2614,12 @@ poly<E> poly_interpolate(
 	return tree.combine_up(std::span<const T>(leaf_vals));
 }
 
+/* namespace poly */ }
+
 // ==== online multiplication ====
 
 // Online (relaxed) multiplication: computes the first N terms of f*g given the terms one at a time.
-template <fft::conv_engine E> struct online_multiplier {
+template <fft::engine E> struct online_multiplier {
 	using T = typename E::value_type;
 	int N; int i;
 	std::vector<T> f, g;
@@ -2658,7 +2670,7 @@ template <fft::conv_engine E> struct online_multiplier {
 	}
 };
 
-template <fft::conv_engine E> struct online_squarer {
+template <fft::engine E> struct online_squarer {
 	using T = typename E::value_type;
 	int N; int i;
 	std::vector<T> f;
@@ -2712,7 +2724,7 @@ template <fft::conv_engine E> struct online_squarer {
 // A polynomial represented by its values evaluated at an Arithmetic Progression (AP).
 // TODO: The AP is always assumed to be 0..length-1; store an explicit offset/gap instead?
 // Maybe not, this is just more convenient.
-template <fft::conv_engine E>
+template <fft::engine E>
 struct poly_ap_values : public std::vector<typename E::value_type> {
 	using T = typename E::value_type;
 	using std::vector<T>::vector;

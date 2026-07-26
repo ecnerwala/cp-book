@@ -10,7 +10,7 @@ int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
 	using num = modnum<998244353>;
-	using E = ecnerwala::fft::fft_engine<num>;
+	using E = ecnerwala::fft::engines::ntt<num>;
 	using ap_vals = ecnerwala::poly_ap_values<E>;
 
 	int N, M; num C; std::cin >> N >> M >> C;

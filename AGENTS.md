@@ -72,7 +72,7 @@ Match the existing code exactly. In particular:
     `#define PROBLEM`.
 - **Capitalize input variables** (`N`, `Q`, `A`, `B`, `S`, `F`, `G`...);
   loop indices and scratch stay lowercase.
-- **Read input directly into library types** (`poly<E>`, `power_series`,
+- **Read input directly into library types** (`poly::vec<E>`, `series::vec`,
   `dirichlet_series_prefix::st[]`) rather than into an intermediate
   `std::vector` first. If a type is missing a small piece of interface that
   would make this natural (a sized constructor, mutable iteration), add it to
@@ -96,9 +96,9 @@ Match the existing code exactly. In particular:
   whole multiples of tab (no aligning to the paren column):
 
   ```cpp
-  template <fft::conv_engine E>
-  std::vector<typename E::value_type> poly_evaluate(
-  	const poly<E>& p,
+  template <fft::engine E>
+  std::vector<typename E::value_type> multipoint(
+  	const poly::vec<E>& p,
   	std::span<const typename E::value_type> pts
   ) {
   ```
@@ -117,7 +117,7 @@ use it correctly. Concretely:
 - **State a convention once, where it's established**, then rely on it —
   don't re-explain it at every use site. E.g. the bit-reversed transform
   convention and the span length rules are stated in the `fft_core` /
-  `conv_engine` preambles, and later functions just use them.
+  `engine` preambles, and later functions just use them.
 - **Contracts over prose.** Prefer short statements of what a function
   computes and requires (`Requires f.len() == N.`, allowed span lengths,
   aliasing rules) to paragraphs of explanation. Derivations/proofs, if worth
@@ -137,10 +137,12 @@ use it correctly. Concretely:
 
 ## Library notes
 
-- `src/fft.hpp`: everything lives in `namespace ecnerwala` (engines in
-  `ecnerwala::fft`). `poly<E>` stores coefficients reversed but iterates and
-  indexes in natural (x^0-first) order; `poly_evaluate` / `poly_interpolate`
-  are in `ecnerwala`, not `ecnerwala::fft`.
+- `src/fft.hpp`: everything lives in `namespace ecnerwala` (transform
+  machinery in `ecnerwala::fft`, engines in `ecnerwala::fft::engines`, value
+  types in `ecnerwala::series` / `ecnerwala::poly`).
+  `poly::vec<E>` stores coefficients reversed but iterates and
+  indexes in natural (x^0-first) order; `poly::multipoint` / `poly::interpolate`
+  live in `ecnerwala::poly`.
 - `src/dirichlet_series.hpp`: `div_vector_layout` is passed as a template
   non-type reference parameter, so declare it `static` and assign the size at
   runtime.
