@@ -1712,7 +1712,7 @@ struct vec : public std::vector<typename E::value_type> {
 	// which are already known.
 	//
 	// This is correct for non-commutative rings.
-	friend vec inverse(const vec& a) requires (!exact) {
+	friend vec ps_inv(const vec& a) requires (!exact) {
 		vec r(a.size());
 		if (a.len() == 0) return r;
 		int s = nextPow2(a.len());
@@ -1735,8 +1735,8 @@ struct vec : public std::vector<typename E::value_type> {
 		std::copy(b.begin(), b.begin() + a.len(), r.begin());
 		return r;
 	}
-	// TODO: operator / can be done slightly faster than inverse:
-	// we only need the n/2 terms of inverse(), and can do the last Newton step directly on the quotient
+	// TODO: operator / can be done slightly faster than ps_inv:
+	// we only need the n/2 terms of ps_inv(), and can do the last Newton step directly on the quotient
 
 	friend vec stretch(const vec& a, int n) {
 		vec r(a.size());
@@ -1781,13 +1781,13 @@ struct vec : public std::vector<typename E::value_type> {
 	}
 	friend vec deriv_shift_log(vec a) requires (!exact) {
 		auto r = deriv_shift(a);
-		return r * inverse(a);
+		return r * ps_inv(a);
 	}
-	friend vec poly_log(vec a) requires (!exact) {
+	friend vec ps_log(vec a) requires (!exact) {
 		assert(a[0] == 1);
 		return integ_shift(deriv_shift_log(std::move(a)));
 	}
-	friend vec poly_exp(vec a) requires (!exact) {
+	friend vec ps_exp(vec a) requires (!exact) {
 		// See https://mathexp.eu/bostan/publications/BoSc09a.pdf for details
 		assert(a.size() >= 1);
 		assert(a[0] == 0);
@@ -1820,15 +1820,15 @@ struct vec : public std::vector<typename E::value_type> {
 		}
 		return r;
 	}
-	friend vec poly_pow_monic(vec a, T k) requires (!exact) {
+	friend vec ps_pow_monic(vec a, T k) requires (!exact) {
 		if (a.empty()) return a;
 		assert(a.size() >= 1);
 		assert(a[0] == 1);
-		a = poly_log(a);
+		a = ps_log(a);
 		a *= k;
-		return poly_exp(a);
+		return ps_exp(a);
 	}
-	friend vec poly_pow(vec a, int64_t k) requires (!exact) {
+	friend vec ps_pow(vec a, int64_t k) requires (!exact) {
 		assert(k >= 0);
 		if (k == 0) {
 			vec r(a.len(), T(0));
@@ -1846,7 +1846,7 @@ struct vec : public std::vector<typename E::value_type> {
 		vec r(a.begin() + st, a.end() - (st * (k-1)));
 		T leading_coeff = r[0];
 		r *= inv(leading_coeff);
-		r = poly_pow_monic(r, T(k));
+		r = ps_pow_monic(r, T(k));
 		r *= power(leading_coeff, k);
 		r.insert(r.begin(), st * k, T(0));
 		assert(r.len() == a.len());
@@ -1863,7 +1863,7 @@ struct vec : public std::vector<typename E::value_type> {
 		assert(S[0] == int(deg));
 		S[0] = 0;
 		for (int i = 1; i < int(S.size()); i++) S[i] = -S[i];
-		return poly_exp(integ_shift(std::move(S)));
+		return ps_exp(integ_shift(std::move(S)));
 	}
 
 	// Calculates prod 1/(1-x^i)^{a[i]}
@@ -1877,10 +1877,10 @@ struct vec : public std::vector<typename E::value_type> {
 				is_prime[i*p] = false;
 			}
 		}
-		return poly_exp(integ_shift(r));
+		return ps_exp(integ_shift(r));
 	}
 	friend vec inverse_euler_transform(const vec& a) requires (!exact) {
-		vec r = deriv_shift(poly_log(a));
+		vec r = deriv_shift(ps_log(a));
 		std::vector<bool> is_prime(a.size(), true);
 		for (int p = 2; p < int(a.size()); p++) {
 			if (!is_prime[p]) continue;
@@ -1893,7 +1893,7 @@ struct vec : public std::vector<typename E::value_type> {
 	}
 
 	// Calculates f(g(x)) mod x^n where deg(g) == n
-	friend vec poly_compose(const vec& f, const vec& g) requires (!exact) {
+	friend vec ps_compose(const vec& f, const vec& g) requires (!exact) {
 		if (sz(g) == 0) return {};
 
 		int m = int(f.size());
@@ -1924,7 +1924,7 @@ struct vec : public std::vector<typename E::value_type> {
 				QL[i] = Q.c[2 * i];
 			}
 			QL.resize(m, T(0));
-			P *= inverse(QL);
+			P *= ps_inv(QL);
 			std::reverse(P.begin(), P.end());
 			P.resize(1 << L, T(0));
 			std::reverse(P.begin(), P.end());
@@ -2238,8 +2238,8 @@ typename E::value_type kth_term_of_rational_function(
 }
 
 // Wrapper around trunc which caches transform(s[:2^k]) for all k,
-// matching the doubling shape of inverse/exp so they can populate the caches.
-// TODO: make inverse/exp populate these
+// matching the doubling shape of ps_inv/exp so they can populate the caches.
+// TODO: make ps_inv/exp populate these
 template <fft::engine E>
 struct prefix_cached {
 	using T = typename E::value_type;
@@ -2582,7 +2582,7 @@ std::vector<typename E::value_type> multipoint(
 	subproduct_tree<E> tree{pts};
 	series::vec<E> q = tree.rev_prod(1);
 	q.resize(p.len()); // inverse precision must cover the form's window
-	form<E> f = form<E>::from_poly(p).composed_with(inverse(q));
+	form<E> f = form<E>::from_poly(p).composed_with(ps_inv(q));
 	return tree.pushdown(f.for_length(N));
 }
 
@@ -2606,7 +2606,7 @@ vec<E> interpolate(
 		deriv_root[i] *= T(N - i);
 	}
 	std::vector<T> denoms = tree.pushdown(
-		form<E>::from_rev_series(series::exact<E>(inverse(root) * deriv_root))
+		form<E>::from_rev_series(series::exact<E>(ps_inv(root) * deriv_root))
 	);
 
 	std::vector<T> leaf_vals(size_t(N), T{});

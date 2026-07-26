@@ -14,7 +14,7 @@ int main() {
 
 	int N; std::cin >> N;
 	ps A(N); for (auto& a : A) std::cin >> a;
-	ps B = poly_exp(A);
+	ps B = ps_exp(A);
 	for (int i = 0; i < N; i++) {
 		std::cout << B[i] << " \n"[i+1==N];
 	}

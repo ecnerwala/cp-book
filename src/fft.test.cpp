@@ -453,7 +453,7 @@ TEMPLATE_TEST_CASE("FFT Inverse", "[fft]", MOD_ENGINES) {
 	series::trunc<E> a(size_t(298));
 	fill_rnd(a, mt);
 	if (a[0] == 0) a[0] = 1;
-	auto i = inverse(a);
+	auto i = ps_inv(a);
 	auto r = multiply_slow<num>(a, i);
 	r.resize(a.size());
 	vector<num> tgt(a.size());
@@ -750,16 +750,16 @@ TEST_CASE("series::vec log/exp/pow", "[fft]") {
 		ps a(len);
 		for (num& x : a) { x = num(mt()); }
 		a[0] = 1;
-		auto l = poly_log(a);
-		auto e = poly_exp(l);
+		auto l = ps_log(a);
+		auto e = ps_exp(l);
 		REQUIRE(e == a);
 
-		// poly_pow vs repeated multiplication
+		// ps_pow vs repeated multiplication
 		ps p3 = a * a;
 		p3 *= a;
 		ps q = a;
 		q[0] = 1;
-		REQUIRE(poly_pow(q, 3) == p3);
+		REQUIRE(ps_pow(q, 3) == p3);
 	}
 	{
 		// pow with valuation
@@ -767,20 +767,20 @@ TEST_CASE("series::vec log/exp/pow", "[fft]") {
 		for (int i = 3; i < 20; i++) a[i] = num(mt());
 		if (a[3] == 0) a[3] = 1;
 		ps p2 = a * a;
-		REQUIRE(poly_pow(a, 2) == p2);
+		REQUIRE(ps_pow(a, 2) == p2);
 		// valuation * exponent overflowing the length gives 0
-		REQUIRE(poly_pow(a, 100) == ps(20, num(0)));
+		REQUIRE(ps_pow(a, 100) == ps(20, num(0)));
 	}
 }
 
-TEST_CASE("series::vec inverse", "[fft]") {
+TEST_CASE("series::vec ps_inv", "[fft]") {
 	using num = modnum<998244353>;
 	using ps = series::vec<engines::ntt<num>>;
 	mt19937 mt(Catch::getSeed());
 	ps a(100);
 	for (num& x : a) { x = num(mt()); }
 	if (a[0] == 0) a[0] = 1;
-	ps i = inverse(a);
+	ps i = ps_inv(a);
 	ps prod = a * i;
 	ps tgt(a.size(), num(0));
 	tgt[0] = 1;
@@ -806,7 +806,7 @@ TEST_CASE("series::vec compose", "[fft]") {
 			for (int j = 0; j < n; j++) expected[j] += f[i] * gp[j];
 			gp *= g;
 		}
-		REQUIRE(poly_compose(f, g) == expected);
+		REQUIRE(ps_compose(f, g) == expected);
 	}
 }
 

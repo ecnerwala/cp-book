@@ -14,7 +14,7 @@ int main() {
 
 	int N; std::cin >> N;
 	ps A(N); for (auto& a : A) std::cin >> a;
-	ps B = poly_log(A);
+	ps B = ps_log(A);
 	for (int i = 0; i < N; i++) {
 		std::cout << B[i] << " \n"[i+1==N];
 	}
