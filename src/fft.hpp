@@ -285,6 +285,8 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //
 //   Input span can be length up to 2n.
 //   Output spans can be length up to n; only the prefix that exists is filled.
+//   finish applies Op exactly once per out element, in index order, to
+//   value_type targets (so ops may be stateful).
 //   Transforms can be longer than necessary, and only the relevant prefix is used.
 //
 //   For non-exact engines, there's some subtlety in whether we wrap before or after packing.
@@ -902,11 +904,22 @@ struct componentwise_engine {
 	}
 	template <int K, typename Op = assign_op> static void finish(product_t<K>&& p, std::span<V> out, Op op = {}) {
 		auto buf = buffer_pool<S>::get(sz(out));
-		for (int c = 0; c < L; c++) {
-			E::finish(std::move(p.t[Ofs[size_t(c)]]), buf.span());
-			for (int j = Ofs[size_t(c)] + 1; j < Ofs[size_t(c) + 1]; j++)
-				E::finish(std::move(p.t[j]), buf.span(), add_op{});
-			for (int i = 0; i < sz(out); i++) op(out[i].data()[c], buf[i]);
+		auto emit = [&](std::span<V> dst) {
+			for (int c = 0; c < L; c++) {
+				E::finish(std::move(p.t[Ofs[size_t(c)]]), buf.span());
+				for (int j = Ofs[size_t(c)] + 1; j < Ofs[size_t(c) + 1]; j++)
+					E::finish(std::move(p.t[j]), buf.span(), add_op{});
+				for (int i = 0; i < sz(dst); i++) dst[i].data()[c] = buf[i];
+			}
+		};
+		// Op must see each out element whole, exactly once, so compose
+		// non-assign ops through an element buffer.
+		if constexpr (std::same_as<Op, assign_op>) {
+			emit(out);
+		} else {
+			auto vbuf = buffer_pool<V>::get(sz(out));
+			emit(vbuf.span());
+			for (int i = 0; i < sz(out); i++) op(out[i], vbuf.span()[i]);
 		}
 	}
 };
@@ -1094,9 +1107,23 @@ void emit_linear(std::span<T> buf, int n, int s, bool cut, T c0, std::span<T> ou
 	if (cut && sz(out) >= s) op(out[s-1], cn);
 }
 
+// Applies op, diverting the wrapped leading coefficient of a cut product:
+// out[0] receives c0 and the wraparound term is captured into cn for the
+// caller to emit at out[s-1].
+template <typename T, typename Op>
+struct cut_op {
+	Op op;
+	T* out0;
+	T c0;
+	T& cn;
+	void operator()(T& x, T v) const {
+		if (&x == out0) { cn = v - c0; v = c0; }
+		op(x, v);
+	}
+};
+
 // finish + emit_linear fused: write the finished product directly into out,
-// avoiding the scratch buffer and its extra pass when the correction can be
-// applied in place.
+// applying the cut correction in place.
 template <conv_engine E, typename P, typename Op = assign_op>
 void finish_linear(
 	P&& p, int n, int s, bool cut,
@@ -1104,18 +1131,13 @@ void finish_linear(
 ) {
 	using T = typename E::value_type;
 	if (sz(out) == 0) return;
-	if (!cut || std::same_as<Op, assign_op>) {
-		int lim = min(sz(out), min(s, n));
+	int lim = min(sz(out), min(s, n));
+	if (!cut) {
 		E::finish(std::move(p), out.subspan(0, lim), op);
-		if (cut) {
-			T cn = out[0] - c0;
-			out[0] = c0;
-			if (sz(out) >= s) out[s-1] = cn;
-		}
 	} else {
-		auto buf = buffer_pool<T>::get(n);
-		E::finish(std::move(p), buf.span());
-		emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
+		T cn{};
+		E::finish(std::move(p), out.subspan(0, lim), cut_op<T, Op>{op, &out[0], c0, cn});
+		if (sz(out) >= s) op(out[s-1], cn);
 	}
 }
 
