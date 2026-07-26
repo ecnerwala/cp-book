@@ -73,7 +73,7 @@ Match the existing code exactly. In particular:
 - **Capitalize input variables** (`N`, `Q`, `A`, `B`, `S`, `F`, `G`...);
   loop indices and scratch stay lowercase.
 - **Read input directly into library types** (`poly::vec<E>`, `series::vec`,
-  `dirichlet_series_prefix::st[]`) rather than into an intermediate
+  `dirichlet_series::prefix::st[]`) rather than into an intermediate
   `std::vector` first. If a type is missing a small piece of interface that
   would make this natural (a sized constructor, mutable iteration), add it to
   the header rather than working around it.

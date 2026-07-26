@@ -177,33 +177,33 @@ public:
 	friend Derived operator / (Derived const& a, T const& t) { return Derived(a) / t; }
 };
 
-template <div_vector_layout const& layout, typename T> class dirichlet_series_values;
-template <div_vector_layout const& layout, typename T> class dirichlet_series_prefix;
-template <div_vector_layout const& layout, typename T> class dirichlet_series_binary_indexed_tree;
+template <div_vector_layout const& layout, typename T> class values;
+template <div_vector_layout const& layout, typename T> class prefix;
+template <div_vector_layout const& layout, typename T> class bit;
 
-template <div_vector_layout const& layout, typename T> class dirichlet_series_values : public div_vector<layout, T>, public vectorspace_mixin<layout, T, dirichlet_series_values<layout, T>> {
+template <div_vector_layout const& layout, typename T> class values : public div_vector<layout, T>, public vectorspace_mixin<layout, T, values<layout, T>> {
 public:
-	dirichlet_series_values() = default;
+	values() = default;
 
 	template <typename F, std::enable_if_t<std::is_invocable_r_v<T, F, int64_t, int64_t>, bool> = true>
-	dirichlet_series_values(F f) {
+	values(F f) {
 		for (int i = 1; i < layout.len; i++) {
 			this->st[i] = f(layout.get_bucket_bound(i-1), layout.get_bucket_bound(i));
 		}
 	}
 
-	template <typename U> explicit dirichlet_series_values(dirichlet_series_values<layout, U> const& o) {
+	template <typename U> explicit values(values<layout, U> const& o) {
 		for (int i = 1; i < layout.len; i++) {
 			this->st[i] = T(o.st[i]);
 		}
 	}
 
-	explicit dirichlet_series_values(dirichlet_series_prefix<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
+	explicit values(prefix<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
 		for (int i = layout.len - 1; i > 1; i--) {
 			this->st[i] -= this->st[i-1];
 		}
 	}
-	explicit dirichlet_series_values(dirichlet_series_prefix<layout, T> const& o) {
+	explicit values(prefix<layout, T> const& o) {
 		for (int i = layout.len - 1; i > 1; i--) {
 			this->st[i] = o.st[i] - o.st[i-1];
 		}
@@ -211,29 +211,29 @@ public:
 	}
 };
 
-template <div_vector_layout const& layout, typename T> class dirichlet_series_prefix : public div_vector<layout, T>, public vectorspace_mixin<layout, T, dirichlet_series_prefix<layout, T>> {
+template <div_vector_layout const& layout, typename T> class prefix : public div_vector<layout, T>, public vectorspace_mixin<layout, T, prefix<layout, T>> {
 public:
-	dirichlet_series_prefix() = default;
+	prefix() = default;
 
 	template <typename F, std::enable_if_t<std::is_invocable_r_v<T, F, int64_t>, bool> = true>
-	dirichlet_series_prefix(F f) {
+	prefix(F f) {
 		for (int i = 1; i < layout.len; i++) {
 			this->st[i] = f(layout.get_bucket_bound(i));
 		}
 	}
 
-	template <typename U> explicit dirichlet_series_prefix(dirichlet_series_prefix<layout, U> const& o) {
+	template <typename U> explicit prefix(prefix<layout, U> const& o) {
 		for (int i = 1; i < layout.len; i++) {
 			this->st[i] = T(o.st[i]);
 		}
 	}
 
-	explicit dirichlet_series_prefix(dirichlet_series_values<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
+	explicit prefix(values<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
 		for (int i = 2; i < layout.len; i++) {
 			this->st[i] += this->st[i-1];
 		}
 	}
-	explicit dirichlet_series_prefix(dirichlet_series_values<layout, T> const& o) {
+	explicit prefix(values<layout, T> const& o) {
 		T pref = this->st[1] = o.st[1];
 		for (int i = 2; i < layout.len; i++) {
 			this->st[i] = (pref += o.st[i]);
@@ -247,7 +247,7 @@ private:
 	// easily implement multiplication or division or sqrt. (Note that a or b
 	// are allowed to be equal to this.)
 	template <typename F>
-	void convolve_helper(dirichlet_series_prefix const& a, dirichlet_series_prefix const& b, F f) {
+	void convolve_helper(prefix const& a, prefix const& b, F f) {
 		// We roughly want to apply this[N/z] += a_val[x] * b_val[y] for all xyz <= N
 		//
 		// We'll split into the following cases (WLOG x <= y):
@@ -327,17 +327,17 @@ private:
 	}
 
 public:
-	friend dirichlet_series_prefix operator * (dirichlet_series_prefix const& a, dirichlet_series_prefix const& b) {
-		dirichlet_series_prefix r;
+	friend prefix operator * (prefix const& a, prefix const& b) {
+		prefix r;
 		r.st[1] = a.st[1] * b.st[1];
 		r.convolve_helper(a, b, [&](int i, T cur_sum) -> T {
 			return cur_sum + (a.st[i] - a.st[i-1]) * b.st[1] + a.st[1] * (b.st[i] - b.st[i-1]);
 		});
 		return r;
 	}
-	dirichlet_series_prefix& operator *= (const dirichlet_series_prefix& o) { return *this = *this * o; }
+	prefix& operator *= (const prefix& o) { return *this = *this * o; }
 
-	friend T get_conv_N(dirichlet_series_prefix const& a, dirichlet_series_prefix const& b) {
+	friend T get_conv_N(prefix const& a, prefix const& b) {
 		T ans = a.st[1] * b.en[-1];
 		for (int i = 2; i <= layout.len; i++) {
 			ans += (a.st[i] - a.st[i-1]) * b.en[-i];
@@ -345,8 +345,8 @@ public:
 		return ans;
 	}
 
-	friend dirichlet_series_prefix operator / (dirichlet_series_prefix const& a, dirichlet_series_prefix const& b) {
-		dirichlet_series_prefix r;
+	friend prefix operator / (prefix const& a, prefix const& b) {
+		prefix r;
 		T inv_b1 = inv(b.st[1]);
 		r.st[1] = a.st[1] * inv_b1;
 		r.convolve_helper(r, b, [&](int i, T cur_sum) -> T {
@@ -354,10 +354,10 @@ public:
 		});
 		return r;
 	}
-	dirichlet_series_prefix& operator /= (const dirichlet_series_prefix& o) { return *this = *this / o; }
+	prefix& operator /= (const prefix& o) { return *this = *this / o; }
 
-	friend dirichlet_series_prefix sqrt(const dirichlet_series_prefix& a) {
-		dirichlet_series_prefix r;
+	friend prefix sqrt(const prefix& a) {
+		prefix r;
 		// assert(a.st[1] == 1);
 		r.st[1] = 1;
 		T inv_2 = inv(T(2));
@@ -381,8 +381,8 @@ public:
 	// when the a_i are always 0/1.
 	//
 	// This runs in $O(n^{2/3})$ time, but requires small inverses (up to 1/120).
-	friend dirichlet_series_prefix euler_transform_fraction(dirichlet_series_prefix a_pref) {
-		dirichlet_series_values<layout, T> a(std::move(a_pref));
+	friend prefix euler_transform_fraction(prefix a_pref) {
+		values<layout, T> a(std::move(a_pref));
 		// assert(a.st[1] == 0);
 
 		// Phase 0: stash away values up to the 6th root of N
@@ -406,12 +406,12 @@ public:
 
 		// Phase 2: now we take exp of the adjusted version
 		// In particular, we take e^a = 1 + a + a^2 / 2 + a^3 / 6 + a^4 / 24 + a^5 / 120
-		dirichlet_series_prefix v;
+		prefix v;
 		for (int i = x; i < layout.len; i++) {
 			v.st[i] = v.st[i-1] + a.st[i];
 		}
 
-		dirichlet_series_prefix r = v * v;
+		prefix r = v * v;
 		for (int i = x; i < layout.len; i++) {
 			r.st[i] = r.st[i] * invs[5] + v.st[i];
 		}
@@ -446,8 +446,8 @@ public:
 
 	// This computes the inverse of the pseudo-Euler transformation. See the
 	// comment on euler_transform() for more details.
-	friend dirichlet_series_prefix inverse_euler_transform_fraction(dirichlet_series_prefix a) {
-		dirichlet_series_values<layout, T> r;
+	friend prefix inverse_euler_transform_fraction(prefix a) {
+		values<layout, T> r;
 
 		// assert(a.st[1] == 1);
 
@@ -475,7 +475,7 @@ public:
 
 		// Phase 2: now we take log of the remaining thing, using just the first few terms.
 		// In particular, we take log_a = a^5 / 5 - a^4 / 4 + a^3 / 3 - a^2 / 2 + a
-		dirichlet_series_prefix log_a;
+		prefix log_a;
 		for (int i = x; i < layout.len; i++) {
 			log_a.st[i] = a.st[i] * invs[5];
 		}
@@ -513,14 +513,14 @@ public:
 			}
 		}
 
-		return dirichlet_series_prefix(std::move(r));
+		return prefix(std::move(r));
 	}
 
-	friend dirichlet_series_prefix euler_transform_binary_indexed_tree(dirichlet_series_prefix a_pref) {
+	friend prefix euler_transform_binary_indexed_tree(prefix a_pref) {
 		int x = 2;
 		while (x <= layout.N / x / x) x++;
 
-		dirichlet_series_prefix r_pref;
+		prefix r_pref;
 		for (int i = x; i < layout.len; i++) {
 			r_pref.st[i] = a_pref.st[i] - a_pref.st[x-1];
 		}
@@ -541,21 +541,21 @@ public:
 			}
 		}
 
-		dirichlet_series_binary_indexed_tree<layout, T> r(std::move(r_pref));
+		bit<layout, T> r(std::move(r_pref));
 		r.increment_bucket_suffix(1, T(1));
 		for (int i = x-1; i >= 2; i--) {
 			T cur = a_pref.st[i] - a_pref.st[i-1];
 			if (cur == 0) continue;
 			r.sparse_mul_unlimited(i, cur);
 		}
-		return dirichlet_series_prefix(std::move(r));
+		return prefix(std::move(r));
 	}
 
-	friend dirichlet_series_prefix inverse_euler_transform_binary_indexed_tree(dirichlet_series_prefix a_pref) {
+	friend prefix inverse_euler_transform_binary_indexed_tree(prefix a_pref) {
 		// assert(a_pref.st[1] == 1);
 
-		dirichlet_series_binary_indexed_tree<layout, T> a_bit(std::move(a_pref));
-		dirichlet_series_values<layout, T> r;
+		bit<layout, T> a_bit(std::move(a_pref));
+		values<layout, T> r;
 
 		// First, use the BIT to clear up to N^1/3
 		int x;
@@ -565,7 +565,7 @@ public:
 			r.st[x] = cur;
 			a_bit.sparse_div_unlimited(x, cur);
 		}
-		a_pref = dirichlet_series_prefix<layout, T>(std::move(a_bit));
+		a_pref = prefix<layout, T>(std::move(a_bit));
 
 		// Now, a_pref contains terms of the form r[i] or r[i] * r[j], so let's
 		// subtract out the semiprimes.
@@ -594,41 +594,41 @@ public:
 			}
 		}
 
-		return dirichlet_series_prefix(std::move(r));
+		return prefix(std::move(r));
 	}
 };
 
 // TODO: This will be useful for sparse convolution, which is nice for e.g. exp/log/prime counting
-template <div_vector_layout const& layout, typename T> class dirichlet_series_binary_indexed_tree : public div_vector<layout, T>, public vectorspace_mixin<layout, T, dirichlet_series_binary_indexed_tree<layout, T>> {
+template <div_vector_layout const& layout, typename T> class bit : public div_vector<layout, T>, public vectorspace_mixin<layout, T, bit<layout, T>> {
 public:
-	dirichlet_series_binary_indexed_tree() = default;
+	bit() = default;
 
-	template <typename U> explicit dirichlet_series_binary_indexed_tree(dirichlet_series_binary_indexed_tree<layout, U> const& o) {
+	template <typename U> explicit bit(bit<layout, U> const& o) {
 		for (int i = 1; i < layout.len; i++) {
 			this->st[i] = T(o.st[i]);
 		}
 	}
 
-	explicit dirichlet_series_binary_indexed_tree(dirichlet_series_prefix<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
+	explicit bit(prefix<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
 		for (int i = layout.len - 1; i >= 1; i--) {
 			this->st[i] -= this->st[i & (i-1)];
 		}
 	}
-	explicit dirichlet_series_binary_indexed_tree(dirichlet_series_prefix<layout, T> const& o) {
+	explicit bit(prefix<layout, T> const& o) {
 		for (int i = layout.len - 1; i >= 1; i--) {
 			this->st[i] = o.st[i] - o.st[i & (i-1)];
 		}
 	}
-	explicit operator dirichlet_series_prefix<layout, T> () && {
-		dirichlet_series_prefix<layout, T> r;
+	explicit operator prefix<layout, T> () && {
+		prefix<layout, T> r;
 		swap(static_cast<div_vector<layout, T>&>(r), static_cast<div_vector<layout, T>&>(*this));
 		for (int i = 1; i < layout.len; i++) {
 			r.st[i] += r.st[i & (i-1)];
 		}
 		return r;
 	}
-	explicit operator dirichlet_series_prefix<layout, T> () const& {
-		dirichlet_series_prefix<layout, T> r;
+	explicit operator prefix<layout, T> () const& {
+		prefix<layout, T> r;
 		for (int i = 1; i < layout.len; i++) {
 			r.st[i] = this->st[i] + r.st[i & (i-1)];
 		}

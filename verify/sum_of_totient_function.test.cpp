@@ -13,7 +13,7 @@ int main() {
 	static dirichlet_series::div_vector_layout layout;
 	layout = N;
 	using num = modnum<998244353>;
-	using ds_prefix = dirichlet_series::dirichlet_series_prefix<layout, num>;
+	using ds_prefix = dirichlet_series::prefix<layout, num>;
 	std::cout << (ds_prefix([&](int64_t x) { return num(x) * num(x+1) / num(2); }) / ds_prefix([&](int64_t x) { return num(x); }))[N] << '\n';
 
 	return 0;
