@@ -295,9 +295,12 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //      add(product_t<K1>, product_t<K2>) -> product_t<K1+K2>
 //
 //   Finally, we expose some additional fast-transform optimization paths.
-//   double_to only operates on transformed_t<unit_scale>; the others are scale-generic.
+//   extend_to only operates on transformed_t<unit_scale>; the others are scale-generic.
 //   downsample is also defined on product_t (halving before finish saves inverse-transform work).
-//      double_to       grow a transform by repeated doubling using the base engine's double_to()
+//      extend_to       build (if empty) or grow a transform to size m by repeated doubling; the
+//                      owner must feed the same coefficient sequence (sz <= 2m) every time. A
+//                      first build with sz(coeffs) > m folds circularly -- what the 2^k+1 cut
+//                      consumes, and a valid seed for later doubling.
 //      downsample      compute the half-sized transform/product of just the even (odd = false) or odd terms of the input
 //      negate_arg      size n transform of A(-x)
 template <typename E>
@@ -313,7 +316,7 @@ concept conv_engine = requires(
 	typename E::value_type;
 	{ E::transform(in, n) } -> std::same_as<typename E::transformed>;
 	{ ct.size() } -> std::same_as<int>;
-	E::double_to(t, n, in);
+	E::extend_to(t, n, in);
 	{ E::downsample(ct, n, false) } -> std::same_as<typename E::transformed>;
 	{ E::downsample(cp, n, false) } -> std::same_as<typename E::product>;
 	{ E::negate_arg(ct, n) } -> std::same_as<typename E::transformed>;
@@ -353,9 +356,12 @@ template <typename num> struct fft_engine {
 		core::forward(std::span<num>(r.v));
 		return r;
 	}
-	static void double_to(transformed& t, int n, std::span<const num> coeffs) {
+	static void extend_to(transformed& t, int m, std::span<const num> coeffs) {
+		assert(!(m & (m-1)) && sz(coeffs) <= 2 * m);
+		if (t.size() >= m) return;
+		if (t.size() == 0) { t = transform(coeffs, m); return; }
 		assert(sz(coeffs) <= 2 * t.size());
-		while (t.size() < n) {
+		while (t.size() < m) {
 			t.v.resize(2 * t.size());
 			core::extend(std::span<num>(t.v), coeffs);
 		}
@@ -442,12 +448,15 @@ template <typename dbl = double> struct fft_real_engine {
 		core::forward(std::span<cnum>(r.v));
 		return r;
 	}
-	static void double_to(transformed& t, int n, std::span<const dbl> coeffs) {
+	static void extend_to(transformed& t, int m, std::span<const dbl> coeffs) {
+		assert(!(m & (m-1)) && sz(coeffs) <= 2 * m);
+		if (t.size() >= m) return;
+		if (t.size() == 0) { t = transform(coeffs, m); return; }
 		assert(sz(coeffs) <= 2 * t.size());
 		auto buf = buffer_pool<cnum>::get((sz(coeffs) + 1) / 2);
 		std::fill(buf.span().begin(), buf.span().end(), cnum(0));
 		pack(coeffs, buf.span());
-		while (t.size() < n) {
+		while (t.size() < m) {
 			t.v.resize(2 * sz(t.v));
 			core::extend(std::span<cnum>(t.v), std::span<const cnum>(buf.span()));
 		}
@@ -552,11 +561,14 @@ template <typename mnum> struct fft_split_engine {
 		core::forward(std::span<cnum>(r.v));
 		return r;
 	}
-	static void double_to(transformed& t, int n, std::span<const mnum> coeffs) {
+	static void extend_to(transformed& t, int m, std::span<const mnum> coeffs) {
+		assert(!(m & (m-1)) && sz(coeffs) <= 2 * m);
+		if (t.size() >= m) return;
+		if (t.size() == 0) { t = transform(coeffs, m); return; }
 		assert(sz(coeffs) <= 2 * t.size());
 		auto buf = buffer_pool<cnum>::get(sz(coeffs));
 		for (int i = 0; i < sz(coeffs); i++) buf[i] = pack(coeffs[i]);
-		while (t.size() < n) {
+		while (t.size() < m) {
 			t.v.resize(2 * t.size());
 			core::extend(std::span<cnum>(t.v), std::span<const cnum>(buf.span()));
 		}
@@ -690,12 +702,13 @@ struct crt_engine {
 			E2::transform(std::span<const num2>(b2.span()), n),
 		};
 	}
-	static void double_to(transformed& t, int n, std::span<const mnum> coeffs) {
+	static void extend_to(transformed& t, int m, std::span<const mnum> coeffs) {
+		if (t.size() >= m) return;
 		auto b1 = buffer_pool<num1>::get(sz(coeffs));
 		auto b2 = buffer_pool<num2>::get(sz(coeffs));
 		for (int i = 0; i < sz(coeffs); i++) { int64_t v = balanced(coeffs[i]); b1[i] = num1(v); b2[i] = num2(v); }
-		E1::double_to(t.t1, n, std::span<const num1>(b1.span()));
-		E2::double_to(t.t2, n, std::span<const num2>(b2.span()));
+		E1::extend_to(t.t1, m, std::span<const num1>(b1.span()));
+		E2::extend_to(t.t2, m, std::span<const num2>(b2.span()));
 	}
 	template <int A> static transformed_t<A> downsample(const transformed_t<A>& t, int n, bool odd) {
 		return transformed_t<A>{E1::downsample(t.t1, n, odd), E2::downsample(t.t2, n, odd)};
@@ -847,11 +860,12 @@ struct componentwise_engine {
 		}
 		return r;
 	}
-	static void double_to(transformed& t, int n, std::span<const V> coeffs) {
+	static void extend_to(transformed& t, int m, std::span<const V> coeffs) {
+		if (t.size() >= m) return;
 		auto buf = buffer_pool<S>::get(sz(coeffs));
 		for (int c = 0; c < L; c++) {
 			for (int i = 0; i < sz(coeffs); i++) buf[i] = coeffs[i].data()[c];
-			E::double_to(t.t[c], n, std::span<const S>(buf.span()));
+			E::extend_to(t.t[c], m, std::span<const S>(buf.span()));
 		}
 	}
 	template <int A> static transformed_t<A> downsample(const transformed_t<A>& t, int n, bool odd) {
@@ -1018,17 +1032,6 @@ static_assert(conv_engine<trunc_series_engine<crt_engine<modnum<int(1e9)+7>>, 2>
 static_assert(conv_engine<matrix_engine_stable<fft_split_engine<modnum<int(1e9)+7>>, 3>>);
 static_assert(conv_engine<trunc_series_engine_stable<crt_engine<modnum<int(1e9)+7>>, 3>>);
 
-// Build (first call) or grow a transform to size m (a power of two, with
-// sz(coeffs) <= 2 * m); the owner must feed the same coefficient sequence every
-// time. A first build with sz(coeffs) > m folds circularly -- what the 2^k+1
-// cut consumes, and a valid seed for later doubling.
-template <conv_engine E>
-void extend_transform(typename E::transformed& t, std::span<const typename E::value_type> coeffs, int m) {
-	assert(!(m & (m-1)) && sz(coeffs) <= 2 * m);
-	if (t.size() == 0) t = E::transform(coeffs, m);
-	else if (t.size() < m) E::double_to(t, m, coeffs);
-}
-
 // ==== multiply layer ====
 // These are free functions to convolve spans.
 //
@@ -1037,7 +1040,7 @@ void extend_transform(typename E::transformed& t, std::span<const typename E::va
 // Output spans may be shorter than expected; the output will just be truncated.
 //
 // Some functions may also take E::transformed& objects associated with the input
-// spans. These will be lazily filled (see extend_transform) and used if available.
+// spans. These will be lazily filled (see E::extend_to) and used if available.
 
 // Circular convolution mod n (power of 2)
 template <conv_engine E, typename Op = assign_op>
@@ -1104,8 +1107,8 @@ void multiply(std::span<const typename E::value_type> a, typename E::transformed
 	int s = sz(a) + sz(b) - 1;
 	auto [n, cut] = detail::conv_size_for(s);
 	T c0 = a[0] * b[0];
-	extend_transform<E>(ta, a, n);
-	extend_transform<E>(tb, b, n);
+	E::extend_to(ta, n, a);
+	E::extend_to(tb, n, b);
 	auto buf = buffer_pool<T>::get(n);
 	E::finish(E::mul(ta, tb, n), buf.span());
 	detail::emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
@@ -1123,8 +1126,8 @@ void multiply_add2(std::span<const typename E::value_type> a1, typename E::trans
 	assert(sz(a2) + sz(b2) - 1 == s);
 	auto [n, cut] = detail::conv_size_for(s);
 	T c0 = a1[0] * b1[0] + a2[0] * b2[0];
-	extend_transform<E>(ta1, a1, n); extend_transform<E>(tb1, b1, n);
-	extend_transform<E>(ta2, a2, n); extend_transform<E>(tb2, b2, n);
+	E::extend_to(ta1, n, a1); E::extend_to(tb1, n, b1);
+	E::extend_to(ta2, n, a2); E::extend_to(tb2, n, b2);
 	auto p = E::add(E::mul(ta1, tb1, n), E::mul(ta2, tb2, n));
 	auto buf = buffer_pool<T>::get(n);
 	E::finish(std::move(p), buf.span());
@@ -1144,8 +1147,8 @@ void multiply_cached(std::span<const typename E::value_type> a, typename E::tran
 	if constexpr (std::same_as<typename E::product, typename E::transformed>) {
 		auto [n, cut] = detail::conv_size_for(s);
 		T c0 = a[0] * b[0];
-		extend_transform<E>(ta, a, n);
-		extend_transform<E>(tb, b, n);
+		E::extend_to(ta, n, a);
+		E::extend_to(tb, n, b);
 		auto p = E::mul(ta, tb, n);
 		auto tp = p;
 		auto buf = buffer_pool<T>::get(n);
@@ -1177,7 +1180,7 @@ void square(std::span<const typename E::value_type> a, typename E::transformed& 
 	int s = 2 * sz(a) - 1;
 	auto [n, cut] = detail::conv_size_for(s);
 	T c0 = a[0] * a[0];
-	extend_transform<E>(ta, a, n);
+	E::extend_to(ta, n, a);
 	auto buf = buffer_pool<T>::get(n);
 	E::finish(E::sq(ta, n), buf.span());
 	detail::emit_linear<T>(buf.span(), n, s, cut, c0, out, op);
@@ -1268,8 +1271,8 @@ void middle_product(std::span<const typename E::value_type> a, typename E::trans
 		return;
 	}
 	auto [n, cut] = detail::conv_size_for(sz(a));
-	extend_transform<E>(ta, a, n);
-	extend_transform<E>(tb, b, n);
+	E::extend_to(ta, n, a);
+	E::extend_to(tb, n, b);
 	auto buf = buffer_pool<T>::get(n);
 	E::finish(E::mul(ta, tb, n), buf.span());
 	detail::emit_middle<T>(buf.span(), cut, sz(a), sz(b),
