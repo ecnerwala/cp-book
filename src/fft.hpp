@@ -1892,15 +1892,15 @@ template <bool ea, bool eb> int product_prec(int la, int lb) {
 }
 
 // Normalize a product operand at the given precision to a borrowed series + the
-// whole cache serving it: a prefix cache at scale nextPow2(prec-1), or the whole
+// whole cache serving it: a prefix cache at scale nextPow2(prec), or the whole
 // span with the operand's own cache, or a truncated span with the caller's
 // throwaway cache.
-// A whole cache of an over-length operand is only worth using when the
-// untruncated span doesn't grow the transform size (a 2x'd inverse transform
-// costs more than the saved forward transform); other_len is the other
-// operand's span length for that sizing.
+// A whole cache of an over-length operand (len > prec, which pins the other,
+// necessarily trunc, operand's span at exactly prec) is only worth using when
+// the untruncated span doesn't grow the transform size: a 2x'd inverse
+// transform costs more than the saved forward transform.
 template <series_like S>
-auto product_operand(const S& s, int prec, int other_len, fft::fft_cache<typename S::engine_t>& tmp) {
+auto product_operand(const S& s, int prec, fft::fft_cache<typename S::engine_t>& tmp) {
 	using E = typename S::engine_t;
 	if constexpr (prefix_cached<S>) {
 		return s.prefix(nextPow2(prec));
@@ -1908,8 +1908,8 @@ auto product_operand(const S& s, int prec, int other_len, fft::fft_cache<typenam
 		power_series_span<E, S::exact_v> v = s.underlying();
 		int used = std::min(s.len(), prec);
 		if constexpr (whole_cached<S>) {
-			if (s.len() == used || fft::detail::conv_size_for(s.len() + other_len - 1).n
-					== fft::detail::conv_size_for(used + other_len - 1).n) {
+			if (s.len() == used || fft::detail::conv_size_for(s.len() + prec - 1).n
+					== fft::detail::conv_size_for(2 * prec - 1).n) {
 				return cached_power_series_span<E, S::exact_v>{v, s.cache()};
 			}
 		}
@@ -1961,8 +1961,8 @@ auto operator * (const A& a, const B& b) {
 		else return power_series<E, false>(size_t(prec), T(0));
 	}
 	fft::fft_cache<E> ta_, tb_;
-	auto va = detail::product_operand(a, prec, std::min(b.len(), prec), ta_);
-	auto vb = detail::product_operand(b, prec, va.len(), tb_);
+	auto va = detail::product_operand(a, prec, ta_);
+	auto vb = detail::product_operand(b, prec, tb_);
 	if constexpr (ea && eb) {
 		std::vector<T> coeffs;
 		fft::fft_cache<E> f;
