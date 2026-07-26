@@ -1831,20 +1831,28 @@ power_series<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A
 // The single multiplication operator: picks the best transform reuse available.
 // Whole-sequence caches are only sound at full (exact x exact) precision;
 // prefix caches serve any precision.
-// An exact x exact product returns a whole_cached result: the cache starts empty
-// (lazy, free) except when both operands were whole-cached and the engine can adopt
-// the pointwise product as the result's transform (see fft::multiply_cached).
+// An exact x exact product returns a whole_cached result, going through
+// fft::multiply_cached (reusing operand caches where present, building them
+// otherwise) so the pointwise product is adopted as the result's transform
+// whenever the engine supports it.
 template <series_like A, series_like B> requires same_engine<A, B>
 auto operator * (const A& a, const B& b) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
 	constexpr bool ea = A::exact_v, eb = B::exact_v;
-	if constexpr (ea && eb && whole_cached<A> && whole_cached<B>) {
+	if constexpr (ea && eb && !prefix_cached<A> && !prefix_cached<B>) {
+		fft::fft_cache<E> ta_, tb_;
+		fft::fft_cache<E>& ta = [&]() -> fft::fft_cache<E>& {
+			if constexpr (whole_cached<A>) return a.cache(); else return ta_;
+		}();
+		fft::fft_cache<E>& tb = [&]() -> fft::fft_cache<E>& {
+			if constexpr (whole_cached<B>) return b.cache(); else return tb_;
+		}();
 		std::vector<T> coeffs;
 		fft::fft_cache<E> f;
 		fft::multiply_cached<E>(
-			std::span<const T>(a.underlying()), a.cache(),
-			std::span<const T>(b.underlying()), b.cache(),
+			std::span<const T>(a.underlying()), ta,
+			std::span<const T>(b.underlying()), tb,
 			coeffs, f
 		);
 		whole_cached_power_series<E, true> w(power_series_exact<E>(std::move(coeffs)));
@@ -1867,18 +1875,21 @@ auto operator * (const A& a, const B& b) {
 				std::span<const T> as = std::span<const T>(a.underlying()).first(std::min(prec, a.len()));
 				fft::fft_cache<E> ac(as, 2 * n);
 				fft::multiply<E>(as, ac, b.prefix(n), b.prefix_cache(n), std::span<T>(r));
-			} else if constexpr (whole_cached<A> && ea && eb) {
-				fft::fft_cache<E> bc;
-				fft::multiply<E>(std::span<const T>(a.underlying()), a.cache(), std::span<const T>(b.underlying()), bc, std::span<T>(r));
-			} else if constexpr (whole_cached<B> && ea && eb) {
-				fft::fft_cache<E> ac;
-				fft::multiply<E>(std::span<const T>(a.underlying()), ac, std::span<const T>(b.underlying()), b.cache(), std::span<T>(r));
 			} else {
-				fft::multiply<E>(
-					std::span<const T>(a.underlying()).first(std::min(a.len(), prec)),
-					std::span<const T>(b.underlying()).first(std::min(b.len(), prec)),
-					std::span<T>(r)
-				);
+				// a whole cache is sound in a truncated product whenever the operand's
+				// full length fits under the precision (its span is untruncated)
+				std::span<const T> as = std::span<const T>(a.underlying()).first(std::min(a.len(), prec));
+				std::span<const T> bs = std::span<const T>(b.underlying()).first(std::min(b.len(), prec));
+				fft::fft_cache<E> ta_, tb_;
+				fft::fft_cache<E>& ta = [&]() -> fft::fft_cache<E>& {
+					if constexpr (whole_cached<A>) { if (a.len() <= prec) return a.cache(); }
+					return ta_;
+				}();
+				fft::fft_cache<E>& tb = [&]() -> fft::fft_cache<E>& {
+					if constexpr (whole_cached<B>) { if (b.len() <= prec) return b.cache(); }
+					return tb_;
+				}();
+				fft::multiply<E>(as, ta, bs, tb, std::span<T>(r));
 			}
 		}
 		if constexpr (ea && eb) {

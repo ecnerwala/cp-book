@@ -558,6 +558,14 @@ TEST_CASE("power_series cached wrappers", "[fft]") {
 		REQUIRE((qa * small) == (pa2 * small));
 		REQUIRE((small * qa) == (small * pa2));
 	}
+	// a whole cache also serves truncated products when the operand fits under
+	// the precision; oversized operands fall back to a truncated span
+	whole_cached_power_series<E, false> wt{power_series<E>(pa)};
+	power_series<E> big(100);
+	fill_rnd(big, mt);
+	REQUIRE((wt * big) == (pa * big));
+	REQUIRE((big * wt) == (big * pa));
+	REQUIRE((wt * pb) == (pa * pb));
 	// exact cached series give full products, mixing with truncated operands
 	prefix_cached_power_series<E, true> xqa(a), xqb(b);
 	REQUIRE((xqa * xqb) == (a * b));
