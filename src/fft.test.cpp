@@ -450,11 +450,11 @@ TEMPLATE_TEST_CASE("FFT Inverse", "[fft]", MOD_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
-	vector<num> a(298);
+	power_series_trunc<E> a(size_t(298));
 	fill_rnd(a, mt);
 	if (a[0] == 0) a[0] = 1;
-	auto i = inverse<E>(a);
-	auto r = multiply_slow(a, i);
+	auto i = inverse(a);
+	auto r = multiply_slow<num>(a, i);
 	r.resize(a.size());
 	vector<num> tgt(a.size());
 	tgt[0] = 1;

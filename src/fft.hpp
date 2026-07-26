@@ -51,6 +51,8 @@ using std::vector;
 using std::min;
 using std::max;
 
+// ==== core: roots, buffers, raw transforms ====
+
 // Complex
 template <typename dbl> struct cplx { /// start-hash
 	dbl x, y;
@@ -252,6 +254,8 @@ template <typename num> struct fft_core {
 	}
 };
 
+// ==== engine concept ====
+
 // Output operations for the finish step to express arbitrary fusion into the output buffer.
 struct assign_op { template <typename T> void operator()(T& d, T v) const { d = v; } };
 struct add_op { template <typename T> void operator()(T& d, T v) const { d += v; } };
@@ -322,6 +326,8 @@ concept conv_engine = requires(
 	requires std::same_as<std::remove_cvref_t<decltype(E::commutative)>, bool>;
 	requires std::same_as<std::remove_cvref_t<decltype(E::unit_scale)>, int>;
 };
+
+// ==== scalar engines ====
 
 template <typename num> struct fft_engine {
 	using value_type = num;
@@ -744,6 +750,8 @@ struct crt_engine {
 };
 
 // Small NxN matrix over num, row-major
+// ==== wrapper engines ====
+
 template <typename num, int N> struct mat {
 	std::array<num, size_t(N) * N> a{};
 	num& operator[](std::array<int, 2> rc) { return a[size_t(rc[0]) * N + rc[1]]; }
@@ -1306,46 +1314,9 @@ vector<typename E::value_type> middle_product(std::span<const typename E::value_
 	return r;
 }
 
-// Newton inversion: out[0..sz(a)) = coefficients of 1/a mod x^sz(a); requires
-// sz(out) >= sz(a) (exactly sz(a) coefficients are written). Generic over any
-// engine; per doubling step n -> m = 2n this is 5 transforms of size m, reusing b's
-// transform for both circular products; in each product the wraparound only
-// contaminates coefficients [0, n) which are already known.
-//
-// This is correct for non-commutative rings.
-//
-// TODO: I don't think this should be here, we should just move this to power_series
-template <conv_engine E> void inverse(std::span<const typename E::value_type> a, std::span<typename E::value_type> out) {
-	using T = typename E::value_type;
-	if (sz(a) == 0) return;
-	int s = nextPow2(sz(a));
-	vector<T> b(s, T{});
-	b[0] = inv(a[0]);
-	for (int n = 1; n < sz(a); n *= 2) {
-		int m = 2 * n;
-		auto ta = E::transform(a.first(min(sz(a), m)), m);
-		auto tb = E::transform(std::span<const T>(b).first(n), m);
-		// e = a*b mod x^m; only e[n..m) is needed (and is wraparound-free).
-		auto e = buffer_pool<T>::get(m);
-		E::finish(E::mul(ta, tb, m), e.span());
-		for (int i = 0; i < n; i++) e[i] = T{};
-		auto te = E::transform(std::span<const T>(e.span()), m);
-		auto c = buffer_pool<T>::get(m);
-		// b' = 2b - b*(a*b): keep b on the left of e = a*b
-		E::finish(E::mul(tb, te, m), c.span());
-		for (int i = n; i < min(m, sz(a)); i++) b[i] = -c[i];
-	}
-	std::copy(b.begin(), b.begin() + sz(a), out.begin());
-}
-
-template <conv_engine E> vector<typename E::value_type> inverse(const vector<typename E::value_type>& a) {
-	using T = typename E::value_type;
-	vector<T> r(a.size());
-	inverse<E>(std::span<const T>(a), std::span<T>(r));
-	return r;
-}
-
 /* namespace fft */ }
+
+// ==== value types ====
 
 // Helper packed bivariate buffer for Kinoshita-Li composition (arXiv:2404.05177).
 //
@@ -1484,6 +1455,47 @@ struct power_series : public std::vector<typename E::value_type> {
 		return r;
 	}
 
+	// mixed-exactness binary operators (hidden friends: found by ADL on either operand)
+	template <bool oe>
+	friend power_series<E, exact && oe> operator + (const power_series& a, const power_series<E, oe>& b) {
+		int n = (exact && oe) ? std::max(a.len(), b.len())
+			: exact ? b.len() : oe ? a.len() : std::min(a.len(), b.len());
+		power_series<E, exact && oe> r(size_t(n), T(0));
+		for (int i = 0; i < n; i++) {
+			r[i] = (i < a.len() ? a[i] : T(0)) + (i < b.len() ? b[i] : T(0));
+		}
+		return r;
+	}
+	template <bool oe>
+	friend power_series<E, exact && oe> operator - (const power_series& a, const power_series<E, oe>& b) {
+		int n = (exact && oe) ? std::max(a.len(), b.len())
+			: exact ? b.len() : oe ? a.len() : std::min(a.len(), b.len());
+		power_series<E, exact && oe> r(size_t(n), T(0));
+		for (int i = 0; i < n; i++) {
+			r[i] = (i < a.len() ? a[i] : T(0)) - (i < b.len() ? b[i] : T(0));
+		}
+		return r;
+	}
+	template <bool oe>
+	friend power_series<E, exact && oe> operator * (const power_series& a, const power_series<E, oe>& b) {
+		if constexpr (exact && oe) {
+			if (a.len() == 0 || b.len() == 0) return {};
+			power_series<E, true> r(size_t(a.len() + b.len() - 1), T(0));
+			fft::multiply<E>(std::span<const T>(a), std::span<const T>(b), std::span<T>(r));
+			return r;
+		} else {
+			int prec = exact ? b.len() : oe ? a.len() : std::min(a.len(), b.len());
+			power_series<E, false> r(size_t(prec), T(0));
+			if (prec == 0 || a.len() == 0 || b.len() == 0) return r;
+			fft::multiply<E>(
+				std::span<const T>(a).first(std::min(a.len(), prec)),
+				std::span<const T>(b).first(std::min(b.len(), prec)),
+				std::span<T>(r)
+			);
+			return r;
+		}
+	}
+
 	power_series& operator *= (const power_series& o) {
 		return *this = (*this) * o;
 	}
@@ -1494,9 +1506,33 @@ struct power_series : public std::vector<typename E::value_type> {
 		return r;
 	}
 
+	// Newton inversion: 1/a mod x^a.len(). Generic over any engine; per doubling step
+	// n -> m = 2n this is 5 transforms of size m, reusing b's transform for both circular
+	// products; in each product the wraparound only contaminates coefficients [0, n)
+	// which are already known.
+	//
+	// This is correct for non-commutative rings.
 	friend power_series inverse(const power_series& a) requires (!exact) {
 		power_series r(a.size());
-		fft::inverse<E>(std::span<const T>(a), std::span<T>(r));
+		if (a.len() == 0) return r;
+		int s = nextPow2(a.len());
+		std::vector<T> b(size_t(s), T{});
+		b[0] = inv(a[0]);
+		for (int n = 1; n < a.len(); n *= 2) {
+			int m = 2 * n;
+			auto ta = E::transform(std::span<const T>(a).first(std::min(a.len(), m)), m);
+			auto tb = E::transform(std::span<const T>(b).first(n), m);
+			// e = a*b mod x^m; only e[n..m) is needed (and is wraparound-free).
+			auto e = fft::buffer_pool<T>::get(m);
+			E::finish(E::mul(ta, tb, m), e.span());
+			for (int i = 0; i < n; i++) e[i] = T{};
+			auto te = E::transform(std::span<const T>(e.span()), m);
+			auto c = fft::buffer_pool<T>::get(m);
+			// b' = 2b - b*(a*b): keep b on the left of e = a*b
+			E::finish(E::mul(tb, te, m), c.span());
+			for (int i = n; i < std::min(m, a.len()); i++) b[i] = -c[i];
+		}
+		std::copy(b.begin(), b.begin() + a.len(), r.begin());
 		return r;
 	}
 	// TODO: operator / can be done slightly faster than inverse:
@@ -1718,50 +1754,6 @@ struct power_series : public std::vector<typename E::value_type> {
 
 template <fft::conv_engine E> using power_series_exact = power_series<E, true>;
 template <fft::conv_engine E> using power_series_trunc = power_series<E, false>;
-
-// TODO: Why aren't these friends?
-template <fft::conv_engine E, bool ea, bool eb>
-power_series<E, ea && eb> operator+(const power_series<E, ea>& a, const power_series<E, eb>& b) {
-	using T = typename E::value_type;
-	int n = (ea && eb) ? std::max(a.len(), b.len())
-		: ea ? b.len() : eb ? a.len() : std::min(a.len(), b.len());
-	power_series<E, ea && eb> r(size_t(n), T(0));
-	for (int i = 0; i < n; i++) {
-		r[i] = (i < a.len() ? a[i] : T(0)) + (i < b.len() ? b[i] : T(0));
-	}
-	return r;
-}
-template <fft::conv_engine E, bool ea, bool eb>
-power_series<E, ea && eb> operator-(const power_series<E, ea>& a, const power_series<E, eb>& b) {
-	using T = typename E::value_type;
-	int n = (ea && eb) ? std::max(a.len(), b.len())
-		: ea ? b.len() : eb ? a.len() : std::min(a.len(), b.len());
-	power_series<E, ea && eb> r(size_t(n), T(0));
-	for (int i = 0; i < n; i++) {
-		r[i] = (i < a.len() ? a[i] : T(0)) - (i < b.len() ? b[i] : T(0));
-	}
-	return r;
-}
-template <fft::conv_engine E, bool ea, bool eb>
-power_series<E, ea && eb> operator*(const power_series<E, ea>& a, const power_series<E, eb>& b) {
-	using T = typename E::value_type;
-	if constexpr (ea && eb) {
-		if (a.len() == 0 || b.len() == 0) return {};
-		power_series_exact<E> r(size_t(a.len() + b.len() - 1), T(0));
-		fft::multiply<E>(std::span<const T>(a), std::span<const T>(b), std::span<T>(r));
-		return r;
-	} else {
-		int prec = ea ? b.len() : eb ? a.len() : std::min(a.len(), b.len());
-		power_series<E, false> r(size_t(prec), T(0));
-		if (prec == 0 || a.len() == 0 || b.len() == 0) return r;
-		fft::multiply<E>(
-			std::span<const T>(a).first(std::min(a.len(), prec)),
-			std::span<const T>(b).first(std::min(b.len(), prec)),
-			std::span<T>(r)
-		);
-		return r;
-	}
-}
 
 // [x^k] p(x)/q(x) (Bostan-Mori) for an exact rational function. Requires q[0] != 0 and
 // p.len() < q.len(). Each level uses p(x) q(-x) (keeping the parity-of-k half) and
@@ -2105,6 +2097,8 @@ struct linear_form {
 	}
 };
 
+// ==== multipoint evaluation / interpolation ====
+
 // Subproduct tree over points a[0:N]
 // BFS-order tree, each node holds prod (1 - a[i] x) with caches.
 template <fft::conv_engine E>
@@ -2210,6 +2204,8 @@ poly<E> poly_interpolate(
 	for (int i = 0; i < N; i++) leaf_vals[i] = vals[i] / denoms[i];
 	return poly<E>::from_rev_series(tree.combine_up(std::span<const T>(leaf_vals)));
 }
+
+// ==== online multiplication ====
 
 // Online (relaxed) multiplication: computes the first N terms of f*g given the terms one at a time.
 template <fft::conv_engine E> struct online_multiplier {
