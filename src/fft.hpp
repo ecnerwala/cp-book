@@ -1908,7 +1908,7 @@ auto product_operand(const S& s, int prec, fft::fft_cache<typename S::engine_t>&
 		power_series_span<E, S::exact_v> v = s.underlying();
 		int used = std::min(s.len(), prec);
 		if constexpr (whole_cached<S>) {
-			if (s.len() == used || fft::detail::conv_size_for(s.len() + prec - 1).n
+			if (s.len() <= prec || fft::detail::conv_size_for(s.len() + prec - 1).n
 					== fft::detail::conv_size_for(2 * prec - 1).n) {
 				return cached_power_series_span<E, S::exact_v>{v, s.cache()};
 			}
