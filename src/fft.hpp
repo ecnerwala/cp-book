@@ -33,7 +33,7 @@
  *                   polynomials - R[x]. Under x -> 1/x a polynomial becomes a Laurent polynomial in 1/x;
  *                                 shifting by x^{deg P} (reversal) lands it in R[[x]], and we store that exact series.
  *                   poly::vec<E> - polynomial type, supporting natural indexing
- *                   linear_form<E> - finite-support linear forms, via the pairing <P, S> = [x^0] P(1/x) S(x)
+ *                   poly::form<E> - finite-support linear forms, via the pairing <P, S> = [x^0] P(1/x) S(x)
  *                                    a linear form is one side of this pairing, applied to the other
  *
  *                   online_multiplier<E> - online (relaxed) multiplication of 2 sequences in n log^2 n time
@@ -2441,10 +2441,9 @@ bool operator==(const A& a, const B& b) {
 	return a.rev_series() == b.rev_series();
 }
 
-/* namespace poly */ }
 
 // finite-support linear form
-// These are one side of the pairing <poly::vec P, series::vec S> = [x^0] P(1/x) S(x).
+// These are one side of the pairing <vec P, series::vec S> = [x^0] P(1/x) S(x).
 // (Strictly speaking, this is actually <>_d where we take polynomials of degree < d.)
 // The main point of this wrapper is that if we have <*, S> and want <P *, S>, that's a middle product by P.
 //
@@ -2455,28 +2454,28 @@ bool operator==(const A& a, const B& b) {
 // if we represent P as a "polynomial" in the differential operator D (x^k = k! D^k):
 // <P, e^{aD}> = P(a)
 template <fft::engine E>
-struct linear_form {
+struct form {
 	using T = typename E::value_type;
 	// coeffs of S in <*, S>; always whole-cached: the kernel transform is
 	// what repeated middle products against the same form reuse
 	series::cached<E> c;
 
-	linear_form() = default;
-	explicit linear_form(int len) : c(series::exact<E>(size_t(len), T{})) {}
+	form() = default;
+	explicit form(int len) : c(series::exact<E>(size_t(len), T{})) {}
 	// We don't provide coefficient-list constructors, to avoid ordering confusion.
 
 	const series::cached<E>& rev_series() const { return c; }
-	static linear_form from_rev_series(series::cached<E> s) {
-		linear_form r;
+	static form from_rev_series(series::cached<E> s) {
+		form r;
 		r.c = std::move(s);
 		return r;
 	}
-	static linear_form from_poly(const poly::vec<E>& p) { return from_rev_series(series::cached<E>(p.rev_series())); }
+	static form from_poly(const vec<E>& p) { return from_rev_series(series::cached<E>(p.rev_series())); }
 
 	int len() const { return c.len(); }
 
 	// Restrict the form's domain: only valid against exact series of length n
-	linear_form for_length(int n) const {
+	form for_length(int n) const {
 		series::exact<E> r(c.underlying());
 		if (n >= len()) r.insert(r.begin(), size_t(n - len()), T(0));
 		else r.erase(r.begin(), r.begin() + (len() - n));
@@ -2484,14 +2483,14 @@ struct linear_form {
 	}
 
 	// the functional p -> p(z) on polynomials of length up to len (weight z^i on [x^i])
-	static linear_form polynomial_evaluation(T z, int len) {
+	static form polynomial_evaluation(T z, int len) {
 		series::exact<E> k(size_t(len), T{});
 		T p = T(1);
 		for (int i = 0; i < len; i++) { k[i] = p; p *= z; }
 		return from_rev_series(std::move(k));
 	}
 
-	template <poly::like P>
+	template <like P>
 	T operator()(const P& p) const {
 		assert(p.len() <= len());
 		T r{};
@@ -2500,15 +2499,15 @@ struct linear_form {
 	}
 
 	// <*, S> -> <q x *, S>
-	template <poly::like P>
-	linear_form composed_with(const P& q) const {
+	template <like P>
+	form composed_with(const P& q) const {
 		assert(q.len() > 0 && q.len() <= len());
 		return from_rev_series(series::exact<E>(middle_product(c, q.rev_series())));
 	}
 
 	// <P, *> -> <P, s x *>
 	template <series::like S> requires std::same_as<typename S::engine_t, E>
-	linear_form composed_with(const S& s) const {
+	form composed_with(const S& s) const {
 		if constexpr (!S::exact_v) assert(s.len() >= len());
 		series::vec<E, S::exact_v> r = c * s;
 		r.resize(size_t(len()));
@@ -2519,17 +2518,17 @@ struct linear_form {
 // ==== multipoint evaluation / interpolation ====
 
 // Subproduct tree over points a[0:N]
-// BFS-order tree, each node holds prod (x - a[i]) as a cached poly::vec.
+// BFS-order tree, each node holds prod (x - a[i]) as a cached vec.
 template <fft::engine E>
 struct subproduct_tree {
 	using T = typename E::value_type;
 	int N;
-	std::vector<poly::cached<E>> nodes;
+	std::vector<cached<E>> nodes;
 
 	explicit subproduct_tree(std::span<const T> pts) : N(sz(pts)), nodes(size_t(2) * N) {
 		assert(N > 0);
 		for (int i = 0; i < N; i++) {
-			nodes[N + i] = poly::vec<E>{-pts[i], T(1)};
+			nodes[N + i] = vec<E>{-pts[i], T(1)};
 		}
 		for (int i = N - 1; i > 0; i--) {
 			nodes[i] = nodes[2*i] * nodes[2*i+1];
@@ -2542,15 +2541,15 @@ struct subproduct_tree {
 	const series::exact<E>& rev_prod(int i) const { return nodes[i].rev_series().underlying(); }
 
 	// Computes, for each i, f(product_{j != i} (1 - a[j] x)). Requires f.len() == N.
-	std::vector<T> pushdown(linear_form<E> f) const {
+	std::vector<T> pushdown(form<E> f) const {
 		assert(f.len() == N);
-		std::vector<linear_form<E>> down(size_t(2) * N);
+		std::vector<form<E>> down(size_t(2) * N);
 		down[1] = std::move(f);
 		for (int i = 1; i < N; i++) {
 			// the form's kernel transform serves both children's middle products
 			down[2*i+0] = down[i].composed_with(nodes[2*i+1]);
 			down[2*i+1] = down[i].composed_with(nodes[2*i+0]);
-			down[i] = linear_form<E>{}; // done with the parent; free it early
+			down[i] = form<E>{}; // done with the parent; free it early
 		}
 		std::vector<T> out(size_t(N), T{});
 		for (int i = 0; i < N; i++) out[i] = down[N + i].rev_series()[0];
@@ -2558,24 +2557,24 @@ struct subproduct_tree {
 	}
 
 	// Compute sum_i leaf_vals[i] prod_{j!=i} (x - a[j]) (transpose of pushdown)
-	poly::cached<E> combine_up(std::span<const T> leaf_vals) const {
+	cached<E> combine_up(std::span<const T> leaf_vals) const {
 		assert(sz(leaf_vals) == N);
-		std::vector<poly::cached<E>> up(size_t(2) * N);
+		std::vector<cached<E>> up(size_t(2) * N);
 		for (int i = 0; i < N; i++) {
-			up[N + i] = poly::vec<E>{leaf_vals[i]};
+			up[N + i] = vec<E>{leaf_vals[i]};
 		}
 		for (int i = N - 1; i > 0; i--) {
 			up[i] = multiply_add2(up[2*i+0], nodes[2*i+1], up[2*i+1], nodes[2*i+0]);
-			up[2*i+0] = poly::cached<E>{};
-			up[2*i+1] = poly::cached<E>{};
+			up[2*i+0] = cached<E>{};
+			up[2*i+1] = cached<E>{};
 		}
 		return std::move(up[1]);
 	}
 };
 
 template <fft::engine E>
-std::vector<typename E::value_type> poly_evaluate(
-	const poly::vec<E>& p,
+std::vector<typename E::value_type> multipoint(
+	const vec<E>& p,
 	std::span<const typename E::value_type> pts
 ) {
 	if (pts.empty()) return {};
@@ -2583,12 +2582,12 @@ std::vector<typename E::value_type> poly_evaluate(
 	subproduct_tree<E> tree{pts};
 	series::vec<E> q = tree.rev_prod(1);
 	q.resize(p.len()); // inverse precision must cover the form's window
-	linear_form<E> f = linear_form<E>::from_poly(p).composed_with(inverse(q));
+	form<E> f = form<E>::from_poly(p).composed_with(inverse(q));
 	return tree.pushdown(f.for_length(N));
 }
 
 template <fft::engine E>
-poly::vec<E> poly_interpolate(
+vec<E> interpolate(
 	std::span<const typename E::value_type> pts,
 	std::span<const typename E::value_type> vals
 ) {
@@ -2607,13 +2606,15 @@ poly::vec<E> poly_interpolate(
 		deriv_root[i] *= T(N - i);
 	}
 	std::vector<T> denoms = tree.pushdown(
-		linear_form<E>::from_rev_series(series::exact<E>(inverse(root) * deriv_root))
+		form<E>::from_rev_series(series::exact<E>(inverse(root) * deriv_root))
 	);
 
 	std::vector<T> leaf_vals(size_t(N), T{});
 	for (int i = 0; i < N; i++) leaf_vals[i] = vals[i] / denoms[i];
 	return tree.combine_up(std::span<const T>(leaf_vals));
 }
+
+/* namespace poly */ }
 
 // ==== online multiplication ====
 

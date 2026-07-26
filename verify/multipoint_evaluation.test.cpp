@@ -14,7 +14,7 @@ int main() {
 	int N, M; std::cin >> N >> M;
 	ecnerwala::poly::vec<E> F(N); for (auto& f : F) std::cin >> f;
 	std::vector<num> P(M); for (auto& p : P) std::cin >> p;
-	auto res = ecnerwala::poly_evaluate<E>(F, P);
+	auto res = ecnerwala::poly::multipoint<E>(F, P);
 	for (int i = 0; i < M; i++) {
 		std::cout << res[i] << " \n"[i+1==M];
 	}

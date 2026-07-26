@@ -97,7 +97,7 @@ Match the existing code exactly. In particular:
 
   ```cpp
   template <fft::engine E>
-  std::vector<typename E::value_type> poly_evaluate(
+  std::vector<typename E::value_type> multipoint(
   	const poly::vec<E>& p,
   	std::span<const typename E::value_type> pts
   ) {
@@ -141,8 +141,8 @@ use it correctly. Concretely:
   machinery in `ecnerwala::fft`, engines in `ecnerwala::fft::engines`, value
   types in `ecnerwala::series` / `ecnerwala::poly`).
   `poly::vec<E>` stores coefficients reversed but iterates and
-  indexes in natural (x^0-first) order; `poly_evaluate` / `poly_interpolate`
-  are in `ecnerwala`, not `ecnerwala::fft`.
+  indexes in natural (x^0-first) order; `poly::multipoint` / `poly::interpolate`
+  live in `ecnerwala::poly`.
 - `src/dirichlet_series.hpp`: `div_vector_layout` is passed as a template
   non-type reference parameter, so declare it `static` and assign the size at
   runtime.

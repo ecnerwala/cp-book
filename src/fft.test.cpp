@@ -568,13 +568,13 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	REQUIRE((wt * pb) == (pa * pb));
 }
 
-TEST_CASE("linear_form evaluation and transposed multiplication", "[fft]") {
+TEST_CASE("poly::form evaluation and transposed multiplication", "[fft]") {
 	using num = modnum<998244353>;
 	using E = engines::ntt<num>;
 	mt19937 mt(Catch::getSeed());
 	int n = 40;
 	num z = num(mt());
-	auto f = linear_form<E>::polynomial_evaluation(z, n);
+	auto f = poly::form<E>::polynomial_evaluation(z, n);
 	vector<num> sv(30);
 	fill_rnd(sv, mt);
 	poly::vec<E> s((span<const num>(sv)));
@@ -810,7 +810,7 @@ TEST_CASE("series::vec compose", "[fft]") {
 	}
 }
 
-TEST_CASE("poly_evaluate and poly_interpolate", "[fft]") {
+TEST_CASE("poly::multipoint and poly::interpolate", "[fft]") {
 	using num = modnum<998244353>;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {1, 2, 3, 8, 17, 40}) {
@@ -820,11 +820,11 @@ TEST_CASE("poly_evaluate and poly_interpolate", "[fft]") {
 		poly::vec<engines::ntt<num>> p((span<const num>(coeffs)));
 		vector<num> pts(n);
 		for (int i = 0; i < n; i++) pts[i] = num(1000 + i);
-		auto vals = poly_evaluate<engines::ntt<num>>(p, pts);
+		auto vals = poly::multipoint<engines::ntt<num>>(p, pts);
 		for (int i = 0; i < n; i++) {
 			REQUIRE(vals[i] == p(pts[i]));
 		}
-		auto rec = poly_interpolate<engines::ntt<num>>(pts, vals);
+		auto rec = poly::interpolate<engines::ntt<num>>(pts, vals);
 		REQUIRE(rec == p);
 	}
 }
