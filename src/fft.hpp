@@ -1487,6 +1487,47 @@ struct power_series : public std::vector<typename E::value_type> {
 		return r;
 	}
 
+	// mixed-exactness binary operators (hidden friends: found by ADL on either operand)
+	template <bool oe>
+	friend power_series<E, exact && oe> operator + (const power_series& a, const power_series<E, oe>& b) {
+		int n = (exact && oe) ? std::max(a.len(), b.len())
+			: exact ? b.len() : oe ? a.len() : std::min(a.len(), b.len());
+		power_series<E, exact && oe> r(size_t(n), T(0));
+		for (int i = 0; i < n; i++) {
+			r[i] = (i < a.len() ? a[i] : T(0)) + (i < b.len() ? b[i] : T(0));
+		}
+		return r;
+	}
+	template <bool oe>
+	friend power_series<E, exact && oe> operator - (const power_series& a, const power_series<E, oe>& b) {
+		int n = (exact && oe) ? std::max(a.len(), b.len())
+			: exact ? b.len() : oe ? a.len() : std::min(a.len(), b.len());
+		power_series<E, exact && oe> r(size_t(n), T(0));
+		for (int i = 0; i < n; i++) {
+			r[i] = (i < a.len() ? a[i] : T(0)) - (i < b.len() ? b[i] : T(0));
+		}
+		return r;
+	}
+	template <bool oe>
+	friend power_series<E, exact && oe> operator * (const power_series& a, const power_series<E, oe>& b) {
+		if constexpr (exact && oe) {
+			if (a.len() == 0 || b.len() == 0) return {};
+			power_series<E, true> r(size_t(a.len() + b.len() - 1), T(0));
+			fft::multiply<E>(std::span<const T>(a), std::span<const T>(b), std::span<T>(r));
+			return r;
+		} else {
+			int prec = exact ? b.len() : oe ? a.len() : std::min(a.len(), b.len());
+			power_series<E, false> r(size_t(prec), T(0));
+			if (prec == 0 || a.len() == 0 || b.len() == 0) return r;
+			fft::multiply<E>(
+				std::span<const T>(a).first(std::min(a.len(), prec)),
+				std::span<const T>(b).first(std::min(b.len(), prec)),
+				std::span<T>(r)
+			);
+			return r;
+		}
+	}
+
 	power_series& operator *= (const power_series& o) {
 		return *this = (*this) * o;
 	}
