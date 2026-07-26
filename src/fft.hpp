@@ -2268,17 +2268,17 @@ struct linear_form {
 // ==== multipoint evaluation / interpolation ====
 
 // Subproduct tree over points a[0:N]
-// BFS-order tree, each node holds prod (1 - a[i] x) with caches.
+// BFS-order tree, each node holds prod (x - a[i]) as a cached poly.
 template <fft::conv_engine E>
 struct subproduct_tree {
 	using T = typename E::value_type;
 	int N;
-	std::vector<whole_cached_power_series<E>> nodes;
+	std::vector<whole_cached_poly<E>> nodes;
 
 	explicit subproduct_tree(std::span<const T> pts) : N(sz(pts)), nodes(size_t(2) * N) {
 		assert(N > 0);
 		for (int i = 0; i < N; i++) {
-			nodes[N + i] = whole_cached_power_series<E>(power_series_exact<E>{T(1), -pts[i]});
+			nodes[N + i] = poly<E>{-pts[i], T(1)};
 		}
 		for (int i = N - 1; i > 0; i--) {
 			nodes[i] = nodes[2*i] * nodes[2*i+1];
@@ -2288,7 +2288,7 @@ struct subproduct_tree {
 	// number of points under node i
 	int size(int i) const { return nodes[i].len() - 1; }
 	// rev(prod (x - z_j)) over node i's leaves; length size(i) + 1
-	const power_series_exact<E>& rev_prod(int i) const { return nodes[i].underlying(); }
+	const power_series_exact<E>& rev_prod(int i) const { return nodes[i].rev_series().underlying(); }
 
 	// Computes, for each i, f(product_{j != i} (1 - a[j] x)). Requires f.len() == N.
 	std::vector<T> pushdown(linear_form<E> f) const {
@@ -2297,9 +2297,8 @@ struct subproduct_tree {
 		down[1] = std::move(f);
 		for (int i = 1; i < N; i++) {
 			// the form's kernel transform serves both children's middle products
-			const auto& k = down[i].rev_series();
-			down[2*i+0] = linear_form<E>::from_rev_series(power_series_exact<E>(middle_product(k, nodes[2*i+1])));
-			down[2*i+1] = linear_form<E>::from_rev_series(power_series_exact<E>(middle_product(k, nodes[2*i+0])));
+			down[2*i+0] = down[i].composed_with(nodes[2*i+1]);
+			down[2*i+1] = down[i].composed_with(nodes[2*i+0]);
 		}
 		std::vector<T> out(size_t(N), T{});
 		for (int i = 0; i < N; i++) out[i] = down[N + i].rev_series()[0];
@@ -2318,9 +2317,9 @@ struct subproduct_tree {
 			fft::transformed<E> cl, cr;
 			fft::multiply_add2<E>(
 					std::span<const T>(up[2*i+0]), cl,
-					std::span<const T>(nodes[2*i+1].underlying()), nodes[2*i+1].cache(),
+					std::span<const T>(nodes[2*i+1].rev_series().underlying()), nodes[2*i+1].rev_series().cache(),
 					std::span<const T>(up[2*i+1]), cr,
-					std::span<const T>(nodes[2*i+0].underlying()), nodes[2*i+0].cache(),
+					std::span<const T>(nodes[2*i+0].rev_series().underlying()), nodes[2*i+0].rev_series().cache(),
 					std::span<T>(r));
 			up[i] = std::move(r);
 		}
