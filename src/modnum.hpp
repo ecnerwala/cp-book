@@ -122,6 +122,7 @@ template <int MOD_> struct modnum {
 };
 
 struct mod_goldilocks {
+	using Self = mod_goldilocks;
 	static constexpr uint64_t MOD = 0xffffffff00000001ull;
 	static constexpr uint64_t EPS = -MOD;
 	// We have 2^32 is a primitive 6th root of unity.
@@ -133,24 +134,24 @@ struct mod_goldilocks {
 	mod_goldilocks() : v(0) {}
 	mod_goldilocks(uint64_t v_, is_reduced_tag) : v(v_) { assert(v < MOD); }
 	mod_goldilocks(int64_t a) : v(a < 0 ? a+MOD : a) {}
-	mod_goldilocks(int a) : mod_goldilocks(int64_t(a)) {}
+	mod_goldilocks(int a) : Self(int64_t(a)) {}
 	mod_goldilocks(uint64_t a) : v(a >= MOD ? a-MOD : a) {}
-	mod_goldilocks(unsigned a) : mod_goldilocks(uint64_t(a)) {}
+	mod_goldilocks(unsigned a) : Self(uint64_t(a)) {}
 	mod_goldilocks(__int128_t a) : v(a % MOD < 0 ? uint64_t(MOD - a % MOD) : uint64_t(a % MOD)) {}
 	mod_goldilocks(__uint128_t a) : v(uint64_t(a % MOD)) {}
 
-	static mod_goldilocks from_reduced(uint64_t v) {
-		return mod_goldilocks(v, is_reduced_tag{});
+	static Self from_reduced(uint64_t v) {
+		return Self(v, is_reduced_tag{});
 	}
 
 	explicit operator uint64_t () const { return v; }
 	int64_t as_signed() const { return MOD-v > v ? v : int64_t(v - MOD); }
-	friend std::ostream& operator << (std::ostream& out, mod_goldilocks n) { return out << uint64_t(n); }
+	friend std::ostream& operator << (std::ostream& out, Self n) { return out << uint64_t(n); }
 
-	friend bool operator == (mod_goldilocks a, mod_goldilocks b) { return a.v == b.v; }
-	friend bool operator != (mod_goldilocks a, mod_goldilocks b) { return a.v != b.v; }
+	friend bool operator == (Self a, Self b) { return a.v == b.v; }
+	friend bool operator != (Self a, Self b) { return a.v != b.v; }
 
-	mod_goldilocks operator+ () const { return *this; }
+	Self operator+ () const { return *this; }
 
 	// returns a-b, assuming -MOD <= a-b, e.g. b <= MOD
 	static uint64_t sub_mod_raw(uint64_t a, uint64_t b) {
@@ -198,45 +199,45 @@ struct mod_goldilocks {
 		return reduce_u160_raw(lo, hi_lo, hi_hi);
 	}
 
-	mod_goldilocks neg() const { return from_reduced(v ? MOD-v : 0); }
-	friend mod_goldilocks neg(const mod_goldilocks& m) { return m.neg(); }
-	mod_goldilocks operator- () const { return neg(); }
+	Self neg() const { return from_reduced(v ? MOD-v : 0); }
+	friend Self neg(const Self& m) { return m.neg(); }
+	Self operator- () const { return neg(); }
 
-	mod_goldilocks& operator ++ () {
+	Self& operator ++ () {
 		++ v;
 		if (v == MOD) v = 0;
 		return *this;
 	}
-	mod_goldilocks& operator -- () {
+	Self& operator -- () {
 		if (v == 0) v = MOD;
 		-- v;
 		return *this;
 	}
-	mod_goldilocks& operator += (mod_goldilocks o) {
+	Self& operator += (Self o) {
 		v = sub_mod_raw(v, MOD-o.v);
 		return *this;
 	}
-	mod_goldilocks& operator -= (mod_goldilocks o) {
+	Self& operator -= (Self o) {
 		v = sub_mod_raw(v, o.v);
 		return *this;
 	}
-	mod_goldilocks& operator *= (mod_goldilocks o) {
+	Self& operator *= (Self o) {
 		v = reduce_u128_raw(__uint128_t(v) * __uint128_t(o.v));
 		return *this;
 	}
 
-	friend mod_goldilocks operator ++ (mod_goldilocks& a, int) { mod_goldilocks r = a; ++a; return r; }
-	friend mod_goldilocks operator -- (mod_goldilocks& a, int) { mod_goldilocks r = a; --a; return r; }
-	friend mod_goldilocks operator + (mod_goldilocks a, mod_goldilocks b) { return mod_goldilocks(a) += b; }
-	friend mod_goldilocks operator - (mod_goldilocks a, mod_goldilocks b) { return mod_goldilocks(a) -= b; }
-	friend mod_goldilocks operator * (mod_goldilocks a, mod_goldilocks b) { return mod_goldilocks(a) *= b; }
+	friend Self operator ++ (Self& a, int) { Self r = a; ++a; return r; }
+	friend Self operator -- (Self& a, int) { Self r = a; --a; return r; }
+	friend Self operator + (Self a, Self b) { return Self(a) += b; }
+	friend Self operator - (Self a, Self b) { return Self(a) -= b; }
+	friend Self operator * (Self a, Self b) { return Self(a) *= b; }
 
-	mod_goldilocks inv() const { return from_reduced(mod_inv_in_range(v, MOD)); }
-	friend mod_goldilocks inv(mod_goldilocks m) { return m.inv(); }
-	mod_goldilocks& operator /= (mod_goldilocks o) {
+	Self inv() const { return from_reduced(mod_inv_in_range(v, MOD)); }
+	friend Self inv(Self m) { return m.inv(); }
+	Self& operator /= (Self o) {
 		return *this *= o.inv();
 	}
-	friend mod_goldilocks operator / (mod_goldilocks a, mod_goldilocks b) { return mod_goldilocks(a) /= b; }
+	friend Self operator / (Self a, Self b) { return Self(a) /= b; }
 };
 
 template <typename T> T power(T a, long long b) {

@@ -9,7 +9,7 @@ int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
 	using num = modnum<998244353>;
-	using E = ecnerwala::fft::fft_engine<num>;
+	using E = ecnerwala::fft::engines::ntt<num>;
 
 	int N; std::cin >> N;
 	std::vector<num> X(N); for (auto& x : X) std::cin >> x;

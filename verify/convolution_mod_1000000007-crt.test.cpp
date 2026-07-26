@@ -9,8 +9,8 @@ int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
 	using num = modnum<int(1e9)+7>;
-	using E = ecnerwala::fft::crt_engine<num>;
-	using pse = ecnerwala::power_series_exact<E>;
+	using E = ecnerwala::fft::engines::crt<num>;
+	using pse = ecnerwala::series::exact<E>;
 
 	int N, M; std::cin >> N >> M;
 	pse A(N); for (auto& x : A) std::cin >> x;
