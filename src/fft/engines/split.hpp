@@ -44,7 +44,7 @@ template <typename mnum> struct split {
 	using product = product_t<1>;
 
 	static cnum pack(mnum x) {
-		int64_t v = x.as_signed();
+		int64_t v = x.balanced();
 		int64_t hi = (v + (1 << 14)) >> 15;
 		return cnum(double(v - (hi << 15)), double(hi));
 	}

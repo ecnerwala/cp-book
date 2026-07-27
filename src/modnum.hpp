@@ -95,7 +95,7 @@ struct mod_ops : num_ops<Self> {
 	static Self from_reduced(V v) { return Self(v, is_reduced_tag{}); }
 
 	explicit operator V() const { return v; }
-	std::make_signed_t<V> as_signed() const {
+	std::make_signed_t<V> balanced() const {
 		return std::make_signed_t<V>(Self::MOD-v > v ? v : v - Self::MOD);
 	}
 
