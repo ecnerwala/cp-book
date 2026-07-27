@@ -333,17 +333,18 @@ cached<typename A::engine_t, kind::exact> multiply_add2(
 	return w;
 }
 
-// coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0
-template <like A, like B> requires fft::same_engine<A, B>
-std::vector<typename A::engine_t::value_type> middle_product(const A& a, const B& b) {
+// coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0.
+// The kernel b participates whole, so it must be exact; the result mirrors a's kind.
+template <like A, exact_like B> requires fft::same_engine<A, B>
+vec<typename A::engine_t, A::kind_v> middle_product(const A& a, const B& b) {
 	using E = typename A::engine_t;
 	span<E, A::kind_v> av = a.underlying();
-	span<E, B::kind_v> bv = b.underlying();
+	span<E, kind::exact> bv = b.underlying();
 	fft::transformed<E> ta_, tb_;
-	return fft::middle_product<E>(
+	return vec<E, A::kind_v>(fft::middle_product<E>(
 		av.coeffs(), detail::whole_cache_or(a, ta_),
 		bv.coeffs(), detail::whole_cache_or(b, tb_)
-	);
+	));
 }
 
 namespace detail {
