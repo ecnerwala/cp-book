@@ -16,8 +16,8 @@ namespace ecnerwala::fft::engines {
 // Multiplies mod `mnum` by splitting values into balanced 15-bit halves (each limb in
 // [-2^14, 2^14], from the balanced representative |v| <= MOD/2) packed into one complex
 // transform per operand.
-// TODO: Add type bounds?
 template <typename mnum> struct split {
+	static_assert(sizeof(decltype(mnum::MOD)) <= 4, "limbs must fit 15 bits");
 	using value_type = mnum;
 	static constexpr bool commutative = true;
 	static constexpr int unit_scale = 1;
@@ -44,8 +44,7 @@ template <typename mnum> struct split {
 	using product = product_t<1>;
 
 	static cnum pack(mnum x) {
-		int64_t v = int64_t(int(x));
-		if (2 * v > int64_t(mnum::MOD)) v -= mnum::MOD;
+		int64_t v = x.balanced();
 		int64_t hi = (v + (1 << 14)) >> 15;
 		return cnum(double(v - (hi << 15)), double(hi));
 	}

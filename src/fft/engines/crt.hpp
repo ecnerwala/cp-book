@@ -16,6 +16,7 @@ namespace ecnerwala::fft::engines {
 // are bounded by n (MOD/2)^2.
 template <typename mnum, typename num1 = mod_goldilocks, typename num2 = modnum<(15 << 27) + 1>>
 struct crt {
+	static_assert(sizeof(decltype(mnum::MOD)) <= 4, "n (MOD/2)^2 must fit the CRT modulus product");
 	using value_type = mnum;
 	static constexpr bool commutative = true;
 	static constexpr int unit_scale = 1;
@@ -44,16 +45,11 @@ struct crt {
 	};
 	using product = product_t<1>;
 
-	static int64_t balanced(mnum x) {
-		int64_t v = int64_t(int(x));
-		return 2 * v > int64_t(mnum::MOD) ? v - mnum::MOD : v;
-	}
-
 	static transformed transform(std::span<const mnum> a, int n) {
 		assert(sz(a) <= 2 * n);
 		auto b1 = buffer_pool<num1>::get(sz(a));
 		auto b2 = buffer_pool<num2>::get(sz(a));
-		for (int i = 0; i < sz(a); i++) { int64_t v = balanced(a[i]); b1[i] = num1(v); b2[i] = num2(v); }
+		for (int i = 0; i < sz(a); i++) { int64_t v = a[i].balanced(); b1[i] = num1(v); b2[i] = num2(v); }
 		return transformed{
 			E1::transform(std::span<const num1>(b1.span()), n),
 			E2::transform(std::span<const num2>(b2.span()), n),
@@ -63,7 +59,7 @@ struct crt {
 		if (t.size() >= m) return;
 		auto b1 = buffer_pool<num1>::get(sz(coeffs));
 		auto b2 = buffer_pool<num2>::get(sz(coeffs));
-		for (int i = 0; i < sz(coeffs); i++) { int64_t v = balanced(coeffs[i]); b1[i] = num1(v); b2[i] = num2(v); }
+		for (int i = 0; i < sz(coeffs); i++) { int64_t v = coeffs[i].balanced(); b1[i] = num1(v); b2[i] = num2(v); }
 		E1::extend_to(t.t1, m, std::span<const num1>(b1.span()));
 		E2::extend_to(t.t2, m, std::span<const num2>(b2.span()));
 	}
