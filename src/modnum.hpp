@@ -303,17 +303,8 @@ template <typename U, typename V> struct pairnum : num_ops<pairnum<U, V>> {
 template <typename tag> struct dynamic_modnum : mod_ops<dynamic_modnum<tag>, uint32_t> {
 	using Self = dynamic_modnum;
 private:
-#if __cpp_inline_variables >= 201606
-	// C++17 and up
 	inline static uint32_t MOD_ = 0;
 	inline static uint64_t BARRETT_M = 0;
-#else
-	// NB: these must be initialized out of the class by hand:
-	//   static uint32_t dynamic_modnum<tag>::MOD = 0;
-	//   static uint64_t dynamic_modnum<tag>::BARRETT_M = 0;
-	static uint32_t MOD_;
-	static uint64_t BARRETT_M;
-#endif
 
 public:
 	// Make only the const-reference public, to force the use of set_mod
