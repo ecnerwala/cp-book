@@ -226,7 +226,7 @@ struct form {
 	template <series::like S> requires std::same_as<typename S::engine_t, E>
 	form composed_with(const S& s) const {
 		if constexpr (!S::exact_v) assert(s.len() >= len());
-		series::vec<E, S::kind_v> r = c * s;
+		series::vec<E, S::exact_v> r = c * s;
 		r.resize(size_t(len()));
 		return from_rev_series(series::exact<E>(std::move(r)));
 	}

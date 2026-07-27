@@ -17,19 +17,14 @@ namespace ecnerwala::series {
 // A series is either exact (a finite series, R[x] sitting inside R[[x]]: the
 // length is just the support bound) or trunc (a known prefix of an infinite
 // series: the length is the precision, and products truncate to it).
-enum class kind { trunc, exact };
-constexpr kind common_kind(kind a, kind b) {
-	return a == kind::exact && b == kind::exact ? kind::exact : kind::trunc;
-}
 
 // Non-owning view of power series coefficients: the span pattern (contiguous
 // window + series semantics), borrowed from an owning series-like type.
-template <fft::engine E, kind K>
+template <fft::engine E, bool exact_>
 struct span {
 	using T = typename E::value_type;
 	using engine_t = E;
-	static constexpr kind kind_v = K;
-	static constexpr bool exact_v = K == kind::exact;
+	static constexpr bool exact_v = exact_;
 
 	span() = default;
 	explicit span(std::span<const T> s_) : s(s_) {}
@@ -50,29 +45,28 @@ private:
 // `exact` and `trunc` are aliases.
 //
 // Operators here are typically permissive: they will accept combinations of unequal types and lengths.
-template <fft::engine E, kind K>
+template <fft::engine E, bool exact_>
 struct vec : public std::vector<typename E::value_type> {
 	using T = typename E::value_type;
 	using engine_t = E;
-	static constexpr kind kind_v = K;
-	static constexpr bool exact_v = K == kind::exact;
+	static constexpr bool exact_v = exact_;
 	using std::vector<T>::vector;
 
 	const vec& underlying() const { return *this; }
 	// a free const borrow of the coefficients: implicit
-	operator span<E, K>() const {
-		return span<E, K>(std::span<const T>(*this));
+	operator span<E, exact_>() const {
+		return span<E, exact_>(std::span<const T>(*this));
 	}
 
 	// exact -> trunc is implicit, trunc -> exact is explicit
-	template <kind OK> requires (OK == kind::exact && K == kind::trunc)
-	vec(const vec<E, OK>& p) : std::vector<T>(p) {}
-	template <kind OK> requires (OK == kind::exact && K == kind::trunc)
-	vec(vec<E, OK>&& p) : std::vector<T>(std::move(p)) {}
-	template <kind OK> requires (OK == kind::trunc && K == kind::exact)
-	explicit vec(const vec<E, OK>& p) : std::vector<T>(p) {}
-	template <kind OK> requires (OK == kind::trunc && K == kind::exact)
-	explicit vec(vec<E, OK>&& p) : std::vector<T>(std::move(p)) {}
+	template <bool oe> requires (oe && !exact_)
+	vec(const vec<E, oe>& p) : std::vector<T>(p) {}
+	template <bool oe> requires (oe && !exact_)
+	vec(vec<E, oe>&& p) : std::vector<T>(std::move(p)) {}
+	template <bool oe> requires (!oe && exact_)
+	explicit vec(const vec<E, oe>& p) : std::vector<T>(p) {}
+	template <bool oe> requires (!oe && exact_)
+	explicit vec(vec<E, oe>&& p) : std::vector<T>(std::move(p)) {}
 
 	// adopt a plain coefficient vector
 	explicit vec(std::vector<T> v) : std::vector<T>(std::move(v)) {}
@@ -80,7 +74,7 @@ struct vec : public std::vector<typename E::value_type> {
 	int len() const {
 		return int(this->size());
 	}
-	int degree() const requires (K == kind::exact) {
+	int degree() const requires (exact_) {
 		return len() - 1;
 	}
 	void extend(int sz) {
@@ -92,32 +86,32 @@ struct vec : public std::vector<typename E::value_type> {
 		this->resize(sz);
 	}
 	// multiply by x^n within the fixed precision window
-	void shift_trunc(int n = 1) requires (K == kind::trunc) {
+	void shift_trunc(int n = 1) requires (!exact_) {
 		assert(n >= 0 && n <= len());
 		std::rotate(this->begin(), this->end()-n, this->end());
 		std::fill(this->begin(), this->begin()+n, T(0));
 	}
 	// divide by x^n and 0-pad within the fixed precision window
-	void unshift_trunc(int n = 1) requires (K == kind::trunc) {
+	void unshift_trunc(int n = 1) requires (!exact_) {
 		assert(n >= 0 && n <= len());
 		std::fill(this->begin(), this->begin()+n, T(0));
 		std::rotate(this->begin(), this->begin()+n, this->end());
 	}
 
 	// in-place forms require that the result's exactness/length must equal this operand's
-	template <kind OK> requires (OK == kind::exact || K == kind::trunc)
-	vec& operator += (const vec<E, OK>& o) {
-		if constexpr (K == kind::exact) { if (o.len() > len()) this->resize(o.len()); }
-		else if constexpr (OK == kind::trunc) { if (o.len() < len()) this->resize(o.len()); }
+	template <bool oe> requires (oe || !exact_)
+	vec& operator += (const vec<E, oe>& o) {
+		if constexpr (exact_) { if (o.len() > len()) this->resize(o.len()); }
+		else if constexpr (!oe) { if (o.len() < len()) this->resize(o.len()); }
 		for (int i = 0; i < std::min(len(), o.len()); i++) {
 			(*this)[i] += o[i];
 		}
 		return *this;
 	}
-	template <kind OK> requires (OK == kind::exact || K == kind::trunc)
-	vec& operator -= (const vec<E, OK>& o) {
-		if constexpr (K == kind::exact) { if (o.len() > len()) this->resize(o.len()); }
-		else if constexpr (OK == kind::trunc) { if (o.len() < len()) this->resize(o.len()); }
+	template <bool oe> requires (oe || !exact_)
+	vec& operator -= (const vec<E, oe>& o) {
+		if constexpr (exact_) { if (o.len() > len()) this->resize(o.len()); }
+		else if constexpr (!oe) { if (o.len() < len()) this->resize(o.len()); }
 		for (int i = 0; i < std::min(len(), o.len()); i++) {
 			(*this)[i] -= o[i];
 		}
@@ -149,8 +143,8 @@ struct vec : public std::vector<typename E::value_type> {
 
 };
 
-template <fft::engine E> using exact = vec<E, kind::exact>;
-template <fft::engine E> using trunc = vec<E, kind::trunc>;
+template <fft::engine E> using exact = vec<E, true>;
+template <fft::engine E> using trunc = vec<E, false>;
 
 // Series-like concepts: the binary operators below are written once as constrained
 // templates and dispatch on which memoized transforms an operand carries.
@@ -161,7 +155,7 @@ template <typename S>
 concept like = fft::engine<typename S::engine_t> && requires(const S& s) {
 	{ S::exact_v } -> std::convertible_to<bool>;
 	{ s.len() } -> std::same_as<int>;
-	{ s.underlying() } -> std::convertible_to<span<typename S::engine_t, S::kind_v>>;
+	{ s.underlying() } -> std::convertible_to<span<typename S::engine_t, S::exact_v>>;
 };
 template <typename S>
 concept exact_like = like<S> && S::exact_v;
@@ -176,17 +170,16 @@ concept has_cache = like<S> && requires(const S& s) {
 
 // A borrowed series paired with the transform serving it: the
 // normalized operand form fed to the cached fft:: entry points. Models has_cache.
-template <fft::engine E, kind K>
+template <fft::engine E, bool exact_>
 struct cached_span {
 	using engine_t = E;
-	static constexpr kind kind_v = K;
-	static constexpr bool exact_v = K == kind::exact;
+	static constexpr bool exact_v = exact_;
 
-	span<E, K> s;
+	span<E, exact_> s;
 	std::reference_wrapper<fft::transformed<E>> f;
 
 	int len() const { return s.len(); }
-	span<E, K> underlying() const { return s; }
+	span<E, exact_> underlying() const { return s; }
 	fft::transformed<E>& cache() const { return f; }
 };
 
@@ -202,21 +195,20 @@ concept has_prefix_cache = like<S> && !S::exact_v && requires(const S& s, int n)
 // Ops exploit the cache whenever the whole span participates; a trunc series'
 // whole-sequence transform is still useful for middle products and repeated
 // full-precision use.
-template <fft::engine E, kind K>
+template <fft::engine E, bool exact_>
 struct cached {
 	using T = typename E::value_type;
 	using engine_t = E;
-	static constexpr kind kind_v = K;
-	static constexpr bool exact_v = K == kind::exact;
+	static constexpr bool exact_v = exact_;
 
 	cached() = default;
 	// moving coefficients in or out is free: implicit on rvalues, explicit copy otherwise
-	cached(vec<E, K>&& s_) : s(std::move(s_)) {}
-	explicit cached(const vec<E, K>& s_) : s(s_) {}
-	operator vec<E, K>() && { return std::move(s); }
+	cached(vec<E, exact_>&& s_) : s(std::move(s_)) {}
+	explicit cached(const vec<E, exact_>& s_) : s(s_) {}
+	operator vec<E, exact_>() && { return std::move(s); }
 
 	int len() const { return s.len(); }
-	const vec<E, K>& underlying() const { return s; }
+	const vec<E, exact_>& underlying() const { return s; }
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
@@ -225,17 +217,17 @@ struct cached {
 
 	template <like S>
 	friend bool operator==(const cached& a, const S& b) {
-		span<E, S::kind_v> bs = b.underlying();
+		span<E, S::exact_v> bs = b.underlying();
 		return a.len() == bs.len() && std::equal(a.s.begin(), a.s.end(), bs.begin());
 	}
 
 private:
-	vec<E, K> s;
+	vec<E, exact_> s;
 	mutable fft::transformed<E> f; // memoized transform: filling it is logically const
 };
 
-template <fft::engine E> using cached_exact = cached<E, kind::exact>;
-template <fft::engine E> using cached_trunc = cached<E, kind::trunc>;
+template <fft::engine E> using cached_exact = cached<E, true>;
+template <fft::engine E> using cached_trunc = cached<E, false>;
 
 namespace detail {
 // the operand's whole cache if it carries one, else the caller's throwaway cache
@@ -256,7 +248,7 @@ template <trunc_like S>
 trunc<typename S::engine_t> ps_inv(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, kind::trunc> a = a_.underlying();
+	span<E, false> a = a_.underlying();
 	trunc<E> r(size_t(a.len()), T{});
 	if (a.len() == 0) return r;
 	int s = nextPow2(a.len());
@@ -288,7 +280,7 @@ template <like A>
 auto square(const A& a) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
-	span<E, A::kind_v> av = a.underlying();
+	span<E, A::exact_v> av = a.underlying();
 	fft::transformed<E> ta_;
 	if constexpr (A::exact_v) {
 		// like operator*, an exact square returns has_cache, adopting the
@@ -296,7 +288,7 @@ auto square(const A& a) {
 		std::vector<T> coeffs;
 		fft::transformed<E> f;
 		fft::square_cached<E>(av.coeffs(), detail::whole_cache_or(a, ta_), coeffs, f);
-		cached<E, kind::exact> w(exact<E>(std::move(coeffs)));
+		cached<E, true> w(exact<E>(std::move(coeffs)));
 		w.cache() = std::move(f);
 		return w;
 	} else {
@@ -312,12 +304,12 @@ auto square(const A& a) {
 template <like A, like B, like C, like D>
 	requires fft::same_engine<A, B> && fft::same_engine<A, C> && fft::same_engine<A, D>
 		&& A::exact_v && B::exact_v && C::exact_v && D::exact_v
-cached<typename A::engine_t, kind::exact> multiply_add2(
+cached<typename A::engine_t, true> multiply_add2(
 		const A& a, const B& b, const C& c, const D& d) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
-	span<E, kind::exact> av = a.underlying(), bv = b.underlying();
-	span<E, kind::exact> cv = c.underlying(), dv = d.underlying();
+	span<E, true> av = a.underlying(), bv = b.underlying();
+	span<E, true> cv = c.underlying(), dv = d.underlying();
 	fft::transformed<E> ta_, tb_, tc_, td_;
 	std::vector<T> coeffs;
 	fft::transformed<E> f;
@@ -328,7 +320,7 @@ cached<typename A::engine_t, kind::exact> multiply_add2(
 		dv.coeffs(), detail::whole_cache_or(d, td_),
 		coeffs, f
 	);
-	cached<E, kind::exact> w(exact<E>(std::move(coeffs)));
+	cached<E, true> w(exact<E>(std::move(coeffs)));
 	w.cache() = std::move(f);
 	return w;
 }
@@ -336,12 +328,12 @@ cached<typename A::engine_t, kind::exact> multiply_add2(
 // coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0.
 // The kernel b participates whole, so it must be exact; the result mirrors a's kind.
 template <like A, exact_like B> requires fft::same_engine<A, B>
-vec<typename A::engine_t, A::kind_v> middle_product(const A& a, const B& b) {
+vec<typename A::engine_t, A::exact_v> middle_product(const A& a, const B& b) {
 	using E = typename A::engine_t;
-	span<E, A::kind_v> av = a.underlying();
-	span<E, kind::exact> bv = b.underlying();
+	span<E, A::exact_v> av = a.underlying();
+	span<E, true> bv = b.underlying();
 	fft::transformed<E> ta_, tb_;
-	return vec<E, A::kind_v>(fft::middle_product<E>(
+	return vec<E, A::exact_v>(fft::middle_product<E>(
 		av.coeffs(), detail::whole_cache_or(a, ta_),
 		bv.coeffs(), detail::whole_cache_or(b, tb_)
 	));
@@ -367,40 +359,40 @@ auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t
 	if constexpr (has_prefix_cache<S>) {
 		return s.prefix(nextPow2(prec));
 	} else {
-		span<E, S::kind_v> v = s.underlying();
+		span<E, S::exact_v> v = s.underlying();
 		int used = std::min(s.len(), prec);
 		if constexpr (has_cache<S>) {
 			if (s.len() <= prec || fft::detail::conv_size_for(s.len() + prec - 1).n
 					== fft::detail::conv_size_for(2 * prec - 1).n) {
-				return cached_span<E, S::kind_v>{v, s.cache()};
+				return cached_span<E, S::exact_v>{v, s.cache()};
 			}
 		}
-		return cached_span<E, S::kind_v>{v.first(used), tmp};
+		return cached_span<E, S::exact_v>{v.first(used), tmp};
 	}
 }
 /* namespace detail */ }
 
 template <like A, like B> requires fft::same_engine<A, B>
-vec<typename A::engine_t, common_kind(A::kind_v, B::kind_v)> operator + (const A& a, const B& b) {
+vec<typename A::engine_t, A::exact_v && B::exact_v> operator + (const A& a, const B& b) {
 	using T = typename A::engine_t::value_type;
-	span<typename A::engine_t, A::kind_v> av = a.underlying();
-	span<typename A::engine_t, B::kind_v> bv = b.underlying();
+	span<typename A::engine_t, A::exact_v> av = a.underlying();
+	span<typename A::engine_t, B::exact_v> bv = b.underlying();
 	int n = (A::exact_v && B::exact_v) ? std::max(a.len(), b.len())
 		: A::exact_v ? b.len() : B::exact_v ? a.len() : std::min(a.len(), b.len());
-	vec<typename A::engine_t, common_kind(A::kind_v, B::kind_v)> r(size_t(n), T(0));
+	vec<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
 	for (int i = 0; i < n; i++) {
 		r[i] = (i < av.len() ? av[i] : T(0)) + (i < bv.len() ? bv[i] : T(0));
 	}
 	return r;
 }
 template <like A, like B> requires fft::same_engine<A, B>
-vec<typename A::engine_t, common_kind(A::kind_v, B::kind_v)> operator - (const A& a, const B& b) {
+vec<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A& a, const B& b) {
 	using T = typename A::engine_t::value_type;
-	span<typename A::engine_t, A::kind_v> av = a.underlying();
-	span<typename A::engine_t, B::kind_v> bv = b.underlying();
+	span<typename A::engine_t, A::exact_v> av = a.underlying();
+	span<typename A::engine_t, B::exact_v> bv = b.underlying();
 	int n = (A::exact_v && B::exact_v) ? std::max(a.len(), b.len())
 		: A::exact_v ? b.len() : B::exact_v ? a.len() : std::min(a.len(), b.len());
-	vec<typename A::engine_t, common_kind(A::kind_v, B::kind_v)> r(size_t(n), T(0));
+	vec<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
 	for (int i = 0; i < n; i++) {
 		r[i] = (i < av.len() ? av[i] : T(0)) - (i < bv.len() ? bv[i] : T(0));
 	}
@@ -419,7 +411,7 @@ auto operator * (const A& a, const B& b) {
 	constexpr bool ea = A::exact_v, eb = B::exact_v;
 	int prec = detail::product_prec<ea, eb>(a.len(), b.len());
 	if (prec == 0 || a.len() == 0 || b.len() == 0) {
-		if constexpr (ea && eb) return cached<E, kind::exact>{};
+		if constexpr (ea && eb) return cached<E, true>{};
 		else return trunc<E>(size_t(prec), T(0));
 	}
 	fft::transformed<E> ta_, tb_;
@@ -433,7 +425,7 @@ auto operator * (const A& a, const B& b) {
 			vb.underlying().coeffs(), vb.cache(),
 			coeffs, f
 		);
-		cached<E, kind::exact> w(exact<E>(std::move(coeffs)));
+		cached<E, true> w(exact<E>(std::move(coeffs)));
 		w.cache() = std::move(f);
 		return w;
 	} else {
@@ -455,7 +447,6 @@ struct prefix_cached {
 	using T = typename E::value_type;
 
 	using engine_t = E;
-	static constexpr kind kind_v = kind::trunc;
 	static constexpr bool exact_v = false;
 
 	prefix_cached() = default;
@@ -476,9 +467,9 @@ struct prefix_cached {
 	}
 
 	// the length-min(n, len) prefix borrowed together with its cache
-	cached_span<E, kind::trunc> prefix(int n) const {
+	cached_span<E, false> prefix(int n) const {
 		return {
-			span<E, kind::trunc>(std::span<const T>(s).first(std::min(n, len()))),
+			span<E, false>(std::span<const T>(s).first(std::min(n, len()))),
 			prefix_cache(n)
 		};
 	}
