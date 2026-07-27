@@ -4,9 +4,9 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "modnum.hpp"
 #include "fft/engines/crt.hpp"
 #include "fft/series_core.hpp"
-#include "modnum.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
