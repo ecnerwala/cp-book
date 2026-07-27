@@ -9,12 +9,12 @@ int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
 	using num = modnum<998244353>;
-	using E = ecnerwala::fft::fft_engine<num>;
-	using ps = ecnerwala::power_series_trunc<E>;
+	using E = ecnerwala::fft::engines::ntt<num>;
+	using ps = ecnerwala::series::trunc<E>;
 
 	int N; std::cin >> N;
 	ps A(N); for (auto& a : A) std::cin >> a;
-	ps B = poly_log(A);
+	ps B = ps_log(A);
 	for (int i = 0; i < N; i++) {
 		std::cout << B[i] << " \n"[i+1==N];
 	}

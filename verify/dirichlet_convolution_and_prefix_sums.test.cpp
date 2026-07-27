@@ -15,7 +15,7 @@ int main() {
 		static dirichlet_series::div_vector_layout layout;
 		layout = N;
 		using num = modnum<998244353>;
-		using ds_prefix = dirichlet_series::dirichlet_series_prefix<layout, num>;
+		using ds_prefix = dirichlet_series::prefix<layout, num>;
 		ds_prefix F;
 		for (int i = 1; i < layout.len; i++) std::cin >> F.st[i];
 		ds_prefix G;
