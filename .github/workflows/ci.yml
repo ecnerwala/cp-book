@@ -40,8 +40,10 @@ jobs:
       - name: Configure
         run: cmake -B build -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
+      # Only the unit tests; the verify solutions are compiled by the
+      # verification jobs below.
       - name: Build
-        run: cmake --build build -j
+        run: cmake --build build -j --target tests
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
