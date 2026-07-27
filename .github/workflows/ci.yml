@@ -596,7 +596,7 @@ jobs:
           for h in $(cd src && find . -name '*.hpp' | sed 's|^\./||'); do
             stub="coverage-stubs/$(echo "$h" | tr '/' '_').cpp"
             echo "#include \"$h\"" > "$stub"
-            ccache g++ --coverage -O0 -fkeep-inline-functions -std=c++26 -I src \
+            ccache g++ --coverage -O0 -fkeep-inline-functions -std=c++23 -I src \
               -c "$stub" -o "${stub%.cpp}.o" &
           done
           wait

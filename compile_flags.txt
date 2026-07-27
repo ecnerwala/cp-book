@@ -3,7 +3,7 @@ c++
 -Wall
 -Wextra
 -pedantic
--std=c++26
+-std=c++23
 -O2
 -Wshadow
 -Wformat=2
