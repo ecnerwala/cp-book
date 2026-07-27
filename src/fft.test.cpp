@@ -25,6 +25,19 @@ static_assert(engine<engines::trunc<engines::crt<modnum<int(1e9)+7>>, 2>>);
 static_assert(engine<engines::matrix_stable<engines::split<modnum<int(1e9)+7>>, 3>>);
 static_assert(engine<engines::trunc_stable<engines::crt<modnum<int(1e9)+7>>, 3>>);
 
+// series::like and poly::like are disjoint: neither family's types satisfy the other's concept
+namespace {
+using CE = engines::ntt<modnum<998244353>>;
+static_assert(!series::like<poly::vec<CE>>);
+static_assert(!series::like<poly::cached<CE>>);
+static_assert(!series::like<poly::form<CE>>);
+static_assert(!poly::like<series::exact<CE>>);
+static_assert(!poly::like<series::trunc<CE>>);
+static_assert(!poly::like<series::cached_exact<CE>>);
+static_assert(!poly::like<series::cached_trunc<CE>>);
+static_assert(!poly::like<series::prefix_cached<CE>>);
+}
+
 template <typename T> vector<T> multiply_slow(const vector<T>& a, const vector<T>& b) {
 	if (a.empty() || b.empty()) return {};
 	vector<T> res(a.size() + b.size() - 1);
