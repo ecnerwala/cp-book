@@ -103,21 +103,14 @@ def main() -> None:
         "-m",
         "--minify",
         action="store_true",
-        help="minify the bundled output: strip comments and compress "
-        "whitespace, one statement per line",
+        help="minify the bundled output (at --minify-level)",
     )
     parser.add_argument(
-        "-l",
-        "--light",
-        action="store_true",
-        help="light minification: strip comments and blank lines only, "
-        "no whitespace compression",
-    )
-    parser.add_argument(
-        "--full",
-        action="store_true",
-        help="full minification: additionally pack statements onto shared "
-        "lines up to 120 columns",
+        "--minify-level",
+        choices=["light", "medium", "full"],
+        help="light: strip comments and blank lines only; medium (default): "
+        "also compress whitespace, one statement per line; full: also pack "
+        "statements onto shared lines up to 120 columns. Implies --minify",
     )
     parser.add_argument(
         "-o", "--output", type=pathlib.Path, help="output file (--all: output dir)"
@@ -130,7 +123,8 @@ def main() -> None:
     parser.add_argument(
         "--line-markers",
         action="store_true",
-        help="with -l/-m: keep exact #line directives (for in-repo compiles) "
+        help="when minifying: keep exact #line directives (for in-repo "
+        "compiles) "
         "instead of the default // file comments (safe to copy-paste)",
     )
     parser.add_argument(
@@ -148,19 +142,8 @@ def main() -> None:
         return
     if not args.paths:
         parser.error("no input files")
-    code = bundle(
-        args.paths,
-        level=(
-            "light"
-            if args.light
-            else "full"
-            if args.full
-            else "medium"
-            if args.minify
-            else None
-        ),
-        line_markers=args.line_markers,
-    )
+    level = args.minify_level or ("medium" if args.minify else None)
+    code = bundle(args.paths, level=level, line_markers=args.line_markers)
     if args.output:
         args.output.write_bytes(code)
     else:
