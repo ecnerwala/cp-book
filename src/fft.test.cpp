@@ -528,7 +528,7 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	series::exact<E> a(37), b(21);
 	fill_rnd(a, mt);
 	fill_rnd(b, mt);
-	series::cached<E, series::kind::exact> ca(a), cb(b);
+	series::cached_exact<E> ca(a), cb(b);
 	series::exact<E> got(size_t(a.len() + b.len() - 1));
 	fft::multiply<E>(span<const num>(ca.underlying()), ca.cache(),
 			span<const num>(cb.underlying()), cb.cache(), span<num>(got));
@@ -575,7 +575,7 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	}
 	// a whole cache also serves truncated products when the operand fits under
 	// the precision; oversized operands fall back to a truncated span
-	series::cached<E, series::kind::trunc> wt{series::trunc<E>(pa)};
+	series::cached_trunc<E> wt{series::trunc<E>(pa)};
 	series::trunc<E> big(100);
 	fill_rnd(big, mt);
 	REQUIRE((wt * big) == (pa * big));
@@ -716,8 +716,8 @@ TEST_CASE("poly::vec reversed storage and series interop", "[fft]") {
 	// the storage transform serves transposed products: middle product against rev_series()
 	std::vector<num> vals(60);
 	fill_rnd(vals, mt);
-	series::cached<E, series::kind::exact> cv(series::exact<E>(vals.begin(), vals.end()));
-	series::cached<E, series::kind::exact> ca(a.rev_series());
+	series::cached_exact<E> cv(series::exact<E>(vals.begin(), vals.end()));
+	series::cached_exact<E> ca(a.rev_series());
 	auto mp = middle_product(cv, ca);
 	auto naive = [&](int j) {
 		num r{};

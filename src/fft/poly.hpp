@@ -115,8 +115,8 @@ struct cached {
 	explicit cached(const vec<E>& p) : c(p.c) {}
 	operator vec<E>() && { return vec<E>::from_rev_series(std::move(c)); }
 
-	const series::cached<E, series::kind::exact>& rev_series() const { return c; }
-	static cached from_rev_series(series::cached<E, series::kind::exact> s) {
+	const series::cached_exact<E>& rev_series() const { return c; }
+	static cached from_rev_series(series::cached_exact<E> s) {
 		cached r;
 		r.c = std::move(s);
 		return r;
@@ -134,7 +134,7 @@ struct cached {
 	}
 
 private:
-	series::cached<E, series::kind::exact> c;
+	series::cached_exact<E> c;
 };
 
 // rev(a*b) = rev(a)*rev(b); the series product reuses/adopts transforms
@@ -175,19 +175,19 @@ struct form {
 	using T = typename E::value_type;
 	// coeffs of S in <*, S>; always whole-cached: the kernel transform is
 	// what repeated middle products against the same form reuse
-	series::cached<E, series::kind::exact> c;
+	series::cached_exact<E> c;
 
 	form() = default;
 	explicit form(int len) : c(series::exact<E>(size_t(len), T{})) {}
 	// We don't provide coefficient-list constructors, to avoid ordering confusion.
 
-	const series::cached<E, series::kind::exact>& rev_series() const { return c; }
-	static form from_rev_series(series::cached<E, series::kind::exact> s) {
+	const series::cached_exact<E>& rev_series() const { return c; }
+	static form from_rev_series(series::cached_exact<E> s) {
 		form r;
 		r.c = std::move(s);
 		return r;
 	}
-	static form from_poly(const vec<E>& p) { return from_rev_series(series::cached<E, series::kind::exact>(p.rev_series())); }
+	static form from_poly(const vec<E>& p) { return from_rev_series(series::cached_exact<E>(p.rev_series())); }
 
 	int len() const { return c.len(); }
 

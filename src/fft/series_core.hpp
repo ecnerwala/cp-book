@@ -234,6 +234,9 @@ private:
 	mutable fft::transformed<E> f; // memoized transform: filling it is logically const
 };
 
+template <fft::engine E> using cached_exact = cached<E, kind::exact>;
+template <fft::engine E> using cached_trunc = cached<E, kind::trunc>;
+
 namespace detail {
 // the operand's whole cache if it carries one, else the caller's throwaway cache
 template <like S>
