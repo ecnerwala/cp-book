@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fft/core.hpp"
+#include "fft/engine.hpp"
 
 namespace ecnerwala::fft {
 

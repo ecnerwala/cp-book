@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fft/engine.hpp"
 #include "fft/core.hpp"
 #include "fft/engines/ntt.hpp"
 #include "fft/engines/real.hpp"
