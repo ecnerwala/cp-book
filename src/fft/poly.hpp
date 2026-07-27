@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "fft/series.hpp"
+#include "fft/series_core.hpp"
 
 namespace ecnerwala::poly {
 
@@ -39,8 +39,8 @@ template <fft::engine E> struct vec {
 	}
 
 	// This should rarely be used
-	series::vec<E> unrev_series(int n) const {
-		series::vec<E> r(size_t(n), T{});
+	series::trunc<E> unrev_series(int n) const {
+		series::trunc<E> r(size_t(n), T{});
 		std::copy(begin(), begin() + std::min(n, len()), r.begin());
 		return r;
 	}
@@ -115,8 +115,8 @@ struct cached {
 	explicit cached(const vec<E>& p) : c(p.c) {}
 	operator vec<E>() && { return vec<E>::from_rev_series(std::move(c)); }
 
-	const series::cached<E>& rev_series() const { return c; }
-	static cached from_rev_series(series::cached<E> s) {
+	const series::cached<E, series::kind::exact>& rev_series() const { return c; }
+	static cached from_rev_series(series::cached<E, series::kind::exact> s) {
 		cached r;
 		r.c = std::move(s);
 		return r;
@@ -134,7 +134,7 @@ struct cached {
 	}
 
 private:
-	series::cached<E> c;
+	series::cached<E, series::kind::exact> c;
 };
 
 // rev(a*b) = rev(a)*rev(b); the series product reuses/adopts transforms
@@ -175,19 +175,19 @@ struct form {
 	using T = typename E::value_type;
 	// coeffs of S in <*, S>; always whole-cached: the kernel transform is
 	// what repeated middle products against the same form reuse
-	series::cached<E> c;
+	series::cached<E, series::kind::exact> c;
 
 	form() = default;
 	explicit form(int len) : c(series::exact<E>(size_t(len), T{})) {}
 	// We don't provide coefficient-list constructors, to avoid ordering confusion.
 
-	const series::cached<E>& rev_series() const { return c; }
-	static form from_rev_series(series::cached<E> s) {
+	const series::cached<E, series::kind::exact>& rev_series() const { return c; }
+	static form from_rev_series(series::cached<E, series::kind::exact> s) {
 		form r;
 		r.c = std::move(s);
 		return r;
 	}
-	static form from_poly(const vec<E>& p) { return from_rev_series(series::cached<E>(p.rev_series())); }
+	static form from_poly(const vec<E>& p) { return from_rev_series(series::cached<E, series::kind::exact>(p.rev_series())); }
 
 	int len() const { return c.len(); }
 
@@ -226,7 +226,7 @@ struct form {
 	template <series::like S> requires std::same_as<typename S::engine_t, E>
 	form composed_with(const S& s) const {
 		if constexpr (!S::exact_v) assert(s.len() >= len());
-		series::vec<E, S::exact_v> r = c * s;
+		series::vec<E, S::kind_v> r = c * s;
 		r.resize(size_t(len()));
 		return from_rev_series(series::exact<E>(std::move(r)));
 	}
@@ -297,7 +297,7 @@ std::vector<typename E::value_type> multipoint(
 	if (pts.empty()) return {};
 	int N = sz(pts);
 	subproduct_tree<E> tree{pts};
-	series::vec<E> q = tree.rev_prod(1);
+	series::trunc<E> q = tree.rev_prod(1);
 	q.resize(p.len()); // inverse precision must cover the form's window
 	form<E> f = form<E>::from_poly(p).composed_with(ps_inv(q));
 	return tree.pushdown(f.for_length(N));
@@ -312,7 +312,7 @@ vec<E> interpolate(
 	assert(sz(pts) == sz(vals));
 	if (pts.empty()) return {};
 	int N = sz(pts);
-	using ps = series::vec<E>;
+	using ps = series::trunc<E>;
 	subproduct_tree<E> tree{pts};
 	ps root = tree.rev_prod(1);
 	root.shrink(N);

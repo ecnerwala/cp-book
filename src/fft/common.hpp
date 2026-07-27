@@ -20,7 +20,7 @@
  *
  *   multiply layer  Wrappers for convolving bounded sequences: track length/truncation.
  *
- *   value types     series::vec<E> - R[[x]]
+ *   value types     series::vec<E, kind> - R[[x]]
  *                   series::exact<E> - exact (finite-support) power series
  *                   series::trunc<E> - truncated prefix of an (infinite) power series
  *
