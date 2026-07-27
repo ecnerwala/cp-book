@@ -13,8 +13,8 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(Catch2)
 
-file(GLOB TEST_SRC_FILES "src/*.test.cpp")
-file(GLOB SRC_FILES "src/*.hpp")
+file(GLOB_RECURSE TEST_SRC_FILES "src/*.test.cpp")
+file(GLOB_RECURSE SRC_FILES "src/*.hpp")
 
 add_library(cp-book INTERFACE)
 target_include_directories(cp-book INTERFACE src)
@@ -37,10 +37,11 @@ target_link_libraries(tests PRIVATE Catch2::Catch2WithMain)
 target_compile_features(tests PUBLIC cxx_std_17)
 target_include_directories(tests PRIVATE src)
 
-file(GLOB VERIFY_SRC_FILES "verify/*.test.cpp")
-foreach(VERIFY_SRC ${VERIFY_SRC_FILES})
-  cmake_path(GET VERIFY_SRC STEM LAST_ONLY VERIFY_NAME)
-  cmake_path(GET VERIFY_NAME STEM VERIFY_NAME)
+file(GLOB_RECURSE VERIFY_SRC_FILES RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/verify" "verify/*.test.cpp")
+foreach(VERIFY_REL ${VERIFY_SRC_FILES})
+  string(REGEX REPLACE "\\.test\\.cpp$" "" VERIFY_NAME "${VERIFY_REL}")
+  string(REPLACE "/" "_" VERIFY_NAME "${VERIFY_NAME}")
+  set(VERIFY_SRC "verify/${VERIFY_REL}")
   add_executable("verify_${VERIFY_NAME}" "${VERIFY_SRC}")
   target_link_libraries("verify_${VERIFY_NAME}" PUBLIC cp-book)
 endforeach()
