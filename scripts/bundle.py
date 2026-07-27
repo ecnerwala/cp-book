@@ -31,7 +31,10 @@ import pathlib
 import sys
 
 from competitive_verifier.oj.languages.cplusplus_bundle import Bundler
-from competitive_verifier.oj.languages.cplusplus_minify import minify
+from competitive_verifier.oj.languages.cplusplus_minify import (
+    minify,
+    raw_token_stream,
+)
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
@@ -53,17 +56,29 @@ def bundle(paths: list[pathlib.Path], *, minified: bool) -> bytes:
     return minify(code) if minified else code
 
 
-def bundle_all(outdir: pathlib.Path) -> None:
+def bundle_all(outdir: pathlib.Path, *, check: bool) -> None:
     headers = sorted(
         p for p in SRC.rglob("*.hpp") if not p.name.endswith(".test.hpp")
     )
+    failures = []
     for header in headers:
         rel = header.relative_to(SRC)
+        outputs = {}
         for name, minified in (("bundled", False), ("minified", True)):
             dest = outdir / name / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(bundle([header], minified=minified))
+            outputs[name] = bundle([header], minified=minified)
+            dest.write_bytes(outputs[name])
+        if check and raw_token_stream(outputs["bundled"]) != raw_token_stream(
+            outputs["minified"]
+        ):
+            failures.append(rel)
         print(rel, file=sys.stderr)
+    if failures:
+        raise SystemExit(
+            "error: minified token stream differs for: "
+            + " ".join(map(str, failures))
+        )
 
 
 def main() -> None:
@@ -87,12 +102,18 @@ def main() -> None:
         action="store_true",
         help="pregenerate bundled+minified copies of every src/ header",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="with --all: verify (via clang's raw lexer) that minification "
+        "preserves every token",
+    )
     args = parser.parse_args()
 
     if args.all:
         if args.paths:
             parser.error("--all takes no positional paths")
-        bundle_all(args.output or ROOT / "dist")
+        bundle_all(args.output or ROOT / "dist", check=args.check)
         return
     if not args.paths:
         parser.error("no input files")
