@@ -10,6 +10,21 @@ namespace fft {
 
 using namespace std;
 
+// engine concept sanity checks (all engine headers together, so cross-engine combos are covered)
+static_assert(engine<engines::ntt<modnum<998244353>>>);
+static_assert(engine<engines::ntt<mod_goldilocks>>);
+static_assert(engine<engines::real<double>>);
+static_assert(engine<engines::split<modnum<int(1e9)+7>>>);
+static_assert(engine<engines::crt<modnum<int(1e9)+7>>>);
+static_assert(engine<engines::matrix<engines::ntt<modnum<998244353>>, 2>>);
+static_assert(engine<engines::trunc<engines::ntt<modnum<998244353>>, 3>>);
+// tracked inner engines work when the accumulated scale fits the budget (N <= 2)
+static_assert(engine<engines::matrix<engines::split<modnum<int(1e9)+7>>, 2>>);
+static_assert(engine<engines::trunc<engines::crt<modnum<int(1e9)+7>>, 2>>);
+// the stable variants keep tracked inner engines sound at any N
+static_assert(engine<engines::matrix_stable<engines::split<modnum<int(1e9)+7>>, 3>>);
+static_assert(engine<engines::trunc_stable<engines::crt<modnum<int(1e9)+7>>, 3>>);
+
 template <typename T> vector<T> multiply_slow(const vector<T>& a, const vector<T>& b) {
 	if (a.empty() || b.empty()) return {};
 	vector<T> res(a.size() + b.size() - 1);
@@ -901,9 +916,9 @@ TEST_CASE("online squarer non-commutative fallback", "[fft]") {
 	}
 }
 
-TEST_CASE("poly_ap_values eval", "[fft,poly_ap_values]") {
+TEST_CASE("ap_sampled_poly eval", "[fft,ap_sampled_poly]") {
 	using num = modnum<998244353>;
-	using poly_vals = poly_ap_values<engines::ntt<num>>;
+	using poly_vals = ap_sampled_poly<engines::ntt<num>>;
 	mt19937 mt(Catch::getSeed());
 	for (int len : {0, 1, 2, 3, 5, 8, 13, 21}) {
 		INFO("len = " << len);
