@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "fft/engines/ntt.hpp"
+#include "modnum.hpp"
 
 namespace ecnerwala::fft::engines {
 
