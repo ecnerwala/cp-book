@@ -1,14 +1,12 @@
 #pragma once
 
-#include <vector>
-#include <cmath>
-#include <utility>
 #include <algorithm>
-#include <span>
-#include <cstdint>
-#include <cassert>
 #include <concepts>
-#include <functional>
+#include <iterator>
+#include <span>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 /**
  * Author: Andrew He
@@ -154,7 +152,6 @@ concept engine = requires(
 	requires std::same_as<std::remove_cvref_t<decltype(E::commutative)>, bool>;
 	requires std::same_as<std::remove_cvref_t<decltype(E::unit_scale)>, int>;
 };
-
 
 // Constrains two engine-parameterized value types to share the same engine.
 template <typename A, typename B>

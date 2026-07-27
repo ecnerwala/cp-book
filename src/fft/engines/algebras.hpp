@@ -1,5 +1,11 @@
 #pragma once
 
+#include <array>
+#include <concepts>
+#include <cstddef>
+#include <span>
+#include <utility>
+
 #include "fft/engine.hpp"
 
 namespace ecnerwala::fft::engines {

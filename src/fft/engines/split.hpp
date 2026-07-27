@@ -1,5 +1,13 @@
 #pragma once
 
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <cstdint>
+#include <span>
+#include <utility>
+#include <vector>
+
 #include "fft/core.hpp"
 
 namespace ecnerwala::fft::engines {

@@ -1,5 +1,11 @@
 #pragma once
 
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <span>
+#include <vector>
+
 #include "fft/engine.hpp"
 #include "modnum.hpp"
 

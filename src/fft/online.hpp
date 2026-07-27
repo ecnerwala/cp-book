@@ -1,5 +1,10 @@
 #pragma once
 
+#include <algorithm>
+#include <cassert>
+#include <span>
+#include <vector>
+
 #include "fft/multiply.hpp"
 
 namespace ecnerwala {
@@ -276,7 +281,5 @@ struct poly_ap_values : public std::vector<typename E::value_type> {
 		return r;
 	}
 };
-
-
 
 /* namespace ecnerwala */ }

@@ -1,5 +1,10 @@
 #pragma once
 
+#include <cassert>
+#include <cstdint>
+#include <span>
+#include <utility>
+
 #include "fft/engines/ntt.hpp"
 
 namespace ecnerwala::fft::engines {

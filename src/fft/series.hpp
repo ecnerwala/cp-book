@@ -1,5 +1,14 @@
 #pragma once
 
+#include <algorithm>
+#include <cassert>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <utility>
+#include <vector>
+
 #include "fft/multiply.hpp"
 
 // ==== value types ====
@@ -54,7 +63,6 @@ template <fft::engine E> struct packed_bivariate {
 		return tn;
 	}
 };
-
 
 // Non-owning view of power series coefficients: the span pattern (contiguous
 // window + series semantics), borrowed from an owning series-like type.
@@ -174,7 +182,6 @@ struct vec : public std::vector<typename E::value_type> {
 		}
 		return r;
 	}
-
 
 	vec& operator *= (const vec& o) {
 		return *this = (*this) * o;

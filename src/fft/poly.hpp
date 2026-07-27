@@ -1,5 +1,15 @@
 #pragma once
 
+#include <algorithm>
+#include <cassert>
+#include <concepts>
+#include <cstddef>
+#include <initializer_list>
+#include <span>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
 #include "fft/series.hpp"
 
 namespace ecnerwala::poly {
@@ -148,7 +158,6 @@ template <like A, like B> requires fft::same_engine<A, B>
 bool operator==(const A& a, const B& b) {
 	return a.rev_series() == b.rev_series();
 }
-
 
 // finite-support linear form
 // These are one side of the pairing <vec P, series::vec S> = [x^0] P(1/x) S(x).
