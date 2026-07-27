@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "fft/core.hpp"
+#include "fft/engine.hpp"
 
 namespace ecnerwala::fft::engines {
 

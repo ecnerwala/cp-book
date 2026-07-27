@@ -916,9 +916,9 @@ TEST_CASE("online squarer non-commutative fallback", "[fft]") {
 	}
 }
 
-TEST_CASE("poly_ap_values eval", "[fft,poly_ap_values]") {
+TEST_CASE("ap_sampled_poly eval", "[fft,ap_sampled_poly]") {
 	using num = modnum<998244353>;
-	using poly_vals = poly_ap_values<engines::ntt<num>>;
+	using poly_vals = ap_sampled_poly<engines::ntt<num>>;
 	mt19937 mt(Catch::getSeed());
 	for (int len : {0, 1, 2, 3, 5, 8, 13, 21}) {
 		INFO("len = " << len);

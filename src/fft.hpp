@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fft/common.hpp"
 #include "fft/engine.hpp"
 #include "fft/core.hpp"
 #include "fft/engines/ntt.hpp"
@@ -11,3 +12,4 @@
 #include "fft/series.hpp"
 #include "fft/poly.hpp"
 #include "fft/online.hpp"
+#include "fft/ap_sampled_poly.hpp"

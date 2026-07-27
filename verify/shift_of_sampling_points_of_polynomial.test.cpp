@@ -11,7 +11,7 @@ int main() {
 
 	using num = modnum<998244353>;
 	using E = ecnerwala::fft::engines::ntt<num>;
-	using ap_vals = ecnerwala::poly_ap_values<E>;
+	using ap_vals = ecnerwala::ap_sampled_poly<E>;
 
 	int N, M; num C; std::cin >> N >> M >> C;
 	ap_vals F(N);

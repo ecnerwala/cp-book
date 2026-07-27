@@ -6,7 +6,7 @@
 #include <span>
 #include <vector>
 
-#include "fft/engine.hpp"
+#include "fft/common.hpp"
 #include "modnum.hpp"
 
 namespace ecnerwala::fft {
