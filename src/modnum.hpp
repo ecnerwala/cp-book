@@ -119,20 +119,18 @@ struct mod_ops : num_ops<Self> {
 		--v;
 		return self();
 	}
-	Self& operator += (const Self& o) { return sub(Self::MOD - o.v); }
-	Self& operator -= (const Self& o) { return sub(o.v); }
+	Self& operator += (const Self& o) { v = Self::sub_mod_raw(v, Self::MOD - o.v); return self(); }
+	Self& operator -= (const Self& o) { v = Self::sub_mod_raw(v, o.v); return self(); }
 	Self& operator /= (const Self& o) { return self() *= o.inv(); }
+
+	// Returns a - b mod MOD, for b in [0, MOD]; wraparound detects the underflow.
+	static V sub_mod_raw(V a, V b) { return a < b ? a - b + Self::MOD : a - b; }
 
 	Self neg() const { return from_reduced(v ? Self::MOD - v : 0); }
 	Self inv() const { return from_reduced(mod_inv_in_range(v, Self::MOD)); }
 
 private:
 	Self& self() { return static_cast<Self&>(*this); }
-	// Subtracts b in [0, MOD] from v; wraparound detects the underflow.
-	Self& sub(V b) {
-		v = v < b ? v - b + Self::MOD : v - b;
-		return self();
-	}
 };
 
 template <auto MOD_> struct modnum : mod_ops<modnum<MOD_>, std::make_unsigned_t<decltype(MOD_)>> {
@@ -229,14 +227,6 @@ struct mod_goldilocks : mod_ops<mod_goldilocks, uint64_t> {
 		return reduce_u160_raw(lo, hi_lo, hi_hi);
 	}
 
-	Self& operator += (Self o) {
-		v = sub_mod_raw(v, MOD-o.v);
-		return *this;
-	}
-	Self& operator -= (Self o) {
-		v = sub_mod_raw(v, o.v);
-		return *this;
-	}
 	Self& operator *= (Self o) {
 		v = reduce_u128_raw(__uint128_t(v) * __uint128_t(o.v));
 		return *this;
