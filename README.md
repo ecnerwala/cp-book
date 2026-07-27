@@ -9,8 +9,9 @@ write generic, fast, and clean algorithm implementations for use in contests
 like CodeForces or ICPC.
 
 The library lives in `src/` as standalone headers (`#include "fft.hpp"`,
-compiled with `-I src`). Browsable source, verification results, and coverage
-are hosted at https://ecnerwala.github.io/cp-book/.
+compiled with `-I src`). The library requires C++23 (the whole toolchain
+builds with `-std=c++23`, e.g. g++ >= 13). Browsable source, verification
+results, and coverage are hosted at https://ecnerwala.github.io/cp-book/.
 
 ## Building and testing
 
