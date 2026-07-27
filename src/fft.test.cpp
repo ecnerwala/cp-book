@@ -25,6 +25,19 @@ static_assert(engine<engines::trunc<engines::crt<modnum<int(1e9)+7>>, 2>>);
 static_assert(engine<engines::matrix_stable<engines::split<modnum<int(1e9)+7>>, 3>>);
 static_assert(engine<engines::trunc_stable<engines::crt<modnum<int(1e9)+7>>, 3>>);
 
+// series::like and poly::like are disjoint: neither family's types satisfy the other's concept
+namespace {
+using CE = engines::ntt<modnum<998244353>>;
+static_assert(!series::like<poly::vec<CE>>);
+static_assert(!series::like<poly::cached<CE>>);
+static_assert(!series::like<poly::form<CE>>);
+static_assert(!poly::like<series::exact<CE>>);
+static_assert(!poly::like<series::trunc<CE>>);
+static_assert(!poly::like<series::cached_exact<CE>>);
+static_assert(!poly::like<series::cached_trunc<CE>>);
+static_assert(!poly::like<series::prefix_cached<CE>>);
+}
+
 template <typename T> vector<T> multiply_slow(const vector<T>& a, const vector<T>& b) {
 	if (a.empty() || b.empty()) return {};
 	vector<T> res(a.size() + b.size() - 1);
@@ -528,7 +541,7 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	series::exact<E> a(37), b(21);
 	fill_rnd(a, mt);
 	fill_rnd(b, mt);
-	series::cached<E> ca(a), cb(b);
+	series::cached_exact<E> ca(a), cb(b);
 	series::exact<E> got(size_t(a.len() + b.len() - 1));
 	fft::multiply<E>(span<const num>(ca.underlying()), ca.cache(),
 			span<const num>(cb.underlying()), cb.cache(), span<num>(got));
@@ -546,7 +559,7 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	REQUIRE(equal(got2.begin(), got2.end(), asq.begin()));
 	// cached_power_series products match plain products at all mixed shapes (see the
 	// templated multiply_cached test for the transform-seeding path on all engines)
-	series::vec<E> pa(40), pb(25);
+	series::trunc<E> pa(40), pb(25);
 	fill_rnd(pa, mt);
 	fill_rnd(pb, mt);
 	series::prefix_cached<E> qa(pa), qb(pb);
@@ -555,10 +568,10 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	REQUIRE((pa * qb) == (pa * pb));
 	// prefix caches survive precision extension: covered prefixes are reused, the
 	// clamped full cache is rebuilt, and results still match
-	series::vec<E> tail(15);
+	series::trunc<E> tail(15);
 	fill_rnd(tail, mt);
 	qa.append(span<const num>(tail));
-	series::vec<E> pa2 = pa;
+	series::trunc<E> pa2 = pa;
 	pa2.insert(pa2.end(), tail.begin(), tail.end());
 	for (int p : {8, 16, 32, 64}) {
 		auto pv = qa.prefix(p);
@@ -568,15 +581,15 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	REQUIRE((qa * qb) == (pa2 * pb));
 	// products against many smaller operands reuse per-scale prefix caches
 	for (int k : {1, 2, 3, 5, 17, 33, 100}) {
-		series::vec<E> small(size_t(k), num{});
+		series::trunc<E> small(size_t(k), num{});
 		fill_rnd(small, mt);
 		REQUIRE((qa * small) == (pa2 * small));
 		REQUIRE((small * qa) == (small * pa2));
 	}
 	// a whole cache also serves truncated products when the operand fits under
 	// the precision; oversized operands fall back to a truncated span
-	series::cached<E, false> wt{series::vec<E>(pa)};
-	series::vec<E> big(100);
+	series::cached_trunc<E> wt{series::trunc<E>(pa)};
+	series::trunc<E> big(100);
 	fill_rnd(big, mt);
 	REQUIRE((wt * big) == (pa * big));
 	REQUIRE((big * wt) == (big * pa));
@@ -605,7 +618,7 @@ TEST_CASE("poly::form evaluation and transposed multiplication", "[fft]") {
 	REQUIRE(fq(s2) == (s2 * q)(z));
 	// composing with a power series (living in 1/x) multiplies the storages,
 	// prefix-truncated back to length n
-	series::vec<E> t(size_t(n), num{});
+	series::trunc<E> t(size_t(n), num{});
 	fill_rnd(t, mt);
 	auto ft = f.composed_with(t);
 	REQUIRE(ft.len() == n);
@@ -629,7 +642,7 @@ TEST_CASE("series::vec mixed exactness operators", "[fft]") {
 	using num = modnum<998244353>;
 	using E = engines::ntt<num>;
 	using xps = series::exact<E>;
-	using ps = series::vec<E>;
+	using ps = series::trunc<E>;
 	mt19937 mt(Catch::getSeed());
 	xps a(37), b(23);
 	fill_rnd(a, mt);
@@ -712,12 +725,12 @@ TEST_CASE("poly::vec reversed storage and series interop", "[fft]") {
 	// a poly::vec's natural-order coefficients as an exact series (for series products)
 	series::exact<E> xa(a.begin(), a.end());
 	REQUIRE(equal(xa.begin(), xa.end(), pa.begin(), pa.end()));
-	REQUIRE(a.unrev_series(10) == series::vec<E>(pa.begin(), pa.begin() + 10));
+	REQUIRE(a.unrev_series(10) == series::trunc<E>(pa.begin(), pa.begin() + 10));
 	// the storage transform serves transposed products: middle product against rev_series()
 	std::vector<num> vals(60);
 	fill_rnd(vals, mt);
-	series::cached<E> cv(series::exact<E>(vals.begin(), vals.end()));
-	series::cached<E> ca(a.rev_series());
+	series::cached_exact<E> cv(series::exact<E>(vals.begin(), vals.end()));
+	series::cached_exact<E> ca(a.rev_series());
 	auto mp = middle_product(cv, ca);
 	auto naive = [&](int j) {
 		num r{};
@@ -758,7 +771,7 @@ TEST_CASE("poly::cached products", "[fft]") {
 
 TEST_CASE("series::vec log/exp/pow", "[fft]") {
 	using num = modnum<998244353>;
-	using ps = series::vec<engines::ntt<num>>;
+	using ps = series::trunc<engines::ntt<num>>;
 	mt19937 mt(Catch::getSeed());
 	for (int len : {1, 2, 3, 17, 100}) {
 		INFO("len = " << len);
@@ -790,7 +803,7 @@ TEST_CASE("series::vec log/exp/pow", "[fft]") {
 
 TEST_CASE("series::vec ps_inv", "[fft]") {
 	using num = modnum<998244353>;
-	using ps = series::vec<engines::ntt<num>>;
+	using ps = series::trunc<engines::ntt<num>>;
 	mt19937 mt(Catch::getSeed());
 	ps a(100);
 	for (num& x : a) { x = num(mt()); }
@@ -804,7 +817,7 @@ TEST_CASE("series::vec ps_inv", "[fft]") {
 
 TEST_CASE("series::vec compose", "[fft]") {
 	using num = modnum<998244353>;
-	using ps = series::vec<engines::ntt<num>>;
+	using ps = series::trunc<engines::ntt<num>>;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {1, 2, 3, 8, 20, 33}) {
 		INFO("n = " << n);

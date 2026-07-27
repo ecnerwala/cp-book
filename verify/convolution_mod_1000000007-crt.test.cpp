@@ -3,7 +3,9 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "fft.hpp"
+#include "modnum.hpp"
+#include "fft/engines/crt.hpp"
+#include "fft/series_core.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);

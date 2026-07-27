@@ -9,6 +9,7 @@
 #include "fft/engines/crt.hpp"
 #include "fft/engines/algebras.hpp"
 #include "fft/multiply.hpp"
+#include "fft/series_core.hpp"
 #include "fft/series.hpp"
 #include "fft/poly.hpp"
 #include "fft/online.hpp"

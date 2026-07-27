@@ -3,8 +3,9 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "fft.hpp"
 #include "modnum.hpp"
+#include "fft/engines/ntt.hpp"
+#include "fft/ap_sampled_poly.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
