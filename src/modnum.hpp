@@ -3,6 +3,9 @@
 #include <cassert>
 #include <iostream>
 #include <cstdint>
+#include <concepts>
+#include <limits>
+#include <type_traits>
 
 template <typename T> T mod_inv_in_range(T a, T m) {
 	// assert(0 <= a && a < m);
@@ -71,80 +74,91 @@ struct num_ops {
 	friend Self inv(const Self& a) { return a.inv(); }
 };
 
-// Shared arithmetic for types storing a reduced representative v in [0, MOD).
-// Requires static MOD, member v, from_reduced, and a value constructor;
-// the type provides its own += / -= / *= (the reduction strategies differ).
-template <typename Self>
+// Storage and arithmetic for numbers mod Self::MOD, as a reduced
+// representative v in [0, MOD) of unsigned type V.
+// The type provides static MOD, reduce (value -> representative), and *=;
+// everything else is derived here, valid for any MOD up to V's full range
+// (sums and differences are tracked mod 2^bits, so no headroom is needed).
+// Hooks may be overridden in the type's own body (e.g. a faster += / -=).
+template <typename Self, typename V>
 struct mod_ops : num_ops<Self> {
-private:
-	Self& self() { return static_cast<Self&>(*this); }
-	const Self& self() const { return static_cast<const Self&>(*this); }
-public:
+	static_assert(std::unsigned_integral<V>);
+	V v;
+
+	struct is_reduced_tag {};
+
+	mod_ops() : v(0) {}
+	mod_ops(V v_, is_reduced_tag) : v(v_) { assert(v < mod()); }
+	template <std::integral I> mod_ops(I x) : v(Self::reduce(x)) {}
+
+	static Self from_reduced(V v) { return Self(v, is_reduced_tag{}); }
+	static V mod() { return V(Self::MOD); }
+
+	explicit operator V() const { return v; }
+	std::make_signed_t<V> as_signed() const {
+		return std::make_signed_t<V>(mod()-v > v ? v : v - mod());
+	}
+
 	friend bool operator == (const Self& a, const Self& b) { return a.v == b.v; }
 	friend std::ostream& operator << (std::ostream& out, const Self& n) { return out << n.v; }
 	friend std::istream& operator >> (std::istream& in, Self& n) { int64_t v_; in >> v_; n = Self(v_); return in; }
 
 	Self& operator ++ () {
-		auto& v = self().v;
 		++v;
-		if (v == Self::MOD) v = 0;
+		if (v == mod()) v = 0;
 		return self();
 	}
 	Self& operator -- () {
-		auto& v = self().v;
-		if (v == 0) v = Self::MOD;
+		if (v == 0) v = mod();
 		--v;
 		return self();
 	}
+	Self& operator += (const Self& o) { return sub(mod() - o.v); }
+	Self& operator -= (const Self& o) { return sub(o.v); }
 	Self& operator /= (const Self& o) { return self() *= o.inv(); }
 
-	Self neg() const {
-		auto v = self().v;
-		return Self::from_reduced(v ? Self::MOD - v : 0);
-	}
-	Self inv() const {
-		auto v = self().v;
-		return Self::from_reduced(mod_inv_in_range(v, decltype(v)(Self::MOD)));
+	Self neg() const { return from_reduced(v ? mod() - v : 0); }
+	Self inv() const { return from_reduced(mod_inv_in_range(v, mod())); }
+
+private:
+	Self& self() { return static_cast<Self&>(*this); }
+	// Subtracts b in [0, MOD] from v; wraparound detects the underflow.
+	Self& sub(V b) {
+		v = v < b ? v - b + mod() : v - b;
+		return self();
 	}
 };
 
-template <int MOD_> struct modnum : mod_ops<modnum<MOD_>> {
+template <auto MOD_> struct modnum : mod_ops<modnum<MOD_>, std::make_unsigned_t<decltype(MOD_)>> {
 	using Self = modnum;
-	// Uses subtraction to support MOD up to 2^31 - 1
-	static constexpr int MOD = MOD_;
 	static_assert(MOD_ > 0, "MOD must be positive");
-	struct is_reduced_tag {};
+	using V = std::make_unsigned_t<decltype(MOD_)>;
+	static constexpr V MOD = V(MOD_);
 
-	int v;
-	modnum() : v(0) {}
-	modnum(int v_, is_reduced_tag) : v(v_) { assert(0 <= v && v < MOD); }
-	static Self from_reduced(int v) { return Self(v, is_reduced_tag{}); }
+	using base = mod_ops<modnum, V>;
+	using base::base;
+	using base::v;
 
-	modnum(int v_) : v(int(v_ % MOD)) { if (v < 0) v += MOD; }
-	modnum(unsigned v_) : v(int(v_ % MOD)) { }
-	modnum(int64_t v_) : v(int(v_ % MOD)) { if (v < 0) v += MOD; }
-	modnum(uint64_t v_) : v(int(v_ % MOD)) { }
-
-	explicit operator int() const { return v; }
-	int as_signed() const { return MOD-v > v ? v : v - MOD; }
-
-	Self& operator += (Self o) {
-		v -= MOD-o.v;
-		v = (v < 0) ? v + MOD : v;
-		return *this;
+	static V reduce(std::unsigned_integral auto x) { return V(x % MOD); }
+	static V reduce(std::signed_integral auto x) {
+		using U = std::make_unsigned_t<decltype(x)>;
+		return x >= 0 ? V(U(x) % MOD) : V(MOD - 1 - U(~x) % MOD);
 	}
-	Self& operator -= (Self o) {
-		v -= o.v;
-		v = (v < 0) ? v + MOD : v;
-		return *this;
+
+	explicit operator std::make_signed_t<V>() const
+		requires (MOD <= V(std::numeric_limits<std::make_signed_t<V>>::max()))
+	{
+		return std::make_signed_t<V>(v);
 	}
-	Self& operator *= (Self o) {
-		v = int(int64_t(v) * int64_t(o.v) % MOD);
+
+	Self& operator *= (const Self& o) {
+		if constexpr (sizeof(V) <= 4) v = V(uint64_t(v) * o.v % MOD);
+		else v = V(__uint128_t(v) * o.v % MOD);
 		return *this;
 	}
 };
 
-struct mod_goldilocks : mod_ops<mod_goldilocks> {
+struct mod_goldilocks : mod_ops<mod_goldilocks, uint64_t> {
 	using Self = mod_goldilocks;
 	static constexpr uint64_t MOD = 0xffffffff00000001ull;
 	static constexpr uint64_t EPS = -MOD;
@@ -152,23 +166,22 @@ struct mod_goldilocks : mod_ops<mod_goldilocks> {
 	// Note that omega_8 + omega_8^7 == 2^24 - 2^72 == sqrt(2)
 	// We'll pick the root so that 2^24 - 2^72 is our primitive 384th root of unity.
 	static constexpr uint64_t PRIMITIVE_ROOT = 2717;
-	struct is_reduced_tag {};
-	uint64_t v;
-	mod_goldilocks() : v(0) {}
-	mod_goldilocks(uint64_t v_, is_reduced_tag) : v(v_) { assert(v < MOD); }
-	mod_goldilocks(int64_t a) : v(a < 0 ? a+MOD : a) {}
-	mod_goldilocks(int a) : Self(int64_t(a)) {}
-	mod_goldilocks(uint64_t a) : v(a >= MOD ? a-MOD : a) {}
-	mod_goldilocks(unsigned a) : Self(uint64_t(a)) {}
-	mod_goldilocks(__int128_t a) : v(a % MOD < 0 ? uint64_t(MOD - a % MOD) : uint64_t(a % MOD)) {}
-	mod_goldilocks(__uint128_t a) : v(uint64_t(a % MOD)) {}
 
-	static Self from_reduced(uint64_t v) {
-		return Self(v, is_reduced_tag{});
+	using base = mod_ops<mod_goldilocks, uint64_t>;
+	using base::base;
+	mod_goldilocks() = default;
+	mod_goldilocks(__int128_t a) : base(uint64_t(a % MOD < 0 ? a % MOD + MOD : a % MOD), is_reduced_tag{}) {}
+	mod_goldilocks(__uint128_t a) : base(uint64_t(a % MOD), is_reduced_tag{}) {}
+
+	// Avoids the division: any uint64_t is within MOD of reduced.
+	static uint64_t reduce(std::unsigned_integral auto x) {
+		uint64_t a = x;
+		return a >= MOD ? a - MOD : a;
 	}
-
-	explicit operator uint64_t () const { return v; }
-	int64_t as_signed() const { return MOD-v > v ? v : int64_t(v - MOD); }
+	static uint64_t reduce(std::signed_integral auto x) {
+		int64_t a = x;
+		return a < 0 ? uint64_t(a) + MOD : uint64_t(a);
+	}
 
 	// returns a-b, assuming -MOD <= a-b, e.g. b <= MOD
 	static uint64_t sub_mod_raw(uint64_t a, uint64_t b) {
@@ -287,7 +300,7 @@ template <typename U, typename V> struct pairnum : num_ops<pairnum<U, V>> {
 	}
 };
 
-template <typename tag> struct dynamic_modnum : mod_ops<dynamic_modnum<tag>> {
+template <typename tag> struct dynamic_modnum : mod_ops<dynamic_modnum<tag>, uint32_t> {
 	using Self = dynamic_modnum;
 private:
 #if __cpp_inline_variables >= 201606
@@ -305,6 +318,10 @@ private:
 public:
 	// Make only the const-reference public, to force the use of set_mod
 	static constexpr int const& MOD = MOD_;
+
+	using base = mod_ops<dynamic_modnum, uint32_t>;
+	using base::base;
+	using base::v;
 
 	// Barret reduction taken from KACTL:
 	/**
@@ -328,9 +345,9 @@ public:
 	static uint32_t barrett_reduce_partial(uint64_t a) {
 		return uint32_t(a - uint64_t((__uint128_t(BARRETT_M) * a) >> 64) * MOD);
 	}
-	static int barrett_reduce(uint64_t a) {
+	static uint32_t barrett_reduce(uint64_t a) {
 		int32_t res = int32_t(barrett_reduce_partial(a) - MOD);
-		return (res < 0) ? res + MOD : res;
+		return uint32_t((res < 0) ? res + MOD : res);
 	}
 
 	struct mod_reader {
@@ -344,34 +361,16 @@ public:
 		return mod_reader();
 	}
 
-private:
-	int v;
-	friend mod_ops<dynamic_modnum>;
-
-public:
-	struct is_reduced_tag {};
-	dynamic_modnum(int v_, is_reduced_tag) : v(v_) { assert(0 <= v && v < MOD); }
-	static Self from_reduced(int v) { return Self(v, is_reduced_tag{}); }
-
-	dynamic_modnum() : v(0) {}
-	dynamic_modnum(int v_) : v(v_ >= 0 ? barrett_reduce(v_) : (MOD-1) - barrett_reduce(~v_)) { }
-	dynamic_modnum(unsigned v_) : v(barrett_reduce(v_)) { }
-	dynamic_modnum(int64_t v_) : v(v_ >= 0 ? barrett_reduce(v_) : (MOD-1) - barrett_reduce(~v_)) { }
-	dynamic_modnum(uint64_t v_) : v(barrett_reduce(v_)) { }
-	explicit operator int() const { return v; }
-
-	Self& operator += (Self o) {
-		v -= MOD-o.v;
-		v = (v < 0) ? v + MOD : v;
-		return *this;
+	static uint32_t reduce(std::unsigned_integral auto x) { return barrett_reduce(x); }
+	static uint32_t reduce(std::signed_integral auto x) {
+		int64_t a = x;
+		return a >= 0 ? barrett_reduce(uint64_t(a)) : uint32_t(MOD - 1) - barrett_reduce(uint64_t(~a));
 	}
-	Self& operator -= (Self o) {
-		v -= o.v;
-		v = (v < 0) ? v + MOD : v;
-		return *this;
-	}
-	Self& operator *= (Self o) {
-		v = barrett_reduce(int64_t(v) * int64_t(o.v));
+
+	explicit operator int() const { return int(v); }
+
+	Self& operator *= (const Self& o) {
+		v = barrett_reduce(uint64_t(v) * o.v);
 		return *this;
 	}
 };
