@@ -71,7 +71,44 @@ struct num_ops {
 	friend Self inv(const Self& a) { return a.inv(); }
 };
 
-template <int MOD_> struct modnum : num_ops<modnum<MOD_>> {
+// Shared arithmetic for types storing a reduced representative v in [0, MOD).
+// Requires static MOD, member v, from_reduced, and a value constructor;
+// the type provides its own += / -= / *= (the reduction strategies differ).
+template <typename Self>
+struct mod_ops : num_ops<Self> {
+private:
+	Self& self() { return static_cast<Self&>(*this); }
+	const Self& self() const { return static_cast<const Self&>(*this); }
+public:
+	friend bool operator == (const Self& a, const Self& b) { return a.v == b.v; }
+	friend std::ostream& operator << (std::ostream& out, const Self& n) { return out << n.v; }
+	friend std::istream& operator >> (std::istream& in, Self& n) { int64_t v_; in >> v_; n = Self(v_); return in; }
+
+	Self& operator ++ () {
+		auto& v = self().v;
+		++v;
+		if (v == Self::MOD) v = 0;
+		return self();
+	}
+	Self& operator -- () {
+		auto& v = self().v;
+		if (v == 0) v = Self::MOD;
+		--v;
+		return self();
+	}
+	Self& operator /= (const Self& o) { return self() *= o.inv(); }
+
+	Self neg() const {
+		auto v = self().v;
+		return Self::from_reduced(v ? Self::MOD - v : 0);
+	}
+	Self inv() const {
+		auto v = self().v;
+		return Self::from_reduced(mod_inv_in_range(v, decltype(v)(Self::MOD)));
+	}
+};
+
+template <int MOD_> struct modnum : mod_ops<modnum<MOD_>> {
 	using Self = modnum;
 	// Uses subtraction to support MOD up to 2^31 - 1
 	static constexpr int MOD = MOD_;
@@ -90,24 +127,7 @@ template <int MOD_> struct modnum : num_ops<modnum<MOD_>> {
 
 	explicit operator int() const { return v; }
 	int as_signed() const { return MOD-v > v ? v : v - MOD; }
-	friend std::ostream& operator << (std::ostream& out, Self n) { return out << int(n); }
-	friend std::istream& operator >> (std::istream& in, Self& n) { int64_t v_; in >> v_; n = Self(v_); return in; }
 
-	friend bool operator == (Self a, Self b) { return a.v == b.v; }
-
-	Self inv() const { return from_reduced(mod_inv_in_range(v, MOD)); }
-	Self neg() const { return from_reduced(v ? MOD-v : 0); }
-
-	Self& operator ++ () {
-		v ++;
-		if (v == MOD) v = 0;
-		return *this;
-	}
-	Self& operator -- () {
-		if (v == 0) v = MOD;
-		v --;
-		return *this;
-	}
 	Self& operator += (Self o) {
 		v -= MOD-o.v;
 		v = (v < 0) ? v + MOD : v;
@@ -122,12 +142,9 @@ template <int MOD_> struct modnum : num_ops<modnum<MOD_>> {
 		v = int(int64_t(v) * int64_t(o.v) % MOD);
 		return *this;
 	}
-	Self& operator /= (Self o) {
-		return *this *= o.inv();
-	}
 };
 
-struct mod_goldilocks : num_ops<mod_goldilocks> {
+struct mod_goldilocks : mod_ops<mod_goldilocks> {
 	using Self = mod_goldilocks;
 	static constexpr uint64_t MOD = 0xffffffff00000001ull;
 	static constexpr uint64_t EPS = -MOD;
@@ -152,9 +169,6 @@ struct mod_goldilocks : num_ops<mod_goldilocks> {
 
 	explicit operator uint64_t () const { return v; }
 	int64_t as_signed() const { return MOD-v > v ? v : int64_t(v - MOD); }
-	friend std::ostream& operator << (std::ostream& out, Self n) { return out << uint64_t(n); }
-
-	friend bool operator == (Self a, Self b) { return a.v == b.v; }
 
 	// returns a-b, assuming -MOD <= a-b, e.g. b <= MOD
 	static uint64_t sub_mod_raw(uint64_t a, uint64_t b) {
@@ -202,18 +216,6 @@ struct mod_goldilocks : num_ops<mod_goldilocks> {
 		return reduce_u160_raw(lo, hi_lo, hi_hi);
 	}
 
-	Self neg() const { return from_reduced(v ? MOD-v : 0); }
-
-	Self& operator ++ () {
-		++ v;
-		if (v == MOD) v = 0;
-		return *this;
-	}
-	Self& operator -- () {
-		if (v == 0) v = MOD;
-		-- v;
-		return *this;
-	}
 	Self& operator += (Self o) {
 		v = sub_mod_raw(v, MOD-o.v);
 		return *this;
@@ -225,11 +227,6 @@ struct mod_goldilocks : num_ops<mod_goldilocks> {
 	Self& operator *= (Self o) {
 		v = reduce_u128_raw(__uint128_t(v) * __uint128_t(o.v));
 		return *this;
-	}
-
-	Self inv() const { return from_reduced(mod_inv_in_range(v, MOD)); }
-	Self& operator /= (Self o) {
-		return *this *= o.inv();
 	}
 };
 
@@ -290,7 +287,7 @@ template <typename U, typename V> struct pairnum : num_ops<pairnum<U, V>> {
 	}
 };
 
-template <typename tag> struct dynamic_modnum : num_ops<dynamic_modnum<tag>> {
+template <typename tag> struct dynamic_modnum : mod_ops<dynamic_modnum<tag>> {
 	using Self = dynamic_modnum;
 private:
 #if __cpp_inline_variables >= 201606
@@ -349,8 +346,12 @@ public:
 
 private:
 	int v;
+	friend mod_ops<dynamic_modnum>;
 
 public:
+	struct is_reduced_tag {};
+	dynamic_modnum(int v_, is_reduced_tag) : v(v_) { assert(0 <= v && v < MOD); }
+	static Self from_reduced(int v) { return Self(v, is_reduced_tag{}); }
 
 	dynamic_modnum() : v(0) {}
 	dynamic_modnum(int v_) : v(v_ >= 0 ? barrett_reduce(v_) : (MOD-1) - barrett_reduce(~v_)) { }
@@ -358,32 +359,7 @@ public:
 	dynamic_modnum(int64_t v_) : v(v_ >= 0 ? barrett_reduce(v_) : (MOD-1) - barrett_reduce(~v_)) { }
 	dynamic_modnum(uint64_t v_) : v(barrett_reduce(v_)) { }
 	explicit operator int() const { return v; }
-	friend std::ostream& operator << (std::ostream& out, Self n) { return out << int(n); }
-	friend std::istream& operator >> (std::istream& in, Self& n) { int64_t v_; in >> v_; n = Self(v_); return in; }
 
-	friend bool operator == (Self a, Self b) { return a.v == b.v; }
-
-	Self inv() const {
-		Self res;
-		res.v = mod_inv_in_range(v, MOD);
-		return res;
-	}
-	Self neg() const {
-		Self res;
-		res.v = v ? MOD-v : 0;
-		return res;
-	}
-
-	Self& operator ++ () {
-		v ++;
-		if (v == MOD) v = 0;
-		return *this;
-	}
-	Self& operator -- () {
-		if (v == 0) v = MOD;
-		v --;
-		return *this;
-	}
 	Self& operator += (Self o) {
 		v -= MOD-o.v;
 		v = (v < 0) ? v + MOD : v;
@@ -397,9 +373,6 @@ public:
 	Self& operator *= (Self o) {
 		v = barrett_reduce(int64_t(v) * int64_t(o.v));
 		return *this;
-	}
-	Self& operator /= (Self o) {
-		return *this *= o.inv();
 	}
 };
 
