@@ -94,6 +94,12 @@ struct mod_ops : num_ops<Self> {
 
 	static Self from_reduced(V v) { return Self(v, is_reduced_tag{}); }
 
+	// A negative value reduces via its nonnegative complement: x = -1 - ~x.
+	static V reduce(std::signed_integral auto x) {
+		using U = std::make_unsigned_t<decltype(x)>;
+		return x < 0 ? V(Self::MOD - 1 - Self::reduce(U(~x))) : Self::reduce(U(x));
+	}
+
 	explicit operator V() const { return v; }
 	std::make_signed_t<V> balanced() const {
 		return std::make_signed_t<V>(Self::MOD-v > v ? v : v - Self::MOD);
@@ -138,12 +144,9 @@ template <auto MOD_> struct modnum : mod_ops<modnum<MOD_>, std::make_unsigned_t<
 	using base = mod_ops<modnum, V>;
 	using base::base;
 	using base::v;
+	using base::reduce;
 
 	static V reduce(std::unsigned_integral auto x) { return V(x % MOD); }
-	static V reduce(std::signed_integral auto x) {
-		using U = std::make_unsigned_t<decltype(x)>;
-		return x < 0 ? V(MOD - 1 - U(~x) % MOD) : V(U(x) % MOD);
-	}
 
 	explicit operator std::make_signed_t<V>() const
 		requires (MOD <= V(std::numeric_limits<std::make_signed_t<V>>::max()))
@@ -169,6 +172,7 @@ struct mod_goldilocks : mod_ops<mod_goldilocks, uint64_t> {
 
 	using base = mod_ops<mod_goldilocks, uint64_t>;
 	using base::base;
+	using base::reduce;
 	mod_goldilocks() = default;
 	mod_goldilocks(__int128_t a) : base(a < 0 ? uint64_t(MOD - 1 - __uint128_t(~a) % MOD) : uint64_t(__uint128_t(a) % MOD), is_reduced_tag{}) {}
 	mod_goldilocks(__uint128_t a) : base(uint64_t(a % MOD), is_reduced_tag{}) {}
@@ -177,10 +181,6 @@ struct mod_goldilocks : mod_ops<mod_goldilocks, uint64_t> {
 	static uint64_t reduce(std::unsigned_integral auto x) {
 		uint64_t a = x;
 		return a >= MOD ? a - MOD : a;
-	}
-	static uint64_t reduce(std::signed_integral auto x) {
-		int64_t a = x;
-		return a < 0 ? MOD - 1 - reduce(uint64_t(~a)) : reduce(uint64_t(a));
 	}
 
 	// returns a-b, assuming -MOD <= a-b, e.g. b <= MOD
@@ -313,6 +313,7 @@ public:
 	using base = mod_ops<dynamic_modnum, uint32_t>;
 	using base::base;
 	using base::v;
+	using base::reduce;
 
 	// Barret reduction taken from KACTL:
 	/**
@@ -353,10 +354,6 @@ public:
 	}
 
 	static uint32_t reduce(std::unsigned_integral auto x) { return barrett_reduce(x); }
-	static uint32_t reduce(std::signed_integral auto x) {
-		int64_t a = x;
-		return a < 0 ? MOD - 1 - barrett_reduce(uint64_t(~a)) : barrett_reduce(uint64_t(a));
-	}
 
 	explicit operator int() const { return int(v); }
 
