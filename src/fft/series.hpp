@@ -2,11 +2,9 @@
 
 #include "fft/multiply.hpp"
 
-namespace ecnerwala {
-
 // ==== value types ====
 
-namespace series {
+namespace ecnerwala::series {
 
 // Helper packed bivariate buffer for Kinoshita-Li composition (arXiv:2404.05177).
 //
@@ -768,6 +766,4 @@ private:
 	mutable std::vector<entry> caches;
 };
 
-/* namespace series */ }
-
-/* namespace ecnerwala */ }
+/* namespace ecnerwala::series */ }

@@ -2,9 +2,7 @@
 
 #include "fft/core.hpp"
 
-namespace ecnerwala {
-namespace fft {
-namespace engines {
+namespace ecnerwala::fft::engines {
 
 // Small NxN matrix over num, row-major
 // ==== wrapper engines ====
@@ -349,6 +347,4 @@ struct trunc_stable
 	}
 };
 
-/* namespace engines */ }
-/* namespace fft */ }
-/* namespace ecnerwala */ }
+/* namespace ecnerwala::fft::engines */ }

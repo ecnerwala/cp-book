@@ -2,9 +2,7 @@
 
 #include "fft/core.hpp"
 
-namespace ecnerwala {
-namespace fft {
-namespace engines {
+namespace ecnerwala::fft::engines {
 
 // Convolve real (floating point) values by packing into complex numbers with
 //   a'[t] = a[2t] + i * a[2t+1]
@@ -142,8 +140,4 @@ template <typename dbl = double> struct real {
 	}
 };
 
-static_assert(engine<real<double>>);
-
-/* namespace engines */ }
-/* namespace fft */ }
-/* namespace ecnerwala */ }
+/* namespace ecnerwala::fft::engines */ }

@@ -2,9 +2,7 @@
 
 #include "fft/engines/ntt.hpp"
 
-namespace ecnerwala {
-namespace fft {
-namespace engines {
+namespace ecnerwala::fft::engines {
 
 // Multiplies mod `mnum` by running NTTs modulo two FFT-friendly primes and CRT'ing.
 // Inputs use balanced representatives (|v| <= MOD/2), so the true integer coefficients
@@ -126,8 +124,4 @@ struct crt {
 	}
 };
 
-static_assert(engine<crt<modnum<int(1e9)+7>>>);
-
-/* namespace engines */ }
-/* namespace fft */ }
-/* namespace ecnerwala */ }
+/* namespace ecnerwala::fft::engines */ }

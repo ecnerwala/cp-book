@@ -2,9 +2,7 @@
 
 #include "fft/core.hpp"
 
-namespace ecnerwala {
-namespace fft {
-namespace engines {
+namespace ecnerwala::fft::engines {
 
 template <typename num> struct ntt {
 	using value_type = num;
@@ -82,9 +80,4 @@ template <typename num> struct ntt {
 	}
 };
 
-static_assert(engine<ntt<modnum<998244353>>>);
-static_assert(engine<ntt<mod_goldilocks>>);
-
-/* namespace engines */ }
-/* namespace fft */ }
-/* namespace ecnerwala */ }
+/* namespace ecnerwala::fft::engines */ }

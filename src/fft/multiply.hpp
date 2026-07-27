@@ -2,8 +2,7 @@
 
 #include "fft/core.hpp"
 
-namespace ecnerwala {
-namespace fft {
+namespace ecnerwala::fft {
 
 // ==== multiply layer ====
 // These are free functions to convolve spans.
@@ -341,6 +340,4 @@ vector<typename E::value_type> middle_product(std::span<const typename E::value_
 	return r;
 }
 
-/* namespace fft */ }
-
-/* namespace ecnerwala */ }
+/* namespace ecnerwala::fft */ }
