@@ -60,9 +60,9 @@ struct vec : public std::vector<typename E::value_type> {
 
 	// exact -> trunc is implicit, trunc -> exact is explicit
 	template <bool oe> requires (oe != exact_)
-	explicit(oe <= exact_) vec(const vec<E, oe>& p) : std::vector<T>(p) {}
+	explicit(oe < exact_) vec(const vec<E, oe>& p) : std::vector<T>(p) {}
 	template <bool oe> requires (oe != exact_)
-	explicit(oe <= exact_) vec(vec<E, oe>&& p) : std::vector<T>(std::move(p)) {}
+	explicit(oe < exact_) vec(vec<E, oe>&& p) : std::vector<T>(std::move(p)) {}
 
 	// adopt a plain coefficient vector
 	explicit vec(std::vector<T> v) : std::vector<T>(std::move(v)) {}
