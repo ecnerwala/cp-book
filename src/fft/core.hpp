@@ -333,6 +333,10 @@ concept engine = requires(
 };
 
 
+// Constrains two engine-parameterized value types to share the same engine.
+template <typename A, typename B>
+concept same_engine = std::same_as<typename A::engine_t, typename B::engine_t>;
+
 // short spelling for E::transformed at use sites
 template <engine E> using transformed = typename E::transformed;
 

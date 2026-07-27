@@ -6,6 +6,8 @@ namespace ecnerwala {
 
 // ==== value types ====
 
+namespace series {
+
 // Helper packed bivariate buffer for Kinoshita-Li composition (arXiv:2404.05177).
 //
 // The motivation is performing Bostan-Mori (Graeffe root-squaring) to compute
@@ -55,10 +57,6 @@ template <fft::engine E> struct packed_bivariate {
 	}
 };
 
-template <typename A, typename B>
-concept same_engine = std::same_as<typename A::engine_t, typename B::engine_t>;
-
-namespace series {
 
 // Non-owning view of power series coefficients: the span pattern (contiguous
 // window + series semantics), borrowed from an owning series-like type.
@@ -544,7 +542,7 @@ auto square(const A& a) {
 // product as the result's transform when the engine supports it. Reuses each
 // operand's whole cache. Requires a*b and c*d to have equal length.
 template <like A, like B, like C, like D>
-	requires same_engine<A, B> && same_engine<A, C> && same_engine<A, D>
+	requires fft::same_engine<A, B> && fft::same_engine<A, C> && fft::same_engine<A, D>
 		&& A::exact_v && B::exact_v && C::exact_v && D::exact_v
 cached<typename A::engine_t> multiply_add2(
 		const A& a, const B& b, const C& c, const D& d) {
@@ -568,7 +566,7 @@ cached<typename A::engine_t> multiply_add2(
 }
 
 // coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0
-template <like A, like B> requires same_engine<A, B>
+template <like A, like B> requires fft::same_engine<A, B>
 std::vector<typename A::engine_t::value_type> middle_product(const A& a, const B& b) {
 	using E = typename A::engine_t;
 	span<E, A::exact_v> av = a.underlying();
@@ -613,7 +611,7 @@ auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t
 }
 /* namespace detail */ }
 
-template <like A, like B> requires same_engine<A, B>
+template <like A, like B> requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v && B::exact_v> operator + (const A& a, const B& b) {
 	using T = typename A::engine_t::value_type;
 	span<typename A::engine_t, A::exact_v> av = a.underlying();
@@ -626,7 +624,7 @@ vec<typename A::engine_t, A::exact_v && B::exact_v> operator + (const A& a, cons
 	}
 	return r;
 }
-template <like A, like B> requires same_engine<A, B>
+template <like A, like B> requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A& a, const B& b) {
 	using T = typename A::engine_t::value_type;
 	span<typename A::engine_t, A::exact_v> av = a.underlying();
@@ -645,7 +643,7 @@ vec<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A& a, cons
 // An exact x exact product returns a has_cache result, going through
 // fft::multiply_cached so the pointwise product is adopted as the result's
 // transform whenever the engine supports it.
-template <like A, like B> requires same_engine<A, B>
+template <like A, like B> requires fft::same_engine<A, B>
 auto operator * (const A& a, const B& b) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;

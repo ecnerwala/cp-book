@@ -130,7 +130,7 @@ private:
 };
 
 // rev(a*b) = rev(a)*rev(b); the series product reuses/adopts transforms
-template <like A, like B> requires same_engine<A, B>
+template <like A, like B> requires fft::same_engine<A, B>
 cached<typename A::engine_t> operator*(const A& a, const B& b) {
 	return cached<typename A::engine_t>::from_rev_series(a.rev_series() * b.rev_series());
 }
@@ -140,13 +140,13 @@ cached<typename A::engine_t> square(const A& a) {
 }
 // rev(a*b + c*d) = rev(a)*rev(b) + rev(c)*rev(d)
 template <like A, like B, like C, like D>
-	requires same_engine<A, B> && same_engine<A, C> && same_engine<A, D>
+	requires fft::same_engine<A, B> && fft::same_engine<A, C> && fft::same_engine<A, D>
 cached<typename A::engine_t> multiply_add2(
 		const A& a, const B& b, const C& c, const D& d) {
 	return cached<typename A::engine_t>::from_rev_series(
 			multiply_add2(a.rev_series(), b.rev_series(), c.rev_series(), d.rev_series()));
 }
-template <like A, like B> requires same_engine<A, B>
+template <like A, like B> requires fft::same_engine<A, B>
 bool operator==(const A& a, const B& b) {
 	return a.rev_series() == b.rev_series();
 }
