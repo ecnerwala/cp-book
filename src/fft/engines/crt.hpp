@@ -16,6 +16,7 @@ namespace ecnerwala::fft::engines {
 // are bounded by n (MOD/2)^2.
 template <typename mnum, typename num1 = mod_goldilocks, typename num2 = modnum<(15 << 27) + 1>>
 struct crt {
+	static_assert(sizeof(decltype(mnum::MOD)) <= 4, "n (MOD/2)^2 must fit the CRT modulus product");
 	using value_type = mnum;
 	static constexpr bool commutative = true;
 	static constexpr int unit_scale = 1;
@@ -45,8 +46,7 @@ struct crt {
 	using product = product_t<1>;
 
 	static int64_t balanced(mnum x) {
-		int64_t v = int64_t(int(x));
-		return 2 * v > int64_t(mnum::MOD) ? v - mnum::MOD : v;
+		return x.as_signed();
 	}
 
 	static transformed transform(std::span<const mnum> a, int n) {

@@ -76,7 +76,8 @@ struct num_ops {
 
 // Storage and arithmetic for numbers mod Self::MOD, as a reduced
 // representative v in [0, MOD) of unsigned type V.
-// The type provides static MOD, reduce (value -> representative), and *=;
+// The type provides static MOD (of type V), reduce (value -> representative),
+// and *=;
 // everything else is derived here, valid for any MOD up to V's full range
 // (sums and differences are tracked mod 2^bits, so no headroom is needed).
 // Hooks may be overridden in the type's own body (e.g. a faster += / -=).
@@ -88,15 +89,14 @@ struct mod_ops : num_ops<Self> {
 	struct is_reduced_tag {};
 
 	mod_ops() : v(0) {}
-	mod_ops(V v_, is_reduced_tag) : v(v_) { assert(v < mod()); }
+	mod_ops(V v_, is_reduced_tag) : v(v_) { assert(v < Self::MOD); }
 	template <std::integral I> mod_ops(I x) : v(Self::reduce(x)) {}
 
 	static Self from_reduced(V v) { return Self(v, is_reduced_tag{}); }
-	static V mod() { return V(Self::MOD); }
 
 	explicit operator V() const { return v; }
 	std::make_signed_t<V> as_signed() const {
-		return std::make_signed_t<V>(mod()-v > v ? v : v - mod());
+		return std::make_signed_t<V>(Self::MOD-v > v ? v : v - Self::MOD);
 	}
 
 	friend bool operator == (const Self& a, const Self& b) { return a.v == b.v; }
@@ -105,26 +105,26 @@ struct mod_ops : num_ops<Self> {
 
 	Self& operator ++ () {
 		++v;
-		if (v == mod()) v = 0;
+		if (v == Self::MOD) v = 0;
 		return self();
 	}
 	Self& operator -- () {
-		if (v == 0) v = mod();
+		if (v == 0) v = Self::MOD;
 		--v;
 		return self();
 	}
-	Self& operator += (const Self& o) { return sub(mod() - o.v); }
+	Self& operator += (const Self& o) { return sub(Self::MOD - o.v); }
 	Self& operator -= (const Self& o) { return sub(o.v); }
 	Self& operator /= (const Self& o) { return self() *= o.inv(); }
 
-	Self neg() const { return from_reduced(v ? mod() - v : 0); }
-	Self inv() const { return from_reduced(mod_inv_in_range(v, mod())); }
+	Self neg() const { return from_reduced(v ? Self::MOD - v : 0); }
+	Self inv() const { return from_reduced(mod_inv_in_range(v, Self::MOD)); }
 
 private:
 	Self& self() { return static_cast<Self&>(*this); }
 	// Subtracts b in [0, MOD] from v; wraparound detects the underflow.
 	Self& sub(V b) {
-		v = v < b ? v - b + mod() : v - b;
+		v = v < b ? v - b + Self::MOD : v - b;
 		return self();
 	}
 };
@@ -305,19 +305,19 @@ template <typename tag> struct dynamic_modnum : mod_ops<dynamic_modnum<tag>, uin
 private:
 #if __cpp_inline_variables >= 201606
 	// C++17 and up
-	inline static int MOD_ = 0;
+	inline static uint32_t MOD_ = 0;
 	inline static uint64_t BARRETT_M = 0;
 #else
 	// NB: these must be initialized out of the class by hand:
-	//   static int dynamic_modnum<tag>::MOD = 0;
-	//   static int dynamic_modnum<tag>::BARRETT_M = 0;
-	static int MOD_;
+	//   static uint32_t dynamic_modnum<tag>::MOD = 0;
+	//   static uint64_t dynamic_modnum<tag>::BARRETT_M = 0;
+	static uint32_t MOD_;
 	static uint64_t BARRETT_M;
 #endif
 
 public:
 	// Make only the const-reference public, to force the use of set_mod
-	static constexpr int const& MOD = MOD_;
+	static constexpr uint32_t const& MOD = MOD_;
 
 	using base = mod_ops<dynamic_modnum, uint32_t>;
 	using base::base;
@@ -339,7 +339,7 @@ public:
 	 */
 	static void set_mod(int mod) {
 		assert(mod > 0);
-		MOD_ = mod;
+		MOD_ = uint32_t(mod);
 		BARRETT_M = (uint64_t(-1) / MOD);
 	}
 	static uint32_t barrett_reduce_partial(uint64_t a) {
@@ -347,7 +347,7 @@ public:
 	}
 	static uint32_t barrett_reduce(uint64_t a) {
 		int32_t res = int32_t(barrett_reduce_partial(a) - MOD);
-		return uint32_t((res < 0) ? res + MOD : res);
+		return uint32_t((res < 0) ? res + int32_t(MOD) : res);
 	}
 
 	struct mod_reader {
@@ -364,7 +364,7 @@ public:
 	static uint32_t reduce(std::unsigned_integral auto x) { return barrett_reduce(x); }
 	static uint32_t reduce(std::signed_integral auto x) {
 		int64_t a = x;
-		return a < 0 ? uint32_t(MOD - 1) - barrett_reduce(uint64_t(~a)) : barrett_reduce(uint64_t(a));
+		return a < 0 ? MOD - 1 - barrett_reduce(uint64_t(~a)) : barrett_reduce(uint64_t(a));
 	}
 
 	explicit operator int() const { return int(v); }
