@@ -17,7 +17,7 @@ namespace ecnerwala::fft::engines {
 // [-2^14, 2^14], from the balanced representative |v| <= MOD/2) packed into one complex
 // transform per operand.
 template <typename mnum> struct split {
-	static_assert(mnum::MOD <= (1u << 30), "limbs must fit 15 bits");
+	static_assert(sizeof(decltype(mnum::MOD)) <= 4, "limbs must fit 15 bits");
 	using value_type = mnum;
 	static constexpr bool commutative = true;
 	static constexpr int unit_scale = 1;
