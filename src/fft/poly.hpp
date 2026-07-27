@@ -219,7 +219,7 @@ struct form {
 	template <like P>
 	form composed_with(const P& q) const {
 		assert(q.len() > 0 && q.len() <= len());
-		return from_rev_series(series::exact<E>(middle_product(c, q.rev_series())));
+		return from_rev_series(middle_product(c, q.rev_series()));
 	}
 
 	// <P, *> -> <P, s x *>
