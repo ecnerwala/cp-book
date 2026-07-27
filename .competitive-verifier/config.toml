@@ -4,9 +4,9 @@ read_macros = false
 # Checking environment: ASan + UBSan (roughly 2x overhead).
 [[languages.cpp.environments]]
 CXX = "scripts/toolchain/g++-sanitizer"
-CXXFLAGS = ["-std=c++26", "-O2", "-Wall", "-Wextra", "-pedantic", "-Wshadow", "-Wformat=2", "-Wfloat-equal", "-Wconversion", "-Wlogical-op", "-Wshift-overflow=2", "-Wduplicated-cond", "-Wcast-qual", "-Wcast-align", "-Wno-unused-result", "-Wno-sign-conversion", "-g", "-fsanitize=address,undefined", "-fno-sanitize-recover=all", "-I", "src"]
+CXXFLAGS = ["-std=c++23", "-O2", "-Wall", "-Wextra", "-pedantic", "-Wshadow", "-Wformat=2", "-Wfloat-equal", "-Wconversion", "-Wlogical-op", "-Wshift-overflow=2", "-Wduplicated-cond", "-Wcast-qual", "-Wcast-align", "-Wno-unused-result", "-Wno-sign-conversion", "-g", "-fsanitize=address,undefined", "-fno-sanitize-recover=all", "-I", "src"]
 
 # Benchmark environment: plain -O2 for clean timings.
 [[languages.cpp.environments]]
 CXX = "g++"
-CXXFLAGS = ["-std=c++26", "-O2", "-Wall", "-Wextra", "-pedantic", "-Wshadow", "-Wformat=2", "-Wfloat-equal", "-Wconversion", "-Wlogical-op", "-Wshift-overflow=2", "-Wduplicated-cond", "-Wcast-qual", "-Wcast-align", "-Wno-unused-result", "-Wno-sign-conversion", "-g", "-I", "src"]
+CXXFLAGS = ["-std=c++23", "-O2", "-Wall", "-Wextra", "-pedantic", "-Wshadow", "-Wformat=2", "-Wfloat-equal", "-Wconversion", "-Wlogical-op", "-Wshift-overflow=2", "-Wduplicated-cond", "-Wcast-qual", "-Wcast-align", "-Wno-unused-result", "-Wno-sign-conversion", "-g", "-I", "src"]

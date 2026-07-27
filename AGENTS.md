@@ -14,12 +14,12 @@ programming reference library).
   submittable file (the docs site's bundled views come from oj-resolve's
   builtin bundling).
 - `.competitive-verifier/config.toml`: compiler settings for verification
-  (g++, `-std=c++26`, `-I src`, `read_macros = false`).
+  (g++, `-std=c++23`, `-I src`, `read_macros = false`).
 
 ## Build, test, verify
 
 ```sh
-# Unit tests (requires CMake >= 3.27 and a C++26 compiler, e.g. g++ >= 14)
+# Unit tests (requires CMake >= 3.27 and a C++23 compiler, e.g. g++ >= 13)
 cmake -B build && cmake --build build -j && ctest --test-dir build
 
 # Library Checker verification (note: oj-resolve only sees git-tracked files,
@@ -34,7 +34,7 @@ uvx competitive-verifier verify --verify-json verify_files.json
 scripts/bundle.py verify/convolution_mod.test.cpp > submission.cpp
 ```
 
-Compile a single file: `g++ -std=c++26 -O2 -I src file.cpp`.
+Compile a single file: `g++ -std=c++23 -O2 -I src file.cpp`.
 
 ## Style conventions
 
