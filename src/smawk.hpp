@@ -3,9 +3,7 @@
 #include <vector>
 #include <cassert>
 #include <optional>
-#if __cpp_concepts >= 202002
 #include <concepts>
-#endif
 
 namespace smawk {
 
@@ -16,18 +14,14 @@ template <typename T> struct value_t {
 
 // Get(int row, int col) -> T
 // Select(int row, const value_t<T>& opt_0, const value_t<T>& opt_1) returns 0 or 1 for which is better
-#if __cpp_concepts >= 202002
 template <typename T, typename Get, typename Select> concept totally_monotone_matrix_oracle =
 	std::default_initializable<T> && std::movable<T>
 	&& std::invocable<Get, int, int> && std::convertible_to<std::invoke_result_t<Get, int, int>, T>
 	&& std::predicate<Select, int, const value_t<T>&, const value_t<T>&>;
-#endif
 
 
 template <typename Get, typename Select, typename T = std::invoke_result_t<Get, int, int>>
-#if __cpp_concepts >= 202002
 requires totally_monotone_matrix_oracle<T, Get, Select>
-#endif
 class LARSCH {
 public:
 	int N;
@@ -153,9 +147,7 @@ public:
 };
 
 template <typename Get, typename Select, typename T = std::invoke_result_t<Get&&, int, int>>
-#if __cpp_concepts >= 202002
 requires totally_monotone_matrix_oracle<T, Get&&, Select&&>
-#endif
 std::vector<value_t<T>> smawk(int N, int M, Get&& get, Select&& select) {
 	// TODO: If M >> N, then we should do an extra layer of column filter on the outside. The cutoff should be M > 2N or so.
 	std::vector<value_t<T>> res(N);
