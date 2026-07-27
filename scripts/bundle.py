@@ -48,12 +48,16 @@ def resolve_input(path: pathlib.Path) -> pathlib.Path:
     raise SystemExit(f"error: no such file: {path}")
 
 
-def bundle(paths: list[pathlib.Path], *, minified: bool) -> bytes:
+def bundle(paths: list[pathlib.Path], *, level: str | None) -> bytes:
     bundler = Bundler(iquotes=[SRC])
     for path in paths:
         bundler.update(resolve_input(path))
     code = bundler.get()
-    return minify(code) if minified else code
+    if level == "light":
+        return minify(code, level="light")
+    if level == "full":
+        return minify(code)
+    return code
 
 
 def bundle_all(outdir: pathlib.Path, *, check: bool) -> None:
@@ -64,10 +68,10 @@ def bundle_all(outdir: pathlib.Path, *, check: bool) -> None:
     for header in headers:
         rel = header.relative_to(SRC)
         outputs = {}
-        for name, minified in (("bundled", False), ("minified", True)):
+        for name, level in (("bundled", None), ("minified", "full")):
             dest = outdir / name / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            outputs[name] = bundle([header], minified=minified)
+            outputs[name] = bundle([header], level=level)
             dest.write_bytes(outputs[name])
         if check and raw_token_stream(outputs["bundled"]) != raw_token_stream(
             outputs["minified"]
@@ -95,6 +99,13 @@ def main() -> None:
         "-m", "--minify", action="store_true", help="minify the bundled output"
     )
     parser.add_argument(
+        "-l",
+        "--light",
+        action="store_true",
+        help="light minification: strip comments and long blank runs only, "
+        "keeping line structure and exact #line markers",
+    )
+    parser.add_argument(
         "-o", "--output", type=pathlib.Path, help="output file (--all: output dir)"
     )
     parser.add_argument(
@@ -117,7 +128,10 @@ def main() -> None:
         return
     if not args.paths:
         parser.error("no input files")
-    code = bundle(args.paths, minified=args.minify)
+    code = bundle(
+        args.paths,
+        level="light" if args.light else "full" if args.minify else None,
+    )
     if args.output:
         args.output.write_bytes(code)
     else:
