@@ -50,7 +50,10 @@ def resolve_input(path: pathlib.Path) -> pathlib.Path:
 
 
 def bundle(
-    paths: list[pathlib.Path], *, level: Literal["light", "medium", "full"] | None
+    paths: list[pathlib.Path],
+    *,
+    level: Literal["light", "medium", "full"] | None,
+    line_markers: bool = False,
 ) -> bytes:
     bundler = Bundler(iquotes=[SRC])
     for path in paths:
@@ -58,7 +61,7 @@ def bundle(
     code = bundler.get()
     if level is None:
         return code
-    return minify(code, level=level)
+    return minify(code, level=level, line_markers=line_markers)
 
 
 def bundle_all(outdir: pathlib.Path, *, check: bool) -> None:
@@ -69,7 +72,7 @@ def bundle_all(outdir: pathlib.Path, *, check: bool) -> None:
     for header in headers:
         rel = header.relative_to(SRC)
         outputs = {}
-        for name, level in (("bundled", None), ("minified", "full")):
+        for name, level in (("bundled", None), ("minified", "medium")):
             dest = outdir / name / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             outputs[name] = bundle([header], level=level)
@@ -97,21 +100,24 @@ def main() -> None:
         help="files to bundle together (bare header names resolve from src/)",
     )
     parser.add_argument(
-        "-m", "--minify", action="store_true", help="minify the bundled output"
+        "-m",
+        "--minify",
+        action="store_true",
+        help="minify the bundled output: strip comments and compress "
+        "whitespace, one statement per line",
     )
     parser.add_argument(
         "-l",
         "--light",
         action="store_true",
-        help="light minification: strip comments and long blank runs only, "
-        "keeping line structure and exact #line markers",
+        help="light minification: strip comments and blank lines only, "
+        "no whitespace compression",
     )
     parser.add_argument(
-        "-w",
-        "--medium",
+        "--full",
         action="store_true",
-        help="medium minification: light plus whitespace compression, "
-        "still one statement per line with exact #line markers",
+        help="full minification: additionally pack statements onto shared "
+        "lines up to 120 columns",
     )
     parser.add_argument(
         "-o", "--output", type=pathlib.Path, help="output file (--all: output dir)"
@@ -120,6 +126,12 @@ def main() -> None:
         "--all",
         action="store_true",
         help="pregenerate bundled+minified copies of every src/ header",
+    )
+    parser.add_argument(
+        "--line-markers",
+        action="store_true",
+        help="with -l/-m: keep exact #line directives (for in-repo compiles) "
+        "instead of the default // file comments (safe to copy-paste)",
     )
     parser.add_argument(
         "--check",
@@ -141,12 +153,13 @@ def main() -> None:
         level=(
             "light"
             if args.light
-            else "medium"
-            if args.medium
             else "full"
+            if args.full
+            else "medium"
             if args.minify
             else None
         ),
+        line_markers=args.line_markers,
     )
     if args.output:
         args.output.write_bytes(code)
