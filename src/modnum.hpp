@@ -177,6 +177,7 @@ struct mod_goldilocks : mod_ops<mod_goldilocks, uint64_t> {
 
 	// Avoids the division: any uint64_t is within MOD of reduced.
 	static uint64_t reduce(std::unsigned_integral auto x) {
+		static_assert(sizeof(x) <= 8);
 		uint64_t a = x;
 		return a >= MOD ? a - MOD : a;
 	}
@@ -343,7 +344,10 @@ public:
 		return mod_reader();
 	}
 
-	static uint32_t reduce(std::unsigned_integral auto x) { return barrett_reduce(x); }
+	static uint32_t reduce(std::unsigned_integral auto x) {
+		static_assert(sizeof(x) <= 8);
+		return barrett_reduce(x);
+	}
 
 	explicit operator int() const { return int(v); }
 
