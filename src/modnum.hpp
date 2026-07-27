@@ -142,7 +142,7 @@ template <auto MOD_> struct modnum : mod_ops<modnum<MOD_>, std::make_unsigned_t<
 	static V reduce(std::unsigned_integral auto x) { return V(x % MOD); }
 	static V reduce(std::signed_integral auto x) {
 		using U = std::make_unsigned_t<decltype(x)>;
-		return x >= 0 ? V(U(x) % MOD) : V(MOD - 1 - U(~x) % MOD);
+		return x < 0 ? V(MOD - 1 - U(~x) % MOD) : V(U(x) % MOD);
 	}
 
 	explicit operator std::make_signed_t<V>() const
@@ -170,7 +170,7 @@ struct mod_goldilocks : mod_ops<mod_goldilocks, uint64_t> {
 	using base = mod_ops<mod_goldilocks, uint64_t>;
 	using base::base;
 	mod_goldilocks() = default;
-	mod_goldilocks(__int128_t a) : base(uint64_t(a % MOD < 0 ? a % MOD + MOD : a % MOD), is_reduced_tag{}) {}
+	mod_goldilocks(__int128_t a) : base(a < 0 ? uint64_t(MOD - 1 - __uint128_t(~a) % MOD) : uint64_t(__uint128_t(a) % MOD), is_reduced_tag{}) {}
 	mod_goldilocks(__uint128_t a) : base(uint64_t(a % MOD), is_reduced_tag{}) {}
 
 	// Avoids the division: any uint64_t is within MOD of reduced.
@@ -180,7 +180,7 @@ struct mod_goldilocks : mod_ops<mod_goldilocks, uint64_t> {
 	}
 	static uint64_t reduce(std::signed_integral auto x) {
 		int64_t a = x;
-		return a < 0 ? uint64_t(a) + MOD : uint64_t(a);
+		return a < 0 ? MOD - 1 - reduce(uint64_t(~a)) : reduce(uint64_t(a));
 	}
 
 	// returns a-b, assuming -MOD <= a-b, e.g. b <= MOD
@@ -364,7 +364,7 @@ public:
 	static uint32_t reduce(std::unsigned_integral auto x) { return barrett_reduce(x); }
 	static uint32_t reduce(std::signed_integral auto x) {
 		int64_t a = x;
-		return a >= 0 ? barrett_reduce(uint64_t(a)) : uint32_t(MOD - 1) - barrett_reduce(uint64_t(~a));
+		return a < 0 ? uint32_t(MOD - 1) - barrett_reduce(uint64_t(~a)) : barrett_reduce(uint64_t(a));
 	}
 
 	explicit operator int() const { return int(v); }
