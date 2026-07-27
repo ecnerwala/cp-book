@@ -99,6 +99,7 @@ def main() -> None:
         capture_output=True,
         text=True,
     ).stdout.split()
+    headers = [h for h in headers if not h.endswith(".test.hpp")]
 
     files_added = lines_added = 0
     for header in headers:

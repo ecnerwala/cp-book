@@ -9,8 +9,14 @@ names via -I src), including in the include directive.
 {%- else -%}
     {%- capture page_title -%}{{display_path | xml_escape }}{%- endcapture -%}
 {%- endif -%}
-{%- comment -%} Catch2 unit tests are not verification files; mark them instead of the not-verified icon. {%- endcomment -%}
-{%- if include.data.path contains ".test.cpp" and include.data.path contains "src/" -%}
+{%- comment -%} Catch2 unit tests and their helpers (src/*.test.cpp, src/*.test.hpp) are not verification files; mark them instead of the not-verified icon. {%- endcomment -%}
+{%- assign is_unittest = false -%}
+{%- if include.data.path contains "src/" -%}
+{%- if include.data.path contains ".test.cpp" or include.data.path contains ".test.hpp" -%}
+{%- assign is_unittest = true -%}
+{%- endif -%}
+{%- endif -%}
+{%- if is_unittest -%}
 <h1>🧪 {{ page_title | xml_escape }}</h1>
 {%- elsif include.data.pathExtension == "hpp" -%}
 {%- comment -%} For headers, the title is the include directive itself (click to copy). {%- endcomment -%}
@@ -48,7 +54,7 @@ names via -I src), including in the include directive.
     {%- endif -%}
 </div>
 
-{% if include.data.pathExtension == "hpp" %}
+{% if include.data.pathExtension == "hpp" and is_unittest == false %}
 <style>
     .include-title {
         cursor: pointer;

@@ -2,8 +2,9 @@
 Overrides the competitive-verifier theme's toppage_body.html:
 - displays paths with the leading "src/" stripped (headers are included with
   bare names via -I src);
-- Catch2 unit tests (src/*.test.cpp) are not verification files, so they get
-  a 🧪 marker instead of the not-verified warning icon.
+- Catch2 unit tests and their helpers (src/*.test.cpp, src/*.test.hpp) are
+  not verification files, so they get a 🧪 marker instead of the not-verified
+  warning icon.
 {%- endcomment -%}
 {%- if page.data.coverage -%}
 <h2>Coverage</h2>
@@ -29,7 +30,11 @@ Overrides the competitive-verifier theme's toppage_body.html:
     {%- else -%}
         {%- assign coverage_span = "" -%}
     {%- endif -%}
-    {%- if top.type == "Library Files" and item.path contains ".test.cpp" -%}
+    {%- assign is_unittest = false -%}
+    {%- if item.path contains ".test.cpp" or item.path contains ".test.hpp" -%}
+        {%- assign is_unittest = true -%}
+    {%- endif -%}
+    {%- if top.type == "Library Files" and is_unittest -%}
     <li class="index-unittest"><a href="{{ item.path | relative_url }}">🧪 {{ link_title | xml_escape }}</a></li>
     {%- else -%}
     <li><a href="{{ item.path | relative_url }}">{{ site.icons[item.icon] }} {{ link_title | xml_escape }}</a>{{ coverage_span }}</li>
