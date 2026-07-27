@@ -563,7 +563,7 @@ jobs:
 
       - name: Generate coverage tracefile
         run: |
-          gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
+          gcovr --root . --filter 'src/' --exclude '.*\.test\.(cpp|hpp)' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
             --exclude-lines-by-pattern '.*assert\(false\).*' \
             --exclude-branches-by-pattern '.*\bassert\(.*' \
@@ -607,7 +607,7 @@ jobs:
       - name: Instrument untouched headers
         run: |
           mkdir -p coverage-stubs
-          for h in $(cd src && find . -name '*.hpp' | sed 's|^\./||'); do
+          for h in $(cd src && find . -name '*.hpp' ! -name '*.test.hpp' | sed 's|^\./||'); do
             stub="coverage-stubs/$(echo "$h" | tr '/' '_').cpp"
             echo "#include \"$h\"" > "$stub"
             ccache g++ --coverage -O0 -fkeep-inline-functions -std=c++23 -I src \
@@ -620,7 +620,7 @@ jobs:
 
       - name: Generate coverage tracefile
         run: |
-          gcovr --root . --filter 'src/' --exclude '.*\.test\.cpp' \
+          gcovr --root . --filter 'src/' --exclude '.*\.test\.(cpp|hpp)' \
             --gcov-ignore-parse-errors suspicious_hits.warn_once_per_file \
             --exclude-lines-by-pattern '.*assert\(false\).*' \
             --exclude-branches-by-pattern '.*\bassert\(.*' \

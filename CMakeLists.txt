@@ -19,6 +19,8 @@ FetchContent_MakeAvailable(Catch2)
 
 file(GLOB_RECURSE TEST_SRC_FILES CONFIGURE_DEPENDS "src/*.test.cpp")
 file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS "src/*.hpp")
+# *.test.hpp files are test-only helpers, not part of the library
+list(FILTER SRC_FILES EXCLUDE REGEX "\\.test\\.hpp$")
 
 add_library(cp-book INTERFACE)
 target_sources(cp-book INTERFACE FILE_SET HEADERS BASE_DIRS src FILES ${SRC_FILES})
