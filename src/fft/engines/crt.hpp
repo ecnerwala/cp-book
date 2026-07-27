@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fft/engine_ntt.hpp"
+#include "fft/engines/ntt.hpp"
 
 namespace ecnerwala {
 namespace fft {

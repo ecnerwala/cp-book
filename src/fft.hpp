@@ -1,11 +1,11 @@
 #pragma once
 
 #include "fft/core.hpp"
-#include "fft/engine_ntt.hpp"
-#include "fft/engine_real.hpp"
-#include "fft/engine_split.hpp"
-#include "fft/engine_crt.hpp"
-#include "fft/engine_wrappers.hpp"
+#include "fft/engines/ntt.hpp"
+#include "fft/engines/real.hpp"
+#include "fft/engines/split.hpp"
+#include "fft/engines/crt.hpp"
+#include "fft/engines/wrappers.hpp"
 #include "fft/multiply.hpp"
 #include "fft/series.hpp"
 #include "fft/poly.hpp"
