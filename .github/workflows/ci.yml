@@ -597,7 +597,7 @@ jobs:
       - name: Build and run unit tests with coverage
         run: |
           cmake -B build -DENABLE_COVERAGE=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          cmake --build build -j
+          cmake --build build -j --target tests
           ctest --test-dir build --output-on-failure
 
       # Never-run instrumented stubs so untouched headers appear in coverage
