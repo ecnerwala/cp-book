@@ -11,8 +11,10 @@ programming reference library).
 - `verify/`: Library Checker (https://judge.yosupo.jp/) solutions, one
   `<problem_slug>.test.cpp` per problem, verified by competitive-verifier.
 - `scripts/bundle.py`: inlines library headers to produce a single
-  submittable file (the docs site's bundled views come from oj-resolve's
-  builtin bundling).
+  submittable file; takes one or more headers/solutions, `--minify` for a
+  compiler-directed minification pass, and `--all` to pregenerate
+  bundled+minified copies of every header (the docs site's bundled/minified
+  views come from oj-resolve's builtin bundling).
 - `.competitive-verifier/config.toml`: compiler settings for verification
   (g++, `-std=c++23`, `-I src`, `read_macros = false`).
 

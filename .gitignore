@@ -33,6 +33,9 @@
 
 /build/
 
+# pregenerated bundles (scripts/bundle.py --all)
+/dist/
+
 # competitive-verifier artifacts
 /.competitive-verifier/bundled/
 /.competitive-verifier/cache/
