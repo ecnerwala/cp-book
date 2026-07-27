@@ -18,7 +18,6 @@ c++
 -fsanitize=undefined
 -fno-sanitize-recover=all
 -fstack-protector
--D_FORTIFY_SOURCE=2
 -Wno-sign-conversion
 -Isrc
 -Itest

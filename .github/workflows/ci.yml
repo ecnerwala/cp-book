@@ -40,8 +40,10 @@ jobs:
       - name: Configure
         run: cmake -B build -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
+      # Only the unit tests; the verify solutions are compiled by the
+      # verification jobs below.
       - name: Build
-        run: cmake --build build -j
+        run: cmake --build build -j --target tests
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
@@ -595,7 +597,7 @@ jobs:
       - name: Build and run unit tests with coverage
         run: |
           cmake -B build -DENABLE_COVERAGE=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          cmake --build build -j
+          cmake --build build -j --target tests
           ctest --test-dir build --output-on-failure
 
       # Never-run instrumented stubs so untouched headers appear in coverage
