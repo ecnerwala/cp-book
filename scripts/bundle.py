@@ -29,6 +29,7 @@ installed).
 import argparse
 import pathlib
 import sys
+from typing import Literal
 
 from competitive_verifier.oj.languages.cplusplus_bundle import Bundler
 from competitive_verifier.oj.languages.cplusplus_minify import (
@@ -48,16 +49,16 @@ def resolve_input(path: pathlib.Path) -> pathlib.Path:
     raise SystemExit(f"error: no such file: {path}")
 
 
-def bundle(paths: list[pathlib.Path], *, level: str | None) -> bytes:
+def bundle(
+    paths: list[pathlib.Path], *, level: Literal["light", "medium", "full"] | None
+) -> bytes:
     bundler = Bundler(iquotes=[SRC])
     for path in paths:
         bundler.update(resolve_input(path))
     code = bundler.get()
-    if level == "light":
-        return minify(code, level="light")
-    if level == "full":
-        return minify(code)
-    return code
+    if level is None:
+        return code
+    return minify(code, level=level)
 
 
 def bundle_all(outdir: pathlib.Path, *, check: bool) -> None:
@@ -106,6 +107,13 @@ def main() -> None:
         "keeping line structure and exact #line markers",
     )
     parser.add_argument(
+        "-w",
+        "--medium",
+        action="store_true",
+        help="medium minification: light plus whitespace compression, "
+        "still one statement per line with exact #line markers",
+    )
+    parser.add_argument(
         "-o", "--output", type=pathlib.Path, help="output file (--all: output dir)"
     )
     parser.add_argument(
@@ -130,7 +138,15 @@ def main() -> None:
         parser.error("no input files")
     code = bundle(
         args.paths,
-        level="light" if args.light else "full" if args.minify else None,
+        level=(
+            "light"
+            if args.light
+            else "medium"
+            if args.medium
+            else "full"
+            if args.minify
+            else None
+        ),
     )
     if args.output:
         args.output.write_bytes(code)
