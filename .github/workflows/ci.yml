@@ -46,6 +46,18 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  bundle-check:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+
+      # Bundle + minify every src/ header and verify (via clang's raw
+      # lexer) that minification preserves every token.
+      - name: Bundle and check all headers
+        run: scripts/bundle.py --all --check
+
   setup-verify:
     runs-on: ubuntu-26.04
     outputs:

@@ -29,6 +29,9 @@ verified in CI with
 ```sh
 # Single submittable file with headers inlined
 scripts/bundle.py verify/convolution_mod.test.cpp > submission.cpp
+scripts/bundle.py fft.hpp seg_tree.hpp     # bundle headers together
+scripts/bundle.py --minify fft.hpp         # compiler-directed minification
+scripts/bundle.py --all -o dist/           # pregenerate all headers
 
 # Run verification locally
 uvx competitive-verifier oj-resolve --include src verify --exclude third_party \
