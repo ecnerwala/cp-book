@@ -3,7 +3,8 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "fft.hpp"
+#include "fft/engines/ntt.hpp"
+#include "fft/ap_sampled_poly.hpp"
 #include "modnum.hpp"
 
 int main() {
