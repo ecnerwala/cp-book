@@ -5,6 +5,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(FetchContent)
 
+# Global so that Catch2 sees the same libstdc++ ABI as our test code.
+# This only affects this build tree, not consumers of the exported cp-book target.
+add_compile_definitions(_GLIBCXX_DEBUG _GLIBCXX_DEBUG_PEDANTIC)
+
 FetchContent_Declare(
   Catch2
   GIT_REPOSITORY https://github.com/catchorg/Catch2.git
@@ -23,7 +27,7 @@ target_compile_features(cp-book INTERFACE cxx_std_23)
 # Testing flags, kept off the exported cp-book interface.
 add_library(cp-book-test-flags INTERFACE)
 # TODO: Clean these up somehow
-target_compile_options(cp-book-test-flags INTERFACE -O2 -Wall -Wextra -pedantic -Wshadow -Wformat=2 -Wfloat-equal -Wconversion -Wlogical-op -Wshift-overflow=2 -Wduplicated-cond -Wcast-qual -Wcast-align -Wno-unused-result -Wno-sign-conversion -g -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fstack-protector -D_FORTIFY_SOURCE=2)
+target_compile_options(cp-book-test-flags INTERFACE -O2 -Wall -Wextra -pedantic -Wshadow -Wformat=2 -Wfloat-equal -Wconversion -Wlogical-op -Wshift-overflow=2 -Wduplicated-cond -Wcast-qual -Wcast-align -Wno-unused-result -Wno-sign-conversion -g -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fstack-protector -D_FORTIFY_SOURCE=2)
 target_link_options(cp-book-test-flags INTERFACE -O2 -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fstack-protector)
 
 # -O1 keeps line/branch data close to the source (gcovr's recommendation);
