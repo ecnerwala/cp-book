@@ -777,7 +777,7 @@ jobs:
 
   # Turns verification failures into a red job. Separate from docs so a
   # failing solution doesn't abort the docs/pages build.
-  check:
+  verify-check:
     runs-on: ubuntu-26.04
     needs: [verify-merge]
     steps:
