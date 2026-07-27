@@ -49,7 +49,29 @@ template <typename T> T mod_inv(T a, T m) {
 	return mod_inv_in_range(a, m);
 }
 
-template <int MOD_> struct modnum {
+// Derives the boilerplate operator surface of a number type from its compound
+// ops, ==, neg(), and inv().
+// Bodies are only instantiated on use, so a type may omit some of the
+// underlying pieces if the corresponding derived ops are never called.
+template <typename Self>
+struct num_ops {
+	Self operator+ () const { return static_cast<const Self&>(*this); }
+	Self operator- () const { return static_cast<const Self&>(*this).neg(); }
+
+	friend Self operator ++ (Self& a, int) { Self r = a; ++a; return r; }
+	friend Self operator -- (Self& a, int) { Self r = a; --a; return r; }
+	friend Self operator + (const Self& a, const Self& b) { return Self(a) += b; }
+	friend Self operator - (const Self& a, const Self& b) { return Self(a) -= b; }
+	friend Self operator * (const Self& a, const Self& b) { return Self(a) *= b; }
+	friend Self operator / (const Self& a, const Self& b) { return Self(a) /= b; }
+
+	friend bool operator != (const Self& a, const Self& b) { return !(a == b); }
+
+	friend Self neg(const Self& a) { return a.neg(); }
+	friend Self inv(const Self& a) { return a.inv(); }
+};
+
+template <int MOD_> struct modnum : num_ops<modnum<MOD_>> {
 	using Self = modnum;
 	// Uses subtraction to support MOD up to 2^31 - 1
 	static constexpr int MOD = MOD_;
@@ -72,19 +94,9 @@ template <int MOD_> struct modnum {
 	friend std::istream& operator >> (std::istream& in, Self& n) { int64_t v_; in >> v_; n = Self(v_); return in; }
 
 	friend bool operator == (Self a, Self b) { return a.v == b.v; }
-	friend bool operator != (Self a, Self b) { return a.v != b.v; }
 
 	Self inv() const { return from_reduced(mod_inv_in_range(v, MOD)); }
-	friend Self inv(Self m) { return m.inv(); }
 	Self neg() const { return from_reduced(v ? MOD-v : 0); }
-	friend Self neg(Self m) { return m.neg(); }
-
-	Self operator- () const {
-		return neg();
-	}
-	Self operator+ () const {
-		return Self(*this);
-	}
 
 	Self& operator ++ () {
 		v ++;
@@ -113,16 +125,9 @@ template <int MOD_> struct modnum {
 	Self& operator /= (Self o) {
 		return *this *= o.inv();
 	}
-
-	friend Self operator ++ (Self& a, int) { Self r = a; ++a; return r; }
-	friend Self operator -- (Self& a, int) { Self r = a; --a; return r; }
-	friend Self operator + (Self a, Self b) { return Self(a) += b; }
-	friend Self operator - (Self a, Self b) { return Self(a) -= b; }
-	friend Self operator * (Self a, Self b) { return Self(a) *= b; }
-	friend Self operator / (Self a, Self b) { return Self(a) /= b; }
 };
 
-struct mod_goldilocks {
+struct mod_goldilocks : num_ops<mod_goldilocks> {
 	using Self = mod_goldilocks;
 	static constexpr uint64_t MOD = 0xffffffff00000001ull;
 	static constexpr uint64_t EPS = -MOD;
@@ -150,9 +155,6 @@ struct mod_goldilocks {
 	friend std::ostream& operator << (std::ostream& out, Self n) { return out << uint64_t(n); }
 
 	friend bool operator == (Self a, Self b) { return a.v == b.v; }
-	friend bool operator != (Self a, Self b) { return a.v != b.v; }
-
-	Self operator+ () const { return *this; }
 
 	// returns a-b, assuming -MOD <= a-b, e.g. b <= MOD
 	static uint64_t sub_mod_raw(uint64_t a, uint64_t b) {
@@ -201,8 +203,6 @@ struct mod_goldilocks {
 	}
 
 	Self neg() const { return from_reduced(v ? MOD-v : 0); }
-	friend Self neg(const Self& m) { return m.neg(); }
-	Self operator- () const { return neg(); }
 
 	Self& operator ++ () {
 		++ v;
@@ -227,18 +227,10 @@ struct mod_goldilocks {
 		return *this;
 	}
 
-	friend Self operator ++ (Self& a, int) { Self r = a; ++a; return r; }
-	friend Self operator -- (Self& a, int) { Self r = a; --a; return r; }
-	friend Self operator + (Self a, Self b) { return Self(a) += b; }
-	friend Self operator - (Self a, Self b) { return Self(a) -= b; }
-	friend Self operator * (Self a, Self b) { return Self(a) *= b; }
-
 	Self inv() const { return from_reduced(mod_inv_in_range(v, MOD)); }
-	friend Self inv(Self m) { return m.inv(); }
 	Self& operator /= (Self o) {
 		return *this *= o.inv();
 	}
-	friend Self operator / (Self a, Self b) { return Self(a) /= b; }
 };
 
 template <typename T> T power(T a, long long b) {
@@ -246,7 +238,7 @@ template <typename T> T power(T a, long long b) {
 	T r = 1; while (b) { if (b & 1) r *= a; b >>= 1; a *= a; } return r;
 }
 
-template <typename U, typename V> struct pairnum {
+template <typename U, typename V> struct pairnum : num_ops<pairnum<U, V>> {
 	using Self = pairnum;
 	U u;
 	V v;
@@ -259,19 +251,12 @@ template <typename U, typename V> struct pairnum {
 	friend std::istream& operator >> (std::istream& in, Self& n) { long long val; in >> val; n = Self(val); return in; }
 
 	friend bool operator == (const Self& a, const Self& b) { return a.u == b.u && a.v == b.v; }
-	friend bool operator != (const Self& a, const Self& b) { return a.u != b.u || a.v != b.v; }
 
 	Self inv() const {
 		return Self(u.inv(), v.inv());
 	}
 	Self neg() const {
 		return Self(u.neg(), v.neg());
-	}
-	Self operator- () const {
-		return Self(-u, -v);
-	}
-	Self operator+ () const {
-		return Self(+u, +v);
 	}
 
 	Self& operator ++ () {
@@ -303,16 +288,9 @@ template <typename U, typename V> struct pairnum {
 		v /= o.v;
 		return *this;
 	}
-
-	friend Self operator ++ (Self& a, int) { Self r = a; ++a; return r; }
-	friend Self operator -- (Self& a, int) { Self r = a; --a; return r; }
-	friend Self operator + (const Self& a, const Self& b) { return Self(a) += b; }
-	friend Self operator - (const Self& a, const Self& b) { return Self(a) -= b; }
-	friend Self operator * (const Self& a, const Self& b) { return Self(a) *= b; }
-	friend Self operator / (const Self& a, const Self& b) { return Self(a) /= b; }
 };
 
-template <typename tag> struct dynamic_modnum {
+template <typename tag> struct dynamic_modnum : num_ops<dynamic_modnum<tag>> {
 	using Self = dynamic_modnum;
 private:
 #if __cpp_inline_variables >= 201606
@@ -384,26 +362,16 @@ public:
 	friend std::istream& operator >> (std::istream& in, Self& n) { int64_t v_; in >> v_; n = Self(v_); return in; }
 
 	friend bool operator == (Self a, Self b) { return a.v == b.v; }
-	friend bool operator != (Self a, Self b) { return a.v != b.v; }
 
 	Self inv() const {
 		Self res;
 		res.v = mod_inv_in_range(v, MOD);
 		return res;
 	}
-	friend Self inv(Self m) { return m.inv(); }
 	Self neg() const {
 		Self res;
 		res.v = v ? MOD-v : 0;
 		return res;
-	}
-	friend Self neg(Self m) { return m.neg(); }
-
-	Self operator- () const {
-		return neg();
-	}
-	Self operator+ () const {
-		return Self(*this);
 	}
 
 	Self& operator ++ () {
@@ -433,13 +401,6 @@ public:
 	Self& operator /= (Self o) {
 		return *this *= o.inv();
 	}
-
-	friend Self operator ++ (Self& a, int) { Self r = a; ++a; return r; }
-	friend Self operator -- (Self& a, int) { Self r = a; --a; return r; }
-	friend Self operator + (Self a, Self b) { return Self(a) += b; }
-	friend Self operator - (Self a, Self b) { return Self(a) -= b; }
-	friend Self operator * (Self a, Self b) { return Self(a) *= b; }
-	friend Self operator / (Self a, Self b) { return Self(a) /= b; }
 };
 
 template <typename T> struct mod_constraint {
