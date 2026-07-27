@@ -42,7 +42,7 @@ foreach(VERIFY_REL ${VERIFY_SRC_FILES})
   string(REGEX REPLACE "\\.test\\.cpp$" "" VERIFY_NAME "${VERIFY_REL}")
   string(REPLACE "/" "_" VERIFY_NAME "${VERIFY_NAME}")
   set(VERIFY_SRC "verify/${VERIFY_REL}")
-  add_executable("verify_${VERIFY_NAME}" EXCLUDE_FROM_ALL "${VERIFY_SRC}")
+  add_executable("verify_${VERIFY_NAME}" "${VERIFY_SRC}")
   target_link_libraries("verify_${VERIFY_NAME}" PUBLIC cp-book)
 endforeach()
 
