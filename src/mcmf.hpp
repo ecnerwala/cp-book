@@ -6,31 +6,72 @@
 // NOTE: This doesn't support negative-cost edges; you can adjust edge weights
 // (e.g. by precomputing a potential function) to make them positive.
 
+// The edge list (with per-edge flow) is the source of truth; add_edge returns
+// an edge id and flow(id) reads back the net flow.
+// Each solve packs the edges into a scratch CSR adjacency whose records
+// (dest, rev, cap, ...) are stored inline and contiguously, so the search
+// loops scan flat memory with no indirection through a separate adjacency
+// list, and writes the flows back afterwards.
+// Edges may be added freely between solves.
+
 template <typename flow_t = int, typename cost_t = int64_t>
 struct MCMF_SSPA {
 	int N;
-	std::vector<std::vector<int>> adj;
 	struct edge_t {
 		int dest;
+		int rev;
 		flow_t cap;
 		cost_t cost;
 	};
-	std::vector<edge_t> edges;
+	struct input_edge_t {
+		int from;
+		int to;
+		flow_t cap;
+		cost_t cost;
+		flow_t flow;
+	};
+	std::vector<input_edge_t> input;
+	std::vector<int> adj_start;
+	std::vector<edge_t> csr;
+	std::vector<int> edge_pos; // csr index of each input edge
 
-	std::vector<char> seen;
 	std::vector<cost_t> pi;
 	std::vector<int> prv;
 
-	explicit MCMF_SSPA(int N_) : N(N_), adj(N), pi(N, 0), prv(N) {}
+	explicit MCMF_SSPA(int N_) : N(N_), pi(N, 0), prv(N) {}
 
-	void add_edge(int from, int to, flow_t cap, cost_t cost) {
+	int add_edge(int from, int to, flow_t cap, cost_t cost) {
 		assert(cap >= 0);
 		assert(cost + pi[from] - pi[to] >= 0); // TODO: Remove this restriction
-		int e = int(edges.size());
-		edges.emplace_back(edge_t{to, cap, cost});
-		edges.emplace_back(edge_t{from, 0, -cost});
-		adj[from].push_back(e);
-		adj[to].push_back(e+1);
+		input.push_back(input_edge_t{from, to, cap, cost, 0});
+		return int(input.size()) - 1;
+	}
+
+	flow_t flow(int e) const { return input[e].flow; }
+
+	void pack() {
+		adj_start.assign(N+1, 0);
+		for (const auto& e : input) {
+			adj_start[e.from+1]++;
+			adj_start[e.to+1]++;
+		}
+		for (int i = 0; i < N; i++) adj_start[i+1] += adj_start[i];
+		csr.resize(2 * input.size());
+		edge_pos.resize(input.size());
+		std::vector<int> pos(adj_start.begin(), adj_start.end()-1);
+		for (int i = 0; i < int(input.size()); i++) {
+			const auto& e = input[i];
+			int ef = pos[e.from]++, et = pos[e.to]++;
+			csr[ef] = edge_t{e.to, et, e.cap - e.flow, e.cost};
+			csr[et] = edge_t{e.from, ef, e.flow, -e.cost};
+			edge_pos[i] = ef;
+		}
+	}
+
+	void unpack() {
+		for (int i = 0; i < int(input.size()); i++) {
+			input[i].flow = input[i].cap - csr[edge_pos[i]].cap;
+		}
 	}
 
 	static constexpr cost_t INF_COST = std::numeric_limits<cost_t>::max() / 4;
@@ -48,13 +89,14 @@ struct MCMF_SSPA {
 		while (!q.empty()) {
 			int i = q.top().second; q.pop();
 			cost_t d = dist[i];
-			for (int e : adj[i]) {
-				if (edges[e].cap) {
-					int j = edges[e].dest;
-					cost_t nd = d + edges[e].cost;
+			for (int a = adj_start[i]; a < adj_start[i+1]; a++) {
+				const edge_t& e = csr[a];
+				if (e.cap) {
+					int j = e.dest;
+					cost_t nd = d + e.cost;
 					if (nd < dist[j]) {
 						dist[j] = nd;
-						prv[j] = e;
+						prv[j] = a;
 						if (its[j] == q.end()) {
 							its[j] = q.push({-(dist[j] - pi[j]), j});
 						} else {
@@ -73,15 +115,15 @@ struct MCMF_SSPA {
 		flow_t cur_flow = std::numeric_limits<flow_t>::max();
 		for (int cur = t; cur != s; ) {
 			int e = prv[cur];
-			int nxt = edges[e^1].dest;
-			cur_flow = std::min(cur_flow, edges[e].cap);
+			int nxt = csr[csr[e].rev].dest;
+			cur_flow = std::min(cur_flow, csr[e].cap);
 			cur = nxt;
 		}
 		for (int cur = t; cur != s; ) {
 			int e = prv[cur];
-			int nxt = edges[e^1].dest;
-			edges[e].cap -= cur_flow;
-			edges[e^1].cap += cur_flow;
+			int nxt = csr[csr[e].rev].dest;
+			csr[e].cap -= cur_flow;
+			csr[csr[e].rev].cap += cur_flow;
 			cur = nxt;
 		}
 		return cur_flow;
@@ -89,23 +131,27 @@ struct MCMF_SSPA {
 
 	std::vector<std::pair<flow_t, cost_t>> all_flows(int s, int t, cost_t max_cost = INF_COST - 1) {
 		assert(s != t);
+		pack();
 		std::vector<std::pair<flow_t, cost_t>> res;
 		while (dijkstra(s, t) <= max_cost) {
 			assert(res.empty() || pi[t] >= res.back().second);
 			flow_t f = path(s, t);
 			res.push_back({f, pi[t]});
 		}
+		unpack();
 		return res;
 	}
 
 	std::pair<flow_t, cost_t> max_flow(int s, int t, cost_t max_cost = INF_COST - 1) {
 		assert(s != t);
+		pack();
 		flow_t tot_flow = 0; cost_t tot_cost = 0;
 		while (dijkstra(s, t) <= max_cost) {
 			flow_t cur_flow = path(s, t);
 			tot_flow += cur_flow;
 			tot_cost += cur_flow * pi[t];
 		}
+		unpack();
 		return {tot_flow, tot_cost};
 	}
 };
@@ -113,27 +159,60 @@ struct MCMF_SSPA {
 template <typename flow_t = int, typename cost_t = int64_t>
 struct MCMF_Dinic {
 	int N;
-	std::vector<std::vector<int>> adj;
 	struct edge_t {
 		int dest;
+		int rev;
 		flow_t cap;
 		cost_t cost;
 	};
-	std::vector<edge_t> edges;
+	struct input_edge_t {
+		int from;
+		int to;
+		flow_t cap;
+		cost_t cost;
+		flow_t flow;
+	};
+	std::vector<input_edge_t> input;
+	std::vector<int> adj_start;
+	std::vector<edge_t> csr;
+	std::vector<int> edge_pos;
 
-	std::vector<char> seen;
 	std::vector<cost_t> pi;
 
-	explicit MCMF_Dinic(int N_) : N(N_), adj(N), pi(N, 0) {}
+	explicit MCMF_Dinic(int N_) : N(N_), pi(N, 0) {}
 
-	void add_edge(int from, int to, flow_t cap, cost_t cost) {
+	int add_edge(int from, int to, flow_t cap, cost_t cost) {
 		assert(cap >= 0);
 		assert(cost + pi[from] - pi[to] >= 0); // TODO: Remove this restriction
-		int e = int(edges.size());
-		edges.emplace_back(edge_t{to, cap, cost});
-		edges.emplace_back(edge_t{from, 0, -cost});
-		adj[from].push_back(e);
-		adj[to].push_back(e+1);
+		input.push_back(input_edge_t{from, to, cap, cost, 0});
+		return int(input.size()) - 1;
+	}
+
+	flow_t flow(int e) const { return input[e].flow; }
+
+	void pack() {
+		adj_start.assign(N+1, 0);
+		for (const auto& e : input) {
+			adj_start[e.from+1]++;
+			adj_start[e.to+1]++;
+		}
+		for (int i = 0; i < N; i++) adj_start[i+1] += adj_start[i];
+		csr.resize(2 * input.size());
+		edge_pos.resize(input.size());
+		std::vector<int> pos(adj_start.begin(), adj_start.end()-1);
+		for (int i = 0; i < int(input.size()); i++) {
+			const auto& e = input[i];
+			int ef = pos[e.from]++, et = pos[e.to]++;
+			csr[ef] = edge_t{e.to, et, e.cap - e.flow, e.cost};
+			csr[et] = edge_t{e.from, ef, e.flow, -e.cost};
+			edge_pos[i] = ef;
+		}
+	}
+
+	void unpack() {
+		for (int i = 0; i < int(input.size()); i++) {
+			input[i].flow = input[i].cap - csr[edge_pos[i]].cap;
+		}
 	}
 
 	static constexpr cost_t INF_COST = std::numeric_limits<cost_t>::max() / 4;
@@ -151,10 +230,11 @@ struct MCMF_Dinic {
 		while (!q.empty()) {
 			int i = q.top().second; q.pop();
 			cost_t d = dist[i];
-			for (int e : adj[i]) {
-				if (edges[e].cap) {
-					int j = edges[e].dest;
-					cost_t nd = d + edges[e].cost;
+			for (int a = adj_start[i]; a < adj_start[i+1]; a++) {
+				const edge_t& e = csr[a];
+				if (e.cap) {
+					int j = e.dest;
+					cost_t nd = d + e.cost;
 					if (nd < dist[j]) {
 						dist[j] = nd;
 						if (its[j] == q.end()) {
@@ -173,17 +253,18 @@ struct MCMF_Dinic {
 
 	std::vector<int> buf;
 	std::vector<int> level;
+	std::vector<int> it;
 	flow_t dinic_dfs(int cur, int t, flow_t f) {
 		if (cur == t) return f;
 		flow_t cur_f = 0;
 		assert(f > 0);
-		for (; buf[cur] < int(adj[cur].size()); buf[cur]++) {
-			int e = adj[cur][buf[cur]];
-			int nxt = edges[e].dest;
-			if (level[nxt] == level[cur] + 1 && edges[e].cap > 0 && edges[e].cost == pi[nxt] - pi[cur]) {
-				flow_t v = dinic_dfs(nxt, t, std::min(f, edges[e].cap));
-				edges[e].cap -= v;
-				edges[e^1].cap += v;
+		for (; it[cur] < adj_start[cur+1]; it[cur]++) {
+			edge_t& e = csr[it[cur]];
+			int nxt = e.dest;
+			if (level[nxt] == level[cur] + 1 && e.cap > 0 && e.cost == pi[nxt] - pi[cur]) {
+				flow_t v = dinic_dfs(nxt, t, std::min(f, e.cap));
+				e.cap -= v;
+				csr[e.rev].cap += v;
 				f -= v;
 				cur_f += v;
 				if (f == 0) break;
@@ -201,16 +282,17 @@ struct MCMF_Dinic {
 			level[s] = 0;
 			for (int z = 0; z < int(buf.size()); z++) {
 				int cur = buf[z];
-				for (int e : adj[cur]) {
-					int nxt = edges[e].dest;
-					if (edges[e].cap > 0 && edges[e].cost == pi[nxt] - pi[cur] && level[nxt] == -1) {
+				for (int a = adj_start[cur]; a < adj_start[cur+1]; a++) {
+					const edge_t& e = csr[a];
+					int nxt = e.dest;
+					if (e.cap > 0 && e.cost == pi[nxt] - pi[cur] && level[nxt] == -1) {
 						level[nxt] = level[cur] + 1;
 						buf.push_back(nxt);
 					}
 				}
 			}
 			if (level[t] == -1) break;
-			buf.assign(N, 0);
+			it.assign(adj_start.begin(), adj_start.end()-1);
 			tot_flow += dinic_dfs(s, t, INF_FLOW);
 		}
 		return tot_flow;
@@ -218,23 +300,27 @@ struct MCMF_Dinic {
 
 	std::vector<std::pair<flow_t, cost_t>> all_flows(int s, int t, cost_t max_cost = INF_COST - 1) {
 		assert(s != t);
+		pack();
 		std::vector<std::pair<flow_t, cost_t>> res;
 		while (dijkstra(s, t) <= max_cost) {
 			assert(res.empty() || pi[t] > res.back().second);
 			flow_t f = dinic(s, t);
 			res.push_back({f, pi[t]});
 		}
+		unpack();
 		return res;
 	}
 
 	std::pair<flow_t, cost_t> max_flow(int s, int t, cost_t max_cost = INF_COST - 1) {
 		assert(s != t);
+		pack();
 		flow_t tot_flow = 0; cost_t tot_cost = 0;
 		while (dijkstra(s, t) <= max_cost) {
 			flow_t cur_flow = dinic(s, t);
 			tot_flow += cur_flow;
 			tot_cost += cur_flow * pi[t];
 		}
+		unpack();
 		return {tot_flow, tot_cost};
 	}
 };
@@ -242,45 +328,79 @@ struct MCMF_Dinic {
 template <typename flow_t = int, typename tot_flow_t = flow_t>
 struct Dinic {
 	int N;
-	std::vector<std::vector<int>> adj;
 	struct edge_t {
 		int dest;
+		int rev;
 		flow_t cap;
 	};
-	std::vector<edge_t> edges;
+	struct input_edge_t {
+		int from;
+		int to;
+		flow_t cap;
+		flow_t rev_cap;
+		flow_t flow;
+	};
+	std::vector<input_edge_t> input;
+	std::vector<int> adj_start;
+	std::vector<edge_t> csr;
+	std::vector<int> edge_pos;
 
-	std::vector<char> seen;
+	explicit Dinic(int N_) : N(N_) {}
 
-	explicit Dinic(int N_) : N(N_), adj(N) {}
-
-	void add_edge(int from, int to, flow_t cap) {
+	int add_edge(int from, int to, flow_t cap) {
 		return add_bi_edge(from, to, cap, 0);
 	}
 
-	void add_bi_edge(int from, int to, flow_t cap, flow_t rev_cap) {
+	int add_bi_edge(int from, int to, flow_t cap, flow_t rev_cap) {
 		assert(cap >= 0);
 		assert(rev_cap >= 0);
-		int e = int(edges.size());
-		edges.emplace_back(edge_t{to, cap});
-		edges.emplace_back(edge_t{from, rev_cap});
-		adj[from].push_back(e);
-		adj[to].push_back(e+1);
+		input.push_back(input_edge_t{from, to, cap, rev_cap, 0});
+		return int(input.size()) - 1;
+	}
+
+	// Net flow; in [-rev_cap, cap].
+	flow_t flow(int e) const { return input[e].flow; }
+
+	void pack() {
+		adj_start.assign(N+1, 0);
+		for (const auto& e : input) {
+			adj_start[e.from+1]++;
+			adj_start[e.to+1]++;
+		}
+		for (int i = 0; i < N; i++) adj_start[i+1] += adj_start[i];
+		csr.resize(2 * input.size());
+		edge_pos.resize(input.size());
+		std::vector<int> pos(adj_start.begin(), adj_start.end()-1);
+		for (int i = 0; i < int(input.size()); i++) {
+			const auto& e = input[i];
+			int ef = pos[e.from]++, et = pos[e.to]++;
+			csr[ef] = edge_t{e.to, et, e.cap - e.flow};
+			csr[et] = edge_t{e.from, ef, e.rev_cap + e.flow};
+			edge_pos[i] = ef;
+		}
+	}
+
+	void unpack() {
+		for (int i = 0; i < int(input.size()); i++) {
+			input[i].flow = input[i].cap - csr[edge_pos[i]].cap;
+		}
 	}
 
 	static constexpr tot_flow_t INF_FLOW = std::numeric_limits<tot_flow_t>::max() / 4;
 	std::vector<int> buf;
 	std::vector<int> level;
+	std::vector<int> it;
 	tot_flow_t dinic_dfs(int cur, int t, tot_flow_t f) {
 		if (cur == t) return f;
 		tot_flow_t cur_f = 0;
 		assert(f > 0);
-		for (; buf[cur] < int(adj[cur].size()); buf[cur]++) {
-			int e = adj[cur][buf[cur]];
-			int nxt = edges[e].dest;
-			if (level[nxt] == level[cur] + 1 && edges[e].cap > 0) {
-				flow_t v = flow_t(dinic_dfs(nxt, t, std::min<tot_flow_t>(f, edges[e].cap)));
-				edges[e].cap -= v;
-				edges[e^1].cap += v;
+		for (; it[cur] < adj_start[cur+1]; it[cur]++) {
+			edge_t& e = csr[it[cur]];
+			int nxt = e.dest;
+			if (level[nxt] == level[cur] + 1 && e.cap > 0) {
+				flow_t v = flow_t(dinic_dfs(nxt, t, std::min<tot_flow_t>(f, e.cap)));
+				e.cap -= v;
+				csr[e.rev].cap += v;
 				f -= v;
 				cur_f += v;
 				if (f == 0) break;
@@ -289,6 +409,7 @@ struct Dinic {
 		return cur_f;
 	}
 	tot_flow_t dinic(int s, int t) {
+		pack();
 		tot_flow_t tot_flow = 0;
 		while (true) {
 			buf.clear();
@@ -298,18 +419,20 @@ struct Dinic {
 			level[s] = 0;
 			for (int z = 0; z < int(buf.size()); z++) {
 				int cur = buf[z];
-				for (int e : adj[cur]) {
-					int nxt = edges[e].dest;
-					if (edges[e].cap > 0 && level[nxt] == -1) {
+				for (int a = adj_start[cur]; a < adj_start[cur+1]; a++) {
+					const edge_t& e = csr[a];
+					int nxt = e.dest;
+					if (e.cap > 0 && level[nxt] == -1) {
 						level[nxt] = level[cur] + 1;
 						buf.push_back(nxt);
 					}
 				}
 			}
 			if (level[t] == -1) break;
-			buf.assign(N, 0);
+			it.assign(adj_start.begin(), adj_start.end()-1);
 			tot_flow += dinic_dfs(s, t, INF_FLOW);
 		}
+		unpack();
 		return tot_flow;
 	}
 	tot_flow_t max_flow(int s, int t) { return dinic(s, t); }
