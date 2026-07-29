@@ -173,8 +173,7 @@ concept like = fft::engine<typename S::engine_t> && requires(const S& s, int i) 
 	// and into the series layer's own span, keeping the exactness tag
 	requires std::convertible_to<const S&, span<typename S::engine_t, S::exact_v>>;
 	// first(n): the sequence truncated to its first n coefficients, borrowed;
-	// requires n <= len(). The borrow may still be shorter than n when the
-	// operand stores fewer coefficients (the tail is zero).
+	// requires n <= len(). The result is itself like (concepts can't self-reference).
 	{ s.first(i) } -> std::convertible_to<span<typename S::engine_t, S::exact_v>>;
 };
 template <typename S>
