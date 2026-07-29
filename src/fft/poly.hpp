@@ -193,7 +193,7 @@ struct form {
 
 	// Restrict the form's domain: only valid against exact series of length n
 	form for_length(int n) const {
-		series::exact<E> r(c);
+		auto r = series::exact<E>(c);
 		if (n >= len()) r.insert(r.begin(), size_t(n - len()), T(0));
 		else r.erase(r.begin(), r.begin() + (len() - n));
 		return from_rev_series(std::move(r));
@@ -297,7 +297,7 @@ std::vector<typename E::value_type> multipoint(
 	if (pts.empty()) return {};
 	int N = sz(pts);
 	subproduct_tree<E> tree{pts};
-	series::trunc<E> q(tree.prod(1).rev_series());
+	auto q = series::trunc<E>(tree.prod(1).rev_series());
 	q.resize(p.len()); // inverse precision must cover the form's window
 	form<E> f = form<E>::from_poly(p).composed_with(ps_inv(q));
 	return tree.pushdown(f.for_length(N));
@@ -314,7 +314,7 @@ vec<E> interpolate(
 	int N = sz(pts);
 	using ps = series::trunc<E>;
 	subproduct_tree<E> tree{pts};
-	ps root(tree.prod(1).rev_series());
+	auto root = ps(tree.prod(1).rev_series());
 	root.shrink(N);
 
 	// We need to evaluate the derivative of the root at each point
