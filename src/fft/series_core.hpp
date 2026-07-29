@@ -65,6 +65,8 @@ struct vec : public std::vector<typename E::value_type> {
 
 	// adopt a plain coefficient vector
 	explicit vec(std::vector<T> v) : std::vector<T>(std::move(v)) {}
+	// materialize an owned copy of any borrowed series
+	explicit vec(span<E, exact_> s) : std::vector<T>(s.begin(), s.end()) {}
 
 	int len() const {
 		return int(this->size());
@@ -209,6 +211,8 @@ struct cached {
 	operator vec<E, exact_>() && { return std::move(s); }
 
 	int len() const { return s.len(); }
+	// unwrap to the owned coefficients
+	const vec<E, exact_>& uncached() const { return s; }
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
@@ -460,6 +464,8 @@ struct prefix_cached {
 	operator trunc<E>() && { return std::move(s); }
 
 	int len() const { return s.len(); }
+	// unwrap to the owned coefficients
+	const trunc<E>& uncached() const { return s; }
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }

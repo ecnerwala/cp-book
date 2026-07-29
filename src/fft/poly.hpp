@@ -193,7 +193,7 @@ struct form {
 
 	// Restrict the form's domain: only valid against exact series of length n
 	form for_length(int n) const {
-		series::exact<E> r(c.begin(), c.end());
+		series::exact<E> r(c);
 		if (n >= len()) r.insert(r.begin(), size_t(n - len()), T(0));
 		else r.erase(r.begin(), r.begin() + (len() - n));
 		return from_rev_series(std::move(r));
@@ -255,10 +255,7 @@ struct subproduct_tree {
 	// number of points under node i
 	int size(int i) const { return nodes[i].len() - 1; }
 	// rev(prod (x - z_j)) over node i's leaves; length size(i) + 1
-	series::exact<E> rev_prod(int i) const {
-		const auto& c = nodes[i].rev_series();
-		return series::exact<E>(c.begin(), c.end());
-	}
+	const series::exact<E>& rev_prod(int i) const { return nodes[i].rev_series().uncached(); }
 
 	// Computes, for each i, f(product_{j != i} (1 - a[j] x)). Requires f.len() == N.
 	std::vector<T> pushdown(form<E> f) const {
