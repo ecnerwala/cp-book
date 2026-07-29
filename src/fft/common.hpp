@@ -46,6 +46,17 @@ using std::vector;
 using std::min;
 using std::max;
 
+// Drop trailing zero coefficients: transforms depend only on the sequence's value,
+// so callers may freely zero-pad.
+template <typename T>
+std::span<const T> trim_zeros(std::span<const T> a) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfloat-equal" // exact-zero padding is meaningless to trim
+	while (!a.empty() && a.back() == T()) a = a.first(a.size() - 1);
+#pragma GCC diagnostic pop
+	return a;
+}
+
 // Reusable scratch buffers. Not thread-safe by default: this is deliberately plain
 // static storage so single-threaded programs pay no TLS indirection; define
 // ECNERWALA_FFT_POOL_STORAGE to `thread_local` for multithreaded use.

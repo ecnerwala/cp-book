@@ -330,7 +330,7 @@ P::engine_t::value_type kth_term_of_rational_function(
 	using E = P::engine_t;
 	using T = E::value_type;
 
-	assert(q.len() > 0 && q.underlying()[0] != T(0));
+	assert(q.len() > 0 && q[0] != T(0));
 	// Check this here so we avoid accessing p[0]
 	if (p.len() == 0) return T(0);
 
@@ -340,27 +340,16 @@ P::engine_t::value_type kth_term_of_rational_function(
 
 	int n = nextPow2((d-1) + d - 1); // >= d
 
+	// Seed the loop transforms from any whole caches; the buffers below hold the
+	// current p, q (zero-padded, which extend_to ignores).
 	fft::transformed<E> tq, tp;
-	// NOTE: Because we assert the coeffs are smaller than the existing transform, we must extend_to before padding
-	if constexpr (has_cache<Q>) {
-		E::extend_to(q.cache(), n, q.underlying().coeffs());
-		tq = q.cache();
-	}
-	if constexpr (has_cache<P>) {
-		E::extend_to(p.cache(), n, p.underlying().coeffs());
-		tp = p.cache();
-	}
+	if constexpr (has_cache<Q>) { E::extend_to(q.cache(), n, q); tq = q.cache(); }
+	if constexpr (has_cache<P>) { E::extend_to(p.cache(), n, p); tp = p.cache(); }
 
 	std::vector<T> p_buf(d-1, T(0));
-	{
-		auto p_span = p.underlying();
-		std::copy(p_span.begin(), p_span.end(), p_buf.begin());
-	}
+	std::ranges::copy(std::span<const T>(p), p_buf.begin());
 	std::vector<T> q_buf(d, T(0));
-	{
-		auto q_span = q.underlying();
-		std::copy(q_span.begin(), q_span.end(), q_buf.begin());
-	}
+	std::ranges::copy(std::span<const T>(q), q_buf.begin());
 
 	while (k > 0) {
 		E::extend_to(tq, n, q_buf);
@@ -375,7 +364,7 @@ P::engine_t::value_type kth_term_of_rational_function(
 		} else {
 			tp = {};
 		}
-		E::finish(std::move(ntp), std::span<T>(p_buf));
+		E::finish(std::move(ntp), std::span(p_buf));
 		k >>= 1;
 
 		// Save the last iteration if we're done
@@ -396,10 +385,10 @@ P::engine_t::value_type kth_term_of_rational_function(
 		if (n/2 == d-1) {
 			// Fix the wraparound
 			T v0 = q_buf[0] * q_buf[0];
-			E::finish(std::move(ntq), std::span<T>(q_buf).first(d-1));
+			E::finish(std::move(ntq), std::span(q_buf).first(d-1));
 			q_buf[d-1] = std::exchange(q_buf[0], v0) - v0;
 		} else {
-			E::finish(std::move(ntq), std::span<T>(q_buf));
+			E::finish(std::move(ntq), std::span(q_buf));
 		}
 	}
 	return p_buf[0] * inv(q_buf[0]);
@@ -415,16 +404,16 @@ S::engine_t::value_type kth_term_of_linear_recurrence(
 	using E = S::engine_t;
 	using T = E::value_type;
 
-	assert(q.len() > 0 && q.underlying()[0] != T(0));
+	assert(q.len() > 0 && q[0] != T(0));
 	assert(s.len() >= q.len()-1);
 
 	// Don't even bother with P so we don't have to do truncation checks
 	// TODO: Could use generic multiply for this whole part?
 	fft::transformed<E> tq;
-	auto q_cached = cached_span<E, true>{q, detail::whole_cache_or(q, tq)};
+	auto q_cached = cached_span<E, true>{q.underlying(), detail::whole_cache_or(q, tq)};
 
 	// Compute the prefix and then hard-cast it to exact
-	auto p = vec<E, true>(span<E, false>(s.underlying()).first(q.len()-1) * q_cached);
+	auto p = exact<E>(span<E, false>(s.underlying()).first(q.len()-1) * q_cached);
 	return kth_term_of_rational_function(p, q_cached, k);
 }
 

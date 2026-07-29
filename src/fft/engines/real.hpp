@@ -61,6 +61,7 @@ template <typename dbl = double> struct real {
 		return r;
 	}
 	static void extend_to(transformed& t, int m, std::span<const dbl> coeffs) {
+		coeffs = trim_zeros(coeffs);
 		assert(!(m & (m-1)) && sz(coeffs) <= 2 * m);
 		if (t.size() >= m) return;
 		if (t.size() == 0) { t = transform(coeffs, m); return; }

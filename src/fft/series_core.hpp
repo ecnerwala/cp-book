@@ -34,6 +34,8 @@ struct span {
 	auto begin() const { return s.begin(); }
 	auto end() const { return s.end(); }
 	std::span<const T> coeffs() const { return s; }
+	// a series-like operand borrows straight into the engine primitives
+	operator std::span<const T>() const { return s; }
 	span underlying() const { return *this; }
 	span first(int n) const { return span(s.first(size_t(n))); }
 
@@ -148,9 +150,12 @@ template <fft::engine E> using trunc = vec<E, false>;
 // span borrow; cached wrappers additionally expose their transform
 // caches (filling them is logically const).
 template <typename S>
-concept like = fft::engine<typename S::engine_t> && requires(const S& s) {
+concept like = fft::engine<typename S::engine_t> && requires(const S& s, int i) {
 	{ S::exact_v } -> std::convertible_to<bool>;
 	{ s.len() } -> std::same_as<int>;
+	{ s[i] } -> std::convertible_to<const typename S::engine_t::value_type&>;
+	// borrows straight into the engine primitives
+	{ std::span<const typename S::engine_t::value_type>(s) };
 	{ s.underlying() } -> std::convertible_to<span<typename S::engine_t, S::exact_v>>;
 };
 template <typename S>
@@ -175,6 +180,8 @@ struct cached_span {
 	std::reference_wrapper<fft::transformed<E>> f;
 
 	int len() const { return s.len(); }
+	const typename E::value_type& operator[](int i) const { return s[i]; }
+	operator std::span<const typename E::value_type>() const { return s.coeffs(); }
 	span<E, exact_> underlying() const { return s; }
 	fft::transformed<E>& cache() const { return f; }
 };
