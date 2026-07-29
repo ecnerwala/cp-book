@@ -62,7 +62,37 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_rational_function", "[fft]", MOD_ENG
 		series::exact<E> xp(p.begin(), p.end()), xq(q.begin(), q.end());
 		for (uint64_t k : {uint64_t(0), uint64_t(1), uint64_t(7), uint64_t(100), uint64_t(299)}) {
 			INFO("d = " << d << ", k = " << k);
-			REQUIRE(kth_term_of_rational_function<E>(xp, xq, k) == ser[k]);
+			REQUIRE(kth_term_of_rational_function(xp, xq, k) == ser[k]);
+		}
+	}
+}
+
+TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_linear_recurrence", "[fft]", MOD_ENGINES) {
+	using E = TestType;
+	using num = typename E::value_type;
+	mt19937 mt(Catch::getSeed());
+	for (int d : {1, 2, 3, 8, 20}) {
+		vector<num> p(d - 1), q(d);
+		fill_rnd(p, mt);
+		fill_rnd(q, mt);
+		if (q[0] == 0) q[0] = 1;
+
+		int terms = 300;
+		vector<num> ser(terms);
+		num iq0 = inv(q[0]);
+		for (int i = 0; i < terms; i++) {
+			if (i < int(p.size())) {
+				ser[i] = p[i];
+			} else {
+				num v = 0;
+				for (int j = 1; j <= min<int>(i, d - 1); j++) v -= q[j] * ser[i-j];
+				ser[i] = v * iq0;
+			}
+		}
+		series::trunc<E> xp(p.begin(), p.end()); series::exact<E> xq(q.begin(), q.end());
+		for (uint64_t k : {uint64_t(0), uint64_t(1), uint64_t(7), uint64_t(100), uint64_t(299)}) {
+			INFO("d = " << d << ", k = " << k);
+			REQUIRE(kth_term_of_linear_recurrence(xp, xq, k) == ser[k]);
 		}
 	}
 }
