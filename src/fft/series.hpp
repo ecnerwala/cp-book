@@ -341,7 +341,7 @@ P::engine_t::value_type kth_term_of_rational_function(
 	int n = nextPow2((d-1) + d - 1); // >= d
 
 	// Seed the loop transforms from any whole caches; the buffers below hold the
-	// current p, q (zero-padded, which extend_to ignores).
+	// current p, q (zero-padded, which extend_to tolerates).
 	fft::transformed<E> tq, tp;
 	if constexpr (has_cache<Q>) { E::extend_to(q.cache(), n, q); tq = q.cache(); }
 	if constexpr (has_cache<P>) { E::extend_to(p.cache(), n, p); tp = p.cache(); }

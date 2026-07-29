@@ -61,16 +61,19 @@ template <typename mnum> struct split {
 		return r;
 	}
 	static void extend_to(transformed& t, int m, std::span<const mnum> coeffs) {
-		coeffs = trim_zeros(coeffs);
 		assert(!(m & (m-1)) && sz(coeffs) <= 2 * m);
 		if (t.size() >= m) return;
 		if (t.size() == 0) { t = transform(coeffs, m); return; }
-		assert(sz(coeffs) <= 2 * t.size());
 		auto buf = buffer_pool<cnum>::get(sz(coeffs));
 		for (int i = 0; i < sz(coeffs); i++) buf[i] = pack(coeffs[i]);
 		while (t.size() < m) {
-			t.v.resize(2 * t.size());
-			core::extend(std::span<cnum>(t.v), std::span<const cnum>(buf.span()));
+			int s = t.size();
+			t.v.resize(2 * s);
+			// coeffs past 2s are zero: they didn't fit in the transform we're a prefix of
+			core::extend(
+				std::span<cnum>(t.v),
+				std::span<const cnum>(buf.span()).first(size_t(min(sz(coeffs), 2 * s)))
+			);
 		}
 	}
 	static void downsample_core(std::span<const cnum> in, std::span<cnum> out, bool odd) {
