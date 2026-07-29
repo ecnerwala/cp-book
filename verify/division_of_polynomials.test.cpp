@@ -18,7 +18,9 @@ int main() {
 	ecnerwala::poly::vec<E> G(M); for (auto& g : G) std::cin >> g;
 
 	auto [Q, R] = ecnerwala::poly::divmod(F, G);
-	while (R.len() > 0 && R.leading() == num(0)) R.resize(R.len() - 1);
+	int rlen = R.len();
+	while (rlen > 0 && R[rlen-1] == num(0)) rlen--;
+	R.resize(rlen);
 
 	std::cout << Q.len() << ' ' << R.len() << '\n';
 	for (int i = 0; i < Q.len(); i++) std::cout << Q[i] << " \n"[i+1==Q.len()];
