@@ -1,6 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <type_traits>
+#include <utility>
 
 template <typename T, int NDIMS> struct tensor_view {
 	static_assert(NDIMS >= 0, "NDIMS must be nonnegative");

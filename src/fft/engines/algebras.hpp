@@ -6,6 +6,7 @@
 #include <span>
 #include <utility>
 
+#include "fft/common.hpp"
 #include "fft/engine.hpp"
 
 namespace ecnerwala::fft::engines {

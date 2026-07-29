@@ -5,6 +5,7 @@
 #include <span>
 #include <utility>
 
+#include "fft/common.hpp"
 #include "fft/engine.hpp"
 #include "fft/engines/ntt.hpp"
 #include "modnum.hpp"

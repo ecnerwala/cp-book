@@ -5,11 +5,14 @@
 #include <concepts>
 #include <cstddef>
 #include <initializer_list>
+#include <iterator>
 #include <span>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
+#include "fft/common.hpp"
+#include "fft/engine.hpp"
 #include "fft/series_core.hpp"
 
 namespace ecnerwala::poly {

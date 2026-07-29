@@ -5,11 +5,12 @@
  */
 
 #include <algorithm>
-#include <vector>
-#include <string>
 #include <cassert>
 #include <cstring>
+#include <iterator>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "rmq.hpp"
 

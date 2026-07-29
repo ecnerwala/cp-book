@@ -1,9 +1,11 @@
 #pragma once
 
-#include <vector>
 #include <cassert>
-#include <optional>
 #include <concepts>
+#include <optional>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace smawk {
 

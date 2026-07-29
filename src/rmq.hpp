@@ -1,9 +1,10 @@
 #pragma once
 
-#include <functional>
-#include <vector>
 #include <cassert>
 #include <cstdint>
+#include <functional>
+#include <iterator>
+#include <vector>
 
 template <typename T, class Compare = std::less<T>> class RangeMinQuery : private Compare {
 	static const int BUCKET_SIZE = 32;

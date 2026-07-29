@@ -1,6 +1,6 @@
 #pragma once
 
-#include <functional>
+#include <type_traits>
 #include <utility>
 
 template <typename F> struct reverse_comparator_t {

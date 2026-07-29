@@ -1,10 +1,13 @@
 #pragma once
 
-#include <iostream>
-#include <vector>
-#include <optional>
+#include <algorithm>
 #include <array>
 #include <cassert>
+#include <compare>
+#include <iostream>
+#include <optional>
+#include <utility>
+#include <vector>
 
 // TODO: Make this generic over numerator type, e.g. bignum
 struct dyadic {

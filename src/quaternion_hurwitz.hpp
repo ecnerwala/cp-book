@@ -1,9 +1,10 @@
 #pragma once
 
-#include <utility>
 #include <array>
-#include <tuple>
+#include <cstdlib>
 #include <iostream>
+#include <tuple>
+#include <utility>
 
 template<typename num = int>
 struct hurwitz_quaternion {

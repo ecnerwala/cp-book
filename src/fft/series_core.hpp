@@ -4,10 +4,13 @@
 #include <cassert>
 #include <concepts>
 #include <cstddef>
+#include <functional>
 #include <span>
 #include <utility>
 #include <vector>
 
+#include "fft/common.hpp"
+#include "fft/engine.hpp"
 #include "fft/multiply.hpp"
 
 // ==== value types ====

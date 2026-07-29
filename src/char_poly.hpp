@@ -1,8 +1,10 @@
 #pragma once
 
-#include <vector>
 #include <bitset>
 #include <cassert>
+#include <cstddef>
+#include <utility>
+#include <vector>
 
 // Compute the characteristic polynomial of a square matrix A over some field.
 // Not numerically stable at all.

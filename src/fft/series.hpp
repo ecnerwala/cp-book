@@ -2,11 +2,15 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <utility>
 #include <vector>
 
+#include "fft/common.hpp"
+#include "fft/engine.hpp"
+#include "fft/multiply.hpp"
 #include "fft/series_core.hpp"
 
 // ==== analytic ops ====

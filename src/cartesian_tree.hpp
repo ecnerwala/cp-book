@@ -1,7 +1,9 @@
 #pragma once
 
-#include <vector>
 #include <array>
+#include <functional>
+#include <utility>
+#include <vector>
 
 #include "reverse_comparator.hpp"
 

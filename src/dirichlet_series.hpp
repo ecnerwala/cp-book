@@ -1,10 +1,11 @@
 #pragma once
 
-#include <cstdint>
 #include <algorithm>
-#include <cassert>
-#include <type_traits>
 #include <array>
+#include <cassert>
+#include <cstdint>
+#include <type_traits>
+#include <utility>
 
 namespace dirichlet_series {
 
@@ -177,9 +178,8 @@ public:
 	friend Derived operator / (Derived const& a, T const& t) { return Derived(a) / t; }
 };
 
-template <div_vector_layout const& layout, typename T> class values;
-template <div_vector_layout const& layout, typename T> class prefix;
 template <div_vector_layout const& layout, typename T> class bit;
+template <div_vector_layout const& layout, typename T> class prefix;
 
 template <div_vector_layout const& layout, typename T> class values : public div_vector<layout, T>, public vectorspace_mixin<layout, T, values<layout, T>> {
 public:

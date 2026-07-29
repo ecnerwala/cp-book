@@ -1,5 +1,8 @@
 #pragma once
-#include<bits/stdc++.h>
+
+#include <cassert>
+#include <cstdint>
+#include <vector>
 
 template <typename num>
 std::vector<num> BerlekampMassey(const std::vector<num>& s) {
