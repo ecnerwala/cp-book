@@ -338,6 +338,19 @@ P::engine_t::value_type kth_term_of_rational_function(
 	int d = std::max(p.len() + 1, q.len());
 	assert(d >= 2);
 
+	int n = nextPow2((d-1) + d - 1); // >= d
+
+	fft::transformed<E> tq, tp;
+	// NOTE: Because we assert the coeffs are smaller than the existing transform, we must extend_to before padding
+	if constexpr (has_cache<Q>) {
+		E::extend_to(q.cache(), n, q.underlying().coeffs());
+		tq = q.cache();
+	}
+	if constexpr (has_cache<P>) {
+		E::extend_to(p.cache(), n, p.underlying().coeffs());
+		tp = p.cache();
+	}
+
 	std::vector<T> p_buf(d-1, T(0));
 	{
 		auto p_span = p.underlying();
@@ -348,13 +361,6 @@ P::engine_t::value_type kth_term_of_rational_function(
 		auto q_span = q.underlying();
 		std::copy(q_span.begin(), q_span.end(), q_buf.begin());
 	}
-
-	int n = nextPow2((d-1) + d - 1); // >= d
-
-	fft::transformed<E> tq, tp;
-	// TODO: Use the passed-in cache by reference so we actually write to it
-	if constexpr (has_cache<Q>) tq = q.cache();
-	if constexpr (has_cache<P>) tp = p.cache();
 
 	while (k > 0) {
 		E::extend_to(tq, n, q_buf);
