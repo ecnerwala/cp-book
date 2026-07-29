@@ -38,7 +38,12 @@ struct span {
 	auto end() const { return s.end(); }
 	// engine primitives borrow through std::span's range constructor
 	std::span<const T> coeffs() const { return s; }
-	span first(int n) const { return span(s.first(size_t(n))); }
+	// the first n coefficients; requires n <= len().
+	// Widening past len() is explicit: see zero_extend.
+	span first(int n) const {
+		assert(n <= len());
+		return span(s.first(size_t(n)));
+	}
 
 private:
 	std::span<const T> s;
@@ -71,6 +76,8 @@ struct vec : public std::vector<typename E::value_type> {
 	// materialize an owned copy of any borrowed series, of either exactness
 	explicit vec(span<E, exact_> s) : std::vector<T>(s.begin(), s.end()) {}
 	explicit vec(span<E, !exact_> s) : std::vector<T>(s.begin(), s.end()) {}
+
+	span<E, exact_> first(int n) const { return span<E, exact_>(*this).first(n); }
 
 	int len() const {
 		return int(this->size());
@@ -163,6 +170,10 @@ concept like = fft::engine<typename S::engine_t> && requires(const S& s, int i) 
 	{ std::span<const typename S::engine_t::value_type>(s) };
 	// and into the series layer's own span, keeping the exactness tag
 	requires std::convertible_to<const S&, span<typename S::engine_t, S::exact_v>>;
+	// first(n): the sequence truncated to its first n coefficients, borrowed;
+	// requires n <= len(). The borrow may still be shorter than n when the
+	// operand stores fewer coefficients (the tail is zero).
+	{ s.first(i) } -> std::convertible_to<span<typename S::engine_t, S::exact_v>>;
 };
 template <typename S>
 concept exact_like = like<S> && S::exact_v;
@@ -194,6 +205,7 @@ struct cached_span {
 	const typename E::value_type& operator[](int i) const { return s[i]; }
 	operator std::span<const typename E::value_type>() const { return s.coeffs(); }
 	operator span<E, exact_>() const { return s; }
+	span<E, exact_> first(int n) const { return s.first(n); }
 	fft::transformed<E>& cache() const { return f; }
 };
 
@@ -217,6 +229,10 @@ struct zero_extended {
 	}
 	operator std::span<const T>() const { return s; }
 	operator span<E, false>() const { return s; }
+	span<E, false> first(int k) const {
+		assert(k <= n);
+		return s.first(std::min(k, s.len()));
+	}
 	fft::transformed<E>& cache() const { return s.cache(); }
 };
 
@@ -228,12 +244,12 @@ zero_extended<typename S::engine_t> zero_extend(const S& s, int n) {
 	return {cached_span<E, false>(span<E, false>(span<E, S::exact_v>(s)), s.cache()), n};
 }
 
-// carries transforms of power-of-two prefixes, usable at any precision:
-// prefix(n) borrows the length-min(n, len) prefix with its cache.
+// carries transforms of power-of-two prefixes: first(n) comes back as a
+// cached operand, with a real cache when one lines up with n.
 // Trunc-only: an exact operand participates whole, so has_cache covers it.
 template <typename S>
 concept has_prefix_cache = like<S> && !S::exact_v && requires(const S& s, int n) {
-	{ s.prefix(n) } -> has_cache;
+	{ s.first(n) } -> has_cache;
 };
 
 // Wrapper around vec which caches the transform of the whole series.
@@ -259,6 +275,7 @@ struct cached {
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
 	operator span<E, exact_>() const { return span<E, exact_>(std::span<const T>(s)); }
+	span<E, exact_> first(int n) const { return span<E, exact_>(*this).first(n); }
 	// the transform of the coefficients, fed to the cached fft:: entry points alongside them
 	fft::transformed<E>& cache() const { return f; }
 
@@ -302,8 +319,6 @@ template <trunc_like S>
 trunc<typename S::engine_t> ps_inv(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	// the stored coefficients; anything past them is zero
-	std::span<const T> a(a_);
 	int N = a_.len();
 	trunc<E> r(size_t(N), T{});
 	if (N == 0) return r;
@@ -312,7 +327,7 @@ trunc<typename S::engine_t> ps_inv(const S& a_) {
 	b[0] = inv(a_[0]);
 	for (int n = 1; n < N; n *= 2) {
 		int m = 2 * n;
-		auto ta = E::transform(a.first(size_t(std::min(sz(a), m))), m);
+		auto ta = E::transform(a_.first(std::min(N, m)), m);
 		auto tb = E::transform(std::span<const T>(b).first(n), m);
 		// e = a*b mod x^m; only e[n..m) is needed (and is wraparound-free).
 		auto e = fft::buffer_pool<T>::get(m);
@@ -413,7 +428,7 @@ template <like S>
 auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t>& tmp) {
 	using E = typename S::engine_t;
 	if constexpr (has_prefix_cache<S>) {
-		return s.prefix(nextPow2(prec));
+		return s.first(std::min(s.len(), nextPow2(prec)));
 	} else {
 		span<E, S::exact_v> v = s;
 		// clamp to the stored coefficients, which may already be fewer than prec
@@ -521,12 +536,16 @@ struct prefix_cached {
 		s.insert(s.end(), tail.begin(), tail.end());
 	}
 
-	// the length-min(n, len) prefix borrowed together with its cache
-	cached_span<E, false> prefix(int n) const {
-		return {
-			span<E, false>(std::span<const T>(s).first(std::min(n, len()))),
-			prefix_cache(n)
-		};
+	// The first k coefficients, paired with the covering prefix cache when one
+	// lines up with k (k a power of two, or k == len()); otherwise with an
+	// empty scratch cache which ops may fill.
+	cached_span<E, false> first(int k) const {
+		assert(k <= len());
+		span<E, false> v(std::span<const T>(s).first(size_t(k)));
+		int n = nextPow2(k);
+		if (std::min(n, len()) == k) return {v, prefix_cache(n)};
+		scratch = {};
+		return {v, scratch};
 	}
 	// cache over the prefix of length min(n, len()); n a power of two
 	fft::transformed<E>& prefix_cache(int n) const {
@@ -547,6 +566,8 @@ private:
 	// memoized transforms: logically const; len tracks how much of s each covers
 	struct entry { fft::transformed<E> t; int len = 0; };
 	mutable std::vector<entry> caches;
+	// throwaway cache paired with prefixes no memoized transform lines up with
+	mutable fft::transformed<E> scratch;
 };
 
 /* namespace ecnerwala::series */ }

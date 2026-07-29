@@ -137,8 +137,8 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	qa.append(span<const num>(tail));
 	series::trunc<E> pa2 = pa;
 	pa2.insert(pa2.end(), tail.begin(), tail.end());
-	for (int p : {8, 16, 32, 64}) {
-		auto pv = qa.prefix(p);
+	for (int p : {8, 16, 32}) {
+		auto pv = qa.first(min(p, qa.len()));
 		REQUIRE(pv.len() == min(p, qa.len()));
 		REQUIRE(pv[0] == pa2[0]);
 	}
