@@ -254,8 +254,8 @@ struct subproduct_tree {
 
 	// number of points under node i
 	int size(int i) const { return nodes[i].len() - 1; }
-	// rev(prod (x - z_j)) over node i's leaves; length size(i) + 1
-	const series::exact<E>& rev_prod(int i) const { return nodes[i].rev_series().uncached(); }
+	// prod (x - z_j) over node i's leaves; length size(i) + 1
+	const cached<E>& prod(int i) const { return nodes[i]; }
 
 	// Computes, for each i, f(product_{j != i} (1 - a[j] x)). Requires f.len() == N.
 	std::vector<T> pushdown(form<E> f) const {
@@ -297,7 +297,7 @@ std::vector<typename E::value_type> multipoint(
 	if (pts.empty()) return {};
 	int N = sz(pts);
 	subproduct_tree<E> tree{pts};
-	series::trunc<E> q = tree.rev_prod(1);
+	series::trunc<E> q(tree.prod(1).rev_series());
 	q.resize(p.len()); // inverse precision must cover the form's window
 	form<E> f = form<E>::from_poly(p).composed_with(ps_inv(q));
 	return tree.pushdown(f.for_length(N));
@@ -314,7 +314,7 @@ vec<E> interpolate(
 	int N = sz(pts);
 	using ps = series::trunc<E>;
 	subproduct_tree<E> tree{pts};
-	ps root = tree.rev_prod(1);
+	ps root(tree.prod(1).rev_series());
 	root.shrink(N);
 
 	// We need to evaluate the derivative of the root at each point

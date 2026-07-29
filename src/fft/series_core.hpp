@@ -28,6 +28,9 @@ struct span {
 
 	span() = default;
 	explicit span(std::span<const T> s_) : s(s_) {}
+	// exact -> trunc is implicit, trunc -> exact is explicit
+	template <bool oe> requires (oe != exact_)
+	explicit(oe < exact_) span(span<E, oe> o) : s(o.coeffs()) {}
 
 	int len() const { return sz(s); }
 	const T& operator[](int i) const { return s[size_t(i)]; }
@@ -65,8 +68,9 @@ struct vec : public std::vector<typename E::value_type> {
 
 	// adopt a plain coefficient vector
 	explicit vec(std::vector<T> v) : std::vector<T>(std::move(v)) {}
-	// materialize an owned copy of any borrowed series
+	// materialize an owned copy of any borrowed series, of either exactness
 	explicit vec(span<E, exact_> s) : std::vector<T>(s.begin(), s.end()) {}
+	explicit vec(span<E, !exact_> s) : std::vector<T>(s.begin(), s.end()) {}
 
 	int len() const {
 		return int(this->size());
@@ -178,6 +182,11 @@ struct cached_span {
 
 	span<E, exact_> s;
 	std::reference_wrapper<fft::transformed<E>> f;
+
+	cached_span(span<E, exact_> s_, fft::transformed<E>& f_) : s(s_), f(f_) {}
+	// exact -> trunc is implicit, trunc -> exact is explicit
+	template <bool oe> requires (oe != exact_)
+	explicit(oe < exact_) cached_span(cached_span<E, oe> o) : s(span<E, exact_>(o.s)), f(o.f) {}
 
 	int len() const { return s.len(); }
 	const typename E::value_type& operator[](int i) const { return s[i]; }
