@@ -152,6 +152,8 @@ template <fft::engine E> using trunc = vec<E, false>;
 // A series-like type exposes its engine/exactness and its coefficients as a
 // span borrow; cached wrappers additionally expose their transform
 // caches (filling them is logically const).
+// The span borrows expose the stored coefficients, which may be fewer than
+// len(): the remaining tail is zero (see zero_extended).
 template <typename S>
 concept like = fft::engine<typename S::engine_t> && requires(const S& s, int i) {
 	{ S::exact_v } -> std::convertible_to<bool>;
@@ -194,6 +196,37 @@ struct cached_span {
 	operator span<E, exact_>() const { return s; }
 	fft::transformed<E>& cache() const { return f; }
 };
+
+// A trunc view of a cached operand at a chosen precision: the borrowed
+// storage holds the leading coefficients, everything past it is zero.
+// The operand's whole cache rides along, so trunc algorithms at a higher
+// precision (polynomial inverse/division) reuse it without copying.
+template <fft::engine E>
+struct zero_extended {
+	using T = typename E::value_type;
+	using engine_t = E;
+	static constexpr bool exact_v = false;
+
+	cached_span<E, false> s;
+	int n;
+
+	int len() const { return n; }
+	const T& operator[](int i) const {
+		static const T zero{};
+		return i < s.len() ? s[i] : zero;
+	}
+	operator std::span<const T>() const { return s; }
+	operator span<E, false>() const { return s; }
+	fft::transformed<E>& cache() const { return s.cache(); }
+};
+
+// widen a cached operand to precision n >= len(); the tail reads zero
+template <has_cache S>
+zero_extended<typename S::engine_t> zero_extend(const S& s, int n) {
+	using E = typename S::engine_t;
+	assert(n >= s.len());
+	return {cached_span<E, false>(span<E, false>(span<E, S::exact_v>(s)), s.cache()), n};
+}
 
 // carries transforms of power-of-two prefixes, usable at any precision:
 // prefix(n) borrows the length-min(n, len) prefix with its cache.
@@ -269,15 +302,17 @@ template <trunc_like S>
 trunc<typename S::engine_t> ps_inv(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, false> a = a_;
-	trunc<E> r(size_t(a.len()), T{});
-	if (a.len() == 0) return r;
-	int s = nextPow2(a.len());
+	// the stored coefficients; anything past them is zero
+	std::span<const T> a(a_);
+	int N = a_.len();
+	trunc<E> r(size_t(N), T{});
+	if (N == 0) return r;
+	int s = nextPow2(N);
 	std::vector<T> b(size_t(s), T{});
-	b[0] = inv(a[0]);
-	for (int n = 1; n < a.len(); n *= 2) {
+	b[0] = inv(a_[0]);
+	for (int n = 1; n < N; n *= 2) {
 		int m = 2 * n;
-		auto ta = E::transform(a.first(std::min(a.len(), m)), m);
+		auto ta = E::transform(a.first(size_t(std::min(sz(a), m))), m);
 		auto tb = E::transform(std::span<const T>(b).first(n), m);
 		// e = a*b mod x^m; only e[n..m) is needed (and is wraparound-free).
 		auto e = fft::buffer_pool<T>::get(m);
@@ -287,9 +322,9 @@ trunc<typename S::engine_t> ps_inv(const S& a_) {
 		auto c = fft::buffer_pool<T>::get(m);
 		// b' = 2b - b*(a*b): keep b on the left of e = a*b
 		E::finish(E::mul(tb, te, m), c.span());
-		for (int i = n; i < std::min(m, a.len()); i++) b[i] = -c[i];
+		for (int i = n; i < std::min(m, N); i++) b[i] = -c[i];
 	}
-	std::copy(b.begin(), b.begin() + a.len(), r.begin());
+	std::copy(b.begin(), b.begin() + N, r.begin());
 	return r;
 }
 // TODO: operator / can be done slightly faster than ps_inv:
@@ -381,7 +416,8 @@ auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t
 		return s.prefix(nextPow2(prec));
 	} else {
 		span<E, S::exact_v> v = s;
-		int used = std::min(s.len(), prec);
+		// clamp to the stored coefficients, which may already be fewer than prec
+		int used = std::min(v.len(), prec);
 		if constexpr (has_cache<S>) {
 			if (s.len() <= prec || fft::detail::conv_size_for(s.len() + prec - 1).n
 					== fft::detail::conv_size_for(2 * prec - 1).n) {
