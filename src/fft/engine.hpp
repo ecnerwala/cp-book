@@ -70,20 +70,39 @@ concept engine = requires(
 	int n
 ) {
 	typename E::value_type;
+
+	// transform(std::span<const value_type> in, int n) -> transformed
 	{ E::transform(in, n) } -> std::same_as<typename E::transformed>;
+
+	// int transformed::size() const (likewise on product)
 	{ ct.size() } -> std::same_as<int>;
+
+	// extend_to(transformed& t, int m, std::span<const value_type> coeffs): grows t in place
 	E::extend_to(t, n, in);
+
+	// downsample(const transformed&, int n, bool odd) -> transformed (and the same on product)
 	{ E::downsample(ct, n, false) } -> std::same_as<typename E::transformed>;
 	{ E::downsample(cp, n, false) } -> std::same_as<typename E::product>;
+
+	// negate_arg(const transformed&, int n) -> transformed
 	{ E::negate_arg(ct, n) } -> std::same_as<typename E::transformed>;
+
+	// mul/sq/mul2(const transformed&..., int n) -> product: inputs borrowed, fresh product returned
 	{ E::mul(ct, ct, n) } -> std::same_as<typename E::product>;
 	{ E::sq(ct, n) } -> std::same_as<typename E::product>;
 	{ E::mul2(ct, ct, ct, ct, n) } -> std::same_as<typename E::template product_t<2 * E::unit_scale>>;
+
+	// finish(product&& p, std::span<value_type> out, Op = assign_op{}): sink;
+	// consumes p's contents (the inverse transform runs in p's buffer), but p keeps its allocation
 	E::finish(std::move(p), out);
 	E::finish(std::move(p), out, add_op{});
 	E::finish(E::add(std::move(p), std::move(p)), out);
+
+	// add(transformed&& a, const transformed& b) / add(product&& a, product b) -> the scale-summed type;
+	// a is a sink whose buffer is reused for the result; b is borrowed (product b may also be a sink)
 	{ E::add(E::transform(in, n), ct) } -> std::same_as<typename E::template transformed_t<2 * E::unit_scale>>;
 	{ E::add(std::move(p), std::move(p)) } -> std::same_as<typename E::template product_t<2 * E::unit_scale>>;
+
 	requires std::same_as<std::remove_cvref_t<decltype(E::commutative)>, bool>;
 	requires std::same_as<std::remove_cvref_t<decltype(E::unit_scale)>, int>;
 };
