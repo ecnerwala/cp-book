@@ -4,6 +4,8 @@
 #include <cassert>
 #include <concepts>
 #include <cstddef>
+#include <functional>
+#include <optional>
 #include <span>
 #include <utility>
 #include <vector>
@@ -209,17 +211,68 @@ struct cached_span {
 	fft::transformed<E>& cache() const { return f; }
 };
 
-// A trunc view of a cached operand at a chosen precision: the borrowed
-// storage holds the leading coefficients, everything past it is zero.
-// The operand's whole cache rides along, so trunc algorithms at a higher
-// precision (polynomial inverse/division) reuse it without copying.
-template <fft::engine E>
+// carries a whole-sequence cache only sometimes, decided at runtime
+template <typename S>
+concept has_cache_opt = like<S> && requires(const S& s) {
+	{ s.cache_opt() } -> std::same_as<std::optional<std::reference_wrapper<fft::transformed<typename S::engine_t>>>>;
+};
+
+namespace detail {
+// the operand's whole cache, if it carries one
+template <like S>
+std::optional<std::reference_wrapper<fft::transformed<typename S::engine_t>>> cache_opt_of(const S& s) {
+	if constexpr (has_cache<S>) return s.cache();
+	else if constexpr (has_cache_opt<S>) return s.cache_opt();
+	else return std::nullopt;
+}
+/* namespace detail */ }
+
+// A borrowed series which may carry the transform serving it: the runtime
+// counterpart of cached_span in the borrow hierarchy
+// prefix_cached/cached -> maybe_cached/cached_span -> span.
+template <fft::engine E, bool exact_>
+struct maybe_cached {
+	using T = typename E::value_type;
+	using engine_t = E;
+	static constexpr bool exact_v = exact_;
+
+	span<E, exact_> s;
+	std::optional<std::reference_wrapper<fft::transformed<E>>> f;
+
+	explicit maybe_cached(span<E, exact_> s_) : s(s_) {}
+	maybe_cached(span<E, exact_> s_, fft::transformed<E>& f_) : s(s_), f(f_) {}
+	maybe_cached(cached_span<E, exact_> c) : s(c.s), f(c.f) {}
+	// borrow any like operand whole, taking along whatever cache it carries
+	template <like S> requires std::same_as<typename S::engine_t, E> && (S::exact_v == exact_)
+	maybe_cached(const S& o) : s(o), f(detail::cache_opt_of(o)) {}
+
+	int len() const { return s.len(); }
+	const T& operator[](int i) const { return s[i]; }
+	operator std::span<const T>() const { return s.coeffs(); }
+	operator span<E, exact_>() const { return s; }
+	// truncation keeps the cache only when it still serves the whole borrow
+	maybe_cached first(int n) const {
+		return n == len() ? *this : maybe_cached(s.first(n));
+	}
+	std::optional<std::reference_wrapper<fft::transformed<E>>> cache_opt() const { return f; }
+	// the attached cache, or the caller's throwaway
+	cached_span<E, exact_> cache_or(fft::transformed<E>& tmp) const {
+		return {s, f ? f->get() : tmp};
+	}
+};
+
+// A view of an operand widened to a longer logical length: the wrapped operand
+// holds the leading coefficients, everything past it is zero.
+// Whatever cache the operand carries rides along, so trunc algorithms at a
+// higher precision (polynomial inverse/division) reuse it without copying.
+template <like S>
 struct zero_extended {
+	using E = typename S::engine_t;
 	using T = typename E::value_type;
 	using engine_t = E;
 	static constexpr bool exact_v = false;
 
-	cached_span<E, false> s;
+	S s;
 	int n;
 
 	int len() const { return n; }
@@ -227,30 +280,33 @@ struct zero_extended {
 		static const T zero{};
 		return i < s.len() ? s[i] : zero;
 	}
-	operator std::span<const T>() const { return s; }
-	operator span<E, false>() const { return s; }
-	span<E, false> first(int k) const {
-		assert(k <= n);
-		return s.first(std::min(k, s.len()));
+	operator std::span<const T>() const { return std::span<const T>(s); }
+	operator span<E, false>() const { return span<E, false>(span<E, S::exact_v>(s)); }
+	// shrink the zero tail, or delegate a real truncation to the wrapped operand
+	zero_extended first(int k) const {
+		assert(0 <= k && k <= n);
+		return {S(s.first(std::min(k, s.len()))), k};
 	}
-	fft::transformed<E>& cache() const { return s.cache(); }
+	std::optional<std::reference_wrapper<fft::transformed<E>>> cache_opt() const {
+		return detail::cache_opt_of(s);
+	}
 };
 
-// widen a cached operand to precision n >= len(); the tail reads zero
-template <has_cache S>
-zero_extended<typename S::engine_t> zero_extend(const S& s, int n) {
-	using E = typename S::engine_t;
+// widen any operand to logical length n >= len(); the tail reads zero
+template <like S>
+zero_extended<maybe_cached<typename S::engine_t, S::exact_v>> zero_extend(const S& s, int n) {
 	assert(n >= s.len());
-	return {cached_span<E, false>(span<E, false>(span<E, S::exact_v>(s)), s.cache()), n};
+	return {maybe_cached<typename S::engine_t, S::exact_v>(s), n};
 }
 
 // carries transforms of power-of-two prefixes: first(n) comes back as a
 // cached operand, with a real cache when one lines up with n.
 // Trunc-only: an exact operand participates whole, so has_cache covers it.
 template <typename S>
-concept has_prefix_cache = like<S> && !S::exact_v && requires(const S& s, int n) {
-	{ s.first(n) } -> has_cache;
-};
+concept has_prefix_cache = like<S> && !S::exact_v && !has_cache<S> && !has_cache_opt<S>
+	&& requires(const S& s, int n) {
+		{ s.first(n) } -> has_cache_opt;
+	};
 
 // Wrapper around vec which caches the transform of the whole series.
 // Ops exploit the cache whenever the whole span participates; a trunc series'
@@ -297,7 +353,8 @@ namespace detail {
 // the operand's whole cache if it carries one, else the caller's throwaway cache
 template <like S>
 fft::transformed<typename S::engine_t>& whole_cache_or(const S& s, fft::transformed<typename S::engine_t>& tmp) {
-	if constexpr (has_cache<S>) return s.cache(); else return tmp;
+	if (auto co = cache_opt_of(s)) return co->get();
+	return tmp;
 }
 // Normalize a whole-span operand to a cached_span: the coefficients borrowed
 // together with the cache serving them (the operand's own, or tmp otherwise).
@@ -320,6 +377,8 @@ trunc<typename S::engine_t> ps_inv(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
 	int N = a_.len();
+	// the stored coefficients; the tail past them is zero
+	span<E, false> a = a_;
 	trunc<E> r(size_t(N), T{});
 	if (N == 0) return r;
 	int s = nextPow2(N);
@@ -327,7 +386,7 @@ trunc<typename S::engine_t> ps_inv(const S& a_) {
 	b[0] = inv(a_[0]);
 	for (int n = 1; n < N; n *= 2) {
 		int m = 2 * n;
-		auto ta = E::transform(a_.first(std::min(N, m)), m);
+		auto ta = E::transform(a.first(std::min(a.len(), m)), m);
 		auto tb = E::transform(std::span<const T>(b).first(n), m);
 		// e = a*b mod x^m; only e[n..m) is needed (and is wraparound-free).
 		auto e = fft::buffer_pool<T>::get(m);
@@ -433,10 +492,10 @@ auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t
 		span<E, S::exact_v> v = s;
 		// clamp to the stored coefficients, which may already be fewer than prec
 		int used = std::min(v.len(), prec);
-		if constexpr (has_cache<S>) {
+		if (auto co = cache_opt_of(s)) {
 			if (s.len() <= prec || fft::detail::conv_size_for(s.len() + prec - 1).n
 					== fft::detail::conv_size_for(2 * prec - 1).n) {
-				return cached_span<E, S::exact_v>{v, s.cache()};
+				return cached_span<E, S::exact_v>{v, co->get()};
 			}
 		}
 		return cached_span<E, S::exact_v>{v.first(used), tmp};
@@ -489,8 +548,8 @@ auto operator * (const A& a, const B& b) {
 		std::vector<T> coeffs;
 		fft::transformed<E> f;
 		fft::multiply_cached<E>(
-			va, va.cache(),
-			vb, vb.cache(),
+			va, detail::whole_cache_or(va, ta_),
+			vb, detail::whole_cache_or(vb, tb_),
 			coeffs, f
 		);
 		cached<E, true> w(exact<E>(std::move(coeffs)));
@@ -499,8 +558,8 @@ auto operator * (const A& a, const B& b) {
 	} else {
 		trunc<E> r(size_t(prec), T(0));
 		fft::multiply<E>(
-			va, va.cache(),
-			vb, vb.cache(),
+			va, detail::whole_cache_or(va, ta_),
+			vb, detail::whole_cache_or(vb, tb_),
 			std::span<T>(r)
 		);
 		return r;
@@ -537,15 +596,13 @@ struct prefix_cached {
 	}
 
 	// The first k coefficients, paired with the covering prefix cache when one
-	// lines up with k (k a power of two, or k == len()); otherwise with an
-	// empty scratch cache which ops may fill.
-	cached_span<E, false> first(int k) const {
+	// lines up with k (k a power of two, or k == len()); uncached otherwise.
+	maybe_cached<E, false> first(int k) const {
 		assert(k <= len());
 		span<E, false> v(std::span<const T>(s).first(size_t(k)));
 		int n = nextPow2(k);
 		if (std::min(n, len()) == k) return {v, prefix_cache(n)};
-		scratch = {};
-		return {v, scratch};
+		return maybe_cached<E, false>(v);
 	}
 	// cache over the prefix of length min(n, len()); n a power of two
 	fft::transformed<E>& prefix_cache(int n) const {
@@ -566,8 +623,6 @@ private:
 	// memoized transforms: logically const; len tracks how much of s each covers
 	struct entry { fft::transformed<E> t; int len = 0; };
 	mutable std::vector<entry> caches;
-	// throwaway cache paired with prefixes no memoized transform lines up with
-	mutable fft::transformed<E> scratch;
 };
 
 /* namespace ecnerwala::series */ }
