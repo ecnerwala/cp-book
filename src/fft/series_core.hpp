@@ -35,7 +35,6 @@ struct span {
 	auto end() const { return s.end(); }
 	// engine primitives borrow through std::span's range constructor
 	std::span<const T> coeffs() const { return s; }
-	span underlying() const { return *this; }
 	span first(int n) const { return span(s.first(size_t(n))); }
 
 private:
@@ -53,7 +52,6 @@ struct vec : public std::vector<typename E::value_type> {
 	static constexpr bool exact_v = exact_;
 	using std::vector<T>::vector;
 
-	const vec& underlying() const { return *this; }
 	// a free const borrow of the coefficients: implicit
 	operator span<E, exact_>() const {
 		return span<E, exact_>(std::span<const T>(*this));
@@ -155,7 +153,8 @@ concept like = fft::engine<typename S::engine_t> && requires(const S& s, int i) 
 	{ s[i] } -> std::convertible_to<const typename S::engine_t::value_type&>;
 	// borrows straight into the engine primitives
 	{ std::span<const typename S::engine_t::value_type>(s) };
-	{ s.underlying() } -> std::convertible_to<span<typename S::engine_t, S::exact_v>>;
+	// and into the series layer's own span, keeping the exactness tag
+	requires std::convertible_to<const S&, span<typename S::engine_t, S::exact_v>>;
 };
 template <typename S>
 concept exact_like = like<S> && S::exact_v;
@@ -181,7 +180,7 @@ struct cached_span {
 	int len() const { return s.len(); }
 	const typename E::value_type& operator[](int i) const { return s[i]; }
 	operator std::span<const typename E::value_type>() const { return s.coeffs(); }
-	span<E, exact_> underlying() const { return s; }
+	operator span<E, exact_>() const { return s; }
 	fft::transformed<E>& cache() const { return f; }
 };
 
@@ -210,16 +209,16 @@ struct cached {
 	operator vec<E, exact_>() && { return std::move(s); }
 
 	int len() const { return s.len(); }
-	const vec<E, exact_>& underlying() const { return s; }
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
-	// the transform of underlying(), fed to the cached fft:: entry points alongside it
+	operator span<E, exact_>() const { return span<E, exact_>(std::span<const T>(s)); }
+	// the transform of the coefficients, fed to the cached fft:: entry points alongside them
 	fft::transformed<E>& cache() const { return f; }
 
 	template <like S>
 	friend bool operator==(const cached& a, const S& b) {
-		span<E, S::exact_v> bs = b.underlying();
+		span<E, S::exact_v> bs = b;
 		return a.len() == bs.len() && std::equal(a.s.begin(), a.s.end(), bs.begin());
 	}
 
@@ -242,7 +241,7 @@ fft::transformed<typename S::engine_t>& whole_cache_or(const S& s, fft::transfor
 // The whole-span multiply/square/middle_product paths run entirely on this form.
 template <like S>
 cached_span<typename S::engine_t, S::exact_v> whole_operand(const S& s, fft::transformed<typename S::engine_t>& tmp) {
-	return {span<typename S::engine_t, S::exact_v>(s.underlying()), whole_cache_or(s, tmp)};
+	return {s, whole_cache_or(s, tmp)};
 }
 /* namespace detail */ }
 
@@ -257,7 +256,7 @@ template <trunc_like S>
 trunc<typename S::engine_t> ps_inv(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, false> a = a_.underlying();
+	span<E, false> a = a_;
 	trunc<E> r(size_t(a.len()), T{});
 	if (a.len() == 0) return r;
 	int s = nextPow2(a.len());
@@ -368,7 +367,7 @@ auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t
 	if constexpr (has_prefix_cache<S>) {
 		return s.prefix(nextPow2(prec));
 	} else {
-		span<E, S::exact_v> v = s.underlying();
+		span<E, S::exact_v> v = s;
 		int used = std::min(s.len(), prec);
 		if constexpr (has_cache<S>) {
 			if (s.len() <= prec || fft::detail::conv_size_for(s.len() + prec - 1).n
@@ -461,10 +460,10 @@ struct prefix_cached {
 	operator trunc<E>() && { return std::move(s); }
 
 	int len() const { return s.len(); }
-	const trunc<E>& underlying() const { return s; }
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
+	operator span<E, false>() const { return span<E, false>(std::span<const T>(s)); }
 
 	// extend precision: appends coefficients, keeping all covering caches valid
 	void append(std::span<const T> tail) {

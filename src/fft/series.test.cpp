@@ -107,8 +107,8 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	fill_rnd(b, mt);
 	series::cached_exact<E> ca(a), cb(b);
 	series::exact<E> got(size_t(a.len() + b.len() - 1));
-	fft::multiply<E>(span<const num>(ca.underlying()), ca.cache(),
-			span<const num>(cb.underlying()), cb.cache(), span<num>(got));
+	fft::multiply<E>(span<const num>(ca), ca.cache(),
+			span<const num>(cb), cb.cache(), span<num>(got));
 	REQUIRE(got == a * b);
 	REQUIRE((ca * cb) == (a * b));
 	REQUIRE(middle_product(ca, cb) == fft::middle_product<E>(a, b));
@@ -140,7 +140,7 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	for (int p : {8, 16, 32, 64}) {
 		auto pv = qa.prefix(p);
 		REQUIRE(pv.len() == min(p, qa.len()));
-		REQUIRE(pv.underlying()[0] == pa2[0]);
+		REQUIRE(pv[0] == pa2[0]);
 	}
 	REQUIRE((qa * qb) == (pa2 * pb));
 	// products against many smaller operands reuse per-scale prefix caches

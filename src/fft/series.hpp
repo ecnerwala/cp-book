@@ -19,7 +19,7 @@ namespace ecnerwala::series {
 template <like S>
 vec<typename S::engine_t, S::exact_v> stretch(const S& a_, int n) {
 	using E = typename S::engine_t;
-	span<E, S::exact_v> a = a_.underlying();
+	span<E, S::exact_v> a = a_;
 	vec<E, S::exact_v> r(size_t(a.len()));
 	for (int i = 0; i*n < a.len(); i++) {
 		r[i*n] = a[i];
@@ -29,7 +29,7 @@ vec<typename S::engine_t, S::exact_v> stretch(const S& a_, int n) {
 template <like S>
 vec<typename S::engine_t, S::exact_v> deriv_shift(const S& a_) {
 	using E = typename S::engine_t;
-	span<E, S::exact_v> a = a_.underlying();
+	span<E, S::exact_v> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	for (int i = 0; i < r.len(); i++) {
 		r[i] *= i;
@@ -40,7 +40,7 @@ template <like S>
 vec<typename S::engine_t, S::exact_v> integ_shift(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, S::exact_v> a = a_.underlying();
+	span<E, S::exact_v> a = a_;
 	assert(a[0] == 0);
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	T f = 1;
@@ -59,7 +59,7 @@ template <like S>
 vec<typename S::engine_t, S::exact_v> integ_shift_offset(const S& a_, int offset) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, S::exact_v> a = a_.underlying();
+	span<E, S::exact_v> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	T f = 1;
 	for (int i = 0; i < r.len(); i++) {
@@ -88,7 +88,7 @@ trunc<typename S::engine_t> ps_exp(const S& a_) {
 	// See https://mathexp.eu/bostan/publications/BoSc09a.pdf for details
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, false> a = a_.underlying();
+	span<E, false> a = a_;
 	assert(a.len() >= 1);
 	assert(a[0] == 0);
 	trunc<E> r(1, T(1)); r.reserve(size_t(a.len()));
@@ -123,7 +123,7 @@ trunc<typename S::engine_t> ps_exp(const S& a_) {
 template <trunc_like S>
 trunc<typename S::engine_t> ps_pow_monic(const S& a_, typename S::engine_t::value_type k) {
 	using E = typename S::engine_t;
-	span<E, false> a = a_.underlying();
+	span<E, false> a = a_;
 	if (a.len() == 0) return {};
 	assert(a[0] == 1);
 	trunc<E> l = ps_log(a_);
@@ -134,7 +134,7 @@ template <trunc_like S>
 trunc<typename S::engine_t> ps_pow(const S& a_, int64_t k) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, false> a = a_.underlying();
+	span<E, false> a = a_;
 	assert(k >= 0);
 	if (k == 0) {
 		trunc<E> r(size_t(a.len()), T(0));
@@ -169,7 +169,7 @@ trunc<typename S::engine_t> to_newton_sums(const S& a, int deg) {
 template <trunc_like S>
 trunc<typename S::engine_t> from_newton_sums(const S& s_, int deg) {
 	using E = typename S::engine_t;
-	span<E, false> s = s_.underlying();
+	span<E, false> s = s_;
 	assert(s[0] == deg);
 	trunc<E> r(s.begin(), s.end());
 	r[0] = 0;
@@ -261,8 +261,8 @@ template <trunc_like SF, trunc_like SG> requires fft::same_engine<SF, SG>
 trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
 	using E = typename SF::engine_t;
 	using T = typename E::value_type;
-	span<E, false> f = f_.underlying();
-	span<E, false> g = g_.underlying();
+	span<E, false> f = f_;
+	span<E, false> g = g_;
 	if (g.len() == 0) return {};
 
 	int m = f.len();
@@ -413,7 +413,8 @@ S::engine_t::value_type kth_term_of_linear_recurrence(
 	auto q_cached = detail::whole_operand(q, tq);
 
 	// Compute the prefix and then hard-cast it to exact
-	auto p = exact<E>(span<E, false>(s.underlying()).first(q.len()-1) * q_cached);
+	span<E, false> sv = s;
+	auto p = exact<E>(sv.first(q.len()-1) * q_cached);
 	return kth_term_of_rational_function(p, q_cached, k);
 }
 
