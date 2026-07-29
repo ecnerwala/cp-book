@@ -220,8 +220,8 @@ struct cached {
 
 	template <like S>
 	friend bool operator==(const cached& a, const S& b) {
-		span<E, S::exact_v> bs = b.underlying();
-		return a.len() == bs.len() && std::equal(a.s.begin(), a.s.end(), bs.begin());
+		std::span<const T> bs(b);
+		return a.len() == sz(bs) && std::equal(a.s.begin(), a.s.end(), bs.begin());
 	}
 
 private:
@@ -238,6 +238,13 @@ template <like S>
 fft::transformed<typename S::engine_t>& whole_cache_or(const S& s, fft::transformed<typename S::engine_t>& tmp) {
 	if constexpr (has_cache<S>) return s.cache(); else return tmp;
 }
+// Normalize a whole-span operand to a cached_span: the coefficients borrowed
+// together with the cache serving them (the operand's own, or tmp otherwise).
+// The whole-span multiply/square/middle_product paths run entirely on this form.
+template <like S>
+cached_span<typename S::engine_t, S::exact_v> whole_operand(const S& s, fft::transformed<typename S::engine_t>& tmp) {
+	return {span<typename S::engine_t, S::exact_v>(s.underlying()), whole_cache_or(s, tmp)};
+}
 /* namespace detail */ }
 
 // Newton inversion: 1/a mod x^a.len(). Generic over any engine; per doubling step
@@ -251,15 +258,15 @@ template <trunc_like S>
 trunc<typename S::engine_t> ps_inv(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, false> a = a_.underlying();
-	trunc<E> r(size_t(a.len()), T{});
-	if (a.len() == 0) return r;
-	int s = nextPow2(a.len());
+	std::span<const T> a(a_);
+	trunc<E> r(a.size(), T{});
+	if (a.empty()) return r;
+	int s = nextPow2(sz(a));
 	std::vector<T> b(size_t(s), T{});
 	b[0] = inv(a[0]);
-	for (int n = 1; n < a.len(); n *= 2) {
+	for (int n = 1; n < sz(a); n *= 2) {
 		int m = 2 * n;
-		auto ta = E::transform(a.coeffs().first(size_t(std::min(a.len(), m))), m);
+		auto ta = E::transform(a.first(size_t(std::min(sz(a), m))), m);
 		auto tb = E::transform(std::span<const T>(b).first(n), m);
 		// e = a*b mod x^m; only e[n..m) is needed (and is wraparound-free).
 		auto e = fft::buffer_pool<T>::get(m);
@@ -269,9 +276,9 @@ trunc<typename S::engine_t> ps_inv(const S& a_) {
 		auto c = fft::buffer_pool<T>::get(m);
 		// b' = 2b - b*(a*b): keep b on the left of e = a*b
 		E::finish(E::mul(tb, te, m), c.span());
-		for (int i = n; i < std::min(m, a.len()); i++) b[i] = -c[i];
+		for (int i = n; i < std::min(m, sz(a)); i++) b[i] = -c[i];
 	}
-	std::copy(b.begin(), b.begin() + a.len(), r.begin());
+	std::copy(b.begin(), b.begin() + sz(a), r.begin());
 	return r;
 }
 // TODO: operator / can be done slightly faster than ps_inv:
@@ -283,20 +290,20 @@ template <like A>
 auto square(const A& a) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
-	span<E, A::exact_v> av = a.underlying();
 	fft::transformed<E> ta_;
+	auto av = detail::whole_operand(a, ta_);
 	if constexpr (A::exact_v) {
 		// like operator*, an exact square returns has_cache, adopting the
 		// pointwise product as the result's transform when the engine supports it
 		std::vector<T> coeffs;
 		fft::transformed<E> f;
-		fft::square_cached<E>(av.coeffs(), detail::whole_cache_or(a, ta_), coeffs, f);
+		fft::square_cached<E>(av, av.cache(), coeffs, f);
 		cached<E, true> w(exact<E>(std::move(coeffs)));
 		w.cache() = std::move(f);
 		return w;
 	} else {
 		trunc<E> r(size_t(a.len()), T{});
-		fft::square<E>(av.coeffs(), detail::whole_cache_or(a, ta_), std::span<T>(r));
+		fft::square<E>(av, av.cache(), std::span<T>(r));
 		return r;
 	}
 }
@@ -311,16 +318,16 @@ cached<typename A::engine_t, true> multiply_add2(
 		const A& a, const B& b, const C& c, const D& d) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
-	span<E, true> av = a.underlying(), bv = b.underlying();
-	span<E, true> cv = c.underlying(), dv = d.underlying();
 	fft::transformed<E> ta_, tb_, tc_, td_;
+	auto av = detail::whole_operand(a, ta_), bv = detail::whole_operand(b, tb_);
+	auto cv = detail::whole_operand(c, tc_), dv = detail::whole_operand(d, td_);
 	std::vector<T> coeffs;
 	fft::transformed<E> f;
 	fft::multiply_add2_cached<E>(
-		av.coeffs(), detail::whole_cache_or(a, ta_),
-		bv.coeffs(), detail::whole_cache_or(b, tb_),
-		cv.coeffs(), detail::whole_cache_or(c, tc_),
-		dv.coeffs(), detail::whole_cache_or(d, td_),
+		av, av.cache(),
+		bv, bv.cache(),
+		cv, cv.cache(),
+		dv, dv.cache(),
 		coeffs, f
 	);
 	cached<E, true> w(exact<E>(std::move(coeffs)));
@@ -333,12 +340,12 @@ cached<typename A::engine_t, true> multiply_add2(
 template <like A, exact_like B> requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v> middle_product(const A& a, const B& b) {
 	using E = typename A::engine_t;
-	span<E, A::exact_v> av = a.underlying();
-	span<E, true> bv = b.underlying();
 	fft::transformed<E> ta_, tb_;
+	auto av = detail::whole_operand(a, ta_);
+	auto bv = detail::whole_operand(b, tb_);
 	return vec<E, A::exact_v>(fft::middle_product<E>(
-		av.coeffs(), detail::whole_cache_or(a, ta_),
-		bv.coeffs(), detail::whole_cache_or(b, tb_)
+		av, av.cache(),
+		bv, bv.cache()
 	));
 }
 
@@ -378,26 +385,22 @@ auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t
 template <like A, like B> requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v && B::exact_v> operator + (const A& a, const B& b) {
 	using T = typename A::engine_t::value_type;
-	span<typename A::engine_t, A::exact_v> av = a.underlying();
-	span<typename A::engine_t, B::exact_v> bv = b.underlying();
 	int n = (A::exact_v && B::exact_v) ? std::max(a.len(), b.len())
 		: A::exact_v ? b.len() : B::exact_v ? a.len() : std::min(a.len(), b.len());
 	vec<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
 	for (int i = 0; i < n; i++) {
-		r[i] = (i < av.len() ? av[i] : T(0)) + (i < bv.len() ? bv[i] : T(0));
+		r[i] = (i < a.len() ? a[i] : T(0)) + (i < b.len() ? b[i] : T(0));
 	}
 	return r;
 }
 template <like A, like B> requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A& a, const B& b) {
 	using T = typename A::engine_t::value_type;
-	span<typename A::engine_t, A::exact_v> av = a.underlying();
-	span<typename A::engine_t, B::exact_v> bv = b.underlying();
 	int n = (A::exact_v && B::exact_v) ? std::max(a.len(), b.len())
 		: A::exact_v ? b.len() : B::exact_v ? a.len() : std::min(a.len(), b.len());
 	vec<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
 	for (int i = 0; i < n; i++) {
-		r[i] = (i < av.len() ? av[i] : T(0)) - (i < bv.len() ? bv[i] : T(0));
+		r[i] = (i < a.len() ? a[i] : T(0)) - (i < b.len() ? b[i] : T(0));
 	}
 	return r;
 }
@@ -424,8 +427,8 @@ auto operator * (const A& a, const B& b) {
 		std::vector<T> coeffs;
 		fft::transformed<E> f;
 		fft::multiply_cached<E>(
-			va.underlying().coeffs(), va.cache(),
-			vb.underlying().coeffs(), vb.cache(),
+			va, va.cache(),
+			vb, vb.cache(),
 			coeffs, f
 		);
 		cached<E, true> w(exact<E>(std::move(coeffs)));
@@ -434,8 +437,8 @@ auto operator * (const A& a, const B& b) {
 	} else {
 		trunc<E> r(size_t(prec), T(0));
 		fft::multiply<E>(
-			va.underlying().coeffs(), va.cache(),
-			vb.underlying().coeffs(), vb.cache(),
+			va, va.cache(),
+			vb, vb.cache(),
 			std::span<T>(r)
 		);
 		return r;

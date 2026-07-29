@@ -80,7 +80,7 @@ trunc<typename S::engine_t> deriv_shift_log(const S& a) {
 }
 template <trunc_like S>
 trunc<typename S::engine_t> ps_log(const S& a) {
-	assert(a.underlying()[0] == 1);
+	assert(a[0] == 1);
 	return integ_shift(deriv_shift_log(a));
 }
 template <trunc_like S>
@@ -410,10 +410,10 @@ S::engine_t::value_type kth_term_of_linear_recurrence(
 	// Don't even bother with P so we don't have to do truncation checks
 	// TODO: Could use generic multiply for this whole part?
 	fft::transformed<E> tq;
-	auto q_cached = cached_span<E, true>{q.underlying(), detail::whole_cache_or(q, tq)};
+	auto q_cached = detail::whole_operand(q, tq);
 
 	// Compute the prefix and then hard-cast it to exact
-	auto p = exact<E>(span<E, false>(s.underlying()).first(q.len()-1) * q_cached);
+	auto p = exact<E>(span<E, false>(std::span<const T>(s)).first(q.len()-1) * q_cached);
 	return kth_term_of_rational_function(p, q_cached, k);
 }
 
