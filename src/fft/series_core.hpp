@@ -282,9 +282,9 @@ struct zero_extended {
 	operator std::span<const T>() const { return std::span<const T>(s); }
 	operator span<E, false>() const { return span<E, false>(span<E, S::exact_v>(s)); }
 	// shrink the zero tail, or delegate a real truncation to the wrapped operand
-	zero_extended first(int k) const {
+	auto first(int k) const {
 		assert(0 <= k && k <= n);
-		return {S(s.first(std::min(k, s.len()))), k};
+		return zero_extended<decltype(s.first(k))>{s.first(std::min(k, s.len())), k};
 	}
 	std::optional<std::reference_wrapper<fft::transformed<E>>> cache_opt() const {
 		return detail::cache_opt_of(s);
