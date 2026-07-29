@@ -413,7 +413,7 @@ S::engine_t::value_type kth_term_of_linear_recurrence(
 	auto q_cached = detail::whole_operand(q, tq);
 
 	// Compute the prefix and then hard-cast it to exact
-	auto p = exact<E>(span<E, false>(std::span<const T>(s)).first(q.len()-1) * q_cached);
+	auto p = exact<E>(span<E, false>(s.underlying()).first(q.len()-1) * q_cached);
 	return kth_term_of_rational_function(p, q_cached, k);
 }
 

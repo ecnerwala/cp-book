@@ -220,8 +220,8 @@ struct cached {
 
 	template <like S>
 	friend bool operator==(const cached& a, const S& b) {
-		std::span<const T> bs(b);
-		return a.len() == sz(bs) && std::equal(a.s.begin(), a.s.end(), bs.begin());
+		span<E, S::exact_v> bs = b.underlying();
+		return a.len() == bs.len() && std::equal(a.s.begin(), a.s.end(), bs.begin());
 	}
 
 private:
@@ -258,15 +258,15 @@ template <trunc_like S>
 trunc<typename S::engine_t> ps_inv(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	std::span<const T> a(a_);
-	trunc<E> r(a.size(), T{});
-	if (a.empty()) return r;
-	int s = nextPow2(sz(a));
+	span<E, false> a = a_.underlying();
+	trunc<E> r(size_t(a.len()), T{});
+	if (a.len() == 0) return r;
+	int s = nextPow2(a.len());
 	std::vector<T> b(size_t(s), T{});
 	b[0] = inv(a[0]);
-	for (int n = 1; n < sz(a); n *= 2) {
+	for (int n = 1; n < a.len(); n *= 2) {
 		int m = 2 * n;
-		auto ta = E::transform(a.first(size_t(std::min(sz(a), m))), m);
+		auto ta = E::transform(a.first(std::min(a.len(), m)), m);
 		auto tb = E::transform(std::span<const T>(b).first(n), m);
 		// e = a*b mod x^m; only e[n..m) is needed (and is wraparound-free).
 		auto e = fft::buffer_pool<T>::get(m);
@@ -276,9 +276,9 @@ trunc<typename S::engine_t> ps_inv(const S& a_) {
 		auto c = fft::buffer_pool<T>::get(m);
 		// b' = 2b - b*(a*b): keep b on the left of e = a*b
 		E::finish(E::mul(tb, te, m), c.span());
-		for (int i = n; i < std::min(m, sz(a)); i++) b[i] = -c[i];
+		for (int i = n; i < std::min(m, a.len()); i++) b[i] = -c[i];
 	}
-	std::copy(b.begin(), b.begin() + sz(a), r.begin());
+	std::copy(b.begin(), b.begin() + a.len(), r.begin());
 	return r;
 }
 // TODO: operator / can be done slightly faster than ps_inv:
