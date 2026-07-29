@@ -371,8 +371,6 @@ trunc<typename S::engine_t> ps_inv(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
 	int N = a_.len();
-	// the stored coefficients; the tail past them is zero
-	span<E, false> a = a_;
 	trunc<E> r(size_t(N), T{});
 	if (N == 0) return r;
 	int s = nextPow2(N);
@@ -380,7 +378,7 @@ trunc<typename S::engine_t> ps_inv(const S& a_) {
 	b[0] = inv(a_[0]);
 	for (int n = 1; n < N; n *= 2) {
 		int m = 2 * n;
-		auto ta = E::transform(a.first(std::min(a.len(), m)), m);
+		auto ta = E::transform(a_.first(std::min(N, m)), m);
 		auto tb = E::transform(std::span<const T>(b).first(n), m);
 		// e = a*b mod x^m; only e[n..m) is needed (and is wraparound-free).
 		auto e = fft::buffer_pool<T>::get(m);
