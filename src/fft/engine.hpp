@@ -88,6 +88,43 @@ concept engine = requires(
 	requires std::same_as<std::remove_cvref_t<decltype(E::unit_scale)>, int>;
 };
 
+// ==== storage/ownership conventions ====
+//
+// Parameter forms encode clobber permission:
+//   const&        borrowed, read-only
+//   && / by-value sink: the callee owns it and may clobber (finish works in the product's buffer)
+//   & out-param   overwritten, reusing the object's existing capacity
+//
+// Engines may additionally provide out-parameter forms of the value-returning
+// primitives so callers can pre-construct/reserve a transformed/product and
+// build into it (contiguous or reused storage across a loop):
+//   transform(in, n, transformed& out)
+//   mul(a, b, n, product& out)
+//   downsample(t, n, odd, out)
+//   negate_arg(t, n, transformed& out)
+// These are optional; the *_into helpers below dispatch to them when present
+// and fall back to move-assignment (fresh allocation) otherwise.
+template <typename E>
+void transform_into(std::span<const typename E::value_type> in, int n, typename E::transformed& out) {
+	if constexpr (requires { E::transform(in, n, out); }) E::transform(in, n, out);
+	else out = E::transform(in, n);
+}
+template <typename E, typename P>
+void mul_into(const typename E::transformed& a, const typename E::transformed& b, int n, P& out) {
+	if constexpr (requires { E::mul(a, b, n, out); }) E::mul(a, b, n, out);
+	else out = E::mul(a, b, n);
+}
+template <typename E, typename P>
+void downsample_into(const P& t, int n, bool odd, P& out) {
+	if constexpr (requires { E::downsample(t, n, odd, out); }) E::downsample(t, n, odd, out);
+	else out = E::downsample(t, n, odd);
+}
+template <typename E>
+void negate_arg_into(const typename E::transformed& t, int n, typename E::transformed& out) {
+	if constexpr (requires { E::negate_arg(t, n, out); }) E::negate_arg(t, n, out);
+	else out = E::negate_arg(t, n);
+}
+
 // Constrains two engine-parameterized value types to share the same engine.
 template <typename A, typename B>
 concept same_engine = std::same_as<typename A::engine_t, typename B::engine_t>;

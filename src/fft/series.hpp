@@ -351,20 +351,26 @@ P::engine_t::value_type kth_term_of_rational_function(
 	std::vector<T> q_buf(d, T(0));
 	std::ranges::copy(std::span<const T>(q), q_buf.begin());
 
+	// Loop storage, reused across iterations (sizes are stable: transforms at n,
+	// products/halves at n/2), so engines with out-parameter forms allocate at
+	// most once per object.
+	fft::transformed<E> tnq;
+	typename E::product prod, half;
 	while (k > 0) {
 		E::extend_to(tq, n, q_buf);
-		auto tnq = E::negate_arg(tq, n);
+		fft::negate_arg_into<E>(tq, n, tnq);
 		E::extend_to(tp, n, p_buf);
 
 		// P <- downsample(P(x) * Q(-x))
-		auto ntp = E::downsample(E::mul(tp, tnq, n), n/2, bool(k & 1));
-		assert(ntp.size() == n/2);
+		fft::mul_into<E>(tp, tnq, n, prod);
+		fft::downsample_into<E>(prod, n/2, bool(k & 1), half);
+		assert(half.size() == n/2);
 		if constexpr (std::same_as<typename E::product, typename E::transformed>) {
-			tp = ntp;
+			tp = half;
 		} else {
 			tp = {};
 		}
-		E::finish(std::move(ntp), std::span(p_buf));
+		E::finish(std::move(half), std::span(p_buf));
 		k >>= 1;
 
 		// Save the last iteration if we're done
@@ -375,20 +381,21 @@ P::engine_t::value_type kth_term_of_rational_function(
 		}
 
 		// Q <- downsample(Q(x) * Q(-x))
-		auto ntq = E::downsample(E::mul(tq, tnq, n), n/2, false);
-		assert(ntq.size() == n/2);
+		fft::mul_into<E>(tq, tnq, n, prod);
+		fft::downsample_into<E>(prod, n/2, false, half);
+		assert(half.size() == n/2);
 		if constexpr (std::same_as<typename E::product, typename E::transformed>) {
-			tq = ntq;
+			tq = half;
 		} else {
 			tq = {};
 		}
 		if (n/2 == d-1) {
 			// Fix the wraparound
 			T v0 = q_buf[0] * q_buf[0];
-			E::finish(std::move(ntq), std::span(q_buf).first(d-1));
+			E::finish(std::move(half), std::span(q_buf).first(d-1));
 			q_buf[d-1] = std::exchange(q_buf[0], v0) - v0;
 		} else {
-			E::finish(std::move(ntq), std::span(q_buf));
+			E::finish(std::move(half), std::span(q_buf));
 		}
 	}
 	return p_buf[0] * inv(q_buf[0]);
