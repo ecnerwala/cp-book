@@ -17,7 +17,7 @@ int main() {
 
 	int D; int64_t K; std::cin >> D >> K;
 	ps S(D); for (auto& v : S) std::cin >> v;
-	pse Q(D);
+	pse Q(D+1);
 	Q[0] = 1;
 	for (auto& v : std::span<num>(Q).subspan(1)) {
 		std::cin >> v; v = -v;
