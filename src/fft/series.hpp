@@ -320,39 +320,112 @@ trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
 	return trunc<E>(P.begin(), P.begin() + n);
 }
 
-// [x^k] p(x)/q(x) (Bostan-Mori) for an exact rational function. Requires q[0] != 0 and
-// p.len() < q.len(). Each level uses p(x) q(-x) (keeping the parity-of-k half) and
-// q(x) q(-x) (even, giving the next q in x^2); q(-x)'s transform is negate_arg of q's,
-// so a level costs 2 forward and 2 inverse transforms.
-// TODO: downsample optimization
-// TODO: support the kth_term_of_linear_recurrence(trunc, exact) form
-template <fft::engine E>
-typename E::value_type kth_term_of_rational_function(
-	exact<E> p,
-	exact<E> q,
+// [x^k] p(x)/q(x) (Bostan-Mori) for an exact rational function.
+template <exact_like P, exact_like Q> requires fft::same_engine<P, Q>
+P::engine_t::value_type kth_term_of_rational_function(
+	const P& p,
+	const Q& q,
 	uint64_t k
 ) {
-	using T = typename E::value_type;
-	assert(q.len() > 0 && q[0] != T(0));
-	assert(p.len() < q.len());
-	int d = q.len();
-	if (d == 1) return T(0);
-	p.resize(d - 1);
-	while (k > 0) {
-		int n = nextPow2(2 * d - 1);
-		auto tq = E::transform(std::span<const T>(q), n);
-		auto tnq = E::negate_arg(tq, n);
-		auto buf = fft::buffer_pool<T>::get(n);
-		auto tp = E::transform(std::span<const T>(p), n);
-		E::finish(E::mul(tp, tnq, n), buf.span());
-		// deg(p * q(-x)) <= 2d-3 < n: wraparound-free
-		for (int j = 0; j < d - 1; j++) p[j] = buf[2*j + int(k & 1)];
-		E::finish(E::mul(tq, tnq, n), buf.span());
-		// q(x) q(-x) is even with degree <= 2d-2
-		for (int j = 0; j < d; j++) q[j] = buf[2*j];
-		k >>= 1;
+	using E = P::engine_t;
+	using T = E::value_type;
+
+	assert(q.len() > 0 && q.underlying()[0] != T(0));
+	// Check this here so we avoid accessing p[0]
+	if (p.len() == 0) return T(0);
+
+	// Size up in a pretty conservative way
+	int d = std::max(p.len() + 1, q.len());
+	assert(d >= 2);
+
+	int n = nextPow2((d-1) + d - 1); // >= d
+
+	fft::transformed<E> tq, tp;
+	// NOTE: Because we assert the coeffs are smaller than the existing transform, we must extend_to before padding
+	if constexpr (has_cache<Q>) {
+		E::extend_to(q.cache(), n, q.underlying().coeffs());
+		tq = q.cache();
 	}
-	return p[0] * inv(q[0]);
+	if constexpr (has_cache<P>) {
+		E::extend_to(p.cache(), n, p.underlying().coeffs());
+		tp = p.cache();
+	}
+
+	std::vector<T> p_buf(d-1, T(0));
+	{
+		auto p_span = p.underlying();
+		std::copy(p_span.begin(), p_span.end(), p_buf.begin());
+	}
+	std::vector<T> q_buf(d, T(0));
+	{
+		auto q_span = q.underlying();
+		std::copy(q_span.begin(), q_span.end(), q_buf.begin());
+	}
+
+	while (k > 0) {
+		E::extend_to(tq, n, q_buf);
+		auto tnq = E::negate_arg(tq, n);
+		E::extend_to(tp, n, p_buf);
+
+		// P <- downsample(P(x) * Q(-x))
+		auto ntp = E::downsample(E::mul(tp, tnq, n), n/2, bool(k & 1));
+		assert(ntp.size() == n/2);
+		if constexpr (std::same_as<typename E::product, typename E::transformed>) {
+			tp = ntp;
+		} else {
+			tp = {};
+		}
+		E::finish(std::move(ntp), std::span<T>(p_buf));
+		k >>= 1;
+
+		// Save the last iteration if we're done
+		if (!k) {
+			// HACK: fix the constant coefficient of q only
+			q_buf[0] *= q_buf[0];
+			break;
+		}
+
+		// Q <- downsample(Q(x) * Q(-x))
+		auto ntq = E::downsample(E::mul(tq, tnq, n), n/2, false);
+		assert(ntq.size() == n/2);
+		if constexpr (std::same_as<typename E::product, typename E::transformed>) {
+			tq = ntq;
+		} else {
+			tq = {};
+		}
+		if (n/2 == d-1) {
+			// Fix the wraparound
+			T v0 = q_buf[0] * q_buf[0];
+			E::finish(std::move(ntq), std::span<T>(q_buf).first(d-1));
+			q_buf[d-1] = std::exchange(q_buf[0], v0) - v0;
+		} else {
+			E::finish(std::move(ntq), std::span<T>(q_buf));
+		}
+	}
+	return p_buf[0] * inv(q_buf[0]);
+}
+
+// Find the kth term of linearly recurrent sequence S with char poly Q and len(S) >= len(Q)-1
+template <trunc_like S, exact_like Q> requires fft::same_engine<S, Q>
+S::engine_t::value_type kth_term_of_linear_recurrence(
+	const S& s,
+	const Q& q,
+	uint64_t k
+) {
+	using E = S::engine_t;
+	using T = E::value_type;
+
+	assert(q.len() > 0 && q.underlying()[0] != T(0));
+	assert(s.len() >= q.len()-1);
+
+	// Don't even bother with P so we don't have to do truncation checks
+	// TODO: Could use generic multiply for this whole part?
+	fft::transformed<E> tq;
+	auto q_cached = cached_span<E, true>{q, detail::whole_cache_or(q, tq)};
+
+	// Compute the prefix and then hard-cast it to exact
+	auto p = vec<E, true>(span<E, false>(s.underlying()).first(q.len()-1) * q_cached);
+	return kth_term_of_rational_function(p, q_cached, k);
 }
 
 /* namespace ecnerwala::series */ }
