@@ -320,10 +320,7 @@ trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
 	return trunc<E>(P.begin(), P.begin() + n);
 }
 
-// [x^k] p(x)/q(x) (Bostan-Mori) for an exact rational function. Requires q[0] != 0 and
-// p.len() < q.len(). Each level uses p(x) q(-x) (keeping the parity-of-k half) and
-// q(x) q(-x) (even, giving the next q in x^2); q(-x)'s transform is negate_arg of q's,
-// so a level costs 2 forward and 2 inverse transforms.
+// [x^k] p(x)/q(x) (Bostan-Mori) for an exact rational function.
 template <exact_like P, exact_like Q> requires fft::same_engine<P, Q>
 P::engine_t::value_type kth_term_of_rational_function(
 	const P& p,
@@ -335,7 +332,7 @@ P::engine_t::value_type kth_term_of_rational_function(
 
 	assert(q.len() > 0 && q.underlying()[0] != T(0));
 	// Check this here so we avoid accessing p[0]
-	if (p.len() == 0) return 0;
+	if (p.len() == 0) return T(0);
 
 	// Size up in a pretty conservative way
 	int d = std::max(p.len() + 1, q.len());
@@ -355,6 +352,7 @@ P::engine_t::value_type kth_term_of_rational_function(
 	int n = nextPow2((d-1) + d - 1); // >= d
 
 	fft::transformed<E> tq, tp;
+	// TODO: Use the passed-in cache by reference so we actually write to it
 	if constexpr (has_cache<Q>) tq = q.cache();
 	if constexpr (has_cache<P>) tp = p.cache();
 
@@ -376,7 +374,7 @@ P::engine_t::value_type kth_term_of_rational_function(
 
 		// Save the last iteration if we're done
 		if (!k) {
-			// HACK: fix the leading coefficient of q only
+			// HACK: fix the constant coefficient of q only
 			q_buf[0] *= q_buf[0];
 			break;
 		}
@@ -401,6 +399,7 @@ P::engine_t::value_type kth_term_of_rational_function(
 	return p_buf[0] * inv(q_buf[0]);
 }
 
+// Find the kth term of linearly recurrent sequence S with char poly Q and len(S) >= len(Q)-1
 template <trunc_like S, exact_like Q> requires fft::same_engine<S, Q>
 S::engine_t::value_type kth_term_of_linear_recurrence(
 	const S& s,
