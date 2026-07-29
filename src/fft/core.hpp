@@ -16,12 +16,15 @@ namespace ecnerwala::fft {
 // Complex
 template <typename dbl> struct cplx { /// start-hash
 	dbl x, y;
-	cplx(dbl x_ = 0, dbl y_ = 0) : x(x_), y(y_) { }
-	friend cplx operator+(cplx a, cplx b) { return cplx(a.x + b.x, a.y + b.y); }
-	friend cplx operator-(cplx a, cplx b) { return cplx(a.x - b.x, a.y - b.y); }
-	friend cplx operator*(cplx a, cplx b) { return cplx(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
+	cplx(dbl x_ = 0, dbl y_ = 0) : x(x_), y(y_) {}
+	friend cplx operator + (cplx a, cplx b) { return cplx(a.x + b.x, a.y + b.y); }
+	friend cplx operator - (cplx a, cplx b) { return cplx(a.x - b.x, a.y - b.y); }
+	friend cplx operator * (cplx a, cplx b) { return cplx(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
 	friend cplx conj(cplx a) { return cplx(a.x, -a.y); }
-	friend cplx inv(cplx a) { dbl n = (a.x*a.x+a.y*a.y); return cplx(a.x/n,-a.y/n); }
+	friend cplx inv(cplx a) {
+		dbl n = (a.x * a.x + a.y * a.y);
+		return cplx(a.x / n, -a.y / n);
+	}
 };
 
 // getRoot implementations
@@ -33,8 +36,8 @@ template <typename dbl> struct getRoot<cplx<dbl>> {
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-		dbl a=2*M_PI/k;
-		return cplx<dbl>(cos(a),sin(a));
+		dbl a = 2 * M_PI / k;
+		return cplx<dbl>(cos(a), sin(a));
 	}
 };
 template <int MOD> struct primitive_root {
@@ -60,14 +63,14 @@ template <> struct primitive_root<(5 << 25) + 1> {
 };
 template <int MOD> struct getRoot<modnum<MOD>> {
 	static modnum<MOD> f(int k) {
-		assert((MOD-1)%k == 0);
-		return power(modnum<MOD>(primitive_root<MOD>::value), (MOD-1)/k);
+		assert((MOD - 1) % k == 0);
+		return power(modnum<MOD>(primitive_root<MOD>::value), (MOD - 1) / k);
 	}
 };
 template <> struct getRoot<mod_goldilocks> {
 	static mod_goldilocks f(int k) {
-		assert((mod_goldilocks::MOD-1)%k == 0);
-		return power(mod_goldilocks(mod_goldilocks::PRIMITIVE_ROOT), (mod_goldilocks::MOD-1)/k);
+		assert((mod_goldilocks::MOD - 1) % k == 0);
+		return power(mod_goldilocks(mod_goldilocks::PRIMITIVE_ROOT), (mod_goldilocks::MOD - 1) / k);
 	}
 };
 
@@ -92,24 +95,29 @@ template <typename num> struct fft_core {
 		if (n <= sz(rt)) return;
 		rev.resize(n);
 		for (int i = 0; i < n; i++) {
-			rev[i] = (rev[i>>1] | ((i&1)*n)) >> 1;
+			rev[i] = (rev[i >> 1] | ((i & 1) * n)) >> 1;
 		}
-		rt.reserve(n); inv_rt.reserve(n);
-		while (sz(rt) < 2 && sz(rt) < n) { rt.push_back(num(1)); inv_rt.push_back(num(1)); }
+		rt.reserve(n);
+		inv_rt.reserve(n);
+		while (sz(rt) < 2 && sz(rt) < n) {
+			rt.push_back(num(1));
+			inv_rt.push_back(num(1));
+		}
 		for (int k = sz(rt); k < n; k *= 2) {
-			rt.resize(2*k); inv_rt.resize(2*k);
-			num z = getRoot<num>::f(2*k);
+			rt.resize(2 * k);
+			inv_rt.resize(2 * k);
+			num z = getRoot<num>::f(2 * k);
 			num iz = inv(z);
-			for (int i = k/2; i < k; i++) {
-				rt[2*i] = rt[i], rt[2*i+1] = rt[i]*z;
-				inv_rt[2*i] = inv_rt[i], inv_rt[2*i+1] = inv_rt[i]*iz;
+			for (int i = k / 2; i < k; i++) {
+				rt[2 * i] = rt[i], rt[2 * i + 1] = rt[i] * z;
+				inv_rt[2 * i] = inv_rt[i], inv_rt[2 * i + 1] = inv_rt[i] * iz;
 			}
 		}
 	}
 
 	// bit-reversal of i as a log2(n)-bit number
 	static int brev(int i, int n) {
-		int s = __builtin_ctz(unsigned(sz(rev)/n));
+		int s = __builtin_ctz(unsigned(sz(rev) / n));
 		return rev[i] >> s;
 	}
 	// index of the conjugate evaluation point, in the returned bit-reversed order
@@ -121,12 +129,12 @@ template <typename num> struct fft_core {
 		int n = sz(a);
 		if (n <= 1) return;
 		init(n);
-		for (int k = n/2; k >= 1; k /= 2) {
-			for (int i = 0; i < n; i += 2*k) {
+		for (int k = n / 2; k >= 1; k /= 2) {
+			for (int i = 0; i < n; i += 2 * k) {
 				for (int j = 0; j < k; j++) {
-					num u = a[i+j], v = a[i+j+k];
-					a[i+j] = u + v;
-					a[i+j+k] = (u - v) * rt[j+k];
+					num u = a[i + j], v = a[i + j + k];
+					a[i + j] = u + v;
+					a[i + j + k] = (u - v) * rt[j + k];
 				}
 			}
 		}
@@ -137,11 +145,11 @@ template <typename num> struct fft_core {
 		if (n <= 1) return;
 		init(n);
 		for (int k = 1; k < n; k *= 2) {
-			for (int i = 0; i < n; i += 2*k) {
+			for (int i = 0; i < n; i += 2 * k) {
 				for (int j = 0; j < k; j++) {
-					num t = inv_rt[j+k] * a[i+j+k];
-					a[i+j+k] = a[i+j] - t;
-					a[i+j] = a[i+j] + t;
+					num t = inv_rt[j + k] * a[i + j + k];
+					a[i + j + k] = a[i + j] - t;
+					a[i + j] = a[i + j] + t;
 				}
 			}
 		}
@@ -170,18 +178,18 @@ template <typename num> struct fft_core {
 	// `even_half` and `odd_half` extract a size 2^{k-1} transform of E/O, respectively.
 	static void even_half(std::span<const num> t, std::span<num> out) {
 		int n = sz(out);
-		assert(sz(t) >= 2*n);
+		assert(sz(t) >= 2 * n);
 		num half = inv(num(2));
-		for (int j = 0; j < n; j++) out[j] = (t[2*j] + t[2*j+1]) * half;
+		for (int j = 0; j < n; j++) out[j] = (t[2 * j] + t[2 * j + 1]) * half;
 	}
 	static void odd_half(std::span<const num> t, std::span<num> out) {
 		int n = sz(out);
-		assert(sz(t) >= 2*n);
-		init(2*n);
+		assert(sz(t) >= 2 * n);
+		init(2 * n);
 		num half = inv(num(2));
 		for (int j = 0; j < n; j++) {
 			// entry j of the size-2n transform pairs (w, -w) with w = w_{2n}^{brev(j, n)}
-			out[j] = (t[2*j] - t[2*j+1]) * half * inv_rt[n + brev(j, n)];
+			out[j] = (t[2 * j] - t[2 * j + 1]) * half * inv_rt[n + brev(j, n)];
 		}
 	}
 };

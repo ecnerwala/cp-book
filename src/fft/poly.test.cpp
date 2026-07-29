@@ -157,4 +157,5 @@ TEST_CASE("poly::multipoint and poly::interpolate", "[fft]") {
 	}
 }
 
-}} // namespace ecnerwala::fft
+}
+} // namespace ecnerwala::fft

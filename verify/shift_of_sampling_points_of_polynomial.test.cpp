@@ -14,12 +14,14 @@ int main() {
 	using E = ecnerwala::fft::engines::ntt<num>;
 	using ap_vals = ecnerwala::ap_sampled_poly<E>;
 
-	int N, M; num C; std::cin >> N >> M >> C;
+	int N, M;
+	num C;
+	std::cin >> N >> M >> C;
 	ap_vals F(N);
 	for (auto& v : F) std::cin >> v;
 	ap_vals res = F.eval_range(C, M);
 	for (int i = 0; i < M; i++) {
-		std::cout << res[i] << " \n"[i+1==M];
+		std::cout << res[i] << " \n"[i + 1 == M];
 	}
 
 	return 0;

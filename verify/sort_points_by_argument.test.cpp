@@ -10,7 +10,8 @@ int main() {
 
 	using pt_t = Point<int, int64_t>;
 
-	int N; std::cin >> N;
+	int N;
+	std::cin >> N;
 	std::vector<pt_t> P(N);
 	for (auto& p : P) std::cin >> p;
 	auto fix_0 = [&](pt_t p) -> pt_t { return p == pt_t(0, 0) ? pt_t(1, 0) : p; };

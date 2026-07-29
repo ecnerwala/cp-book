@@ -30,27 +30,30 @@ std::vector<std::vector<int>> generate_totally_monotone(int N, int M, auto&& rng
 	std::iota(cur_order.begin(), cur_order.end(), 0);
 	std::vector<int> cur_vals(M);
 	std::iota(cur_vals.begin(), cur_vals.end(), 0);
-	std::vector<std::vector<int>> perms; perms.reserve(M * (M-1) / 2 + 1);
+	std::vector<std::vector<int>> perms;
+	perms.reserve(M * (M - 1) / 2 + 1);
 	perms.push_back(cur_vals);
 	{
-		std::vector<int> cnds; cnds.reserve(M);
-		for (int z = 0; z < M * (M-1) / 2; z++) {
+		std::vector<int> cnds;
+		cnds.reserve(M);
+		for (int z = 0; z < M * (M - 1) / 2; z++) {
 			cnds.clear();
-			for (int i = 0; i+1 < M; i++) {
-				if (cur_order[i] < cur_order[i+1]) {
+			for (int i = 0; i + 1 < M; i++) {
+				if (cur_order[i] < cur_order[i + 1]) {
 					cnds.push_back(i);
 				}
 			}
 			assert(!cnds.empty());
 			int i = cnds[std::uniform_int_distribution<int>(0, int(cnds.size()) - 1)(rng)];
-			std::swap(cur_order[i], cur_order[i+1]);
+			std::swap(cur_order[i], cur_order[i + 1]);
 			cur_vals[cur_order[i]] = i;
-			cur_vals[cur_order[i+1]] = i+1;
+			cur_vals[cur_order[i + 1]] = i + 1;
 			perms.push_back(cur_vals);
 		}
 	}
-	std::vector<std::vector<int>> output; output.reserve(N);
-	std::vector<int> stars_bars(M * (M-1) / 2 + N);
+	std::vector<std::vector<int>> output;
+	output.reserve(N);
+	std::vector<int> stars_bars(M * (M - 1) / 2 + N);
 	std::fill(stars_bars.begin(), stars_bars.begin() + N, 1);
 	std::shuffle(stars_bars.begin(), stars_bars.end(), rng);
 	{
@@ -71,8 +74,7 @@ void check_smawk(int N, int M, std::vector<std::vector<int>> mat) {
 	auto result = smawk::smawk(N, M, [&](int row, int col) -> move_only_t {
 		REQUIRE(0 <= row); REQUIRE(row < N);
 		REQUIRE(0 <= col); REQUIRE(col < M);
-		return move_only_t{mat[row][col]};
-	}, [&](int r, const smawk::value_t<move_only_t>& cnd1, const smawk::value_t<move_only_t>& cnd2) -> bool {
+		return move_only_t{mat[row][col]}; }, [&](int r, const smawk::value_t<move_only_t>& cnd1, const smawk::value_t<move_only_t>& cnd2) -> bool {
 		REQUIRE(0 <= r); REQUIRE(r < N);
 		REQUIRE(0 <= cnd1.col); REQUIRE(cnd1.col < M);
 		REQUIRE(0 <= cnd2.col); REQUIRE(cnd2.col < M);
@@ -80,8 +82,7 @@ void check_smawk(int N, int M, std::vector<std::vector<int>> mat) {
 		REQUIRE(cnd1.v.v == mat[r][cnd1.col]);
 		REQUIRE(cnd2.v.v == mat[r][cnd2.col]);
 		// cnd2 is better when it's strictly smaller
-		return cnd2.v.v < cnd1.v.v;
-	});
+		return cnd2.v.v < cnd1.v.v; });
 	REQUIRE(int(result.size()) == N);
 	for (int i = 0; i < N; i++) {
 		int j = int(std::min_element(mat[i].begin(), mat[i].end()) - mat[i].begin());
@@ -108,8 +109,7 @@ void check_larsch(int N, std::vector<std::vector<int>> mat, bool is_totally_mono
 		REQUIRE(0 <= row); REQUIRE(row < N);
 		REQUIRE(0 <= col); REQUIRE(col < M);
 		REQUIRE(col <= row);
-		return move_only_t{mat[row][col]};
-	}, [&](int r, const smawk::value_t<move_only_t>& cnd1, const smawk::value_t<move_only_t>& cnd2) -> bool {
+		return move_only_t{mat[row][col]}; }, [&](int r, const smawk::value_t<move_only_t>& cnd1, const smawk::value_t<move_only_t>& cnd2) -> bool {
 		REQUIRE(0 <= r); REQUIRE(r < N);
 		REQUIRE(0 <= cnd1.col); REQUIRE(cnd1.col < M);
 		REQUIRE(0 <= cnd2.col); REQUIRE(cnd2.col < M);
@@ -119,12 +119,12 @@ void check_larsch(int N, std::vector<std::vector<int>> mat, bool is_totally_mono
 		REQUIRE(cnd1.v.v == mat[r][cnd1.col]);
 		REQUIRE(cnd2.v.v == mat[r][cnd2.col]);
 		// cnd2 is better when it's strictly smaller
-		return cnd2.v.v < cnd1.v.v;
-	});
+		return cnd2.v.v < cnd1.v.v; });
 	int prv_col = 0;
 	for (int i = 0; i < N; i++) {
 		auto res = l.push_and_query_next();
-		REQUIRE(0 <= res.col); REQUIRE(res.col <= i);
+		REQUIRE(0 <= res.col);
+		REQUIRE(res.col <= i);
 		REQUIRE(res.v.v == mat[i][res.col]);
 		if (is_totally_monotone) {
 			int j = int(std::min_element(mat[i].begin(), mat[i].begin() + i + 1) - mat[i].begin());
@@ -140,7 +140,7 @@ TEST_CASE("LARSCH", "[smawk]") {
 	for (int N : {0, 1, 2, 3, 5, 8, 13}) {
 		auto inp = generate_totally_monotone(N, N, mt);
 		for (int i = 0; i < N; i++) {
-			for (int j = i+1; j < N; j++) {
+			for (int j = i + 1; j < N; j++) {
 				inp[i][j] = -1;
 			}
 		}
@@ -159,7 +159,7 @@ TEST_CASE("LARSCH Consistency", "[smawk]") {
 			std::shuffle(inp[i].begin(), inp[i].end(), mt);
 		}
 		for (int i = 0; i < N; i++) {
-			for (int j = i+1; j < N; j++) {
+			for (int j = i + 1; j < N; j++) {
 				inp[i][j] = -1;
 			}
 		}

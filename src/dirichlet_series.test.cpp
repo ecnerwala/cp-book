@@ -27,14 +27,14 @@ dv_values<T> multiply_slow(const dv_values<T>& a, const dv_values<T>& b) {
 	return r;
 }
 
-TEMPLATE_TEST_CASE("Dirichlet series multiplication and inverse", "[dirichlet]", modnum<int(1e9)+7>, int64_t) {
+TEMPLATE_TEST_CASE("Dirichlet series multiplication and inverse", "[dirichlet]", modnum<int(1e9) + 7>, int64_t) {
 	using num = TestType;
 	for (int N = 1; N <= 30; N++) {
 		INFO("N = " << N);
 		std::mt19937 mt(Catch::getSeed());
 		layout = div_vector_layout(N);
 		dv_prefix<num> a([&](int64_t x) { return num(x); });
-		dv_prefix<num> b([&](int64_t x) { return num(x) * num(x+1) / num(2); });
+		dv_prefix<num> b([&](int64_t x) { return num(x) * num(x + 1) / num(2); });
 		dv_prefix<num> slow_res(multiply_slow(dv_values<num>(a), dv_values<num>(b)));
 		dv_prefix<num> fast_res = a * b;
 		for (int i = 1; i < layout.len; i++) {
@@ -68,15 +68,15 @@ TEMPLATE_TEST_CASE("Dirichlet series multiplication and inverse", "[dirichlet]",
 	}
 }
 
-TEMPLATE_TEST_CASE("Dirichlet series BIT sparse multiplication", "[dirichlet]", modnum<int(1e9)+7>) {
+TEMPLATE_TEST_CASE("Dirichlet series BIT sparse multiplication", "[dirichlet]", modnum<int(1e9) + 7>) {
 	using num = TestType;
 	for (int N : {1, 2, 3, 4, 5, 24, 25, 26, 99, 100, 101, 1000}) {
 		INFO("N = " << N);
 		layout = div_vector_layout(N);
-		for (int m = 2; m <= N+1; m++) {
+		for (int m = 2; m <= N + 1; m++) {
 			INFO("m = " << m);
 			num w = -5;
-			dv_prefix<num> a([&](int64_t x) -> num { return num(x * (x+1) / 2); });
+			dv_prefix<num> a([&](int64_t x) -> num { return num(x * (x + 1) / 2); });
 			dv_prefix<num> b([&](int64_t x) -> num { return 1 + (x >= m ? w : 0); });
 			{
 				dv_prefix<num> c_slow = a * b;
@@ -102,12 +102,12 @@ TEMPLATE_TEST_CASE("Dirichlet series BIT sparse multiplication", "[dirichlet]", 
 	}
 }
 
-TEMPLATE_TEST_CASE("Dirichlet series euler transform", "[dirichlet]", modnum<int(1e9)+7>) {
+TEMPLATE_TEST_CASE("Dirichlet series euler transform", "[dirichlet]", modnum<int(1e9) + 7>) {
 	using num = TestType;
 	for (int N : {1, 2, 3, 4, 5, 24, 25, 26, 99, 100, 101, 1000}) {
 		INFO("N = " << N);
 		layout = div_vector_layout(N);
-		dv_prefix<num> a([&](int64_t x) { return num(x) * num(x+1) / num(2); });
+		dv_prefix<num> a([&](int64_t x) { return num(x) * num(x + 1) / num(2); });
 		dv_prefix<num> primes = inverse_euler_transform_fraction(a);
 		dv_prefix<num> primes2 = inverse_euler_transform_binary_indexed_tree(a);
 		dv_values<num> primes_slow_v;

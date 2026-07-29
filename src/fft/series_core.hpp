@@ -30,7 +30,7 @@ struct span {
 	explicit span(std::span<const T> s_) : s(s_) {}
 
 	int len() const { return sz(s); }
-	const T& operator[](int i) const { return s[size_t(i)]; }
+	const T& operator [] (int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.begin(); }
 	auto end() const { return s.end(); }
 	std::span<const T> coeffs() const { return s; }
@@ -59,9 +59,11 @@ struct vec : public std::vector<typename E::value_type> {
 	}
 
 	// exact -> trunc is implicit, trunc -> exact is explicit
-	template <bool oe> requires (oe != exact_)
+	template <bool oe>
+		requires (oe != exact_)
 	explicit(oe < exact_) vec(const vec<E, oe>& p) : std::vector<T>(p) {}
-	template <bool oe> requires (oe != exact_)
+	template <bool oe>
+		requires (oe != exact_)
 	explicit(oe < exact_) vec(vec<E, oe>&& p) : std::vector<T>(std::move(p)) {}
 
 	// adopt a plain coefficient vector
@@ -70,7 +72,9 @@ struct vec : public std::vector<typename E::value_type> {
 	int len() const {
 		return int(this->size());
 	}
-	int degree() const requires (exact_) {
+	int degree() const
+		requires (exact_)
+	{
 		return len() - 1;
 	}
 	void extend(int sz) {
@@ -82,32 +86,44 @@ struct vec : public std::vector<typename E::value_type> {
 		this->resize(sz);
 	}
 	// multiply by x^n within the fixed precision window
-	void shift_trunc(int n = 1) requires (!exact_) {
+	void shift_trunc(int n = 1)
+		requires (!exact_)
+	{
 		assert(n >= 0 && n <= len());
-		std::rotate(this->begin(), this->end()-n, this->end());
-		std::fill(this->begin(), this->begin()+n, T(0));
+		std::rotate(this->begin(), this->end() - n, this->end());
+		std::fill(this->begin(), this->begin() + n, T(0));
 	}
 	// divide by x^n and 0-pad within the fixed precision window
-	void unshift_trunc(int n = 1) requires (!exact_) {
+	void unshift_trunc(int n = 1)
+		requires (!exact_)
+	{
 		assert(n >= 0 && n <= len());
-		std::fill(this->begin(), this->begin()+n, T(0));
-		std::rotate(this->begin(), this->begin()+n, this->end());
+		std::fill(this->begin(), this->begin() + n, T(0));
+		std::rotate(this->begin(), this->begin() + n, this->end());
 	}
 
 	// in-place forms require that the result's exactness/length must equal this operand's
-	template <bool oe> requires (exact_ <= oe)
+	template <bool oe>
+		requires (exact_ <= oe)
 	vec& operator += (const vec<E, oe>& o) {
-		if constexpr (exact_) { if (o.len() > len()) this->resize(o.len()); }
-		else if constexpr (!oe) { if (o.len() < len()) this->resize(o.len()); }
+		if constexpr (exact_) {
+			if (o.len() > len()) this->resize(o.len());
+		} else if constexpr (!oe) {
+			if (o.len() < len()) this->resize(o.len());
+		}
 		for (int i = 0; i < std::min(len(), o.len()); i++) {
 			(*this)[i] += o[i];
 		}
 		return *this;
 	}
-	template <bool oe> requires (exact_ <= oe)
+	template <bool oe>
+		requires (exact_ <= oe)
 	vec& operator -= (const vec<E, oe>& o) {
-		if constexpr (exact_) { if (o.len() > len()) this->resize(o.len()); }
-		else if constexpr (!oe) { if (o.len() < len()) this->resize(o.len()); }
+		if constexpr (exact_) {
+			if (o.len() > len()) this->resize(o.len());
+		} else if constexpr (!oe) {
+			if (o.len() < len()) this->resize(o.len());
+		}
 		for (int i = 0; i < std::min(len(), o.len()); i++) {
 			(*this)[i] -= o[i];
 		}
@@ -136,7 +152,6 @@ struct vec : public std::vector<typename E::value_type> {
 	vec& operator *= (const vec& o) {
 		return *this = (*this) * o;
 	}
-
 };
 
 template <fft::engine E> using exact = vec<E, true>;
@@ -205,14 +220,14 @@ struct cached {
 
 	int len() const { return s.len(); }
 	const vec<E, exact_>& underlying() const { return s; }
-	const T& operator[](int i) const { return s[size_t(i)]; }
+	const T& operator [] (int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
 	// the transform of underlying(), fed to the cached fft:: entry points alongside it
 	fft::transformed<E>& cache() const { return f; }
 
 	template <like S>
-	friend bool operator==(const cached& a, const S& b) {
+	friend bool operator == (const cached& a, const S& b) {
 		span<E, S::exact_v> bs = b.underlying();
 		return a.len() == bs.len() && std::equal(a.s.begin(), a.s.end(), bs.begin());
 	}
@@ -229,7 +244,8 @@ namespace detail {
 // the operand's whole cache if it carries one, else the caller's throwaway cache
 template <like S>
 fft::transformed<typename S::engine_t>& whole_cache_or(const S& s, fft::transformed<typename S::engine_t>& tmp) {
-	if constexpr (has_cache<S>) return s.cache(); else return tmp;
+	if constexpr (has_cache<S>) return s.cache();
+	else return tmp;
 }
 /* namespace detail */ }
 
@@ -298,10 +314,9 @@ auto square(const A& a) {
 // product as the result's transform when the engine supports it. Reuses each
 // operand's whole cache. Requires a*b and c*d to have equal length.
 template <like A, like B, like C, like D>
-	requires fft::same_engine<A, B> && fft::same_engine<A, C> && fft::same_engine<A, D>
-		&& A::exact_v && B::exact_v && C::exact_v && D::exact_v
+	requires fft::same_engine<A, B> && fft::same_engine<A, C> && fft::same_engine<A, D> && A::exact_v && B::exact_v && C::exact_v && D::exact_v
 cached<typename A::engine_t, true> multiply_add2(
-		const A& a, const B& b, const C& c, const D& d) {
+	const A& a, const B& b, const C& c, const D& d) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
 	span<E, true> av = a.underlying(), bv = b.underlying();
@@ -314,8 +329,7 @@ cached<typename A::engine_t, true> multiply_add2(
 		bv.coeffs(), detail::whole_cache_or(b, tb_),
 		cv.coeffs(), detail::whole_cache_or(c, tc_),
 		dv.coeffs(), detail::whole_cache_or(d, td_),
-		coeffs, f
-	);
+		coeffs, f);
 	cached<E, true> w(exact<E>(std::move(coeffs)));
 	w.cache() = std::move(f);
 	return w;
@@ -323,7 +337,8 @@ cached<typename A::engine_t, true> multiply_add2(
 
 // coefficients [b.len()-1, a.len()) of a*b; requires a.len() >= b.len() > 0.
 // The kernel b participates whole, so it must be exact; the result mirrors a's kind.
-template <like A, exact_like B> requires fft::same_engine<A, B>
+template <like A, exact_like B>
+	requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v> middle_product(const A& a, const B& b) {
 	using E = typename A::engine_t;
 	span<E, A::exact_v> av = a.underlying();
@@ -331,14 +346,14 @@ vec<typename A::engine_t, A::exact_v> middle_product(const A& a, const B& b) {
 	fft::transformed<E> ta_, tb_;
 	return vec<E, A::exact_v>(fft::middle_product<E>(
 		av.coeffs(), detail::whole_cache_or(a, ta_),
-		bv.coeffs(), detail::whole_cache_or(b, tb_)
-	));
+		bv.coeffs(), detail::whole_cache_or(b, tb_)));
 }
 
 namespace detail {
 template <bool ea, bool eb> int product_prec(int la, int lb) {
 	if constexpr (ea && eb) return la > 0 && lb > 0 ? la + lb - 1 : 0;
-	else return ea ? lb : eb ? la : std::min(la, lb);
+	else return ea ? lb : eb ? la
+							 : std::min(la, lb);
 }
 
 // Normalize a product operand at the given precision to a borrowed series + the
@@ -358,8 +373,7 @@ auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t
 		span<E, S::exact_v> v = s.underlying();
 		int used = std::min(s.len(), prec);
 		if constexpr (has_cache<S>) {
-			if (s.len() <= prec || fft::detail::conv_size_for(s.len() + prec - 1).n
-					== fft::detail::conv_size_for(2 * prec - 1).n) {
+			if (s.len() <= prec || fft::detail::conv_size_for(s.len() + prec - 1).n == fft::detail::conv_size_for(2 * prec - 1).n) {
 				return cached_span<E, S::exact_v>{v, s.cache()};
 			}
 		}
@@ -368,26 +382,32 @@ auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t
 }
 /* namespace detail */ }
 
-template <like A, like B> requires fft::same_engine<A, B>
+template <like A, like B>
+	requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v && B::exact_v> operator + (const A& a, const B& b) {
 	using T = typename A::engine_t::value_type;
 	span<typename A::engine_t, A::exact_v> av = a.underlying();
 	span<typename A::engine_t, B::exact_v> bv = b.underlying();
 	int n = (A::exact_v && B::exact_v) ? std::max(a.len(), b.len())
-		: A::exact_v ? b.len() : B::exact_v ? a.len() : std::min(a.len(), b.len());
+		: A::exact_v                   ? b.len()
+		: B::exact_v                   ? a.len()
+									   : std::min(a.len(), b.len());
 	vec<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
 	for (int i = 0; i < n; i++) {
 		r[i] = (i < av.len() ? av[i] : T(0)) + (i < bv.len() ? bv[i] : T(0));
 	}
 	return r;
 }
-template <like A, like B> requires fft::same_engine<A, B>
+template <like A, like B>
+	requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A& a, const B& b) {
 	using T = typename A::engine_t::value_type;
 	span<typename A::engine_t, A::exact_v> av = a.underlying();
 	span<typename A::engine_t, B::exact_v> bv = b.underlying();
 	int n = (A::exact_v && B::exact_v) ? std::max(a.len(), b.len())
-		: A::exact_v ? b.len() : B::exact_v ? a.len() : std::min(a.len(), b.len());
+		: A::exact_v                   ? b.len()
+		: B::exact_v                   ? a.len()
+									   : std::min(a.len(), b.len());
 	vec<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
 	for (int i = 0; i < n; i++) {
 		r[i] = (i < av.len() ? av[i] : T(0)) - (i < bv.len() ? bv[i] : T(0));
@@ -400,7 +420,8 @@ vec<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A& a, cons
 // An exact x exact product returns a has_cache result, going through
 // fft::multiply_cached so the pointwise product is adopted as the result's
 // transform whenever the engine supports it.
-template <like A, like B> requires fft::same_engine<A, B>
+template <like A, like B>
+	requires fft::same_engine<A, B>
 auto operator * (const A& a, const B& b) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
@@ -419,8 +440,7 @@ auto operator * (const A& a, const B& b) {
 		fft::multiply_cached<E>(
 			va.underlying().coeffs(), va.cache(),
 			vb.underlying().coeffs(), vb.cache(),
-			coeffs, f
-		);
+			coeffs, f);
 		cached<E, true> w(exact<E>(std::move(coeffs)));
 		w.cache() = std::move(f);
 		return w;
@@ -429,8 +449,7 @@ auto operator * (const A& a, const B& b) {
 		fft::multiply<E>(
 			va.underlying().coeffs(), va.cache(),
 			vb.underlying().coeffs(), vb.cache(),
-			std::span<T>(r)
-		);
+			std::span<T>(r));
 		return r;
 	}
 }
@@ -453,7 +472,7 @@ struct prefix_cached {
 
 	int len() const { return s.len(); }
 	const trunc<E>& underlying() const { return s; }
-	const T& operator[](int i) const { return s[size_t(i)]; }
+	const T& operator [] (int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
 
@@ -466,12 +485,11 @@ struct prefix_cached {
 	cached_span<E, false> prefix(int n) const {
 		return {
 			span<E, false>(std::span<const T>(s).first(std::min(n, len()))),
-			prefix_cache(n)
-		};
+			prefix_cache(n)};
 	}
 	// cache over the prefix of length min(n, len()); n a power of two
 	fft::transformed<E>& prefix_cache(int n) const {
-		assert(n > 0 && !(n & (n-1)));
+		assert(n > 0 && !(n & (n - 1)));
 		int k = __builtin_ctz(unsigned(n));
 		if (k >= sz(caches)) caches.resize(size_t(k) + 1);
 		auto& c = caches[k];
@@ -486,7 +504,10 @@ struct prefix_cached {
 private:
 	trunc<E> s;
 	// memoized transforms: logically const; len tracks how much of s each covers
-	struct entry { fft::transformed<E> t; int len = 0; };
+	struct entry {
+		fft::transformed<E> t;
+		int len = 0;
+	};
 	mutable std::vector<entry> caches;
 };
 

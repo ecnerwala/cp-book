@@ -10,7 +10,7 @@ inline int floor_log_2(int a) {
 }
 
 inline int ceil_log_2(int a) {
-	return a ? floor_log_2(2*a-1) : -1;
+	return a ? floor_log_2(2 * a - 1) : -1;
 }
 
 inline int next_pow_2(int a) {
@@ -22,13 +22,13 @@ struct point {
 	point() : a(0) {}
 	explicit point(int a_) : a(a_) { assert(a >= -1); }
 
-	explicit operator bool () { return bool(a); }
+	explicit operator bool() { return bool(a); }
 
 	// This is useful so you can directly do array indices
 	/* implicit */ operator int() const { return a; }
 
 	point c(bool z) const {
-		return point((a<<1)|z);
+		return point((a << 1) | z);
 	}
 
 	point operator [] (bool z) const {
@@ -36,7 +36,7 @@ struct point {
 	}
 
 	point p() const {
-		return point(a>>1);
+		return point(a >> 1);
 	}
 
 	friend std::ostream& operator << (std::ostream& o, const point& p) { return o << int(p); }
@@ -73,9 +73,15 @@ struct point {
 		}
 	}
 
-	point& operator ++ () { ++a; return *this; }
+	point& operator ++ () {
+		++a;
+		return *this;
+	}
 	point operator ++ (int) { return point(a++); }
-	point& operator -- () { --a; return *this; }
+	point& operator -- () {
+		--a;
+		return *this;
+	}
 	point operator -- (int) { return point(a--); }
 };
 
@@ -88,10 +94,10 @@ struct range {
 	explicit range(std::array<int, 2> r) : range(r[0], r[1]) {}
 
 	explicit operator std::array<int, 2>() const {
-		return {a,b};
+		return {a, b};
 	}
 
-	const int& operator[] (bool z) const {
+	const int& operator [] (bool z) const {
 		return z ? b : a;
 	}
 
@@ -118,13 +124,13 @@ struct range {
 	// Iterate over the range from left to right.
 	//    Calls f(point)
 	template <typename F> void for_each_l_to_r(F f) const {
-		int anc_depth = floor_log_2((a-1) ^ b);
+		int anc_depth = floor_log_2((a - 1) ^ b);
 		int anc_msk = (1 << anc_depth) - 1;
-		for (int v = (-a) & anc_msk; v; v &= v-1) {
+		for (int v = (-a) & anc_msk; v; v &= v - 1) {
 			int i = __builtin_ctz(v);
-			f(point(((a-1) >> i) + 1));
+			f(point(((a - 1) >> i) + 1));
 		}
-		for (int v = b & anc_msk; v; ) {
+		for (int v = b & anc_msk; v;) {
 			int i = floor_log_2(v);
 			f(point((b >> i) - 1));
 			v ^= (1 << i);
@@ -134,15 +140,15 @@ struct range {
 	// Iterate over the range from right to left.
 	//    Calls f(point)
 	template <typename F> void for_each_r_to_l(F f) const {
-		int anc_depth = floor_log_2((a-1) ^ b);
+		int anc_depth = floor_log_2((a - 1) ^ b);
 		int anc_msk = (1 << anc_depth) - 1;
-		for (int v = b & anc_msk; v; v &= v-1) {
+		for (int v = b & anc_msk; v; v &= v - 1) {
 			int i = __builtin_ctz(v);
 			f(point((b >> i) - 1));
 		}
-		for (int v = (-a) & anc_msk; v; ) {
+		for (int v = (-a) & anc_msk; v;) {
 			int i = floor_log_2(v);
-			f(point(((a-1) >> i) + 1));
+			f(point(((a - 1) >> i) + 1));
 			v ^= (1 << i);
 		}
 	}
@@ -152,7 +158,7 @@ struct range {
 		if ((x ^ y) > x) { x <<= 1, std::swap(x, y); }
 		int dx = __builtin_ctz(x);
 		int dy = __builtin_ctz(y);
-		int anc_depth = floor_log_2((x-1) ^ y);
+		int anc_depth = floor_log_2((x - 1) ^ y);
 		for (int i = floor_log_2(x); i > dx; i--) {
 			f(point(x >> i));
 		}
@@ -166,11 +172,11 @@ struct range {
 		if ((x ^ y) > x) { x <<= 1, std::swap(x, y); }
 		int dx = __builtin_ctz(x);
 		int dy = __builtin_ctz(y);
-		int anc_depth = floor_log_2((x-1) ^ y);
-		for (int i = dx+1; i <= anc_depth; i++) {
+		int anc_depth = floor_log_2((x - 1) ^ y);
+		for (int i = dx + 1; i <= anc_depth; i++) {
 			f(point(x >> i));
 		}
-		for (int v = y >> (dy+1); v; v >>= 1) {
+		for (int v = y >> (dy + 1); v; v >>= 1) {
 			f(point(v));
 		}
 	}
@@ -195,7 +201,7 @@ struct in_order_layout {
 		assert(0 <= a && a <= b && b <= N);
 		if (N == 0) return range();
 		a += S, b += S;
-		return range((a >= 2 * N ? 2*(a-N) : a), (b >= 2 * N ? 2*(b-N) : b));
+		return range((a >= 2 * N ? 2 * (a - N) : a), (b >= 2 * N ? 2 * (b - N) : b));
 	}
 
 	range get_range(std::array<int, 2> p) const {
@@ -211,19 +217,19 @@ struct in_order_layout {
 	std::array<int, 2> get_node_bounds(point pt) const {
 		int a = int(pt);
 		assert(1 <= a && a < 2 * N);
-		int l = __builtin_clz(a) - __builtin_clz(2*N-1);
-		int x = a << l, y = (a+1) << l;
-		assert(S <= x && x < y && y <= 2*S);
-		return {(x >= 2 * N ? (x>>1) + N : x) - S, (y >= 2 * N ? (y>>1) + N : y) - S};
+		int l = __builtin_clz(a) - __builtin_clz(2 * N - 1);
+		int x = a << l, y = (a + 1) << l;
+		assert(S <= x && x < y && y <= 2 * S);
+		return {(x >= 2 * N ? (x >> 1) + N : x) - S, (y >= 2 * N ? (y >> 1) + N : y) - S};
 	}
 
 	int get_node_split(point pt) const {
 		int a = int(pt);
 		assert(1 <= a && a < N);
-		int l = __builtin_clz(2*a+1) - __builtin_clz(2*N-1);
-		int x = (2*a+1) << l;
-		assert(S <= x && x < 2*S);
-		return (x >= 2 * N ? (x>>1) + N : x) - S;
+		int l = __builtin_clz(2 * a + 1) - __builtin_clz(2 * N - 1);
+		int x = (2 * a + 1) << l;
+		assert(S <= x && x < 2 * S);
+		return (x >= 2 * N ? (x >> 1) + N : x) - S;
 	}
 
 	int get_node_size(point pt) const {
@@ -267,10 +273,10 @@ struct circular_layout {
 	std::array<int, 2> get_node_bounds(point pt) const {
 		int a = int(pt);
 		assert(1 <= a && a < 2 * N);
-		int l = __builtin_clz(a) - __builtin_clz(2*N-1);
+		int l = __builtin_clz(a) - __builtin_clz(2 * N - 1);
 		int S = next_pow_2(N);
-		int x = a << l, y = (a+1) << l;
-		assert(S <= x && x < y && y <= 2*S);
+		int x = a << l, y = (a + 1) << l;
+		assert(S <= x && x < y && y <= 2 * S);
 		return {(x >= 2 * N ? x >> 1 : x) - N, (y > 2 * N ? y >> 1 : y) - N};
 	}
 

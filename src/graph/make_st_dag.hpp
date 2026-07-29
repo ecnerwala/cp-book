@@ -67,7 +67,8 @@ inline std::vector<int> make_st_dag(const std::vector<std::vector<int>>& adj, in
 		return res;
 	}(source);
 
-	std::vector<int> res; res.reserve(N);
+	std::vector<int> res;
+	res.reserve(N);
 	int cur = lst[0];
 	while (cur != -1) {
 		res.push_back(cur);

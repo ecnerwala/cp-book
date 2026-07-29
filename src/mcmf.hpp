@@ -1,5 +1,5 @@
 #pragma once
-#include<bits/stdc++.h>
+#include <bits/stdc++.h>
 // #include<bits/extc++.h>
 #include <ext/pb_ds/priority_queue.hpp>
 
@@ -30,7 +30,7 @@ struct MCMF_SSPA {
 		edges.emplace_back(edge_t{to, cap, cost});
 		edges.emplace_back(edge_t{from, 0, -cost});
 		adj[from].push_back(e);
-		adj[to].push_back(e+1);
+		adj[to].push_back(e + 1);
 	}
 
 	static constexpr cost_t INF_COST = std::numeric_limits<cost_t>::max() / 4;
@@ -46,7 +46,8 @@ struct MCMF_SSPA {
 		its[s] = q.push({-(dist[s] - pi[s]), s});
 
 		while (!q.empty()) {
-			int i = q.top().second; q.pop();
+			int i = q.top().second;
+			q.pop();
 			cost_t d = dist[i];
 			for (int e : adj[i]) {
 				if (edges[e].cap) {
@@ -71,17 +72,17 @@ struct MCMF_SSPA {
 
 	flow_t path(int s, int t) {
 		flow_t cur_flow = std::numeric_limits<flow_t>::max();
-		for (int cur = t; cur != s; ) {
+		for (int cur = t; cur != s;) {
 			int e = prv[cur];
-			int nxt = edges[e^1].dest;
+			int nxt = edges[e ^ 1].dest;
 			cur_flow = std::min(cur_flow, edges[e].cap);
 			cur = nxt;
 		}
-		for (int cur = t; cur != s; ) {
+		for (int cur = t; cur != s;) {
 			int e = prv[cur];
-			int nxt = edges[e^1].dest;
+			int nxt = edges[e ^ 1].dest;
 			edges[e].cap -= cur_flow;
-			edges[e^1].cap += cur_flow;
+			edges[e ^ 1].cap += cur_flow;
 			cur = nxt;
 		}
 		return cur_flow;
@@ -100,7 +101,8 @@ struct MCMF_SSPA {
 
 	std::pair<flow_t, cost_t> max_flow(int s, int t, cost_t max_cost = INF_COST - 1) {
 		assert(s != t);
-		flow_t tot_flow = 0; cost_t tot_cost = 0;
+		flow_t tot_flow = 0;
+		cost_t tot_cost = 0;
 		while (dijkstra(s, t) <= max_cost) {
 			flow_t cur_flow = path(s, t);
 			tot_flow += cur_flow;
@@ -133,7 +135,7 @@ struct MCMF_Dinic {
 		edges.emplace_back(edge_t{to, cap, cost});
 		edges.emplace_back(edge_t{from, 0, -cost});
 		adj[from].push_back(e);
-		adj[to].push_back(e+1);
+		adj[to].push_back(e + 1);
 	}
 
 	static constexpr cost_t INF_COST = std::numeric_limits<cost_t>::max() / 4;
@@ -149,7 +151,8 @@ struct MCMF_Dinic {
 		its[s] = q.push({-(dist[s] - pi[s]), s});
 
 		while (!q.empty()) {
-			int i = q.top().second; q.pop();
+			int i = q.top().second;
+			q.pop();
 			cost_t d = dist[i];
 			for (int e : adj[i]) {
 				if (edges[e].cap) {
@@ -183,7 +186,7 @@ struct MCMF_Dinic {
 			if (level[nxt] == level[cur] + 1 && edges[e].cap > 0 && edges[e].cost == pi[nxt] - pi[cur]) {
 				flow_t v = dinic_dfs(nxt, t, std::min(f, edges[e].cap));
 				edges[e].cap -= v;
-				edges[e^1].cap += v;
+				edges[e ^ 1].cap += v;
 				f -= v;
 				cur_f += v;
 				if (f == 0) break;
@@ -229,7 +232,8 @@ struct MCMF_Dinic {
 
 	std::pair<flow_t, cost_t> max_flow(int s, int t, cost_t max_cost = INF_COST - 1) {
 		assert(s != t);
-		flow_t tot_flow = 0; cost_t tot_cost = 0;
+		flow_t tot_flow = 0;
+		cost_t tot_cost = 0;
 		while (dijkstra(s, t) <= max_cost) {
 			flow_t cur_flow = dinic(s, t);
 			tot_flow += cur_flow;
@@ -264,7 +268,7 @@ struct Dinic {
 		edges.emplace_back(edge_t{to, cap});
 		edges.emplace_back(edge_t{from, rev_cap});
 		adj[from].push_back(e);
-		adj[to].push_back(e+1);
+		adj[to].push_back(e + 1);
 	}
 
 	static constexpr tot_flow_t INF_FLOW = std::numeric_limits<tot_flow_t>::max() / 4;
@@ -280,7 +284,7 @@ struct Dinic {
 			if (level[nxt] == level[cur] + 1 && edges[e].cap > 0) {
 				flow_t v = flow_t(dinic_dfs(nxt, t, std::min<tot_flow_t>(f, edges[e].cap)));
 				edges[e].cap -= v;
-				edges[e^1].cap += v;
+				edges[e ^ 1].cap += v;
 				f -= v;
 				cur_f += v;
 				if (f == 0) break;

@@ -13,8 +13,8 @@ template <typename T, typename C = int, typename Comp = std::less<T>> struct cnt
 	friend cnt_min operator + (const cnt_min& a, const cnt_min& b) {
 		if (!b.cnt) return a;
 		else if (!a.cnt) return b;
-		else if (Comp().operator()(a.v, b.v)) return a;
-		else if (Comp().operator()(b.v, a.v)) return b;
+		else if (Comp().operator () (a.v, b.v)) return a;
+		else if (Comp().operator () (b.v, a.v)) return b;
 		else return cnt_min(a.v, a.cnt + b.cnt);
 	}
 

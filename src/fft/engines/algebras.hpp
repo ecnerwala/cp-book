@@ -15,42 +15,69 @@ namespace ecnerwala::fft::engines {
 
 template <typename num, int N> struct mat {
 	std::array<num, size_t(N) * N> a{};
-	num& operator[](std::array<int, 2> rc) { return a[size_t(rc[0]) * N + rc[1]]; }
-	const num& operator[](std::array<int, 2> rc) const { return a[size_t(rc[0]) * N + rc[1]]; }
+	num& operator [] (std::array<int, 2> rc) { return a[size_t(rc[0]) * N + rc[1]]; }
+	const num& operator [] (std::array<int, 2> rc) const { return a[size_t(rc[0]) * N + rc[1]]; }
 	num* data() { return a.data(); }
 	const num* data() const { return a.data(); }
-	mat& operator+=(const mat& o) { for (int i = 0; i < N*N; i++) a[i] += o.a[i]; return *this; }
-	friend mat operator+(mat x, const mat& y) { x += y; return x; }
-	mat& operator-=(const mat& o) { for (int i = 0; i < N*N; i++) a[i] -= o.a[i]; return *this; }
-	friend mat operator-(mat x, const mat& y) { x -= y; return x; }
-	friend mat operator*(const mat& x, const mat& y) {
+	mat& operator += (const mat& o) {
+		for (int i = 0; i < N * N; i++) a[i] += o.a[i];
+		return *this;
+	}
+	friend mat operator + (mat x, const mat& y) {
+		x += y;
+		return x;
+	}
+	mat& operator -= (const mat& o) {
+		for (int i = 0; i < N * N; i++) a[i] -= o.a[i];
+		return *this;
+	}
+	friend mat operator - (mat x, const mat& y) {
+		x -= y;
+		return x;
+	}
+	friend mat operator * (const mat& x, const mat& y) {
 		mat r;
-		for (int i = 0; i < N; i++) for (int k = 0; k < N; k++) for (int j = 0; j < N; j++)
-			r[{i, j}] += x[{i, k}] * y[{k, j}];
+		for (int i = 0; i < N; i++)
+			for (int k = 0; k < N; k++)
+				for (int j = 0; j < N; j++)
+					r[{i, j}] += x[{i, k}] * y[{k, j}];
 		return r;
 	}
-	mat& operator*=(const mat& o) { return *this = *this * o; }
-	friend bool operator==(const mat&, const mat&) = default;
+	mat& operator *= (const mat& o) { return *this = *this * o; }
+	friend bool operator == (const mat&, const mat&) = default;
 };
 
 // Truncated polynomial mod x^N over num
 template <typename num, int N> struct trunc_series {
 	std::array<num, size_t(N)> a{};
-	num& operator[](int i) { return a[size_t(i)]; }
-	const num& operator[](int i) const { return a[size_t(i)]; }
+	num& operator [] (int i) { return a[size_t(i)]; }
+	const num& operator [] (int i) const { return a[size_t(i)]; }
 	num* data() { return a.data(); }
 	const num* data() const { return a.data(); }
-	trunc_series& operator+=(const trunc_series& o) { for (int i = 0; i < N; i++) a[i] += o.a[i]; return *this; }
-	friend trunc_series operator+(trunc_series x, const trunc_series& y) { x += y; return x; }
-	trunc_series& operator-=(const trunc_series& o) { for (int i = 0; i < N; i++) a[i] -= o.a[i]; return *this; }
-	friend trunc_series operator-(trunc_series x, const trunc_series& y) { x -= y; return x; }
-	friend trunc_series operator*(const trunc_series& x, const trunc_series& y) {
+	trunc_series& operator += (const trunc_series& o) {
+		for (int i = 0; i < N; i++) a[i] += o.a[i];
+		return *this;
+	}
+	friend trunc_series operator + (trunc_series x, const trunc_series& y) {
+		x += y;
+		return x;
+	}
+	trunc_series& operator -= (const trunc_series& o) {
+		for (int i = 0; i < N; i++) a[i] -= o.a[i];
+		return *this;
+	}
+	friend trunc_series operator - (trunc_series x, const trunc_series& y) {
+		x -= y;
+		return x;
+	}
+	friend trunc_series operator * (const trunc_series& x, const trunc_series& y) {
 		trunc_series r;
-		for (int i = 0; i < N; i++) for (int j = 0; j < N - i; j++) r[i + j] += x[i] * y[j];
+		for (int i = 0; i < N; i++)
+			for (int j = 0; j < N - i; j++) r[i + j] += x[i] * y[j];
 		return r;
 	}
-	trunc_series& operator*=(const trunc_series& o) { return *this = *this * o; }
-	friend bool operator==(const trunc_series&, const trunc_series&) = default;
+	trunc_series& operator *= (const trunc_series& o) { return *this = *this * o; }
+	friend bool operator == (const trunc_series&, const trunc_series&) = default;
 };
 
 // componentwise
@@ -81,7 +108,9 @@ struct componentwise {
 		std::array<typename E::template transformed_t<A>, size_t(L)> t;
 		int size() const { return t[0].size(); }
 		transformed_t() = default;
-		template <int A2> requires (A2 != A) explicit(A2 > A) transformed_t(transformed_t<A2>&& o) {
+		template <int A2>
+			requires (A2 != A)
+		explicit(A2 > A) transformed_t(transformed_t<A2>&& o) {
 			for (int c = 0; c < L; c++)
 				t[c] = typename E::template transformed_t<A>(std::move(o.t[c]));
 		}
@@ -92,7 +121,9 @@ struct componentwise {
 		std::array<typename E::template product_t<K>, size_t(P)> t;
 		int size() const { return t[0].size(); }
 		product_t() = default;
-		template <int K2> requires (K2 != K) explicit(K2 > K) product_t(product_t<K2>&& o) {
+		template <int K2>
+			requires (K2 != K)
+		explicit(K2 > K) product_t(product_t<K2>&& o) {
 			for (int c = 0; c < P; c++)
 				t[c] = typename E::template product_t<K>(std::move(o.t[c]));
 		}
@@ -183,8 +214,9 @@ struct matrix : componentwise<E, mat<typename E::value_type, N>, N * N> {
 	template <int A, int B>
 	static product_t<A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
 		product_t<A * B> p;
-		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++)
-			p.t[size_t(r) * N + c] = entry<A, B>(a, b, r, c, n);
+		for (int r = 0; r < N; r++)
+			for (int c = 0; c < N; c++)
+				p.t[size_t(r) * N + c] = entry<A, B>(a, b, r, c, n);
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
@@ -192,13 +224,11 @@ struct matrix : componentwise<E, mat<typename E::value_type, N>, N * N> {
 	static auto entry2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
 		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
-		int r, int c, int n
-	) {
+		int r, int c, int n) {
 		auto e = E::mul2(
 			a1.t[size_t(r) * N + k], b1.t[size_t(k) * N + c],
 			a2.t[size_t(r) * N + k], b2.t[size_t(k) * N + c],
-			n
-		);
+			n);
 		if constexpr (k + 1 == N) return e;
 		else return E::add(std::move(e), entry2<A1, B1, A2, B2, k + 1>(a1, b1, a2, b2, r, c, n));
 	}
@@ -206,11 +236,11 @@ struct matrix : componentwise<E, mat<typename E::value_type, N>, N * N> {
 	static product_t<A1 * B1 + A2 * B2> mul2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
 		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
-		int n
-	) {
+		int n) {
 		product_t<A1 * B1 + A2 * B2> p;
-		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++)
-			p.t[size_t(r) * N + c] = entry2<A1, B1, A2, B2>(a1, b1, a2, b2, r, c, n);
+		for (int r = 0; r < N; r++)
+			for (int c = 0; c < N; c++)
+				p.t[size_t(r) * N + c] = entry2<A1, B1, A2, B2>(a1, b1, a2, b2, r, c, n);
 		return p;
 	}
 };
@@ -245,8 +275,7 @@ struct trunc : componentwise<E, trunc_series<typename E::value_type, N>, N> {
 	static auto entry2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
 		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
-		int n
-	) {
+		int n) {
 		auto e = E::mul2(a1.t[size_t(i)], b1.t[size_t(s - i)], a2.t[size_t(i)], b2.t[size_t(s - i)], n);
 		if constexpr (i == s) return e;
 		else return E::add(std::move(e), entry2<A1, B1, A2, B2, s, i + 1>(a1, b1, a2, b2, n));
@@ -255,8 +284,7 @@ struct trunc : componentwise<E, trunc_series<typename E::value_type, N>, N> {
 	static product_t<A1 * B1 + A2 * B2> mul2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
 		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
-		int n
-	) {
+		int n) {
 		product_t<A1 * B1 + A2 * B2> p;
 		[&]<size_t... s_>(std::index_sequence<s_...>) {
 			((p.t[s_] = entry2<A1, B1, A2, B2, int(s_)>(a1, b1, a2, b2, n)), ...);
@@ -276,7 +304,7 @@ template <int N> constexpr std::array<int, size_t(N) * N + 1> matrix_stable_ofs 
 
 template <engine E, int N>
 struct matrix_stable
-		: componentwise<E, mat<typename E::value_type, N>, N * N, matrix_stable_ofs<N>> {
+	: componentwise<E, mat<typename E::value_type, N>, N * N, matrix_stable_ofs<N>> {
 	using base = componentwise<E, mat<typename E::value_type, N>, N * N, matrix_stable_ofs<N>>;
 	static constexpr bool commutative = false;
 	static constexpr int unit_scale = base::unit_scale;
@@ -289,8 +317,10 @@ struct matrix_stable
 	static product_t<A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
 		product_t<A * B> p;
 		// entry (r, c)'s k-th addend a(r,k)*b(k,c), grouped per the offsets
-		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) for (int k = 0; k < N; k++)
-			p.t[(size_t(r) * N + c) * N + k] = E::mul(a.t[size_t(r) * N + k], b.t[size_t(k) * N + c], n);
+		for (int r = 0; r < N; r++)
+			for (int c = 0; c < N; c++)
+				for (int k = 0; k < N; k++)
+					p.t[(size_t(r) * N + c) * N + k] = E::mul(a.t[size_t(r) * N + k], b.t[size_t(k) * N + c], n);
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
@@ -298,15 +328,15 @@ struct matrix_stable
 	static product_t<A1 * B1 + A2 * B2> mul2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
 		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
-		int n
-	) {
+		int n) {
 		product_t<A1 * B1 + A2 * B2> p;
-		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) for (int k = 0; k < N; k++)
-			p.t[(size_t(r) * N + c) * N + k] = E::mul2(
-				a1.t[size_t(r) * N + k], b1.t[size_t(k) * N + c],
-				a2.t[size_t(r) * N + k], b2.t[size_t(k) * N + c],
-				n
-			);
+		for (int r = 0; r < N; r++)
+			for (int c = 0; c < N; c++)
+				for (int k = 0; k < N; k++)
+					p.t[(size_t(r) * N + c) * N + k] = E::mul2(
+						a1.t[size_t(r) * N + k], b1.t[size_t(k) * N + c],
+						a2.t[size_t(r) * N + k], b2.t[size_t(k) * N + c],
+						n);
 		return p;
 	}
 };
@@ -319,7 +349,7 @@ template <int N> constexpr std::array<int, size_t(N) + 1> trunc_series_stable_of
 
 template <engine E, int N>
 struct trunc_stable
-		: componentwise<E, trunc_series<typename E::value_type, N>, N, trunc_series_stable_ofs<N>> {
+	: componentwise<E, trunc_series<typename E::value_type, N>, N, trunc_series_stable_ofs<N>> {
 	using base = componentwise<E, trunc_series<typename E::value_type, N>, N, trunc_series_stable_ofs<N>>;
 	static constexpr bool commutative = E::commutative;
 	static constexpr int unit_scale = base::unit_scale;
@@ -331,8 +361,9 @@ struct trunc_stable
 	template <int A, int B>
 	static product_t<A * B> mul(const transformed_t<A>& a, const transformed_t<B>& b, int n) {
 		product_t<A * B> p;
-		for (int s = 0; s < N; s++) for (int i = 0; i <= s; i++)
-			p.t[size_t(trunc_series_stable_ofs<N>[size_t(s)] + i)] = E::mul(a.t[size_t(i)], b.t[size_t(s - i)], n);
+		for (int s = 0; s < N; s++)
+			for (int i = 0; i <= s; i++)
+				p.t[size_t(trunc_series_stable_ofs<N>[size_t(s)] + i)] = E::mul(a.t[size_t(i)], b.t[size_t(s - i)], n);
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
@@ -340,15 +371,14 @@ struct trunc_stable
 	static product_t<A1 * B1 + A2 * B2> mul2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
 		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
-		int n
-	) {
+		int n) {
 		product_t<A1 * B1 + A2 * B2> p;
-		for (int s = 0; s < N; s++) for (int i = 0; i <= s; i++)
-			p.t[size_t(trunc_series_stable_ofs<N>[size_t(s)] + i)] = E::mul2(
-				a1.t[size_t(i)], b1.t[size_t(s - i)],
-				a2.t[size_t(i)], b2.t[size_t(s - i)],
-				n
-			);
+		for (int s = 0; s < N; s++)
+			for (int i = 0; i <= s; i++)
+				p.t[size_t(trunc_series_stable_ofs<N>[size_t(s)] + i)] = E::mul2(
+					a1.t[size_t(i)], b1.t[size_t(s - i)],
+					a2.t[size_t(i)], b2.t[size_t(s - i)],
+					n);
 		return p;
 	}
 };

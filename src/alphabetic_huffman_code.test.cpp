@@ -13,17 +13,17 @@ template <typename T> T alphabetic_huffman_code_naive(std::vector<T> weights) {
 	for (int i = 0; i < N; i++) {
 		dp[i * N + i] = 0;
 		T pref = weights[i];
-		for (int j = i-1; j >= 0; j--) {
-			T v = dp[i * N + i] + dp[(i-1) * N + j];
-			for (int k = i-1; k >= j+1; k--) {
-				v = std::min(v, dp[i * N + k] + dp[(k-1) * N + j]);
+		for (int j = i - 1; j >= 0; j--) {
+			T v = dp[i * N + i] + dp[(i - 1) * N + j];
+			for (int k = i - 1; k >= j + 1; k--) {
+				v = std::min(v, dp[i * N + k] + dp[(k - 1) * N + j]);
 			}
 			pref += weights[j];
 			v += pref;
 			dp[i * N + j] = v;
 		}
 	}
-	return dp[(N-1) * N + 0];
+	return dp[(N - 1) * N + 0];
 }
 
 TEST_CASE("Alphabetic Huffman Code", "[alphabetic_huffman_code]") {
@@ -32,7 +32,7 @@ TEST_CASE("Alphabetic Huffman Code", "[alphabetic_huffman_code]") {
 		int N = std::uniform_int_distribution(1, 60)(mt);
 		int MX = 1 << std::uniform_int_distribution(0, 15)(mt);
 		std::vector<int> weights(N);
-		for (auto& w : weights) w = std::uniform_int_distribution(0, MX-1)(mt);
+		for (auto& w : weights) w = std::uniform_int_distribution(0, MX - 1)(mt);
 		auto naive_tot = alphabetic_huffman_code_naive(weights);
 
 		auto code_depths = alphabetic_huffman_code(weights);

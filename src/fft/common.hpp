@@ -36,8 +36,11 @@
 
 namespace ecnerwala {
 
-template<class T> int sz(T&& arg) { using std::size; return int(size(std::forward<T>(arg))); }
-inline int nextPow2(int s) { return 1 << (s > 1 ? 32 - __builtin_clz(s-1) : 0); }
+template <class T> int sz(T&& arg) {
+	using std::size;
+	return int(size(std::forward<T>(arg)));
+}
+inline int nextPow2(int s) { return 1 << (s > 1 ? 32 - __builtin_clz(s - 1) : 0); }
 
 namespace fft {
 
@@ -64,10 +67,12 @@ template <typename T> struct buffer_pool {
 			v.assign(n, T());
 		}
 		handle(const handle&) = delete;
-		handle& operator=(const handle&) = delete;
+		handle& operator = (const handle&) = delete;
 		handle(handle&& o) noexcept : v(std::move(o.v)) {}
-		~handle() { if (v.capacity()) free_list.push_back(std::move(v)); }
-		T& operator[](int i) { return v[i]; }
+		~handle() {
+			if (v.capacity()) free_list.push_back(std::move(v));
+		}
+		T& operator [] (int i) { return v[i]; }
 		operator std::span<T>() { return std::span<T>(v); }
 		std::span<T> span() { return std::span<T>(v); }
 	};

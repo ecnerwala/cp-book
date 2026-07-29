@@ -56,7 +56,7 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_rational_function", "[fft]", MOD_ENG
 		num iq0 = inv(q[0]);
 		for (int i = 0; i < terms; i++) {
 			num v = i < int(p.size()) ? p[i] : num(0);
-			for (int j = 1; j <= min<int>(i, d - 1); j++) v -= q[j] * ser[i-j];
+			for (int j = 1; j <= min<int>(i, d - 1); j++) v -= q[j] * ser[i - j];
 			ser[i] = v * iq0;
 		}
 		series::exact<E> xp(p.begin(), p.end()), xq(q.begin(), q.end());
@@ -78,7 +78,7 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	series::cached_exact<E> ca(a), cb(b);
 	series::exact<E> got(size_t(a.len() + b.len() - 1));
 	fft::multiply<E>(span<const num>(ca.underlying()), ca.cache(),
-			span<const num>(cb.underlying()), cb.cache(), span<num>(got));
+		span<const num>(cb.underlying()), cb.cache(), span<num>(got));
 	REQUIRE(got == a * b);
 	REQUIRE((ca * cb) == (a * b));
 	REQUIRE(middle_product(ca, cb) == fft::middle_product<E>(a, b));
@@ -246,4 +246,5 @@ TEST_CASE("series::vec compose", "[fft]") {
 	}
 }
 
-}} // namespace ecnerwala::fft
+}
+} // namespace ecnerwala::fft

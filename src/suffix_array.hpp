@@ -13,7 +13,10 @@
 
 #include "rmq.hpp"
 
-template<class T> int sz(T&& arg) { using std::size; return int(size(std::forward<T>(arg))); }
+template <class T> int sz(T&& arg) {
+	using std::size;
+	return int(size(std::forward<T>(arg)));
+}
 
 // Layered suffix array: SuffixArrayBase computes just sa/rank, each further
 // layer statically opts into one more derived structure. Use the leaf classes
@@ -52,8 +55,7 @@ public:
 		using compressed_value_type = typename std::conditional<
 			sizeof(value_type) < sizeof(index_t),
 			value_type,
-			index_t
-		>::type;
+			index_t>::type;
 
 		std::vector<compressed_value_type> compressed_s(sz(S));
 		int sigma = 0;
@@ -105,8 +107,7 @@ public:
 		using compressed_value_type = typename std::conditional<
 			sizeof(value_type) < sizeof(index_t),
 			value_type,
-			index_t
-		>::type;
+			index_t>::type;
 
 		std::vector<compressed_value_type> compressed_s(sz(S));
 		int sigma = 0;
@@ -143,7 +144,7 @@ protected:
 
 private:
 	template <typename String> void build_sa(const String& S, index_t sigma) {
-		sa = std::vector<index_t>(N+1);
+		sa = std::vector<index_t>(N + 1);
 		assert(sigma >= 0);
 		for (auto s : S) assert(0 <= index_t(s) && index_t(s) < sigma);
 		std::vector<index_t> tmp(sigma + std::max(N, sigma));
@@ -161,7 +162,8 @@ private:
 		}
 
 		// Phase 1: Initialize the frequency array, which will let us lookup buckets.
-		index_t* freq = tmp; tmp += sigma;
+		index_t* freq = tmp;
+		tmp += sigma;
 		memset(freq, 0, sizeof(*freq) * sigma);
 		for (int i = 0; i < N; i++) {
 			++freq[index_t(S[i])];
@@ -192,8 +194,9 @@ private:
 			// This doesn't count towards num_pieces.
 			sa[0] = N;
 
-			index_t c0 = S[N-1], c1 = -1; bool isS = false;
-			for (int i = N-2; i >= 0; i--) {
+			index_t c0 = S[N - 1], c1 = -1;
+			bool isS = false;
+			for (int i = N - 2; i >= 0; i--) {
 				c1 = c0;
 				c0 = S[i];
 				if (c0 < c1) {
@@ -201,7 +204,7 @@ private:
 				} else if (c0 > c1 && isS) {
 					isS = false;
 					// insert i+1
-					sa[first_endpoint = --tmp[c1]] = i+1;
+					sa[first_endpoint = --tmp[c1]] = i + 1;
 					++num_pieces;
 				}
 			}
@@ -227,7 +230,7 @@ private:
 					sa[z] = 0;
 
 					--v;
-					index_t c0 = S[v-1], c1 = S[v];
+					index_t c0 = S[v - 1], c1 = S[v];
 					sa[tmp[c1]++] = (c0 < c1) ? ~v : v;
 				}
 			}
@@ -253,7 +256,7 @@ private:
 					v = ~v;
 
 					--v;
-					index_t c0 = S[v-1], c1 = S[v];
+					index_t c0 = S[v - 1], c1 = S[v];
 					sa[--tmp[c1]] = (c0 > c1) ? v : ~v;
 				}
 			}
@@ -264,8 +267,9 @@ private:
 			// the sentinel.
 			{
 				int prv_start = N;
-				index_t c0 = S[N-1], c1 = -1; bool isS = false;
-				for (int i = N-2; i >= 0; i--) {
+				index_t c0 = S[N - 1], c1 = -1;
+				bool isS = false;
+				for (int i = N - 2; i >= 0; i--) {
 					c1 = c0;
 					c0 = S[i];
 					if (c0 < c1) {
@@ -274,8 +278,8 @@ private:
 						isS = false;
 
 						// insert i+1
-						int v = i+1;
-						sa[v>>1] = prv_start == N ? 0 : prv_start - v;
+						int v = i + 1;
+						sa[v >> 1] = prv_start == N ? 0 : prv_start - v;
 						prv_start = v;
 					}
 				}
@@ -287,11 +291,11 @@ private:
 				int prv_len = -1, prv_v = 0;
 				for (int i = 0; i < num_pieces; i++) {
 					int v = pieces[i];
-					int len = sa[v>>1];
+					int len = sa[v >> 1];
 
 					bool eq = prv_len == len;
 					for (int a = 0; eq && a < len; ++a) {
-						eq = S[v+a] == S[prv_v+a];
+						eq = S[v + a] == S[prv_v + a];
 					}
 					if (!eq) {
 						next_sigma++;
@@ -299,32 +303,33 @@ private:
 						prv_v = v;
 					}
 
-					sa[v>>1] = next_sigma; // purposely leave this 1 large to check != 0
+					sa[v >> 1] = next_sigma; // purposely leave this 1 large to check != 0
 				}
 			}
 
 			if (next_sigma == num_pieces) {
 				sa[0] = N;
-				memcpy(sa+1, pieces, sizeof(*sa) * num_pieces);
+				memcpy(sa + 1, pieces, sizeof(*sa) * num_pieces);
 			} else {
 				index_t* next_S = sa_end;
 
 				// Finally, pack the input to the SA
 				{
-					for (int i = (N-1)>>1; i >= 0; i--) {
+					for (int i = (N - 1) >> 1; i >= 0; i--) {
 						int v = sa[i];
-						if (v) *--next_S = v-1;
+						if (v) *--next_S = v - 1;
 						sa[i] = 0;
 					}
 				}
 
-				memset(sa, 0, sizeof(*sa) * (num_pieces+1));
+				memset(sa, 0, sizeof(*sa) * (num_pieces + 1));
 				sais<const index_t*>(num_pieces, next_S, sa, next_sigma, tmp);
 
 				{ // Compute the piece start points again and use those to map up the suffix array
 					next_S = sa_end;
-					index_t c0 = S[N-1], c1 = -1; bool isS = false;
-					for (int i = N-2; i >= 0; i--) {
+					index_t c0 = S[N - 1], c1 = -1;
+					bool isS = false;
+					for (int i = N - 2; i >= 0; i--) {
 						c1 = c0;
 						c0 = S[i];
 						if (c0 < c1) {
@@ -332,7 +337,7 @@ private:
 						} else if (c0 > c1 && isS) {
 							isS = false;
 
-							int v = i+1;
+							int v = i + 1;
 							*--next_S = v;
 						}
 					}
@@ -344,7 +349,7 @@ private:
 			}
 
 			// zero everything else
-			memset(sa+num_pieces+1, 0, sizeof(*sa) * (N - num_pieces));
+			memset(sa + num_pieces + 1, 0, sizeof(*sa) * (N - num_pieces));
 
 			{
 				// Scatter the finished pieces
@@ -367,7 +372,7 @@ private:
 				if (v <= 0) continue;
 				--v;
 				index_t c1 = S[v];
-				index_t c0 = v ? S[v-1] : c1; // if v = 0, we don't want to invert
+				index_t c0 = v ? S[v - 1] : c1; // if v = 0, we don't want to invert
 				sa[tmp[c1]++] = (c0 < c1) ? ~v : v;
 			}
 		}
@@ -381,14 +386,14 @@ private:
 				sa[z] = v = ~v;
 				--v;
 				index_t c1 = S[v];
-				index_t c0 = v ? S[v-1] : c1+1;
+				index_t c0 = v ? S[v - 1] : c1 + 1;
 				sa[--tmp[c1]] = (c0 > c1) ? v : ~v;
 			}
 		}
 	}
 
 	void build_rank() {
-		rank = std::vector<index_t>(N+1);
+		rank = std::vector<index_t>(N + 1);
 		for (int i = 0; i <= N; i++) rank[sa[i]] = i;
 	}
 };
@@ -416,9 +421,9 @@ private:
 		assert(sz(S) == N);
 		lcp = std::vector<index_t>(N);
 		for (int i = 0, k = 0; i < N - 1; i++) {
-			int j = sa[rank[i]-1];
-			while (k < N - std::max(i, j) && S[i+k] == S[j+k]) k++;
-			lcp[rank[i]-1] = k;
+			int j = sa[rank[i] - 1];
+			while (k < N - std::max(i, j) && S[i + k] == S[j + k]) k++;
+			lcp[rank[i] - 1] = k;
 			if (k) --k;
 		}
 	}
@@ -432,17 +437,17 @@ public:
 	RangeMinQuery<std::pair<index_t, index_t>> rmq;
 
 	index_t get_lcp(index_t a, index_t b) const {
-		if (a == b) return this->N-a;
+		if (a == b) return this->N - a;
 		a = this->rank[a], b = this->rank[b];
 		if (a > b) std::swap(a, b);
-		return rmq.query(a, b-1).first;
+		return rmq.query(a, b - 1).first;
 	}
 
 	// Get the split in the suffix tree, using half-open intervals
 	// Returns len, idx
 	std::pair<index_t, index_t> get_split(index_t l, index_t r) const {
 		assert(r - l > 1);
-		return rmq.query(l, r-2);
+		return rmq.query(l, r - 2);
 	}
 
 protected:
@@ -458,7 +463,7 @@ private:
 		const auto& lcp = this->lcp;
 		std::vector<std::pair<index_t, index_t>> lcp_idx(N);
 		for (int i = 0; i < N; i++) {
-			lcp_idx[i] = {lcp[i], i+1};
+			lcp_idx[i] = {lcp[i], i + 1};
 		}
 		rmq = RangeMinQuery<std::pair<index_t, index_t>>(std::move(lcp_idx));
 	}
@@ -469,6 +474,7 @@ class SuffixArrayRMQ : public SuffixArrayRMQBase<SuffixArrayRMQ> {};
 class PrefixArrayRMQ : private SuffixArrayRMQ {
 	PrefixArrayRMQ(const SuffixArrayRMQ& sa_) : SuffixArrayRMQ(sa_) {}
 	PrefixArrayRMQ(SuffixArrayRMQ&& sa_) : SuffixArrayRMQ(std::move(sa_)) {}
+
 public:
 	PrefixArrayRMQ() {}
 	template <typename String> static PrefixArrayRMQ construct_raw(const String& S, int sigma) {

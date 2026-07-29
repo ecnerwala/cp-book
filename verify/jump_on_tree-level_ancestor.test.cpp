@@ -6,12 +6,15 @@
 #include "level_ancestor.hpp"
 
 int main() {
-	std::ios_base::sync_with_stdio(false); std::cin.tie(nullptr);
+	std::ios_base::sync_with_stdio(false);
+	std::cin.tie(nullptr);
 
-	int N, Q; std::cin >> N >> Q;
+	int N, Q;
+	std::cin >> N >> Q;
 	std::vector<std::vector<int>> adj(N);
-	for (int e = 0; e < N-1; e++) {
-		int u, v; std::cin >> u >> v;
+	for (int e = 0; e < N - 1; e++) {
+		int u, v;
+		std::cin >> u >> v;
 		adj[u].push_back(v);
 		adj[v].push_back(u);
 	}
@@ -22,14 +25,15 @@ int main() {
 		depth[cur] = d;
 		for (int nxt : adj[cur]) {
 			if (nxt == prv) continue;
-			self(nxt, cur, d+1);
+			self(nxt, cur, d + 1);
 		}
 	}(0, -1, 0);
 	ecnerwala::level_ancestor la(par);
 
 
 	for (int q = 0; q < Q; q++) {
-		int s, t, i; std::cin >> s >> t >> i;
+		int s, t, i;
+		std::cin >> s >> t >> i;
 		std::cout << [&]() -> int {
 			int l = la.lca(s, t);
 			if (i <= depth[s] - depth[l]) {

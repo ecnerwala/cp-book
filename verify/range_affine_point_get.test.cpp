@@ -7,12 +7,15 @@
 #include "modnum.hpp"
 
 int main() {
-	std::ios_base::sync_with_stdio(false); std::cin.tie(nullptr);
+	std::ios_base::sync_with_stdio(false);
+	std::cin.tie(nullptr);
 
 	using num = modnum<998244353>;
 
-	int N, Q; std::cin >> N >> Q;
-	std::vector<num> A(N); for (auto& a : A) std::cin >> a;
+	int N, Q;
+	std::cin >> N >> Q;
+	std::vector<num> A(N);
+	for (auto& a : A) std::cin >> a;
 	struct linear_fn {
 		std::array<num, 2> v;
 	};
@@ -20,7 +23,7 @@ int main() {
 		return {a.v[0] + a.v[1] * b.v[0], a.v[1] * b.v[1]};
 	};
 	seg_tree::in_order_layout layout(N);
-	std::vector<linear_fn> seg(2*layout.N);
+	std::vector<linear_fn> seg(2 * layout.N);
 	auto apply_lazy = [&](seg_tree::point a, linear_fn f) -> void {
 		seg[a] = apply(f, seg[a]);
 	};
@@ -33,22 +36,26 @@ int main() {
 		auto a = layout.get_point(i);
 		seg[a] = {A[i], 0};
 	}
-	for (seg_tree::point a(N-1); a > 0; a--) {
+	for (seg_tree::point a(N - 1); a > 0; a--) {
 		seg[a] = {0, 1};
 	}
 
 	for (int q = 0; q < Q; q++) {
-		int op; std::cin >> op;
+		int op;
+		std::cin >> op;
 		if (op == 0) {
-			int l, r; std::cin >> l >> r;
-			linear_fn f; std::cin >> f.v[1] >> f.v[0];
+			int l, r;
+			std::cin >> l >> r;
+			linear_fn f;
+			std::cin >> f.v[1] >> f.v[0];
 			auto rng = layout.get_range(l, r);
 			rng.for_parents_down(downdate_node);
 			rng.for_each([&](seg_tree::point a) -> void {
 				apply_lazy(a, f);
 			});
 		} else if (op == 1) {
-			int i; std::cin >> i;
+			int i;
+			std::cin >> i;
 			auto a = layout.get_point(i);
 			a.for_parents_down(downdate_node);
 			std::cout << seg[a].v[0] << '\n';

@@ -14,11 +14,13 @@ int main() {
 	using E = ecnerwala::fft::engines::ntt<num>;
 	using ps = ecnerwala::series::trunc<E>;
 
-	int N; std::cin >> N;
-	ps A(N); for (auto& a : A) std::cin >> a;
+	int N;
+	std::cin >> N;
+	ps A(N);
+	for (auto& a : A) std::cin >> a;
 	ps B = ps_inv(A);
 	for (int i = 0; i < N; i++) {
-		std::cout << B[i] << " \n"[i+1==N];
+		std::cout << B[i] << " \n"[i + 1 == N];
 	}
 
 

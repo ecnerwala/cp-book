@@ -58,11 +58,19 @@ template <typename T> T mod_inv(T a, T m) {
 // underlying pieces if the corresponding derived ops are never called.
 template <typename Self>
 struct num_ops {
-	Self operator+ () const { return static_cast<const Self&>(*this); }
-	Self operator- () const { return static_cast<const Self&>(*this).neg(); }
+	Self operator + () const { return static_cast<const Self&>(*this); }
+	Self operator - () const { return static_cast<const Self&>(*this).neg(); }
 
-	friend Self operator ++ (Self& a, int) { Self r = a; ++a; return r; }
-	friend Self operator -- (Self& a, int) { Self r = a; --a; return r; }
+	friend Self operator ++ (Self& a, int) {
+		Self r = a;
+		++a;
+		return r;
+	}
+	friend Self operator -- (Self& a, int) {
+		Self r = a;
+		--a;
+		return r;
+	}
 	friend Self operator + (const Self& a, const Self& b) { return Self(a) += b; }
 	friend Self operator - (const Self& a, const Self& b) { return Self(a) -= b; }
 	friend Self operator * (const Self& a, const Self& b) { return Self(a) *= b; }
@@ -102,12 +110,17 @@ struct mod_ops : num_ops<Self> {
 
 	explicit operator V() const { return v; }
 	std::make_signed_t<V> balanced() const {
-		return std::make_signed_t<V>(Self::MOD-v > v ? v : v - Self::MOD);
+		return std::make_signed_t<V>(Self::MOD - v > v ? v : v - Self::MOD);
 	}
 
 	friend bool operator == (const Self& a, const Self& b) { return a.v == b.v; }
 	friend std::ostream& operator << (std::ostream& out, const Self& n) { return out << n.v; }
-	friend std::istream& operator >> (std::istream& in, Self& n) { int64_t v_; in >> v_; n = Self(v_); return in; }
+	friend std::istream& operator >> (std::istream& in, Self& n) {
+		int64_t v_;
+		in >> v_;
+		n = Self(v_);
+		return in;
+	}
 
 	Self& operator ++ () {
 		++v;
@@ -119,8 +132,14 @@ struct mod_ops : num_ops<Self> {
 		--v;
 		return self();
 	}
-	Self& operator += (const Self& o) { v = Self::sub_mod_raw(v, Self::MOD - o.v); return self(); }
-	Self& operator -= (const Self& o) { v = Self::sub_mod_raw(v, o.v); return self(); }
+	Self& operator += (const Self& o) {
+		v = Self::sub_mod_raw(v, Self::MOD - o.v);
+		return self();
+	}
+	Self& operator -= (const Self& o) {
+		v = Self::sub_mod_raw(v, o.v);
+		return self();
+	}
 	Self& operator /= (const Self& o) { return self() *= o.inv(); }
 
 	// Returns a - b mod MOD, for b in [0, MOD]; wraparound detects the underflow.
@@ -188,7 +207,7 @@ struct mod_goldilocks : mod_ops<mod_goldilocks, uint64_t> {
 		// TODO: We could try to write this using intrinsics, but GCC sometimes produces the wrong code.
 		uint64_t res_wrapped = a;
 		uint64_t adjustment = b;
-		asm (
+		asm(
 			// AT&T syntax: SRC DST
 			"sub %[y], %[x]\n\t"
 			// Trick from plonky2 implementation:
@@ -200,8 +219,7 @@ struct mod_goldilocks : mod_ops<mod_goldilocks, uint64_t> {
 			: [x] "+r"(res_wrapped),
 			[y] "+r"(adjustment)
 			:
-			: "cc"
-		);
+			: "cc");
 #else
 		uint64_t res_wrapped = a - b;
 		uint64_t adjustment = (res_wrapped > a) ? EPS : 0;
@@ -217,7 +235,7 @@ struct mod_goldilocks : mod_ops<mod_goldilocks, uint64_t> {
 		// 0 <= hi <= MOD
 		// -MOD <= lo - hi + EPS * mi <= 2*MOD-2
 		// so we do have some leeway
-		return sub_mod_raw(sub_mod_raw(lo, hi), MOD-(uint64_t(mi)<<32)+mi);
+		return sub_mod_raw(sub_mod_raw(lo, hi), MOD - (uint64_t(mi) << 32) + mi);
 	}
 
 	static uint64_t reduce_u128_raw(__uint128_t v) {
@@ -236,7 +254,13 @@ struct mod_goldilocks : mod_ops<mod_goldilocks, uint64_t> {
 
 template <typename T> T power(T a, long long b) {
 	assert(b >= 0);
-	T r = 1; while (b) { if (b & 1) r *= a; b >>= 1; a *= a; } return r;
+	T r = 1;
+	while (b) {
+		if (b & 1) r *= a;
+		b >>= 1;
+		a *= a;
+	}
+	return r;
 }
 
 template <typename U, typename V> struct pairnum : num_ops<pairnum<U, V>> {
@@ -249,7 +273,12 @@ template <typename U, typename V> struct pairnum : num_ops<pairnum<U, V>> {
 	pairnum(const U& u_, const V& v_) : u(u_), v(v_) {}
 
 	friend std::ostream& operator << (std::ostream& out, const Self& n) { return out << '(' << n.u << ',' << ' ' << n.v << ')'; }
-	friend std::istream& operator >> (std::istream& in, Self& n) { long long val; in >> val; n = Self(val); return in; }
+	friend std::istream& operator >> (std::istream& in, Self& n) {
+		long long val;
+		in >> val;
+		n = Self(val);
+		return in;
+	}
 
 	friend bool operator == (const Self& a, const Self& b) { return a.u == b.u && a.v == b.v; }
 
@@ -293,6 +322,7 @@ template <typename U, typename V> struct pairnum : num_ops<pairnum<U, V>> {
 
 template <typename tag> struct dynamic_modnum : mod_ops<dynamic_modnum<tag>, uint32_t> {
 	using Self = dynamic_modnum;
+
 private:
 	inline static uint32_t MOD_ = 0;
 	inline static uint64_t BARRETT_M = 0;
@@ -335,7 +365,8 @@ public:
 
 	struct mod_reader {
 		friend std::istream& operator >> (std::istream& i, mod_reader) {
-			int mod; i >> mod;
+			int mod;
+			i >> mod;
 			Self::set_mod(mod);
 			return i;
 		}
@@ -376,7 +407,6 @@ template <typename T> struct mod_constraint {
 
 		return mod_constraint{
 			a.v + extra * a.mod,
-			a.mod * (b.mod / egcd.gcd)
-		};
+			a.mod * (b.mod / egcd.gcd)};
 	}
 };

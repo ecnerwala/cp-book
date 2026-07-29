@@ -21,8 +21,8 @@ vec<typename S::engine_t, S::exact_v> stretch(const S& a_, int n) {
 	using E = typename S::engine_t;
 	span<E, S::exact_v> a = a_.underlying();
 	vec<E, S::exact_v> r(size_t(a.len()));
-	for (int i = 0; i*n < a.len(); i++) {
-		r[i*n] = a[i];
+	for (int i = 0; i * n < a.len(); i++) {
+		r[i * n] = a[i];
 	}
 	return r;
 }
@@ -91,8 +91,10 @@ trunc<typename S::engine_t> ps_exp(const S& a_) {
 	span<E, false> a = a_.underlying();
 	assert(a.len() >= 1);
 	assert(a[0] == 0);
-	trunc<E> r(1, T(1)); r.reserve(size_t(a.len()));
-	trunc<E> invR(1, T(1)); invR.reserve(size_t(a.len()));
+	trunc<E> r(1, T(1));
+	r.reserve(size_t(a.len()));
+	trunc<E> invR(1, T(1));
+	invR.reserve(size_t(a.len()));
 	while (r.len() < a.len()) {
 		int o_sz = r.len();
 		int n_sz = std::min(o_sz * 2, a.len());
@@ -149,7 +151,7 @@ trunc<typename S::engine_t> ps_pow(const S& a_, int64_t k) {
 		return trunc<E>(size_t(a.len()), T(0));
 	}
 
-	trunc<E> r(a.begin() + st, a.end() - (st * (k-1)));
+	trunc<E> r(a.begin() + st, a.end() - (st * (k - 1)));
 	T leading_coeff = r[0];
 	r *= inv(leading_coeff);
 	r = ps_pow_monic(r, T(k));
@@ -185,9 +187,9 @@ trunc<typename S::engine_t> euler_transform(const S& a) {
 	std::vector<bool> is_prime(size_t(r.len()), true);
 	for (int p = 2; p < r.len(); p++) {
 		if (!is_prime[p]) continue;
-		for (int i = 1; i*p < r.len(); i++) {
-			r[i*p] += r[i];
-			is_prime[i*p] = false;
+		for (int i = 1; i * p < r.len(); i++) {
+			r[i * p] += r[i];
+			is_prime[i * p] = false;
 		}
 	}
 	return ps_exp(integ_shift(r));
@@ -199,9 +201,9 @@ trunc<typename S::engine_t> inverse_euler_transform(const S& a) {
 	std::vector<bool> is_prime(size_t(r.len()), true);
 	for (int p = 2; p < r.len(); p++) {
 		if (!is_prime[p]) continue;
-		for (int i = (r.len()-1)/p; i >= 1; i--) {
-			r[i*p] -= r[i];
-			is_prime[i*p] = false;
+		for (int i = (r.len() - 1) / p; i >= 1; i--) {
+			r[i * p] -= r[i];
+			is_prime[i * p] = false;
 		}
 	}
 	return integ_shift(r);
@@ -237,7 +239,7 @@ template <fft::engine E> struct packed_bivariate {
 		E::finish(E::mul(tq, tn, B), std::span<T>(c));
 		l++;
 		// compactify x^2 -> x
-		for (int i = 1; i < (2 << L); i++) c[i] = c[2*i];
+		for (int i = 1; i < (2 << L); i++) c[i] = c[2 * i];
 		// undo the circular wraparound using monicity in y
 		for (int i = 0; i < (2 << (L - l)); i++) {
 			c[(2 << L) + i] = c[i];
@@ -257,7 +259,8 @@ template <fft::engine E> struct packed_bivariate {
 };
 
 // Calculates f(g(x)) mod x^n where deg(g) == n
-template <trunc_like SF, trunc_like SG> requires fft::same_engine<SF, SG>
+template <trunc_like SF, trunc_like SG>
+	requires fft::same_engine<SF, SG>
 trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
 	using E = typename SF::engine_t;
 	using T = typename E::value_type;
@@ -299,15 +302,15 @@ trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
 		std::reverse(P.begin(), P.end());
 		P.resize(size_t(B), T(0));
 		for (int i = (1 << L) - 1; i > 0; i--) {
-			P[2*i] = P[i];
+			P[2 * i] = P[i];
 			P[i] = T(0);
 		}
 	}
-	for (int l = L-1; l >= 0; l--) {
+	for (int l = L - 1; l >= 0; l--) {
 		// Spread it out, clear the high terms
 		for (int i = (2 << L) - 1; i > 0; i--) {
 			T v = P[i];
-			P[2*i] = ((2*i) & (1 << (L-l))) ? T(0) : v;
+			P[2 * i] = ((2 * i) & (1 << (L - l))) ? T(0) : v;
 			P[i] = T(0);
 		}
 		auto tp = E::transform(std::span<const T>(P), B);
@@ -330,8 +333,7 @@ template <fft::engine E>
 typename E::value_type kth_term_of_rational_function(
 	exact<E> p,
 	exact<E> q,
-	uint64_t k
-) {
+	uint64_t k) {
 	using T = typename E::value_type;
 	assert(q.len() > 0 && q[0] != T(0));
 	assert(p.len() < q.len());
@@ -346,10 +348,10 @@ typename E::value_type kth_term_of_rational_function(
 		auto tp = E::transform(std::span<const T>(p), n);
 		E::finish(E::mul(tp, tnq, n), buf.span());
 		// deg(p * q(-x)) <= 2d-3 < n: wraparound-free
-		for (int j = 0; j < d - 1; j++) p[j] = buf[2*j + int(k & 1)];
+		for (int j = 0; j < d - 1; j++) p[j] = buf[2 * j + int(k & 1)];
 		E::finish(E::mul(tq, tnq, n), buf.span());
 		// q(x) q(-x) is even with degree <= 2d-2
-		for (int j = 0; j < d; j++) q[j] = buf[2*j];
+		for (int j = 0; j < d; j++) q[j] = buf[2 * j];
 		k >>= 1;
 	}
 	return p[0] * inv(q[0]);

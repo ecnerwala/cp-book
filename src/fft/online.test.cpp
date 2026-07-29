@@ -22,15 +22,15 @@ TEMPLATE_TEST_CASE("online multiplier", "[fft]", MOD_ENGINES) {
 		fill_rnd(f, mt);
 		fill_rnd(g, mt);
 		auto slow = multiply_slow(f, g);
-		slow.resize(2*n, num(0));
+		slow.resize(2 * n, num(0));
 		online_multiplier<E> om(n);
 		for (int i = 0; i < n; i++) {
 			om.push(f[i], g[i]);
 			REQUIRE(om.back() == slow[i]);
 		}
-		if ((n & (n-1)) == 0) {
+		if ((n & (n - 1)) == 0) {
 			// the final push of a power-of-two N completes all 2N terms
-			for (int i = n; i < 2*n; i++) {
+			for (int i = n; i < 2 * n; i++) {
 				REQUIRE(om.res[i] == slow[i]);
 			}
 		}
@@ -46,14 +46,14 @@ TEMPLATE_TEST_CASE("online squarer", "[fft]", MOD_ENGINES) {
 		vector<num> f(n);
 		fill_rnd(f, mt);
 		auto slow = multiply_slow(f, f);
-		slow.resize(2*n, num(0));
+		slow.resize(2 * n, num(0));
 		online_squarer<E> os(n);
 		for (int i = 0; i < n; i++) {
 			os.push(f[i]);
 			REQUIRE(os.back() == slow[i]);
 		}
-		if ((n & (n-1)) == 0) {
-			for (int i = n; i < 2*n; i++) {
+		if ((n & (n - 1)) == 0) {
+			for (int i = n; i < 2 * n; i++) {
 				REQUIRE(os.res[i] == slow[i]);
 			}
 		}
@@ -75,7 +75,7 @@ TEST_CASE("online squarer non-commutative fallback", "[fft]") {
 		vector<num> f(n);
 		fill_rnd(f, mt);
 		auto slow = multiply_slow(f, f);
-		slow.resize(2*n, num(0));
+		slow.resize(2 * n, num(0));
 		online_squarer<nc_engine> os(n);
 		for (int i = 0; i < n; i++) {
 			os.push(f[i]);
@@ -84,4 +84,5 @@ TEST_CASE("online squarer non-commutative fallback", "[fft]") {
 	}
 }
 
-}} // namespace ecnerwala::fft
+}
+} // namespace ecnerwala::fft

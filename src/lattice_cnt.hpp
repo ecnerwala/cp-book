@@ -18,13 +18,13 @@ inline long long lattice_cnt(long long A, long long B, long long C) {
 	while (C >= 0) {
 		assert(0 < A && A <= B);
 
-		ll k = B/A;
-		ll l = B%A;
+		ll k = B / A;
+		ll l = B % A;
 		assert(B == k * A + l);
 
-		ll f = C/B;
-		ll e = C%B / A;
-		ll g = C%B % A;
+		ll f = C / B;
+		ll e = C % B / A;
+		ll g = C % B % A;
 		assert(C == f * B + e * A + g);
 		assert(C == (f * k + e) * A + f * l + g);
 
@@ -36,9 +36,9 @@ inline long long lattice_cnt(long long A, long long B, long long C) {
 		// Az + A(fk + e + 1 - ky) + Aky + ly <= C = A (fk + e + 1) + fl - A + g
 		// Az + ly <= fl - A + g
 
-		ans += (f+1) * (e+1) + (f+1) * f / 2 * k;
+		ans += (f + 1) * (e + 1) + (f + 1) * f / 2 * k;
 
-		C = f*l - A + g;
+		C = f * l - A + g;
 		B = A;
 		A = l;
 	}
@@ -50,26 +50,29 @@ inline long long mod_count(long long a, long long m, long long c, long long n) {
 	assert(m > 0);
 	if (n == 0) return 0;
 
-	a %= m; if (a < 0) a += m;
+	a %= m;
+	if (a < 0) a += m;
 
-	long long extraC = c / m; c %= m;
+	long long extraC = c / m;
+	c %= m;
 	if (c < 0) extraC--, c += m;
 	assert(0 <= c && c < m);
 
 	long long ans = extraC * n;
 
-	long long extraN = n / m; n %= m;
+	long long extraN = n / m;
+	n %= m;
 	if (n < 0) extraN--, n += m;
 	assert(0 <= n && n < m);
 
 	if (extraN) {
-		ans += extraN * (lattice_cnt(m, a+m, (a+m) * (m-1)) - lattice_cnt(m, a+m, (a+m) * (m-1) - c));
+		ans += extraN * (lattice_cnt(m, a + m, (a + m) * (m - 1)) - lattice_cnt(m, a + m, (a + m) * (m - 1) - c));
 	}
 
 	if (n) {
 		// we want solutions to 0 <= a(N-1-x) - my < c with 0 <= x <= N-1
 		// a * (N-1) >= ax + my > a * (N-1) - c
-		ans += lattice_cnt(m, a+m, (a+m) * (n-1)) - lattice_cnt(m, a+m, (a+m) * (n-1) - c);
+		ans += lattice_cnt(m, a + m, (a + m) * (n - 1)) - lattice_cnt(m, a + m, (a + m) * (n - 1) - c);
 	}
 
 	return ans;

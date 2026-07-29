@@ -12,10 +12,18 @@ namespace ecnerwala::fft {
 // ==== engine concept ====
 
 // Output operations for the finish step to express arbitrary fusion into the output buffer.
-struct assign_op { template <typename T> void operator()(T& d, T v) const { d = v; } };
-struct add_op { template <typename T> void operator()(T& d, T v) const { d += v; } };
-struct sub_op { template <typename T> void operator()(T& d, T v) const { d -= v; } };
-struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d += v + v; } };
+struct assign_op {
+	template <typename T> void operator () (T& d, T v) const { d = v; }
+};
+struct add_op {
+	template <typename T> void operator () (T& d, T v) const { d += v; }
+};
+struct sub_op {
+	template <typename T> void operator () (T& d, T v) const { d -= v; }
+};
+struct add_twice_op {
+	template <typename T> void operator () (T& d, T v) const { d += v + v; }
+};
 
 // `engine` contract
 //   engine represents a way of packing/unpacking sequences over an arbitrary ring into FFT-style transforms.
@@ -65,8 +73,7 @@ concept engine = requires(
 	const typename E::transformed& ct,
 	typename E::product& p,
 	const typename E::product& cp,
-	int n
-) {
+	int n) {
 	typename E::value_type;
 	{ E::transform(in, n) } -> std::same_as<typename E::transformed>;
 	{ ct.size() } -> std::same_as<int>;

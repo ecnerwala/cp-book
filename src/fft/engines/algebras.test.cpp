@@ -21,11 +21,11 @@ using namespace std;
 static_assert(engine<engines::matrix<engines::ntt<modnum<998244353>>, 2>>);
 static_assert(engine<engines::trunc<engines::ntt<modnum<998244353>>, 3>>);
 // tracked inner engines work when the accumulated scale fits the budget (N <= 2)
-static_assert(engine<engines::matrix<engines::split<modnum<int(1e9)+7>>, 2>>);
-static_assert(engine<engines::trunc<engines::crt<modnum<int(1e9)+7>>, 2>>);
+static_assert(engine<engines::matrix<engines::split<modnum<int(1e9) + 7>>, 2>>);
+static_assert(engine<engines::trunc<engines::crt<modnum<int(1e9) + 7>>, 2>>);
 // the stable variants keep tracked inner engines sound at any N
-static_assert(engine<engines::matrix_stable<engines::split<modnum<int(1e9)+7>>, 3>>);
-static_assert(engine<engines::trunc_stable<engines::crt<modnum<int(1e9)+7>>, 3>>);
+static_assert(engine<engines::matrix_stable<engines::split<modnum<int(1e9) + 7>>, 3>>);
+static_assert(engine<engines::trunc_stable<engines::crt<modnum<int(1e9) + 7>>, 3>>);
 
 template <typename E, bool online, int N>
 void test_matrix_engine(mt19937& mt) {
@@ -33,7 +33,8 @@ void test_matrix_engine(mt19937& mt) {
 	using num = std::remove_reference_t<decltype(std::declval<M&>()[{0, 0}])>;
 	auto rnd_mat = [&]() {
 		M m;
-		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) m[{r, c}] = rnd_val<num>(mt);
+		for (int r = 0; r < N; r++)
+			for (int c = 0; c < N; c++) m[{r, c}] = rnd_val<num>(mt);
 		return m;
 	};
 	for (int la : {1, 2, 3, 17, 33}) {
@@ -50,10 +51,10 @@ void test_matrix_engine(mt19937& mt) {
 	vector<M> f(n);
 	for (M& m : f) m = rnd_mat();
 	auto slow = multiply_slow(f, f);
-	slow.resize(2*n, M{});
-	vector<M> got(2*n - 1);
+	slow.resize(2 * n, M{});
+	vector<M> got(2 * n - 1);
 	square<E>(span<const M>(f), span<M>(got));
-	REQUIRE(got == vector<M>(slow.begin(), slow.begin() + 2*n - 1));
+	REQUIRE(got == vector<M>(slow.begin(), slow.begin() + 2 * n - 1));
 	if constexpr (online) {
 		online_squarer<E> os(n);
 		for (int i = 0; i < n; i++) {
@@ -64,9 +65,9 @@ void test_matrix_engine(mt19937& mt) {
 }
 
 TEMPLATE_TEST_CASE("matrix engine", "[fft]",
-		engines::ntt<modnum<998244353>>,
-		engines::split<modnum<int(1e9)+7>>,
-		engines::crt<modnum<int(1e9)+7>>) {
+	engines::ntt<modnum<998244353>>,
+	engines::split<modnum<int(1e9) + 7>>,
+	engines::crt<modnum<int(1e9) + 7>>) {
 	using IE = TestType;
 	// the tracked engines' scale budget admits N = 2 (entries are N-addend sums), and
 	// the non-commutative online squarer accumulates two N-addend products per window
@@ -98,9 +99,9 @@ void test_trunc_series_engine(mt19937& mt) {
 }
 
 TEMPLATE_TEST_CASE("trunc_series engine", "[fft]",
-		engines::ntt<modnum<998244353>>,
-		engines::split<modnum<int(1e9)+7>>,
-		engines::crt<modnum<int(1e9)+7>>) {
+	engines::ntt<modnum<998244353>>,
+	engines::split<modnum<int(1e9) + 7>>,
+	engines::crt<modnum<int(1e9) + 7>>) {
 	using IE = TestType;
 	using num = typename IE::value_type;
 	constexpr int N = IE::unit_scale == 0 ? 3 : 2;
@@ -109,4 +110,5 @@ TEMPLATE_TEST_CASE("trunc_series engine", "[fft]",
 	test_trunc_series_engine<engines::trunc_stable<IE, 3>, num, 3>(mt);
 }
 
-}} // namespace ecnerwala::fft
+}
+} // namespace ecnerwala::fft

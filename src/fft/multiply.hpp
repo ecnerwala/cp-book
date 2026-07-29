@@ -25,8 +25,8 @@ namespace ecnerwala::fft {
 // Circular convolution mod n (power of 2)
 template <engine E, typename Op = assign_op>
 void multiply_circular(std::span<const typename E::value_type> a, std::span<const typename E::value_type> b,
-		std::span<typename E::value_type> out, int n, Op op = {}) {
-	assert(!(n & (n-1)));
+	std::span<typename E::value_type> out, int n, Op op = {}) {
+	assert(!(n & (n - 1)));
 	auto ta = E::transform(a, n);
 	auto tb = E::transform(b, n);
 	E::finish(E::mul(ta, tb, n), out, op);
@@ -34,7 +34,7 @@ void multiply_circular(std::span<const typename E::value_type> a, std::span<cons
 
 template <engine E, typename Op = assign_op>
 void square_circular(std::span<const typename E::value_type> a, std::span<typename E::value_type> out, int n, Op op = {}) {
-	assert(!(n & (n-1)));
+	assert(!(n & (n - 1)));
 	auto ta = E::transform(a, n);
 	E::finish(E::sq(ta, n), out, op);
 }
@@ -44,7 +44,10 @@ namespace detail {
 // multiplying mod 2^k, and fixing up the leading coefficient.
 
 // Helpers to detect and perform this optimization.
-struct conv_size { int n; bool cut; };
+struct conv_size {
+	int n;
+	bool cut;
+};
 inline conv_size conv_size_for(int s) {
 	int n = nextPow2(s);
 	bool cut = (n == 2 * (s - 1));
@@ -61,7 +64,7 @@ void emit_linear(std::span<T> buf, int n, int s, bool cut, T c0, std::span<T> ou
 	}
 	int lim = min(sz(out), min(s, n));
 	for (int i = 0; i < lim; i++) op(out[i], buf[i]);
-	if (cut && sz(out) >= s) op(out[s-1], cn);
+	if (cut && sz(out) >= s) op(out[s - 1], cn);
 }
 
 // Applies op, diverting the wrapped leading coefficient of a cut product:
@@ -73,8 +76,11 @@ struct cut_op {
 	T* out0;
 	T c0;
 	T& cn;
-	void operator()(T& x, T v) const {
-		if (&x == out0) { cn = v - c0; v = c0; }
+	void operator () (T& x, T v) const {
+		if (&x == out0) {
+			cn = v - c0;
+			v = c0;
+		}
 		op(x, v);
 	}
 };
@@ -84,8 +90,7 @@ struct cut_op {
 template <engine E, typename P, typename Op = assign_op>
 void finish_linear(
 	P&& p, int n, int s, bool cut,
-	typename E::value_type c0, std::span<typename E::value_type> out, Op op = {}
-) {
+	typename E::value_type c0, std::span<typename E::value_type> out, Op op = {}) {
 	using T = typename E::value_type;
 	if (sz(out) == 0) return;
 	int lim = min(sz(out), min(s, n));
@@ -94,7 +99,7 @@ void finish_linear(
 	} else {
 		T cn{};
 		E::finish(std::move(p), out.subspan(0, lim), cut_op<T, Op>{op, &out[0], c0, cn});
-		if (sz(out) >= s) op(out[s-1], cn);
+		if (sz(out) >= s) op(out[s - 1], cn);
 	}
 }
 
@@ -102,7 +107,7 @@ void finish_linear(
 
 template <engine E, typename Op = assign_op>
 void multiply(std::span<const typename E::value_type> a, std::span<const typename E::value_type> b,
-		std::span<typename E::value_type> out, Op op = {}) {
+	std::span<typename E::value_type> out, Op op = {}) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return;
 	int s = sz(a) + sz(b) - 1;
@@ -115,8 +120,8 @@ void multiply(std::span<const typename E::value_type> a, std::span<const typenam
 
 template <engine E, typename Op = assign_op>
 void multiply(std::span<const typename E::value_type> a, transformed<E>& ta,
-		std::span<const typename E::value_type> b, transformed<E>& tb,
-		std::span<typename E::value_type> out, Op op = {}) {
+	std::span<const typename E::value_type> b, transformed<E>& tb,
+	std::span<typename E::value_type> out, Op op = {}) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return;
 	int s = sz(a) + sz(b) - 1;
@@ -129,18 +134,20 @@ void multiply(std::span<const typename E::value_type> a, transformed<E>& ta,
 
 template <engine E, typename Op = assign_op>
 void multiply_add2(std::span<const typename E::value_type> a1, transformed<E>& ta1,
-		std::span<const typename E::value_type> b1, transformed<E>& tb1,
-		std::span<const typename E::value_type> a2, transformed<E>& ta2,
-		std::span<const typename E::value_type> b2, transformed<E>& tb2,
-		std::span<typename E::value_type> out, Op op = {}) {
+	std::span<const typename E::value_type> b1, transformed<E>& tb1,
+	std::span<const typename E::value_type> a2, transformed<E>& ta2,
+	std::span<const typename E::value_type> b2, transformed<E>& tb2,
+	std::span<typename E::value_type> out, Op op = {}) {
 	using T = typename E::value_type;
 	assert(sz(a1) > 0 && sz(b1) > 0 && sz(a2) > 0 && sz(b2) > 0);
 	int s = sz(a1) + sz(b1) - 1;
 	assert(sz(a2) + sz(b2) - 1 == s);
 	auto [n, cut] = detail::conv_size_for(s);
 	T c0 = a1[0] * b1[0] + a2[0] * b2[0];
-	E::extend_to(ta1, n, a1); E::extend_to(tb1, n, b1);
-	E::extend_to(ta2, n, a2); E::extend_to(tb2, n, b2);
+	E::extend_to(ta1, n, a1);
+	E::extend_to(tb1, n, b1);
+	E::extend_to(ta2, n, a2);
+	E::extend_to(tb2, n, b2);
 	detail::finish_linear<E>(E::mul2(ta1, tb1, ta2, tb2, n), n, s, cut, c0, out, op);
 }
 
@@ -148,11 +155,11 @@ void multiply_add2(std::span<const typename E::value_type> a1, transformed<E>& t
 // transform of the (full-length) result, like multiply_cached.
 template <engine E>
 void multiply_add2_cached(
-		std::span<const typename E::value_type> a1, transformed<E>& ta1,
-		std::span<const typename E::value_type> b1, transformed<E>& tb1,
-		std::span<const typename E::value_type> a2, transformed<E>& ta2,
-		std::span<const typename E::value_type> b2, transformed<E>& tb2,
-		std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
+	std::span<const typename E::value_type> a1, transformed<E>& ta1,
+	std::span<const typename E::value_type> b1, transformed<E>& tb1,
+	std::span<const typename E::value_type> a2, transformed<E>& ta2,
+	std::span<const typename E::value_type> b2, transformed<E>& tb2,
+	std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
 	using T = typename E::value_type;
 	assert(sz(a1) > 0 && sz(b1) > 0 && sz(a2) > 0 && sz(b2) > 0);
 	int s = sz(a1) + sz(b1) - 1;
@@ -162,8 +169,10 @@ void multiply_add2_cached(
 	if constexpr (std::same_as<typename E::product, transformed<E>>) {
 		auto [n, cut] = detail::conv_size_for(s);
 		T c0 = a1[0] * b1[0] + a2[0] * b2[0];
-		E::extend_to(ta1, n, a1); E::extend_to(tb1, n, b1);
-		E::extend_to(ta2, n, a2); E::extend_to(tb2, n, b2);
+		E::extend_to(ta1, n, a1);
+		E::extend_to(tb1, n, b1);
+		E::extend_to(ta2, n, a2);
+		E::extend_to(tb2, n, b2);
 		auto p = E::mul2(ta1, tb1, ta2, tb2, n);
 		auto tp = p;
 		detail::finish_linear<E>(std::move(p), n, s, cut, c0, std::span<T>(coeffs));
@@ -176,8 +185,8 @@ void multiply_add2_cached(
 // This helper also accepts an output transform which will be populated if it is cheap to do so
 template <engine E>
 void multiply_cached(std::span<const typename E::value_type> a, transformed<E>& ta,
-		std::span<const typename E::value_type> b, transformed<E>& tb,
-		std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
+	std::span<const typename E::value_type> b, transformed<E>& tb,
+	std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
 	using T = typename E::value_type;
 	coeffs.assign(size_t(sz(a) && sz(b) ? sz(a) + sz(b) - 1 : 0), T{});
 	t = transformed<E>{};
@@ -211,7 +220,7 @@ void square(std::span<const typename E::value_type> a, std::span<typename E::val
 
 template <engine E, typename Op = assign_op>
 void square(std::span<const typename E::value_type> a, transformed<E>& ta,
-		std::span<typename E::value_type> out, Op op = {}) {
+	std::span<typename E::value_type> out, Op op = {}) {
 	using T = typename E::value_type;
 	if (sz(a) == 0) return;
 	int s = 2 * sz(a) - 1;
@@ -225,7 +234,7 @@ void square(std::span<const typename E::value_type> a, transformed<E>& ta,
 // the result (empty when the engine's product isn't a transform).
 template <engine E>
 void square_cached(std::span<const typename E::value_type> a, transformed<E>& ta,
-		std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
+	std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
 	using T = typename E::value_type;
 	coeffs.assign(size_t(sz(a) ? 2 * sz(a) - 1 : 0), T{});
 	t = transformed<E>{};
@@ -245,7 +254,7 @@ void square_cached(std::span<const typename E::value_type> a, transformed<E>& ta
 }
 
 template <engine E> vector<typename E::value_type> multiply(
-		const vector<typename E::value_type>& a, const vector<typename E::value_type>& b) {
+	const vector<typename E::value_type>& a, const vector<typename E::value_type>& b) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return {};
 	vector<T> r(sz(a) + sz(b) - 1);
@@ -273,7 +282,7 @@ void emit_middle(std::span<T> buf, bool cut, int la, int lb, T c0, T ctop, std::
 	}
 	int lim = min(sz(out), cut ? m - 1 : m);
 	for (int t = 0; t < lim; t++) op(out[t], buf[lb - 1 + t]);
-	if (cut && sz(out) >= m) op(out[m-1], cn);
+	if (cut && sz(out) >= m) op(out[m - 1], cn);
 }
 }
 
@@ -281,7 +290,7 @@ void emit_middle(std::span<T> buf, bool cut, int la, int lb, T c0, T ctop, std::
 // Must have len(a) >= len(b)
 template <engine E, typename Op = assign_op>
 void middle_product(std::span<const typename E::value_type> a, std::span<const typename E::value_type> b,
-		std::span<typename E::value_type> out, Op op = {}) {
+	std::span<typename E::value_type> out, Op op = {}) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return;
 	assert(sz(a) >= sz(b));
@@ -297,14 +306,14 @@ void middle_product(std::span<const typename E::value_type> a, std::span<const t
 	auto buf = buffer_pool<T>::get(n);
 	multiply_circular<E>(a, b, buf.span(), n);
 	detail::emit_middle<T>(buf.span(), cut, sz(a), sz(b),
-			a[0] * b[0], a[sz(a) - 1] * b[sz(b) - 1], out, op);
+		a[0] * b[0], a[sz(a) - 1] * b[sz(b) - 1], out, op);
 }
 
 // TODO: Let's decide whether to keep vector<> returning forms or not; this
 // largely depends on whether we think these functions are a public interface or
 // merely convenience for value type implementors.
 template <engine E> vector<typename E::value_type> middle_product(
-		std::span<const typename E::value_type> a, std::span<const typename E::value_type> b) {
+	std::span<const typename E::value_type> a, std::span<const typename E::value_type> b) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return {};
 	assert(sz(a) >= sz(b));
@@ -315,8 +324,8 @@ template <engine E> vector<typename E::value_type> middle_product(
 
 template <engine E, typename Op = assign_op>
 void middle_product(std::span<const typename E::value_type> a, transformed<E>& ta,
-		std::span<const typename E::value_type> b, transformed<E>& tb,
-		std::span<typename E::value_type> out, Op op = {}) {
+	std::span<const typename E::value_type> b, transformed<E>& tb,
+	std::span<typename E::value_type> out, Op op = {}) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return;
 	assert(sz(a) >= sz(b));
@@ -334,12 +343,12 @@ void middle_product(std::span<const typename E::value_type> a, transformed<E>& t
 	auto buf = buffer_pool<T>::get(n);
 	E::finish(E::mul(ta, tb, n), buf.span());
 	detail::emit_middle<T>(buf.span(), cut, sz(a), sz(b),
-			a[0] * b[0], a[sz(a) - 1] * b[sz(b) - 1], out, op);
+		a[0] * b[0], a[sz(a) - 1] * b[sz(b) - 1], out, op);
 }
 
 template <engine E>
 vector<typename E::value_type> middle_product(std::span<const typename E::value_type> a, transformed<E>& ta,
-		std::span<const typename E::value_type> b, transformed<E>& tb) {
+	std::span<const typename E::value_type> b, transformed<E>& tb) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return {};
 	assert(sz(a) >= sz(b));

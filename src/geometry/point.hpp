@@ -5,7 +5,7 @@
 #include <iostream>
 #include <numeric>
 
-template <typename T, typename AreaT=T> struct Point {
+template <typename T, typename AreaT = T> struct Point {
 public:
 	T x, y;
 	Point() : x(0), y(0) {}
@@ -13,37 +13,52 @@ public:
 	template <typename U, typename V> explicit Point(const Point<U, V>& p) : x(p.x), y(p.y) {}
 	Point(const std::pair<T, T>& p) : x(p.first), y(p.second) {}
 	Point(const std::complex<T>& p) : x(real(p)), y(imag(p)) {}
-	explicit operator std::pair<T, T> () const { return std::pair<T, T>(x, y); }
-	explicit operator std::complex<T> () const { return std::complex<T>(x, y); }
+	explicit operator std::pair<T, T>() const { return std::pair<T, T>(x, y); }
+	explicit operator std::complex<T>() const { return std::complex<T>(x, y); }
 	auto as_pair() const { return std::pair<T, T>(*this); }
 	auto as_complex() const { return std::complex<T>(*this); }
 
 	friend std::ostream& operator << (std::ostream& o, const Point& p) { return o << '(' << p.x << ',' << p.y << ')'; }
 	friend std::istream& operator >> (std::istream& i, Point& p) { return i >> p.x >> p.y; }
 	friend bool operator == (const Point& a, const Point& b) { return a.x == b.x && a.y == b.y; }
-	friend bool operator != (const Point& a, const Point& b) { return !(a==b); }
+	friend bool operator != (const Point& a, const Point& b) { return !(a == b); }
 
 	Point operator + () const { return Point(+x, +y); }
 	Point operator - () const { return Point(-x, -y); }
 
-	Point& operator += (const Point& p) { x += p.x, y += p.y; return *this; }
-	Point& operator -= (const Point& p) { x -= p.x, y -= p.y; return *this; }
-	Point& operator *= (const T& t) { x *= t, y *= t; return *this; }
-	Point& operator /= (const T& t) { x /= t, y /= t; return *this; }
+	Point& operator += (const Point& p) {
+		x += p.x, y += p.y;
+		return *this;
+	}
+	Point& operator -= (const Point& p) {
+		x -= p.x, y -= p.y;
+		return *this;
+	}
+	Point& operator *= (const T& t) {
+		x *= t, y *= t;
+		return *this;
+	}
+	Point& operator /= (const T& t) {
+		x /= t, y /= t;
+		return *this;
+	}
 
-	friend Point operator + (const Point& a, const Point& b) { return Point(a.x+b.x, a.y+b.y); }
-	friend Point operator - (const Point& a, const Point& b) { return Point(a.x-b.x, a.y-b.y); }
-	friend Point operator * (const Point& a, const T& t) { return Point(a.x*t, a.y*t); }
-	friend Point operator * (const T& t ,const Point& a) { return Point(t*a.x, t*a.y); }
-	friend Point operator / (const Point& a, const T& t) { return Point(a.x/t, a.y/t); }
+	friend Point operator + (const Point& a, const Point& b) { return Point(a.x + b.x, a.y + b.y); }
+	friend Point operator - (const Point& a, const Point& b) { return Point(a.x - b.x, a.y - b.y); }
+	friend Point operator * (const Point& a, const T& t) { return Point(a.x * t, a.y * t); }
+	friend Point operator * (const T& t, const Point& a) { return Point(t * a.x, t * a.y); }
+	friend Point operator / (const Point& a, const T& t) { return Point(a.x / t, a.y / t); }
 
 	AreaT dist2() const { return AreaT(x) * AreaT(x) + AreaT(y) * AreaT(y); }
 	auto dist() const { return std::sqrt(dist2()); }
 	Point unit() const { return *this / this->dist(); }
 	auto angle() const { return std::atan2(y, x); }
 
-	T int_norm() const { return std::gcd(x,y); }
-	Point int_unit() const { if (!x && !y) return *this; return *this / this->int_norm(); }
+	T int_norm() const { return std::gcd(x, y); }
+	Point int_unit() const {
+		if (!x && !y) return *this;
+		return *this / this->int_norm();
+	}
 
 	// Convenient free-functions, mostly for generic interop
 	friend auto norm(const Point& a) { return a.dist2(); }
@@ -58,7 +73,7 @@ public:
 
 	friend AreaT dot(const Point& a, const Point& b) { return AreaT(a.x) * AreaT(b.x) + AreaT(a.y) * AreaT(b.y); }
 	friend AreaT cross(const Point& a, const Point& b) { return AreaT(a.x) * AreaT(b.y) - AreaT(a.y) * AreaT(b.x); }
-	friend AreaT cross3(const Point& a, const Point& b, const Point& c) { return cross(b-a, c-a); }
+	friend AreaT cross3(const Point& a, const Point& b, const Point& c) { return cross(b - a, c - a); }
 
 	// Complex numbers and rotation
 	friend Point conj(const Point& a) { return Point(a.x, -a.y); }
@@ -76,10 +91,13 @@ public:
 		return std::tie(a.x, a.y) < std::tie(b.x, b.y);
 	}
 
-	friend bool same_dir(const Point& a, const Point& b) { return cross(a,b) == 0 && dot(a,b) > 0; }
+	friend bool same_dir(const Point& a, const Point& b) { return cross(a, b) == 0 && dot(a, b) > 0; }
 
 	// check if 180 <= s..t < 360
-	friend bool is_reflex(const Point& a, const Point& b) { auto c = cross(a,b); return c ? (c < 0) : (dot(a, b) < 0); }
+	friend bool is_reflex(const Point& a, const Point& b) {
+		auto c = cross(a, b);
+		return c ? (c < 0) : (dot(a, b) < 0);
+	}
 
 	// operator < (s,t) for angles in [base,base+2pi)
 	friend bool angle_less_from(const Point& base, const Point& s, const Point& t) {
@@ -99,10 +117,10 @@ public:
 		return [base](const Point& s, const Point& t) { return angle_less_upto(base, s, t); };
 	}
 	friend auto angle_cmp_center_from(const Point& center, const Point& dir) {
-		return [center, dir](const Point& s, const Point& t) -> bool { return angle_less_from(dir, s-center, t-center); };
+		return [center, dir](const Point& s, const Point& t) -> bool { return angle_less_from(dir, s - center, t - center); };
 	}
 	friend auto angle_cmp_center_upto(const Point& center, const Point& dir) {
-		return [center, dir](const Point& s, const Point& t) -> bool { return angle_less_upto(dir, s-center, t-center); };
+		return [center, dir](const Point& s, const Point& t) -> bool { return angle_less_upto(dir, s - center, t - center); };
 	}
 
 	// is p in [s,t] taken ccw? 1/0/-1 for in/border/out

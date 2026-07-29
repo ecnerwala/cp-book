@@ -26,21 +26,22 @@ private:
 	CartesianTree(std::vector<Node>&& nodes_, int root_) : nodes(std::move(nodes_)), root(root_) {}
 
 public:
-
 	// min-cartesian-tree, with earlier cells tiebroken earlier
 	template <typename T, typename Comp = std::less<T>>
 	static CartesianTree build_min_tree(const std::vector<T>& v, Comp comp = Comp()) {
-		std::vector<Node> nodes(v.size()*2+1);
-		std::vector<int> stk; stk.reserve(v.size());
+		std::vector<Node> nodes(v.size() * 2 + 1);
+		std::vector<int> stk;
+		stk.reserve(v.size());
 		int root = -1;
 		for (int i = 0; i <= int(v.size()); i++) {
-			int cur = 2*i;
+			int cur = 2 * i;
 			nodes[cur].l = i;
-			nodes[cur].r = i-1;
-			nodes[cur].m = i-1;
+			nodes[cur].r = i - 1;
+			nodes[cur].m = i - 1;
 			nodes[cur].c = {-1, -1};
 			while (!stk.empty() && (i == int(v.size()) || comp(v[i], v[nodes[stk.back()].m]))) {
-				int nxt = stk.back(); stk.pop_back();
+				int nxt = stk.back();
+				stk.pop_back();
 				nodes[cur].p = nxt;
 				nodes[nxt].c[1] = cur;
 				nodes[nxt].r = nodes[cur].r;
@@ -50,11 +51,11 @@ public:
 				root = cur;
 				break;
 			}
-			nodes[2*i+1].l = nodes[cur].l;
-			nodes[2*i+1].m = i;
-			nodes[cur].p = 2*i+1;
-			nodes[2*i+1].c[0] = cur;
-			stk.push_back(2*i+1);
+			nodes[2 * i + 1].l = nodes[cur].l;
+			nodes[2 * i + 1].m = i;
+			nodes[cur].p = 2 * i + 1;
+			nodes[2 * i + 1].c[0] = cur;
+			stk.push_back(2 * i + 1);
 		}
 		nodes[root].p = -1;
 		return {std::move(nodes), root};

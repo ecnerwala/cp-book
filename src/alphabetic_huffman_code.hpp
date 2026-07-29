@@ -10,7 +10,8 @@
 template <typename T, typename T_sum = T> std::vector<int> alphabetic_huffman_code(std::vector<T> weights) {
 	int N = int(weights.size());
 	if (N == 0) return {};
-	std::vector<std::array<int, 2>> ch; ch.reserve(N-1);
+	std::vector<std::array<int, 2>> ch;
+	ch.reserve(N - 1);
 
 	{
 		struct splay_node {
@@ -58,10 +59,10 @@ template <typename T, typename T_sum = T> std::vector<int> alphabetic_huffman_co
 				}
 			}
 		};
-		std::vector<splay_node> nodes(N+1);
+		std::vector<splay_node> nodes(N + 1);
 		for (int i = 0; i < N; i++) {
-			nodes[i].p = &nodes[i+1];
-			nodes[i+1].c[0] = &nodes[i];
+			nodes[i].p = &nodes[i + 1];
+			nodes[i + 1].c[0] = &nodes[i];
 			nodes[i].value = T_sum(weights[i]);
 			nodes[i].idx = i;
 		}
@@ -155,13 +156,13 @@ template <typename T, typename T_sum = T> std::vector<int> alphabetic_huffman_co
 	}
 
 	// Reconstruct depths
-	assert(int(ch.size()) == N-1);
-	std::vector<int> res(2*N-1, -1);
-	res[2*N-2] = 0;
-	for (int i = 2*N-2; i >= N; i--) {
+	assert(int(ch.size()) == N - 1);
+	std::vector<int> res(2 * N - 1, -1);
+	res[2 * N - 2] = 0;
+	for (int i = 2 * N - 2; i >= N; i--) {
 		assert(res[i] != -1);
-		res[ch[i-N][0]] = res[i] + 1;
-		res[ch[i-N][1]] = res[i] + 1;
+		res[ch[i - N][0]] = res[i] + 1;
+		res[ch[i - N][1]] = res[i] + 1;
 	}
 	res.resize(N);
 	return res;
@@ -171,15 +172,17 @@ template <typename T, typename T_sum = T> std::vector<int> alphabetic_huffman_co
 inline std::vector<int> binary_code_depths_to_lca_depths(std::vector<int> depths) {
 	int N = int(depths.size());
 	if (N == 0) return {};
-	std::vector<int> res; res.reserve(N-1);
-	std::vector<int> stk; stk.reserve(N);
+	std::vector<int> res;
+	res.reserve(N - 1);
+	std::vector<int> stk;
+	stk.reserve(N);
 	for (int v : depths) {
 		while (!stk.empty() && stk.back() == v) {
 			stk.pop_back();
 			v--;
 		}
 		assert(stk.empty() || stk.back() < v);
-		if (v != 0) res.push_back(v-1);
+		if (v != 0) res.push_back(v - 1);
 		stk.push_back(v);
 	}
 	assert(int(stk.size()) == 1 && stk.back() == 0);

@@ -31,7 +31,7 @@ protected:
 	}
 
 public:
-	T& operator[] (std::array<int, NDIMS> idx) const {
+	T& operator [] (std::array<int, NDIMS> idx) const {
 #ifdef _GLIBCXX_DEBUG
 		return data[flatten_index_checked(idx)];
 #else
@@ -43,16 +43,18 @@ public:
 	}
 
 	template <int D = NDIMS>
-	typename std::enable_if<(0 < D), tensor_view<T, NDIMS-1>>::type operator[] (int idx) const {
-		std::array<int, NDIMS-1> nshape; std::copy(shape.begin()+1, shape.end(), nshape.begin());
-		std::array<int, NDIMS-1> nstrides; std::copy(strides.begin()+1, strides.end(), nstrides.begin());
+	typename std::enable_if<(0 < D), tensor_view<T, NDIMS - 1>>::type operator [] (int idx) const {
+		std::array<int, NDIMS - 1> nshape;
+		std::copy(shape.begin() + 1, shape.end(), nshape.begin());
+		std::array<int, NDIMS - 1> nstrides;
+		std::copy(strides.begin() + 1, strides.end(), nstrides.begin());
 		T* ndata = data + (strides[0] * idx);
-		return tensor_view<T, NDIMS-1>(nshape, nstrides, ndata);
+		return tensor_view<T, NDIMS - 1>(nshape, nstrides, ndata);
 	}
 	template <int D = NDIMS>
-	typename std::enable_if<(0 < D), tensor_view<T, NDIMS-1>>::type at(int idx) const {
+	typename std::enable_if<(0 < D), tensor_view<T, NDIMS - 1>>::type at(int idx) const {
 		assert(0 <= idx && idx < shape[0]);
-		return operator[](idx);
+		return operator [] (idx);
 	}
 
 	template <int D = NDIMS>
@@ -79,7 +81,7 @@ public:
 	explicit tensor(std::array<int, NDIMS> shape_, const T& t = T()) {
 		shape = shape_;
 		len = 1;
-		for (int i = NDIMS-1; i >= 0; i--) {
+		for (int i = NDIMS - 1; i >= 0; i--) {
 			strides[i] = len;
 			len *= shape[i];
 		}
@@ -93,7 +95,7 @@ public:
 		}
 	}
 
-	tensor& operator=(tensor&& o) noexcept {
+	tensor& operator = (tensor&& o) noexcept {
 		using std::swap;
 		swap(shape, o.shape);
 		swap(strides, o.strides);
@@ -104,7 +106,7 @@ public:
 	tensor(tensor&& o) : tensor() {
 		*this = std::move(o);
 	}
-	tensor& operator=(const tensor& o) {
+	tensor& operator = (const tensor& o) {
 		return *this = tensor(o);
 	}
 	~tensor() { delete[] data; }
@@ -125,26 +127,26 @@ public:
 		return view();
 	}
 
-	T& operator[] (std::array<int, NDIMS> idx) { return view()[idx]; }
+	T& operator [] (std::array<int, NDIMS> idx) { return view()[idx]; }
 	T& at(std::array<int, NDIMS> idx) { return view().at(idx); }
-	const T& operator[] (std::array<int, NDIMS> idx) const { return view()[idx]; }
+	const T& operator [] (std::array<int, NDIMS> idx) const { return view()[idx]; }
 	const T& at(std::array<int, NDIMS> idx) const { return view().at(idx); }
 
 	template <int D = NDIMS>
-	typename std::enable_if<(0 < D), tensor_view<T, NDIMS-1>>::type operator[] (int idx) {
+	typename std::enable_if<(0 < D), tensor_view<T, NDIMS - 1>>::type operator [] (int idx) {
 		return view()[idx];
 	}
 	template <int D = NDIMS>
-	typename std::enable_if<(0 < D), tensor_view<T, NDIMS-1>>::type at(int idx) {
+	typename std::enable_if<(0 < D), tensor_view<T, NDIMS - 1>>::type at(int idx) {
 		return view().at(idx);
 	}
 
 	template <int D = NDIMS>
-	typename std::enable_if<(0 < D), tensor_view<const T, NDIMS-1>>::type operator[] (int idx) const {
+	typename std::enable_if<(0 < D), tensor_view<const T, NDIMS - 1>>::type operator [] (int idx) const {
 		return view()[idx];
 	}
 	template <int D = NDIMS>
-	typename std::enable_if<(0 < D), tensor_view<const T, NDIMS-1>>::type at(int idx) const {
+	typename std::enable_if<(0 < D), tensor_view<const T, NDIMS - 1>>::type at(int idx) const {
 		return view().at(idx);
 	}
 

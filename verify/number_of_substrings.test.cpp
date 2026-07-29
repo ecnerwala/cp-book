@@ -8,10 +8,11 @@
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
-	std::string S; std::cin >> S;
+	std::string S;
+	std::cin >> S;
 	int N = int(S.size());
 	auto sa = SuffixArrayLCP::shift_and_construct(S);
-	int64_t ans = int64_t(N) * int64_t(N+1) / 2;
+	int64_t ans = int64_t(N) * int64_t(N + 1) / 2;
 	for (int i = 0; i < N; i++) ans -= sa.lcp[i];
 	std::cout << ans << '\n';
 

@@ -21,8 +21,8 @@ using namespace std;
 static_assert(engine<engines::ntt<modnum<998244353>>>);
 static_assert(engine<engines::ntt<mod_goldilocks>>);
 static_assert(engine<engines::real<double>>);
-static_assert(engine<engines::split<modnum<int(1e9)+7>>>);
-static_assert(engine<engines::crt<modnum<int(1e9)+7>>>);
+static_assert(engine<engines::split<modnum<int(1e9) + 7>>>);
+static_assert(engine<engines::crt<modnum<int(1e9) + 7>>>);
 
 TEMPLATE_TEST_CASE("FFT multiply sizes", "[fft]", ALL_ENGINES) {
 	using E = TestType;
@@ -47,7 +47,9 @@ TEMPLATE_TEST_CASE("transform add", "[fft]", MOD_ENGINES) {
 	mt19937 mt(Catch::getSeed());
 	for (int n : {2, 16, 64}) {
 		vector<num> a(n), b(n), c(n);
-		fill_rnd(a, mt); fill_rnd(b, mt); fill_rnd(c, mt);
+		fill_rnd(a, mt);
+		fill_rnd(b, mt);
+		fill_rnd(c, mt);
 		auto tab = E::add(E::transform(span<const num>(a), n), E::transform(span<const num>(b), n));
 		auto tc = E::transform(span<const num>(c), n);
 		vector<num> got(n);
@@ -79,12 +81,12 @@ TEST_CASE("FFT double engine downsample", "[fft]") {
 	using E = engines::real<double>;
 	mt19937 mt(Catch::getSeed());
 	int n = 64;
-	vector<double> a(2*n), evens(n), odds(n);
-	for (int i = 0; i < 2*n; i++) {
+	vector<double> a(2 * n), evens(n), odds(n);
+	for (int i = 0; i < 2 * n; i++) {
 		a[i] = rnd_val<double>(mt);
-		(i & 1 ? odds : evens)[i/2] = a[i];
+		(i & 1 ? odds : evens)[i / 2] = a[i];
 	}
-	auto t = E::transform(span<const double>(a), 2*n);
+	auto t = E::transform(span<const double>(a), 2 * n);
 	vector<double> b(n);
 	fill_rnd(b, mt);
 	auto tb = E::transform(span<const double>(b), n);
@@ -103,18 +105,18 @@ TEMPLATE_TEST_CASE("product downsample", "[fft]", ALL_ENGINES) {
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {2, 16, 64}) {
-		vector<num> a(2*n), b(2*n);
+		vector<num> a(2 * n), b(2 * n);
 		fill_rnd(a, mt);
 		fill_rnd(b, mt);
-		auto p = E::mul(E::transform(span<const num>(a), 2*n), E::transform(span<const num>(b), 2*n), 2*n);
-		vector<num> full(2*n);
+		auto p = E::mul(E::transform(span<const num>(a), 2 * n), E::transform(span<const num>(b), 2 * n), 2 * n);
+		vector<num> full(2 * n);
 		E::finish(auto(p), span<num>(full));
 		for (bool odd : {false, true}) {
 			auto ph = E::downsample(p, n, odd);
 			vector<num> got(n);
 			E::finish(std::move(ph), span<num>(got));
 			vector<num> want(n);
-			for (int i = 0; i < n; i++) want[i] = full[2*i + odd];
+			for (int i = 0; i < n; i++) want[i] = full[2 * i + odd];
 			check_eq(got, want);
 		}
 	}
@@ -227,19 +229,28 @@ TEMPLATE_TEST_CASE("FFT multiply_add2", "[fft]", ALL_ENGINES) {
 	mt19937 mt(Catch::getSeed());
 	// pairs share a linear length; includes 2^k+1 cut shapes and length-1 operands
 	vector<array<int, 4>> cases = {
-		{1, 2, 2, 1}, {2, 2, 2, 2}, {3, 3, 3, 3}, {1, 5, 3, 3},
-		{4, 5, 8, 1}, {17, 16, 32, 1}, {65, 65, 129, 1}, {100, 29, 64, 65},
+		{1, 2, 2, 1},
+		{2, 2, 2, 2},
+		{3, 3, 3, 3},
+		{1, 5, 3, 3},
+		{4, 5, 8, 1},
+		{17, 16, 32, 1},
+		{65, 65, 129, 1},
+		{100, 29, 64, 65},
 	};
 	for (auto [la1, lb1, la2, lb2] : cases) {
 		vector<num> a1(la1), b1(lb1), a2(la2), b2(lb2);
-		fill_rnd(a1, mt); fill_rnd(b1, mt); fill_rnd(a2, mt); fill_rnd(b2, mt);
+		fill_rnd(a1, mt);
+		fill_rnd(b1, mt);
+		fill_rnd(a2, mt);
+		fill_rnd(b2, mt);
 		vector<num> want = multiply_slow(a1, b1);
 		vector<num> p2 = multiply_slow(a2, b2);
 		for (int i = 0; i < sz(p2); i++) want[i] += p2[i];
 		fft::transformed<E> ca1, cb1, ca2, cb2;
 		vector<num> got(want.size());
 		multiply_add2<E>(span<const num>(a1), ca1, span<const num>(b1), cb1,
-				span<const num>(a2), ca2, span<const num>(b2), cb2, span<num>(got));
+			span<const num>(a2), ca2, span<const num>(b2), cb2, span<num>(got));
 		INFO("la1 = " << la1 << ", lb1 = " << lb1 << ", la2 = " << la2 << ", lb2 = " << lb2);
 		check_eq(got, want);
 	}
@@ -292,4 +303,5 @@ TEMPLATE_TEST_CASE("negate_arg transforms", "[fft]", ALL_ENGINES) {
 	}
 }
 
-}} // namespace ecnerwala::fft
+}
+} // namespace ecnerwala::fft

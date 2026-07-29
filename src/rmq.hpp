@@ -27,32 +27,28 @@ private:
 	int sparse_table_size() const {
 		return num_buckets() * num_levels();
 	}
+
 private:
 	const T& min(const T& a, const T& b) const {
-		return Compare::operator()(a, b) ? a : b;
+		return Compare::operator () (a, b) ? a : b;
 	}
 	void setmin(T& a, const T& b) const {
-		if (Compare::operator()(b, a)) a = b;
+		if (Compare::operator () (b, a)) a = b;
 	}
 
-	template <typename Vec> static int get_size(const Vec& v) { using std::size; return int(size(v)); }
+	template <typename Vec> static int get_size(const Vec& v) {
+		using std::size;
+		return int(size(v));
+	}
 
 public:
 	RangeMinQuery() {}
-	template <typename Vec> explicit RangeMinQuery(const Vec& data_, const Compare& comp_ = Compare())
-		: Compare(comp_)
-		, n(get_size(data_))
-		, data(n)
-		, pref_data(n)
-		, suff_data(n)
-		, sparse_table(sparse_table_size())
-		, range_mask(n)
-	{
+	template <typename Vec> explicit RangeMinQuery(const Vec& data_, const Compare& comp_ = Compare()) : Compare(comp_), n(get_size(data_)), data(n), pref_data(n), suff_data(n), sparse_table(sparse_table_size()), range_mask(n) {
 		for (int i = 0; i < n; i++) data[i] = data_[i];
 		for (int i = 0; i < n; i++) {
-			if (i & (BUCKET_SIZE-1)) {
-				uint32_t m = range_mask[i-1];
-				while (m && !Compare::operator()(data[(i | (BUCKET_SIZE-1)) - __builtin_clz(m)], data[i])) {
+			if (i & (BUCKET_SIZE - 1)) {
+				uint32_t m = range_mask[i - 1];
+				while (m && !Compare::operator () (data[(i | (BUCKET_SIZE - 1)) - __builtin_clz(m)], data[i])) {
 					m -= uint32_t(1) << (BUCKET_SIZE - 1 - __builtin_clz(m));
 				}
 				m |= uint32_t(1) << (i & (BUCKET_SIZE - 1));
@@ -63,14 +59,14 @@ public:
 		}
 		for (int i = 0; i < n; i++) {
 			pref_data[i] = data[i];
-			if (i & (BUCKET_SIZE-1)) {
-				setmin(pref_data[i], pref_data[i-1]);
+			if (i & (BUCKET_SIZE - 1)) {
+				setmin(pref_data[i], pref_data[i - 1]);
 			}
 		}
-		for (int i = n-1; i >= 0; i--) {
+		for (int i = n - 1; i >= 0; i--) {
 			suff_data[i] = data[i];
-			if (i+1 < n && ((i+1) & (BUCKET_SIZE-1))) {
-				setmin(suff_data[i], suff_data[i+1]);
+			if (i + 1 < n && ((i + 1) & (BUCKET_SIZE - 1))) {
+				setmin(suff_data[i], suff_data[i + 1]);
 			}
 		}
 		for (int i = 0; i < num_buckets(); i++) {
@@ -79,9 +75,9 @@ public:
 				setmin(sparse_table[i], data[i * BUCKET_SIZE + v]);
 			}
 		}
-		for (int l = 0; l+1 < num_levels(); l++) {
-			for (int i = 0; i + (1 << (l+1)) <= num_buckets(); i++) {
-				sparse_table[(l+1) * num_buckets() + i] = min(sparse_table[l * num_buckets() + i], sparse_table[l * num_buckets() + i + (1 << l)]);
+		for (int l = 0; l + 1 < num_levels(); l++) {
+			for (int i = 0; i + (1 << (l + 1)) <= num_buckets(); i++) {
+				sparse_table[(l + 1) * num_buckets() + i] = min(sparse_table[l * num_buckets() + i], sparse_table[l * num_buckets() + i + (1 << l)]);
 			}
 		}
 	}
@@ -91,8 +87,8 @@ public:
 		int bucket_l = (l >> BUCKET_SIZE_LOG);
 		int bucket_r = (r >> BUCKET_SIZE_LOG);
 		if (bucket_l == bucket_r) {
-			uint32_t msk = range_mask[r] & ~((uint32_t(1) << (l & (BUCKET_SIZE-1))) - 1);
-			int ind = (l & ~(BUCKET_SIZE-1)) + __builtin_ctz(msk);
+			uint32_t msk = range_mask[r] & ~((uint32_t(1) << (l & (BUCKET_SIZE - 1))) - 1);
+			int ind = (l & ~(BUCKET_SIZE - 1)) + __builtin_ctz(msk);
 			return data[ind];
 		} else {
 			T ans = min(suff_data[l], pref_data[r]);

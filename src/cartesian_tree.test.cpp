@@ -13,14 +13,14 @@ TEST_CASE("Cartesian Tree", "[cartesian_tree]") {
 		{
 			CartesianTree t = CartesianTree::build_min_tree(v);
 			for (int i = 1; i < int(t.size()); i += 2) {
-				REQUIRE(t[i].m == i/2);
+				REQUIRE(t[i].m == i / 2);
 				REQUIRE(t[i].l <= t[i].m);
 				REQUIRE(t[i].m <= t[i].r);
 
 				REQUIRE(t[t[i].c[0]].l == t[i].l);
-				REQUIRE(t[t[i].c[0]].r == t[i].m-1);
+				REQUIRE(t[t[i].c[0]].r == t[i].m - 1);
 
-				REQUIRE(t[t[i].c[1]].l == t[i].m+1);
+				REQUIRE(t[t[i].c[1]].l == t[i].m + 1);
 				REQUIRE(t[t[i].c[1]].r == t[i].r);
 
 				REQUIRE((t[t[i].c[0]].l > t[t[i].c[0]].r || v[t[i].m] < v[t[t[i].c[0]].m]));
@@ -30,14 +30,14 @@ TEST_CASE("Cartesian Tree", "[cartesian_tree]") {
 		{
 			CartesianTree t = CartesianTree::build_max_tree(v);
 			for (int i = 1; i < int(t.size()); i += 2) {
-				REQUIRE(t[i].m == i/2);
+				REQUIRE(t[i].m == i / 2);
 				REQUIRE(t[i].l <= t[i].m);
 				REQUIRE(t[i].m <= t[i].r);
 
 				REQUIRE(t[t[i].c[0]].l == t[i].l);
-				REQUIRE(t[t[i].c[0]].r == t[i].m-1);
+				REQUIRE(t[t[i].c[0]].r == t[i].m - 1);
 
-				REQUIRE(t[t[i].c[1]].l == t[i].m+1);
+				REQUIRE(t[t[i].c[1]].l == t[i].m + 1);
 				REQUIRE(t[t[i].c[1]].r == t[i].r);
 
 				REQUIRE((t[t[i].c[0]].l > t[t[i].c[0]].r || v[t[i].m] > v[t[t[i].c[0]].m]));

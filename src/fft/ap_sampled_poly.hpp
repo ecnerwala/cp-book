@@ -65,10 +65,10 @@ struct ap_sampled_poly : public std::vector<typename E::value_type> {
 				T v = 1;
 				for (int i = 1; i <= len(); i++) v *= T(i);
 				v = inv(v);
-				for (int i = len()-1; i >= 0; i--) {
-					v *= T(i+1);
+				for (int i = len() - 1; i >= 0; i--) {
+					v *= T(i + 1);
 					terms[i] *= v;
-					terms[len()-1-i] *= (i & 1) ? -v : v;
+					terms[len() - 1 - i] *= (i & 1) ? -v : v;
 				}
 			}
 			{
@@ -105,11 +105,12 @@ struct ap_sampled_poly : public std::vector<typename E::value_type> {
 		// If the field is very very small and we wrap around several times, our runtime can be bad...
 		// but then something has already gone wrong, why are you evaluating so many points???
 		for (int i = -(len() - 1); i <= osz - 1; i++) {
-			if (k+i == T(0)) {
+			if (k + i == T(0)) {
 				// everything from [i,i+len()-1) of the output is a match
-				ap_sampled_poly res; res.reserve(osz);
+				ap_sampled_poly res;
+				res.reserve(osz);
 				int lo = std::max(0, i);
-				int hi = std::min(i+len(), osz);
+				int hi = std::min(i + len(), osz);
 				{
 					auto pref = eval_range(k, lo);
 					res.insert(res.end(), pref.begin(), pref.end());
@@ -129,17 +130,17 @@ struct ap_sampled_poly : public std::vector<typename E::value_type> {
 			T v = 1;
 			for (int i = 1; i <= len(); i++) v *= T(i);
 			v = inv(v);
-			for (int i = len()-1; i >= 0; i--) {
-				v *= T(i+1);
+			for (int i = len() - 1; i >= 0; i--) {
+				v *= T(i + 1);
 				inps[i] *= v;
-				inps[len()-1-i] *= (i & 1) ? -v : v;
+				inps[len() - 1 - i] *= (i & 1) ? -v : v;
 			}
 		}
 		std::vector<T> inv_offsets(len() + osz - 1);
 		ap_sampled_poly results(osz);
 		{
 			T v = 1;
-			for (int i = - (len() - 1); i <= osz - 1; i++) {
+			for (int i = -(len() - 1); i <= osz - 1; i++) {
 				inv_offsets[i + (len() - 1)] = v;
 				v *= k + i;
 				if (i >= 0) results[i] = v;
@@ -171,7 +172,7 @@ struct ap_sampled_poly : public std::vector<typename E::value_type> {
 	[[nodiscard]] ap_sampled_poly prefix_sum_inclusive() const {
 		ap_sampled_poly r = *this;
 		r.extend_right();
-		for (int i = 1; i < r.len(); i++) r[i] += r[i-1];
+		for (int i = 1; i < r.len(); i++) r[i] += r[i - 1];
 		return r;
 	}
 };

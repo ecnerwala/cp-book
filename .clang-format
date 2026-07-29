@@ -1,0 +1,71 @@
+# Style for ecnerwala/cp-book. Requires clang-format >= 21
+# (SpaceAfterOperatorKeyword, KeepEmptyLines).
+# Deliberately permissive: ColumnLimit 0 preserves existing line breaks
+# (including single-line operator boilerplate and hanging indents),
+# so clang-format only normalizes local spacing and indentation.
+# Known deviations clang-format cannot express:
+# - it always spaces binary operators (2*a-1 -> 2 * a - 1);
+# - it always splits multi-statement lines (int N, Q; std::cin >> N >> Q;);
+# - operator boilerplate spacing is all-or-nothing; we pick the dominant
+#   `operator ++ ()` form, which also respaces the `operator()(...)` uses.
+Language: Cpp
+Standard: Latest
+BasedOnStyle: LLVM
+
+ColumnLimit: 0
+UseTab: ForContinuationAndIndentation
+TabWidth: 4
+IndentWidth: 4
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+
+BreakBeforeBraces: Attach
+AlignAfterOpenBracket: DontAlign
+BinPackArguments: true
+BinPackParameters: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortLambdasOnASingleLine: All
+AllowShortEnumsOnASingleLine: true
+BreakTemplateDeclarations: Leave
+BreakConstructorInitializers: AfterColon
+PackConstructorInitializers: CurrentLine
+IndentRequiresClause: true
+RequiresClausePosition: OwnLine
+RequiresExpressionIndentation: OuterScope
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+QualifierAlignment: Leave
+SpaceAfterTemplateKeyword: true
+SpaceAfterOperatorKeyword: true
+SpaceBeforeParens: Custom
+SpaceBeforeParensOptions:
+  AfterControlStatements: true
+  AfterOverloadedOperator: true
+  AfterPlacementOperator: true
+  AfterRequiresInClause: true
+SpacesBeforeTrailingComments: 1
+ReflowComments: false
+AlignTrailingComments:
+  Kind: Leave
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignOperands: DontAlign
+AlignEscapedNewlines: DontAlign
+
+SortIncludes: Never
+SortUsingDeclarations: Never
+IncludeBlocks: Preserve
+FixNamespaceComments: false
+NamespaceIndentation: None
+IndentCaseLabels: false
+IndentPPDirectives: None
+KeepEmptyLines:
+  AtStartOfBlock: true
+MaxEmptyLinesToKeep: 2
+InsertBraces: false
+RemoveParentheses: Leave

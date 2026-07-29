@@ -22,7 +22,6 @@ private:
 	RangeMinQuery<int> depth_val_rmq;
 
 public:
-
 	static_forest_t() : N(0) {}
 	static_forest_t(const std::vector<std::vector<int>>& adj, const std::vector<int>& roots = {}) :
 		N(int(adj.size())),
@@ -33,8 +32,7 @@ public:
 		sz(N, -1),
 		heavy_par(N, -1),
 		heavy_dist(N, -1),
-		depth_val_to_idx(N, -1)
-	{
+		depth_val_to_idx(N, -1) {
 		{
 			int nxt_idx = 0;
 			std::vector<int> depth_freq(N, 0);
@@ -75,12 +73,12 @@ public:
 					}
 					if (heavy_child[cur] != -1) {
 						int nxt = heavy_child[cur];
-						self(nxt, cur, cur_idx, d+1, false);
+						self(nxt, cur, cur_idx, d + 1, false);
 					}
 					for (int nxt : adj[cur]) {
 						if (nxt == prv) continue;
 						if (nxt == heavy_child[cur]) continue;
-						self(nxt, cur, cur_idx, d+1, true);
+						self(nxt, cur, cur_idx, d + 1, true);
 					}
 					sz[cur_idx] = nxt_idx - cur_idx;
 				})(rt, -1, -1, 0, true);
@@ -98,7 +96,7 @@ public:
 				assert(idx[i] != -1);
 			}
 			for (int i = 1; i < N; i++) {
-				depth_freq[i] += depth_freq[i-1];
+				depth_freq[i] += depth_freq[i - 1];
 			}
 			for (int i = 0; i < N; i++) {
 				depth_val[i] = depth_freq[depth[i]] - depth_val[i];
@@ -113,7 +111,7 @@ public:
 		if (a == b) return 0;
 		a = idx[a], b = idx[b];
 		if (a > b) std::swap(a, b);
-		int o = depth_val_to_idx[depth_val_rmq.query(a+1, b)];
+		int o = depth_val_to_idx[depth_val_rmq.query(a + 1, b)];
 		return depth[a] + depth[b] - 2 * (depth[o] - 1);
 	}
 
@@ -121,7 +119,7 @@ public:
 		if (a == b) return a;
 		a = idx[a], b = idx[b];
 		if (a > b) std::swap(a, b);
-		int o = depth_val_to_idx[depth_val_rmq.query(a+1, b)];
+		int o = depth_val_to_idx[depth_val_rmq.query(a + 1, b)];
 		return preorder[par[o]];
 	}
 
@@ -131,7 +129,7 @@ public:
 		if (a == b) return -1;
 		a = idx[a], b = idx[b];
 		assert(a < b && b < a + sz[a]);
-		return preorder[depth_val_to_idx[depth_val_rmq.query(a+1, b)]];
+		return preorder[depth_val_to_idx[depth_val_rmq.query(a + 1, b)]];
 	}
 
 	// next from a to b, a and b must be in the same tree
@@ -139,7 +137,7 @@ public:
 		if (a == b) return -1;
 		a = idx[a], b = idx[b];
 		if (a < b && b < a + sz[a]) {
-			return preorder[depth_val_to_idx[depth_val_rmq.query(a+1, b)]];
+			return preorder[depth_val_to_idx[depth_val_rmq.query(a + 1, b)]];
 		} else {
 			return preorder[par[a]];
 		}

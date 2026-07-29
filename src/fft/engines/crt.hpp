@@ -27,10 +27,10 @@ struct crt {
 		typename E2::transformed t2;
 		int size() const { return t1.size(); }
 		transformed_t() = default;
-		transformed_t(typename E1::transformed&& t1_, typename E2::transformed&& t2_)
-			: t1(std::move(t1_)), t2(std::move(t2_)) {}
-		template <int A2> requires (A2 != A) explicit(A2 > A) transformed_t(transformed_t<A2>&& o)
-			: t1(std::move(o.t1)), t2(std::move(o.t2)) {}
+		transformed_t(typename E1::transformed&& t1_, typename E2::transformed&& t2_) : t1(std::move(t1_)), t2(std::move(t2_)) {}
+		template <int A2>
+			requires (A2 != A)
+		explicit(A2 > A) transformed_t(transformed_t<A2>&& o) : t1(std::move(o.t1)), t2(std::move(o.t2)) {}
 	};
 	using transformed = transformed_t<1>;
 	template <int K> struct product_t {
@@ -38,10 +38,10 @@ struct crt {
 		typename E2::product p2;
 		int size() const { return sz(p1); }
 		product_t() = default;
-		product_t(typename E1::product&& p1_, typename E2::product&& p2_)
-			: p1(std::move(p1_)), p2(std::move(p2_)) {}
-		template <int K2> requires (K2 != K) explicit(K2 > K) product_t(product_t<K2>&& o)
-			: p1(std::move(o.p1)), p2(std::move(o.p2)) {}
+		product_t(typename E1::product&& p1_, typename E2::product&& p2_) : p1(std::move(p1_)), p2(std::move(p2_)) {}
+		template <int K2>
+			requires (K2 != K)
+		explicit(K2 > K) product_t(product_t<K2>&& o) : p1(std::move(o.p1)), p2(std::move(o.p2)) {}
 	};
 	using product = product_t<1>;
 
@@ -49,7 +49,11 @@ struct crt {
 		assert(sz(a) <= 2 * n);
 		auto b1 = buffer_pool<num1>::get(sz(a));
 		auto b2 = buffer_pool<num2>::get(sz(a));
-		for (int i = 0; i < sz(a); i++) { int64_t v = a[i].balanced(); b1[i] = num1(v); b2[i] = num2(v); }
+		for (int i = 0; i < sz(a); i++) {
+			int64_t v = a[i].balanced();
+			b1[i] = num1(v);
+			b2[i] = num2(v);
+		}
 		return transformed{
 			E1::transform(std::span<const num1>(b1.span()), n),
 			E2::transform(std::span<const num2>(b2.span()), n),
@@ -59,7 +63,11 @@ struct crt {
 		if (t.size() >= m) return;
 		auto b1 = buffer_pool<num1>::get(sz(coeffs));
 		auto b2 = buffer_pool<num2>::get(sz(coeffs));
-		for (int i = 0; i < sz(coeffs); i++) { int64_t v = coeffs[i].balanced(); b1[i] = num1(v); b2[i] = num2(v); }
+		for (int i = 0; i < sz(coeffs); i++) {
+			int64_t v = coeffs[i].balanced();
+			b1[i] = num1(v);
+			b2[i] = num2(v);
+		}
 		E1::extend_to(t.t1, m, std::span<const num1>(b1.span()));
 		E2::extend_to(t.t2, m, std::span<const num2>(b2.span()));
 	}
@@ -84,8 +92,7 @@ struct crt {
 	static product_t<A1 * B1 + A2 * B2> mul2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
 		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
-		int n
-	) {
+		int n) {
 		return product_t<A1 * B1 + A2 * B2>{
 			E1::mul2(a1.t1, b1.t1, a2.t1, b2.t1, n),
 			E2::mul2(a1.t2, b1.t2, a2.t2, b2.t2, n),
@@ -119,7 +126,10 @@ struct crt {
 			num2 v2 = o2[i] * inv_n1;
 			mnum o_mod = mnum(uint64_t(v1)) * m2_mod + mnum(int(v2)) * m1_mod;
 			__int128_t o_exact = __int128_t(uint64_t(v1)) * __int128_t(num2::MOD) + __int128_t(int(v2)) * __int128_t(num1::MOD);
-			if (o_exact >= whole) { o_exact -= whole; o_mod -= whole_mod; }
+			if (o_exact >= whole) {
+				o_exact -= whole;
+				o_mod -= whole_mod;
+			}
 			// Balanced representatives: |o| <= whole/2
 			if (o_exact > whole / 2) o_mod -= whole_mod;
 			op(out[i], o_mod);

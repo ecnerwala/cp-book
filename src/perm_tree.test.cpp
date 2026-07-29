@@ -28,10 +28,10 @@ void check_tree(std::vector<int> A) {
 		if (node.type == PermTree::NodeType::LEAF) {
 			REQUIRE(node.c[0] == -1);
 			REQUIRE(node.c[1] == -1);
-			REQUIRE(node.l == n/2);
-			REQUIRE(node.r == n/2);
-			REQUIRE(node.lo == A[n/2]);
-			REQUIRE(node.hi == A[n/2]);
+			REQUIRE(node.l == n / 2);
+			REQUIRE(node.r == n / 2);
+			REQUIRE(node.lo == A[n / 2]);
+			REQUIRE(node.hi == A[n / 2]);
 			continue;
 		}
 		REQUIRE(node.c[0] != -1);
@@ -44,9 +44,7 @@ void check_tree(std::vector<int> A) {
 		if (node.type == PermTree::NodeType::FULL) {
 			// There should be at least 3 pieces
 			REQUIRE((
-				tree[node.c[0]].type == PermTree::NodeType::PARTIAL
-				|| tree[node.c[1]].type == PermTree::NodeType::PARTIAL
-			));
+				tree[node.c[0]].type == PermTree::NodeType::PARTIAL || tree[node.c[1]].type == PermTree::NodeType::PARTIAL));
 		}
 		if (node.type == PermTree::NodeType::INCR) {
 			REQUIRE(tree[node.c[0]].hi + 1 == tree[node.c[1]].lo);

@@ -15,19 +15,19 @@
  */
 template <typename V> std::vector<int> manacher(const V& S) {
 	int N = int(S.size());
-	std::vector<int> res(2*N+1, 0);
-	for (int i = 1, j = -1, r = 0; i < 2*N; i++, j--) {
+	std::vector<int> res(2 * N + 1, 0);
+	for (int i = 1, j = -1, r = 0; i < 2 * N; i++, j--) {
 		if (i > r) {
-			r = i+1, res[i] = 1;
+			r = i + 1, res[i] = 1;
 		} else {
 			res[i] = res[j];
 		}
-		if (i+res[i] >= r) {
-			int b = r>>1, a = i-b;
-			while (a > 0 && b < N && S[a-1] == S[b]) {
+		if (i + res[i] >= r) {
+			int b = r >> 1, a = i - b;
+			while (a > 0 && b < N && S[a - 1] == S[b]) {
 				a--, b++;
 			}
-			res[i] = b-a, j = i, r = b<<1;
+			res[i] = b - a, j = i, r = b << 1;
 		}
 	}
 	return res;
@@ -50,12 +50,12 @@ template <typename V> std::vector<int> manacher_odd(const V& S) {
 		} else {
 			res[i] = res[j];
 		}
-		if (i+res[i] >= r) {
-			int b = r, a = 2*i-r;
-			while (a-1 >= 0 && b+1 < N && S[a-1] == S[b+1]) {
+		if (i + res[i] >= r) {
+			int b = r, a = 2 * i - r;
+			while (a - 1 >= 0 && b + 1 < N && S[a - 1] == S[b + 1]) {
 				a--, b++;
 			}
-			res[i] = b-i, j = i, r = b;
+			res[i] = b - i, j = i, r = b;
 		}
 	}
 	return res;

@@ -14,12 +14,15 @@ int main() {
 	using E = ecnerwala::fft::engines::ntt<num>;
 	using pse = ecnerwala::series::exact<E>;
 
-	int N, M; std::cin >> N >> M;
-	pse A(N); for (auto& x : A) std::cin >> x;
-	pse B(M); for (auto& x : B) std::cin >> x;
+	int N, M;
+	std::cin >> N >> M;
+	pse A(N);
+	for (auto& x : A) std::cin >> x;
+	pse B(M);
+	for (auto& x : B) std::cin >> x;
 	pse C = A * B;
-	for (int i = 0; i < N+M-1; i++) {
-		std::cout << C[i] << " \n"[i+1==N+M-1];
+	for (int i = 0; i < N + M - 1; i++) {
+		std::cout << C[i] << " \n"[i + 1 == N + M - 1];
 	}
 
 	return 0;

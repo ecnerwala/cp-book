@@ -9,9 +9,9 @@
 
 inline void disable_denormal_floats() {
 	// https://stackoverflow.com/a/8217313
-	#define CSR_FLUSH_TO_ZERO         (1 << 15)
+#define CSR_FLUSH_TO_ZERO (1 << 15)
 	unsigned csr = __builtin_ia32_stmxcsr();
 	csr |= CSR_FLUSH_TO_ZERO;
 	__builtin_ia32_ldmxcsr(csr);
-	#undef CSR_FLUSH_TO_ZERO
+#undef CSR_FLUSH_TO_ZERO
 }

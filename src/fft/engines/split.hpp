@@ -28,8 +28,9 @@ template <typename mnum> struct split {
 		int size() const { return sz(v); }
 		transformed_t() = default;
 		explicit transformed_t(vector<cnum>&& v_) : v(std::move(v_)) {}
-		template <int A2> requires (A2 != A) explicit(A2 > A) transformed_t(transformed_t<A2>&& o)
-			: v(std::move(o.v)) {}
+		template <int A2>
+			requires (A2 != A)
+		explicit(A2 > A) transformed_t(transformed_t<A2>&& o) : v(std::move(o.v)) {}
 	};
 	using transformed = transformed_t<1>;
 	template <int K> struct product_t {
@@ -38,8 +39,9 @@ template <typename mnum> struct split {
 		int size() const { return sz(lo); }
 		product_t() = default;
 		product_t(vector<cnum>&& lo_, vector<cnum>&& hi_) : lo(std::move(lo_)), hi(std::move(hi_)) {}
-		template <int K2> requires (K2 != K) explicit(K2 > K) product_t(product_t<K2>&& o)
-			: lo(std::move(o.lo)), hi(std::move(o.hi)) {}
+		template <int K2>
+			requires (K2 != K)
+		explicit(K2 > K) product_t(product_t<K2>&& o) : lo(std::move(o.lo)), hi(std::move(o.hi)) {}
 	};
 	using product = product_t<1>;
 
@@ -61,9 +63,12 @@ template <typename mnum> struct split {
 		return r;
 	}
 	static void extend_to(transformed& t, int m, std::span<const mnum> coeffs) {
-		assert(!(m & (m-1)) && sz(coeffs) <= 2 * m);
+		assert(!(m & (m - 1)) && sz(coeffs) <= 2 * m);
 		if (t.size() >= m) return;
-		if (t.size() == 0) { t = transform(coeffs, m); return; }
+		if (t.size() == 0) {
+			t = transform(coeffs, m);
+			return;
+		}
 		assert(sz(coeffs) <= 2 * t.size());
 		auto buf = buffer_pool<cnum>::get(sz(coeffs));
 		for (int i = 0; i < sz(coeffs); i++) buf[i] = pack(coeffs[i]);
@@ -77,19 +82,23 @@ template <typename mnum> struct split {
 		else core::even_half(in, out);
 	}
 	template <int A> static transformed_t<A> downsample(const transformed_t<A>& t, int n, bool odd) {
-		transformed_t<A> r; r.v.resize(n);
+		transformed_t<A> r;
+		r.v.resize(n);
 		downsample_core(std::span<const cnum>(t.v), std::span<cnum>(r.v), odd);
 		return r;
 	}
 	template <int K> static product_t<K> downsample(const product_t<K>& p, int n, bool odd) {
-		product_t<K> r; r.lo.resize(n); r.hi.resize(n);
+		product_t<K> r;
+		r.lo.resize(n);
+		r.hi.resize(n);
 		downsample_core(std::span<const cnum>(p.lo), std::span<cnum>(r.lo), odd);
 		downsample_core(std::span<const cnum>(p.hi), std::span<cnum>(r.hi), odd);
 		return r;
 	}
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {
 		assert(n >= 2 && t.size() >= n);
-		transformed_t<A> r; r.v.resize(n);
+		transformed_t<A> r;
+		r.v.resize(n);
 		for (int j = 0; j < n; j++) r.v[j] = t.v[j ^ 1];
 		return r;
 	}
@@ -103,7 +112,8 @@ template <typename mnum> struct split {
 	// parameter only affects the bookkeeping, so the body is a shared untyped impl.
 	static void mul_impl(const vector<cnum>& a, const vector<cnum>& b, vector<cnum>& lo, vector<cnum>& hi, int n, bool acc = false) {
 		core::init(n);
-		lo.resize(n); hi.resize(n);
+		lo.resize(n);
+		hi.resize(n);
 		for (int i = 0; i < n; i++) {
 			int ci = core::conj_index(i);
 			cnum g0 = (b[i] + conj(b[ci])) * cnum(0.5);
@@ -129,8 +139,7 @@ template <typename mnum> struct split {
 	static product_t<A1 * B1 + A2 * B2> mul2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
 		const transformed_t<A2>& a2, const transformed_t<B2>& b2,
-		int n
-	) {
+		int n) {
 		assert(a1.size() >= n && b1.size() >= n && a2.size() >= n && b2.size() >= n);
 		product_t<A1 * B1 + A2 * B2> p;
 		mul_impl(a1.v, b1.v, p.lo, p.hi, n);
@@ -160,10 +169,7 @@ template <typename mnum> struct split {
 		// llround + a final wrap so negative half-products (e.g. from negate_arg'd
 		// transforms) reconstruct correctly.
 		for (int i = 0; i < sz(out); i++) {
-			int64_t v = (llround(p.lo[i].x * d)
-					+ (llround(p.lo[i].y * d) % m << 15)
-					+ (llround(p.hi[i].x * d) % m << 15)
-					+ (llround(p.hi[i].y * d) % m << 30)) % m;
+			int64_t v = (llround(p.lo[i].x * d) + (llround(p.lo[i].y * d) % m << 15) + (llround(p.hi[i].x * d) % m << 15) + (llround(p.hi[i].y * d) % m << 30)) % m;
 			if (v < 0) v += m;
 			op(out[i], mnum(v));
 		}

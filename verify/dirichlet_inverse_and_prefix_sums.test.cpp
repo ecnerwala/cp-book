@@ -9,9 +9,11 @@
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
-	int T; std::cin >> T;
+	int T;
+	std::cin >> T;
 	while (T--) {
-		int64_t N; std::cin >> N;
+		int64_t N;
+		std::cin >> N;
 		static dirichlet_series::div_vector_layout layout;
 		layout = N;
 		using num = modnum<998244353>;
@@ -20,7 +22,7 @@ int main() {
 		for (int i = 1; i < layout.len; i++) std::cin >> F.st[i];
 		ds_prefix delta([&](int64_t) { return 1; });
 		ds_prefix H = delta / F;
-		for (int i = 1; i < layout.len; i++) std::cout << H.st[i] << " \n"[i+1==layout.len];
+		for (int i = 1; i < layout.len; i++) std::cout << H.st[i] << " \n"[i + 1 == layout.len];
 	}
 
 	return 0;

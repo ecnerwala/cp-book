@@ -42,8 +42,8 @@ struct level_ancestor {
 					if (isRoot) {
 						heavyPar[idx[cur]] = {par[cur] == -1 ? -1 : idx[par[cur]], 1};
 					} else {
-						assert(idx[par[cur]] == idx[cur]-1);
-						heavyPar[idx[cur]] = heavyPar[idx[cur]-1];
+						assert(idx[par[cur]] == idx[cur] - 1);
+						heavyPar[idx[cur]] = heavyPar[idx[cur] - 1];
 						heavyPar[idx[cur]].second++;
 					}
 					bool chRoot = false;

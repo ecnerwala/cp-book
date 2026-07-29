@@ -30,16 +30,19 @@ public:
 
 	int size() const { return int(nodes.size()); }
 
-	PermTree(const std::vector<int>& A) : nodes(A.empty() ? 0 : int(A.size())*2-1) {
-		if (A.empty()) { root = -1; return; }
+	PermTree(const std::vector<int>& A) : nodes(A.empty() ? 0 : int(A.size()) * 2 - 1) {
+		if (A.empty()) {
+			root = -1;
+			return;
+		}
 		int N = int(A.size());
 		std::vector<int> nxt_earlier(N);
 		std::vector<int> prv_earlier(N);
 		for (int i = 0; i < N; i++) {
-			nxt_earlier[i] = i+1;
-			prv_earlier[i] = i-1;
+			nxt_earlier[i] = i + 1;
+			prv_earlier[i] = i - 1;
 		}
-		for (int i = N-1; i >= 0; i--) {
+		for (int i = N - 1; i >= 0; i--) {
 			int a = A[i];
 			int p = prv_earlier[a];
 			int n = nxt_earlier[a];
@@ -56,7 +59,8 @@ public:
 			int node;
 		};
 
-		std::vector<cnd_t> stk; stk.reserve(N);
+		std::vector<cnd_t> stk;
+		stk.reserve(N);
 
 		for (int i = 0; i < N; i++) {
 			int a = A[i];
@@ -70,7 +74,7 @@ public:
 					nodes[n].c = {stk.end()[-2].node, stk.end()[-1].node};
 					nodes[n].type = NodeType::PARTIAL;
 					nodes[n].l = stk.end()[-2].left;
-					nodes[n].r = i-1;
+					nodes[n].r = i - 1;
 					nodes[n].lo = stk.end()[-2].lo;
 					nodes[n].hi = stk.end()[-2].hi;
 
@@ -82,11 +86,11 @@ public:
 				}
 			}
 
-			stk.push_back({i, a, prv_earlier[a]+1, a, nxt_earlier[a]-1, 2*i});
-			nodes[2*i].type = NodeType::LEAF;
-			nodes[2*i].c = {-1, -1};
-			nodes[2*i].l = nodes[2*i].r = i;
-			nodes[2*i].lo = nodes[2*i].hi = a;
+			stk.push_back({i, a, prv_earlier[a] + 1, a, nxt_earlier[a] - 1, 2 * i});
+			nodes[2 * i].type = NodeType::LEAF;
+			nodes[2 * i].c = {-1, -1};
+			nodes[2 * i].l = nodes[2 * i].r = i;
+			nodes[2 * i].lo = nodes[2 * i].hi = a;
 
 			while (stk.size() >= 2 && std::max(stk.back().hi, stk.end()[-2].hi) - std::min(stk.back().lo, stk.end()[-2].lo) == i - stk.end()[-2].left) {
 				// merge these two nodes into one

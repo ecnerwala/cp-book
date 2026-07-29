@@ -53,8 +53,8 @@ template <fft::engine E> struct vec {
 
 	int len() const { return c.len(); }
 	int degree() const { return len() - 1; }
-	T& operator[](int i) { return c[len() - 1 - i]; }
-	const T& operator[](int i) const { return c[len() - 1 - i]; }
+	T& operator [] (int i) { return c[len() - 1 - i]; }
+	const T& operator [] (int i) const { return c[len() - 1 - i]; }
 	T leading() const { return c.front(); }
 	// multiply by x^k: appends the new zero constant terms to the storage
 	void shift(int k = 1) {
@@ -66,31 +66,46 @@ template <fft::engine E> struct vec {
 		else c.erase(c.begin(), c.begin() + (len() - n));
 	}
 
-	T operator()(const T& x) const {
+	T operator () (const T& x) const {
 		T r{};
 		for (const T& v : c) r = r * x + v;
 		return r;
 	}
 
-	vec& operator+=(const vec& o) {
+	vec& operator += (const vec& o) {
 		if (o.len() > len()) resize(o.len());
 		for (int i = 0; i < o.len(); i++) (*this)[i] += o[i];
 		return *this;
 	}
-	friend vec operator+(vec a, const vec& b) { a += b; return a; }
-	vec& operator-=(const vec& o) {
+	friend vec operator + (vec a, const vec& b) {
+		a += b;
+		return a;
+	}
+	vec& operator -= (const vec& o) {
 		if (o.len() > len()) resize(o.len());
 		for (int i = 0; i < o.len(); i++) (*this)[i] -= o[i];
 		return *this;
 	}
-	friend vec operator-(vec a, const vec& b) { a -= b; return a; }
-	friend bool operator==(const vec& a, const vec& b) { return a.c == b.c; }
+	friend vec operator - (vec a, const vec& b) {
+		a -= b;
+		return a;
+	}
+	friend bool operator == (const vec& a, const vec& b) { return a.c == b.c; }
 
-	vec& operator*=(const T& n) { for (T& v : c) v *= n; return *this; }
-	friend vec operator*(vec a, const T& n) { a *= n; return a; }
-	friend vec operator*(const T& n, vec a) { a *= n; return a; }
+	vec& operator *= (const T& n) {
+		for (T& v : c) v *= n;
+		return *this;
+	}
+	friend vec operator * (vec a, const T& n) {
+		a *= n;
+		return a;
+	}
+	friend vec operator * (const T& n, vec a) {
+		a *= n;
+		return a;
+	}
 
-	vec& operator*=(const vec& o) { return *this = (*this) * o; }
+	vec& operator *= (const vec& o) { return *this = (*this) * o; }
 };
 
 // any polynomial representation exposing its reversed coefficient series
@@ -124,10 +139,10 @@ struct cached {
 
 	int len() const { return c.len(); }
 	int degree() const { return len() - 1; }
-	const T& operator[](int i) const { return c[len() - 1 - i]; }
+	const T& operator [] (int i) const { return c[len() - 1 - i]; }
 	T leading() const { return c[0]; }
 
-	T operator()(const T& x) const {
+	T operator () (const T& x) const {
 		T r{};
 		for (const T& v : c) r = r * x + v;
 		return r;
@@ -138,8 +153,9 @@ private:
 };
 
 // rev(a*b) = rev(a)*rev(b); the series product reuses/adopts transforms
-template <like A, like B> requires fft::same_engine<A, B>
-cached<typename A::engine_t> operator*(const A& a, const B& b) {
+template <like A, like B>
+	requires fft::same_engine<A, B>
+cached<typename A::engine_t> operator * (const A& a, const B& b) {
 	return cached<typename A::engine_t>::from_rev_series(a.rev_series() * b.rev_series());
 }
 template <like A>
@@ -150,12 +166,13 @@ cached<typename A::engine_t> square(const A& a) {
 template <like A, like B, like C, like D>
 	requires fft::same_engine<A, B> && fft::same_engine<A, C> && fft::same_engine<A, D>
 cached<typename A::engine_t> multiply_add2(
-		const A& a, const B& b, const C& c, const D& d) {
+	const A& a, const B& b, const C& c, const D& d) {
 	return cached<typename A::engine_t>::from_rev_series(
-			multiply_add2(a.rev_series(), b.rev_series(), c.rev_series(), d.rev_series()));
+		multiply_add2(a.rev_series(), b.rev_series(), c.rev_series(), d.rev_series()));
 }
-template <like A, like B> requires fft::same_engine<A, B>
-bool operator==(const A& a, const B& b) {
+template <like A, like B>
+	requires fft::same_engine<A, B>
+bool operator == (const A& a, const B& b) {
 	return a.rev_series() == b.rev_series();
 }
 
@@ -203,12 +220,15 @@ struct form {
 	static form polynomial_evaluation(T z, int len) {
 		series::exact<E> k(size_t(len), T{});
 		T p = T(1);
-		for (int i = 0; i < len; i++) { k[i] = p; p *= z; }
+		for (int i = 0; i < len; i++) {
+			k[i] = p;
+			p *= z;
+		}
 		return from_rev_series(std::move(k));
 	}
 
 	template <like P>
-	T operator()(const P& p) const {
+	T operator () (const P& p) const {
 		assert(p.len() <= len());
 		T r{};
 		for (int i = 0; i < p.len(); i++) r += c[i] * p[i]; // weights multiply from the left
@@ -223,7 +243,8 @@ struct form {
 	}
 
 	// <P, *> -> <P, s x *>
-	template <series::like S> requires std::same_as<typename S::engine_t, E>
+	template <series::like S>
+		requires std::same_as<typename S::engine_t, E>
 	form composed_with(const S& s) const {
 		if constexpr (!S::exact_v) assert(s.len() >= len());
 		series::vec<E, S::exact_v> r = c * s;
@@ -248,7 +269,7 @@ struct subproduct_tree {
 			nodes[N + i] = vec<E>{-pts[i], T(1)};
 		}
 		for (int i = N - 1; i > 0; i--) {
-			nodes[i] = nodes[2*i] * nodes[2*i+1];
+			nodes[i] = nodes[2 * i] * nodes[2 * i + 1];
 		}
 	}
 
@@ -264,8 +285,8 @@ struct subproduct_tree {
 		down[1] = std::move(f);
 		for (int i = 1; i < N; i++) {
 			// the form's kernel transform serves both children's middle products
-			down[2*i+0] = down[i].composed_with(nodes[2*i+1]);
-			down[2*i+1] = down[i].composed_with(nodes[2*i+0]);
+			down[2 * i + 0] = down[i].composed_with(nodes[2 * i + 1]);
+			down[2 * i + 1] = down[i].composed_with(nodes[2 * i + 0]);
 			down[i] = form<E>{}; // done with the parent; free it early
 		}
 		std::vector<T> out(size_t(N), T{});
@@ -281,9 +302,9 @@ struct subproduct_tree {
 			up[N + i] = vec<E>{leaf_vals[i]};
 		}
 		for (int i = N - 1; i > 0; i--) {
-			up[i] = multiply_add2(up[2*i+0], nodes[2*i+1], up[2*i+1], nodes[2*i+0]);
-			up[2*i+0] = cached<E>{};
-			up[2*i+1] = cached<E>{};
+			up[i] = multiply_add2(up[2 * i + 0], nodes[2 * i + 1], up[2 * i + 1], nodes[2 * i + 0]);
+			up[2 * i + 0] = cached<E>{};
+			up[2 * i + 1] = cached<E>{};
 		}
 		return std::move(up[1]);
 	}
@@ -292,8 +313,7 @@ struct subproduct_tree {
 template <fft::engine E>
 std::vector<typename E::value_type> multipoint(
 	const vec<E>& p,
-	std::span<const typename E::value_type> pts
-) {
+	std::span<const typename E::value_type> pts) {
 	if (pts.empty()) return {};
 	int N = sz(pts);
 	subproduct_tree<E> tree{pts};
@@ -306,8 +326,7 @@ std::vector<typename E::value_type> multipoint(
 template <fft::engine E>
 vec<E> interpolate(
 	std::span<const typename E::value_type> pts,
-	std::span<const typename E::value_type> vals
-) {
+	std::span<const typename E::value_type> vals) {
 	using T = typename E::value_type;
 	assert(sz(pts) == sz(vals));
 	if (pts.empty()) return {};
@@ -323,8 +342,7 @@ vec<E> interpolate(
 		deriv_root[i] *= T(N - i);
 	}
 	std::vector<T> denoms = tree.pushdown(
-		form<E>::from_rev_series(series::exact<E>(ps_inv(root) * deriv_root))
-	);
+		form<E>::from_rev_series(series::exact<E>(ps_inv(root) * deriv_root)));
 
 	std::vector<T> leaf_vals(size_t(N), T{});
 	for (int i = 0; i < N; i++) leaf_vals[i] = vals[i] / denoms[i];

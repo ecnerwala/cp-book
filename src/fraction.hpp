@@ -3,7 +3,7 @@
 #include <iostream>
 #include <numeric>
 
-template <typename T, typename MulT=T> struct fraction_t {
+template <typename T, typename MulT = T> struct fraction_t {
 	T numer = 0, denom = 1;
 
 	fraction_t() : numer(0), denom(1) {}

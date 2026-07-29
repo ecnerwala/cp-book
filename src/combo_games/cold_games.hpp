@@ -131,13 +131,13 @@ inline std::optional<cold_ish> cold_ish_game(std::array<std::vector<cold_ish>, 2
 	// otherwise, cnd is too big, and we're just doing the dyadic rational thing
 	assert(best[1]);
 	// extra 1 to allow the middle
-	int d = std::max(best[0]->v.d, best[1]->v.d)+1;
+	int d = std::max(best[0]->v.d, best[1]->v.d) + 1;
 	// exclusive bounds
 	int v0 = (best[0]->v.n << (d - best[0]->v.d)) - best[0]->star;
 	int v1 = (best[1]->v.n << (d - best[1]->v.d)) + best[1]->star;
 	assert(v1 - v0 >= 2);
-	int b = 31 - __builtin_clz((v1-1) ^ v0);
-	cnd = cold_ish{dyadic((v1-1) >> b, d-b), false};
+	int b = 31 - __builtin_clz((v1 - 1) ^ v0);
+	cnd = cold_ish{dyadic((v1 - 1) >> b, d - b), false};
 	assert(cnd.v.n & 1);
 	assert(fuzzy_less(best[0], cnd) && fuzzy_less(cnd, best[1]));
 	return flip ? -cnd : cnd;

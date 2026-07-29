@@ -43,16 +43,16 @@ TEST_CASE("Lattice Count", "[lattice_cnt]") {
 
 TEST_CASE("Mod Count (positive)", "[lattice_cnt]") {
 	for (int m = 1; m <= 25; m++) {
-		for (int a = 0; a <= m+10; a++) {
+		for (int a = 0; a <= m + 10; a++) {
 			for (int c = 0; c <= m; c++) {
 				INFO("a = " << a);
 				INFO("m = " << m);
 				INFO("c = " << c);
 				int trueAns = 0;
-				for (int n = 1; n <= m+10; n++) {
+				for (int n = 1; n <= m + 10; n++) {
 					INFO("n = " << n);
 
-					trueAns += (a * (n-1) % m) < c;
+					trueAns += (a * (n - 1) % m) < c;
 					REQUIRE(mod_count(a, m, c, n) == trueAns);
 				}
 			}
@@ -62,8 +62,8 @@ TEST_CASE("Mod Count (positive)", "[lattice_cnt]") {
 
 TEST_CASE("Mod Count (negatives)", "[lattice_cnt]") {
 	for (int m : {1, 2, 3, 5, 8, 13, 21}) {
-		for (int a : {-10, 0, 1, 2, 3, 5, m, m+5}) {
-			auto cnds = {-37, -2*m-1, -m, -m+1, -m/2, -1, 0, 1, m/2, m+1, 2*m-1, 34};
+		for (int a : {-10, 0, 1, 2, 3, 5, m, m + 5}) {
+			auto cnds = {-37, -2 * m - 1, -m, -m + 1, -m / 2, -1, 0, 1, m / 2, m + 1, 2 * m - 1, 34};
 			INFO("a = " << a);
 			INFO("m = " << m);
 			for (int clo : cnds) {

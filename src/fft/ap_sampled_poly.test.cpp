@@ -21,7 +21,7 @@ TEST_CASE("ap_sampled_poly eval", "[fft,ap_sampled_poly]") {
 		for (int i = 0; i < len; i++) coeffs[i] = num(mt());
 		auto eval_at = [&](num v) {
 			num r = 0;
-			for (int i = len-1; i >= 0; i--) r = r * v + coeffs[i];
+			for (int i = len - 1; i >= 0; i--) r = r * v + coeffs[i];
 			return r;
 		};
 		poly_vals v(len);
@@ -44,4 +44,5 @@ TEST_CASE("ap_sampled_poly eval", "[fft,ap_sampled_poly]") {
 	}
 }
 
-}} // namespace ecnerwala::fft
+}
+} // namespace ecnerwala::fft

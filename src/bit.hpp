@@ -28,6 +28,7 @@
 template <typename T> class binary_indexed_tree {
 private:
 	std::vector<T> dat;
+
 public:
 	binary_indexed_tree() {}
 	explicit binary_indexed_tree(size_t N) : dat(N) {}
@@ -42,6 +43,7 @@ private:
 	private:
 		I begin_;
 		S end_;
+
 	public:
 		iterator_range() : begin_(), end_() {}
 		iterator_range(const I& begin__, const S& end__) : begin_(begin__), end_(end__) {}
@@ -57,13 +59,14 @@ public:
 		int a;
 		const_suffix_iterator(const T* dat_, int a_) : dat(dat_), a(a_) {}
 		friend class binary_indexed_tree;
+
 	public:
 		friend bool operator != (const const_suffix_iterator& i, const const_suffix_iterator& j) {
 			assert(j.dat == nullptr);
 			return i.a < j.a;
 		}
 		const_suffix_iterator& operator ++ () {
-			a |= a+1;
+			a |= a + 1;
 			return *this;
 		}
 		const T& operator * () const {
@@ -82,13 +85,14 @@ public:
 		int a;
 		suffix_iterator(T* dat_, int a_) : dat(dat_), a(a_) {}
 		friend class binary_indexed_tree;
+
 	public:
 		friend bool operator != (const suffix_iterator& i, const suffix_iterator& j) {
 			assert(j.dat == nullptr);
 			return i.a < j.a;
 		}
 		suffix_iterator& operator ++ () {
-			a |= a+1;
+			a |= a + 1;
 			return *this;
 		}
 		T& operator * () const {
@@ -107,17 +111,18 @@ public:
 		int a;
 		const_prefix_iterator(const T* dat_, int a_) : dat(dat_), a(a_) {}
 		friend class binary_indexed_tree;
+
 	public:
 		friend bool operator != (const const_prefix_iterator& i, const const_prefix_iterator& j) {
 			assert(j.dat == nullptr);
 			return i.a > 0;
 		}
 		const_prefix_iterator& operator ++ () {
-			a &= a-1;
+			a &= a - 1;
 			return *this;
 		}
 		const T& operator * () const {
-			return dat[a-1];
+			return dat[a - 1];
 		}
 	};
 	using const_prefix_range = iterator_range<const_prefix_iterator>;
@@ -131,17 +136,18 @@ public:
 		int a;
 		prefix_iterator(T* dat_, int a_) : dat(dat_), a(a_) {}
 		friend class binary_indexed_tree;
+
 	public:
 		friend bool operator != (const prefix_iterator& i, const prefix_iterator& j) {
 			assert(j.dat == nullptr);
 			return i.a > 0;
 		}
 		prefix_iterator& operator ++ () {
-			a &= a-1;
+			a &= a - 1;
 			return *this;
 		}
 		T& operator * () const {
-			return dat[a-1];
+			return dat[a - 1];
 		}
 	};
 	using prefix_range = iterator_range<prefix_iterator>;

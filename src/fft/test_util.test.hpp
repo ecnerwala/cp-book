@@ -19,7 +19,7 @@ template <typename T> std::vector<T> multiply_slow(const std::vector<T>& a, cons
 	std::vector<T> res(a.size() + b.size() - 1);
 	for (int i = 0; i < int(a.size()); i++) {
 		for (int j = 0; j < int(b.size()); j++) {
-			res[i+j] += a[i] * b[j];
+			res[i + j] += a[i] * b[j];
 		}
 	}
 	return res;
@@ -43,10 +43,11 @@ template <typename T> void check_eq(const std::vector<T>& got, const std::vector
 }
 
 #define ALL_ENGINES \
-		engines::ntt<modnum<998244353>>, engines::ntt<mod_goldilocks>, engines::real<double>, \
-		engines::split<modnum<int(1e9)+7>>, engines::crt<modnum<int(1e9)+7>>
+	engines::ntt<modnum<998244353>>, engines::ntt<mod_goldilocks>, engines::real<double>, \
+		engines::split<modnum<int(1e9) + 7>>, engines::crt<modnum<int(1e9) + 7>>
 #define MOD_ENGINES \
-		engines::ntt<modnum<998244353>>, engines::ntt<mod_goldilocks>, \
-		engines::split<modnum<int(1e9)+7>>, engines::crt<modnum<int(1e9)+7>>
+	engines::ntt<modnum<998244353>>, engines::ntt<mod_goldilocks>, \
+		engines::split<modnum<int(1e9) + 7>>, engines::crt<modnum<int(1e9) + 7>>
 
-}} // namespace ecnerwala::fft
+}
+} // namespace ecnerwala::fft

@@ -23,10 +23,10 @@ constexpr int64_t floor_sqrt(int64_t N) {
 	if (N == 0) return 0;
 	int64_t a = N;
 	while (true) {
-		int64_t b = N/a;
+		int64_t b = N / a;
 		assert(a >= b);
-		if (a-b <= 1) return b;
-		a = (a+b+1)>>1;
+		if (a - b <= 1) return b;
+		a = (a + b + 1) >> 1;
 	}
 }
 
@@ -34,22 +34,22 @@ class div_vector_layout {
 public:
 	int64_t N;
 	int64_t rt = floor_sqrt(N);
-	int len = int(2 * rt + (rt * (rt+1) <= N));
+	int len = int(2 * rt + (rt * (rt + 1) <= N));
 
 	constexpr div_vector_layout(int64_t N_ = 1) : N(N_) {}
 
 	constexpr int get_value_bucket(int64_t a) const {
-		return a <= rt ? int(a) : len - int(N/a);
+		return a <= rt ? int(a) : len - int(N / a);
 	}
 	constexpr int64_t get_bucket_bound(int i) const {
-		return i <= rt ? i : N/(len-i);
+		return i <= rt ? i : N / (len - i);
 	}
 };
 
 template <const div_vector_layout& layout, typename T> class div_vector {
 public:
 	// Let's just make everything public, getters and setters are too much work
-	T* st = new T[layout.len+1]{}; // Allocate one extra on each side
+	T* st = new T[layout.len + 1]{}; // Allocate one extra on each side
 	T* en = st + layout.len;
 
 	div_vector() = default;
@@ -66,10 +66,10 @@ public:
 		std::swap(a.st, b.st);
 		std::swap(a.en, b.en);
 	}
-	div_vector(div_vector && o) : st(nullptr), en(nullptr) {
+	div_vector(div_vector&& o) : st(nullptr), en(nullptr) {
 		swap(*this, o);
 	}
-	div_vector& operator = (div_vector && o) {
+	div_vector& operator = (div_vector&& o) {
 		swap(*this, o);
 		return *this;
 	}
@@ -96,7 +96,7 @@ public:
 		return a;
 	}
 	friend Derived operator + (Derived const& a) { return +Derived(a); }
-	friend Derived operator - (Derived && a) {
+	friend Derived operator - (Derived&& a) {
 		for (int64_t i = 1; i < layout.len; i++) {
 			a.st[i] = -a.st[i];
 		}
@@ -110,14 +110,14 @@ public:
 		}
 		return underlying();
 	}
-	friend Derived operator + (Derived && a, Derived const& b) { return a += b; }
-	friend Derived operator + (Derived const& a, Derived && b) {
+	friend Derived operator + (Derived&& a, Derived const& b) { return a += b; }
+	friend Derived operator + (Derived const& a, Derived&& b) {
 		for (int64_t i = 1; i < layout.len; i++) {
 			b.st[i] = a.st[i] + b.st[i];
 		}
 		return b;
 	}
-	friend Derived operator + (Derived && a, Derived && b) { return std::move(a) + b; }
+	friend Derived operator + (Derived&& a, Derived&& b) { return std::move(a) + b; }
 	friend Derived operator + (Derived const& a, Derived const& b) { return Derived(a) + b; }
 
 	template <typename F> Derived& operator += (F f) {
@@ -133,14 +133,14 @@ public:
 		}
 		return underlying();
 	}
-	friend Derived operator - (Derived && a, Derived const& b) { return a -= b; }
-	friend Derived operator - (Derived const& a, Derived && b) {
+	friend Derived operator - (Derived&& a, Derived const& b) { return a -= b; }
+	friend Derived operator - (Derived const& a, Derived&& b) {
 		for (int64_t i = 1; i < layout.len; i++) {
 			b.st[i] = a.st[i] - b.st[i];
 		}
 		return b;
 	}
-	friend Derived operator - (Derived && a, Derived && b) { return std::move(a) - b; }
+	friend Derived operator - (Derived&& a, Derived&& b) { return std::move(a) - b; }
 	friend Derived operator - (Derived const& a, Derived const& b) { return Derived(a) - b; }
 
 	template <typename F> Derived& operator -= (F f) {
@@ -156,10 +156,10 @@ public:
 		}
 		return underlying();
 	}
-	friend Derived operator * (Derived && a, T const& t) { return a *= t; }
+	friend Derived operator * (Derived&& a, T const& t) { return a *= t; }
 	friend Derived operator * (Derived const& a, T const& t) { return Derived(a) * t; }
 	// Just in case, don't assume multiplication is commutative.
-	friend Derived operator * (T const& t, Derived && a) {
+	friend Derived operator * (T const& t, Derived&& a) {
 		for (int64_t i = 1; i < layout.len; i++) {
 			a.st[i] = t * a.st[i];
 		}
@@ -173,7 +173,7 @@ public:
 		}
 		return underlying();
 	}
-	friend Derived operator / (Derived && a, T const& t) { return a /= t; }
+	friend Derived operator / (Derived&& a, T const& t) { return a /= t; }
 	friend Derived operator / (Derived const& a, T const& t) { return Derived(a) / t; }
 };
 
@@ -188,7 +188,7 @@ public:
 	template <typename F, std::enable_if_t<std::is_invocable_r_v<T, F, int64_t, int64_t>, bool> = true>
 	values(F f) {
 		for (int i = 1; i < layout.len; i++) {
-			this->st[i] = f(layout.get_bucket_bound(i-1), layout.get_bucket_bound(i));
+			this->st[i] = f(layout.get_bucket_bound(i - 1), layout.get_bucket_bound(i));
 		}
 	}
 
@@ -198,14 +198,14 @@ public:
 		}
 	}
 
-	explicit values(prefix<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
+	explicit values(prefix<layout, T>&& o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
 		for (int i = layout.len - 1; i > 1; i--) {
-			this->st[i] -= this->st[i-1];
+			this->st[i] -= this->st[i - 1];
 		}
 	}
 	explicit values(prefix<layout, T> const& o) {
 		for (int i = layout.len - 1; i > 1; i--) {
-			this->st[i] = o.st[i] - o.st[i-1];
+			this->st[i] = o.st[i] - o.st[i - 1];
 		}
 		this->st[1] = o.st[1];
 	}
@@ -228,9 +228,9 @@ public:
 		}
 	}
 
-	explicit prefix(values<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
+	explicit prefix(values<layout, T>&& o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
 		for (int i = 2; i < layout.len; i++) {
-			this->st[i] += this->st[i-1];
+			this->st[i] += this->st[i - 1];
 		}
 	}
 	explicit prefix(values<layout, T> const& o) {
@@ -266,20 +266,20 @@ private:
 			if (i >= layout.len - layout.rt) {
 				int z = int(layout.len - i);
 				assert(z <= layout.rt);
-				int64_t rt_over_z = layout.rt/z;
-				int64_t N_over_z = layout.N/z;
-				int64_t x_max = N_over_z/(z+1);
+				int64_t rt_over_z = layout.rt / z;
+				int64_t N_over_z = layout.N / z;
+				int64_t x_max = N_over_z / (z + 1);
 
 				T tot_val = T();
-				for (int64_t x = 2; x * (x+1) <= N_over_z && x <= x_max; x++) {
+				for (int64_t x = 2; x * (x + 1) <= N_over_z && x <= x_max; x++) {
 					// ylo = std::max(x, z)
 					int ylo_idx = std::max(int(x), z);
 					// yhi = N / x / z
 					int yhi_idx = int(x <= rt_over_z ? layout.len - x * z : N_over_z / x);
 					assert(ylo_idx < yhi_idx);
 
-					T ax = a.st[x] - a.st[x-1];
-					T bx = b.st[x] - b.st[x-1];
+					T ax = a.st[x] - a.st[x - 1];
+					T bx = b.st[x] - b.st[x - 1];
 					T ay = a.st[yhi_idx] - a.st[ylo_idx];
 					T by = b.st[yhi_idx] - b.st[ylo_idx];
 
@@ -287,15 +287,15 @@ private:
 					tot_val += v;
 				}
 				cur_sum += tot_val;
-				if (i+1 < layout.len) {
-					this->st[i+1] -= tot_val;
+				if (i + 1 < layout.len) {
+					this->st[i + 1] -= tot_val;
 				}
 			}
 
 			this->st[i] = f(i, cur_sum);
 
-			T ai = a.st[i] - a.st[i-1];
-			T bi = b.st[i] - b.st[i-1];
+			T ai = a.st[i] - a.st[i - 1];
+			T bi = b.st[i] - b.st[i - 1];
 
 			// Case 0a: x = 1
 			cur_sum += ai * b.st[1] + a.st[1] * bi;
@@ -305,17 +305,17 @@ private:
 				// xy <= z <= N/y
 				int64_t rt_over_i = layout.rt / i;
 				int64_t N_over_i = layout.N / i;
-				int x_max = int(std::min<int64_t>(N_over_i / i, i-1));
+				int x_max = int(std::min<int64_t>(N_over_i / i, i - 1));
 				T tot_sub = T();
 				for (int x = 2; x <= x_max; x++) {
 					T v;
-					v = ai * (b.st[x] - b.st[x-1]) + (a.st[x] - a.st[x-1]) * bi;
+					v = ai * (b.st[x] - b.st[x - 1]) + (a.st[x] - a.st[x - 1]) * bi;
 
 					int zlo_idx = int(x <= rt_over_i ? x * i : layout.len - (N_over_i / x));
 					this->st[zlo_idx] += v;
 					tot_sub += v;
 				}
-				this->en[-(i-1)] -= tot_sub;
+				this->en[-(i - 1)] -= tot_sub;
 
 				// Case 0b: x = y > 1
 				{
@@ -331,7 +331,7 @@ public:
 		prefix r;
 		r.st[1] = a.st[1] * b.st[1];
 		r.convolve_helper(a, b, [&](int i, T cur_sum) -> T {
-			return cur_sum + (a.st[i] - a.st[i-1]) * b.st[1] + a.st[1] * (b.st[i] - b.st[i-1]);
+			return cur_sum + (a.st[i] - a.st[i - 1]) * b.st[1] + a.st[1] * (b.st[i] - b.st[i - 1]);
 		});
 		return r;
 	}
@@ -340,7 +340,7 @@ public:
 	friend T get_conv_N(prefix const& a, prefix const& b) {
 		T ans = a.st[1] * b.en[-1];
 		for (int i = 2; i <= layout.len; i++) {
-			ans += (a.st[i] - a.st[i-1]) * b.en[-i];
+			ans += (a.st[i] - a.st[i - 1]) * b.en[-i];
 		}
 		return ans;
 	}
@@ -350,7 +350,7 @@ public:
 		T inv_b1 = inv(b.st[1]);
 		r.st[1] = a.st[1] * inv_b1;
 		r.convolve_helper(r, b, [&](int i, T cur_sum) -> T {
-			return (a.st[i] - (cur_sum + r.st[1] * (b.st[i] - b.st[i-1]))) * inv_b1 + r.st[i-1];
+			return (a.st[i] - (cur_sum + r.st[1] * (b.st[i] - b.st[i - 1]))) * inv_b1 + r.st[i - 1];
 		});
 		return r;
 	}
@@ -362,7 +362,7 @@ public:
 		r.st[1] = 1;
 		T inv_2 = inv(T(2));
 		r.convolve_helper(r, r, [&](int i, T cur_sum) -> T {
-			return (a.st[i] - cur_sum) * inv_2 + r.st[i-1];
+			return (a.st[i] - cur_sum) * inv_2 + r.st[i - 1];
 		});
 		return r;
 	}
@@ -387,7 +387,7 @@ public:
 
 		// Phase 0: stash away values up to the 6th root of N
 		int x;
-		for (x = 2; layout.rt / x / x / x > 0; x++) { }
+		for (x = 2; layout.rt / x / x / x > 0; x++) {}
 
 		// Phase 1: adjust the values and insert the necessary extra powers
 		std::array<T, 6> invs{T{}, T(1), inv(T(2)), inv(T(3)), inv(T(4)), inv(T(5))};
@@ -396,7 +396,7 @@ public:
 			int e = 1;
 			T pv = v;
 			int64_t pi = i;
-			while (pi <= layout.N/i) {
+			while (pi <= layout.N / i) {
 				e++;
 				pi *= i;
 				pv *= v;
@@ -408,7 +408,7 @@ public:
 		// In particular, we take e^a = 1 + a + a^2 / 2 + a^3 / 6 + a^4 / 24 + a^5 / 120
 		prefix v;
 		for (int i = x; i < layout.len; i++) {
-			v.st[i] = v.st[i-1] + a.st[i];
+			v.st[i] = v.st[i - 1] + a.st[i];
 		}
 
 		prefix r = v * v;
@@ -498,14 +498,14 @@ public:
 
 		// Phase 3: correct log_a; we need to get rid of the extra powers.
 		for (int i = x; i < layout.len; i++) {
-			r.st[i] = log_a.st[i] - log_a.st[i-1];
+			r.st[i] = log_a.st[i] - log_a.st[i - 1];
 		}
 		for (; x <= layout.rt; x++) {
 			T v = r.st[x];
 			int e = 1;
 			T pv = v;
 			int64_t px = x;
-			while (px <= layout.N/x) {
+			while (px <= layout.N / x) {
 				e++;
 				px *= x;
 				pv *= v;
@@ -522,29 +522,29 @@ public:
 
 		prefix r_pref;
 		for (int i = x; i < layout.len; i++) {
-			r_pref.st[i] = a_pref.st[i] - a_pref.st[x-1];
+			r_pref.st[i] = a_pref.st[i] - a_pref.st[x - 1];
 		}
 
 		for (int i = x; i <= layout.rt; i++) {
-			T vi = a_pref.st[i] - a_pref.st[i-1];
+			T vi = a_pref.st[i] - a_pref.st[i - 1];
 			if (vi == 0) continue;
 
 			int64_t N_over_i = layout.N / i;
 			int64_t rt_over_i = layout.rt / i;
 			int64_t max_z = N_over_i / i;
 			for (int z = 1; z <= max_z; z++) {
-				int jlo_idx = i-1;
+				int jlo_idx = i - 1;
 				int jhi_idx = int(z <= rt_over_i ? layout.len - i * z : N_over_i / z);
 				assert(jlo_idx < jhi_idx);
 				T v = vi * (a_pref.st[jhi_idx] - a_pref.st[jlo_idx]);
-				r_pref.st[layout.len-z] += v;
+				r_pref.st[layout.len - z] += v;
 			}
 		}
 
 		bit<layout, T> r(std::move(r_pref));
 		r.increment_bucket_suffix(1, T(1));
-		for (int i = x-1; i >= 2; i--) {
-			T cur = a_pref.st[i] - a_pref.st[i-1];
+		for (int i = x - 1; i >= 2; i--) {
+			T cur = a_pref.st[i] - a_pref.st[i - 1];
 			if (cur == 0) continue;
 			r.sparse_mul_unlimited(i, cur);
 		}
@@ -572,7 +572,7 @@ public:
 		// Note that N^1/3 < x <= i <= j, so N/i/j <= N^1/3 < x
 
 		for (int i = x; i < layout.len; i++) {
-			T vi = a_pref.st[i] - a_pref.st[i-1];
+			T vi = a_pref.st[i] - a_pref.st[i - 1];
 			r.st[i] = vi;
 		}
 
@@ -585,12 +585,12 @@ public:
 			int64_t rt_over_i = layout.rt / i;
 			int64_t max_z = N_over_i / i;
 			for (int z = 1; z <= max_z; z++) {
-				int jlo_idx = i-1;
+				int jlo_idx = i - 1;
 				int jhi_idx = int(z <= rt_over_i ? layout.len - i * z : N_over_i / z);
 				assert(jlo_idx < jhi_idx);
 				T v = vi * (a_pref.st[jhi_idx] - a_pref.st[jlo_idx]);
 				r.en[-z] -= v;
-				if (z > 0) r.en[-(z-1)] += v;
+				if (z > 0) r.en[-(z - 1)] += v;
 			}
 		}
 
@@ -609,28 +609,28 @@ public:
 		}
 	}
 
-	explicit bit(prefix<layout, T> && o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
+	explicit bit(prefix<layout, T>&& o) : div_vector<layout, T>(static_cast<div_vector<layout, T>&&>(std::move(o))) {
 		for (int i = layout.len - 1; i >= 1; i--) {
-			this->st[i] -= this->st[i & (i-1)];
+			this->st[i] -= this->st[i & (i - 1)];
 		}
 	}
 	explicit bit(prefix<layout, T> const& o) {
 		for (int i = layout.len - 1; i >= 1; i--) {
-			this->st[i] = o.st[i] - o.st[i & (i-1)];
+			this->st[i] = o.st[i] - o.st[i & (i - 1)];
 		}
 	}
-	explicit operator prefix<layout, T> () && {
+	explicit operator prefix<layout, T>() && {
 		prefix<layout, T> r;
 		swap(static_cast<div_vector<layout, T>&>(r), static_cast<div_vector<layout, T>&>(*this));
 		for (int i = 1; i < layout.len; i++) {
-			r.st[i] += r.st[i & (i-1)];
+			r.st[i] += r.st[i & (i - 1)];
 		}
 		return r;
 	}
-	explicit operator prefix<layout, T> () const& {
+	explicit operator prefix<layout, T>() const& {
 		prefix<layout, T> r;
 		for (int i = 1; i < layout.len; i++) {
-			r.st[i] = this->st[i] + r.st[i & (i-1)];
+			r.st[i] = this->st[i] + r.st[i & (i - 1)];
 		}
 		return r;
 	}
@@ -662,15 +662,15 @@ public:
 		assert(x > 1);
 		int64_t j = 1;
 		T cur = get_bucket_prefix(int(j <= layout.rt / x ? layout.len - j * x : layout.N / x / j));
-		for (; (j+1) <= layout.N / x / (j+1); j++) {
-			T nxt = get_bucket_prefix(int(j + 1 <= layout.rt / x ? layout.len - (j+1) * x : layout.N / x / (j+1)));
+		for (; (j + 1) <= layout.N / x / (j + 1); j++) {
+			T nxt = get_bucket_prefix(int(j + 1 <= layout.rt / x ? layout.len - (j + 1) * x : layout.N / x / (j + 1)));
 			if (cur != nxt) {
 				increment_bucket_suffix(int(layout.len - j), w * (cur - nxt));
 				cur = nxt;
 			}
 		}
 		for (int64_t i = layout.N / x / j; i > 0; i--) {
-			T nxt = get_bucket_prefix(int(i-1));
+			T nxt = get_bucket_prefix(int(i - 1));
 			if (cur != nxt) {
 				increment_bucket_suffix(int(i <= layout.rt / x ? i * x : layout.len - layout.N / x / i), w * (cur - nxt));
 				cur = nxt;

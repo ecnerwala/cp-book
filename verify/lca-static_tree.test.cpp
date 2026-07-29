@@ -6,9 +6,11 @@
 #include "static_tree.hpp"
 
 int main() {
-	std::ios_base::sync_with_stdio(false); std::cin.tie(nullptr);
+	std::ios_base::sync_with_stdio(false);
+	std::cin.tie(nullptr);
 
-	int N, Q; std::cin >> N >> Q;
+	int N, Q;
+	std::cin >> N >> Q;
 	std::vector<int> P(N);
 	P[0] = -1;
 	for (auto& v : P | std::views::drop(1)) std::cin >> v;
@@ -22,7 +24,8 @@ int main() {
 	static_forest_t tree(adj, {0});
 
 	for (int q = 0; q < Q; q++) {
-		int u, v; std::cin >> u >> v;
+		int u, v;
+		std::cin >> u >> v;
 		std::cout << tree.lca(u, v) << '\n';
 	}
 

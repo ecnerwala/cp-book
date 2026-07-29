@@ -14,12 +14,15 @@ int main() {
 	using E = ecnerwala::fft::engines::ntt<num>;
 	using ps = ecnerwala::series::trunc<E>;
 
-	int N; std::cin >> N;
-	ps A(N); for (auto& a : A) std::cin >> a;
-	ps B(N); for (auto& b : B) std::cin >> b;
+	int N;
+	std::cin >> N;
+	ps A(N);
+	for (auto& a : A) std::cin >> a;
+	ps B(N);
+	for (auto& b : B) std::cin >> b;
 	auto res = ps_compose(A, B);
 	for (int i = 0; i < N; i++) {
-		std::cout << res[i] << " \n"[i+1==N];
+		std::cout << res[i] << " \n"[i + 1 == N];
 	}
 
 	return 0;

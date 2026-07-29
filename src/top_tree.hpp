@@ -61,6 +61,7 @@ private:
 	const top_tree_node* derived_this() const {
 		return static_cast<const top_tree_node*>(this);
 	}
+
 public:
 	mutable top_tree_node* p = nullptr;
 	std::array<top_tree_node*, 3> c{nullptr, nullptr, nullptr};
@@ -113,12 +114,12 @@ public:
 	}
 
 private:
-
 	void rot() {
 		assert(!is_vert);
 		assert(!r());
 		top_tree_node* pa = p;
-		int x = d(); assert(x == 0 || x == 1);
+		int x = d();
+		assert(x == 0 || x == 1);
 		top_tree_node* ch = c[!x];
 
 		if (pa->p) pa->p_c() = derived_this();
@@ -145,7 +146,8 @@ private:
 		}
 
 		top_tree_node* pa = p;
-		int x = d(); assert(x == 0 || x == 1);
+		int x = d();
+		assert(x == 0 || x == 1);
 		assert(c_d == !x);
 		top_tree_node* ch = c[c_d]->c[!x];
 
@@ -251,11 +253,14 @@ private:
 		pa->is_path = false;
 		pa->c[2] = pa->c[1]; // don't need to change the parent
 
-		pa->c[0] = c[0]; if (c[0]) c[0]->p = pa;
-		pa->c[1] = c[1]; if (c[1]) c[1]->p = pa;
+		pa->c[0] = c[0];
+		if (c[0]) c[0]->p = pa;
+		pa->c[1] = c[1];
+		if (c[1]) c[1]->p = pa;
 
 		c[0] = nullptr;
-		c[1] = pa; pa->p = derived_this();
+		c[1] = pa;
+		pa->p = derived_this();
 		assert(c[2] == nullptr);
 
 		assert(c[0] == nullptr);
@@ -282,12 +287,15 @@ private:
 		if (pa->p) pa->p_c() = derived_this();
 		this->p = pa->p;
 
-		pa->c[0] = c[0]; if (c[0]) c[0]->p = pa;
-		pa->c[1] = c[1]; if (c[1]) c[1]->p = pa;
+		pa->c[0] = c[0];
+		if (c[0]) c[0]->p = pa;
+		pa->c[1] = c[1];
+		if (c[1]) c[1]->p = pa;
 
 		assert(c[2] && c[2]->is_path);
 		c[1] = c[2]; // don't need to change parent
-		c[0] = pa; pa->p = derived_this();
+		c[0] = pa;
+		pa->p = derived_this();
 		c[2] = nullptr;
 
 		is_path = true;
@@ -401,7 +409,8 @@ public:
 	friend void link(top_tree_node* e, top_tree_node* v1, top_tree_node* v2) {
 		assert(e && v1 && v2);
 		assert(!e->c[0] && !e->c[1] && !e->c[2]);
-		v1->expose(); while (v1->p) v1 = v1->p;
+		v1->expose();
+		while (v1->p) v1 = v1->p;
 		v2->make_root();
 
 		assert(!v1->p);
@@ -518,13 +527,13 @@ public:
 	}
 
 	// Assumes a and b are in the same connected component
-	friend top_tree_node* lca_same_cc(top_tree_node *a, top_tree_node *b) {
+	friend top_tree_node* lca_same_cc(top_tree_node* a, top_tree_node* b) {
 		a->expose();
 		return b->expose();
 	}
 
 	// Returns nullptr if a and b are in different ccs
-	friend top_tree_node* maybe_lca(top_tree_node *a, top_tree_node *b) {
+	friend top_tree_node* maybe_lca(top_tree_node* a, top_tree_node* b) {
 		a->expose();
 		auto ap = a->p;
 		assert(!ap || !ap->p);
