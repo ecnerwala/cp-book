@@ -410,7 +410,7 @@ S::engine_t::value_type kth_term_of_linear_recurrence(
 	// Don't even bother with P so we don't have to do truncation checks
 	// TODO: Could use generic multiply for this whole part?
 	fft::transformed<E> tq;
-	auto q_cached = detail::whole_operand(q, tq);
+	auto q_cached = detail::as_cached_span(q, tq);
 
 	// Compute the prefix and then hard-cast it to exact
 	span<E, false> sv = s;

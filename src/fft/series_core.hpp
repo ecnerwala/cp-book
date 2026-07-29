@@ -349,18 +349,13 @@ template <fft::engine E> using cached_exact = cached<E, true>;
 template <fft::engine E> using cached_trunc = cached<E, false>;
 
 namespace detail {
-// the operand's whole cache if it carries one, else the caller's throwaway cache
-template <like S>
-fft::transformed<typename S::engine_t>& whole_cache_or(const S& s, fft::transformed<typename S::engine_t>& tmp) {
-	if (auto co = cache_opt_of(s)) return co->get();
-	return tmp;
-}
 // Normalize a whole-span operand to a cached_span: the coefficients borrowed
 // together with the cache serving them (the operand's own, or tmp otherwise).
 // The whole-span multiply/square/middle_product paths run entirely on this form.
 template <like S>
-cached_span<typename S::engine_t, S::exact_v> whole_operand(const S& s, fft::transformed<typename S::engine_t>& tmp) {
-	return {s, whole_cache_or(s, tmp)};
+cached_span<typename S::engine_t, S::exact_v> as_cached_span(const S& s, fft::transformed<typename S::engine_t>& tmp) {
+	auto co = cache_opt_of(s);
+	return {s, co ? co->get() : tmp};
 }
 /* namespace detail */ }
 
@@ -410,7 +405,7 @@ auto square(const A& a) {
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
 	fft::transformed<E> ta_;
-	auto av = detail::whole_operand(a, ta_);
+	auto av = detail::as_cached_span(a, ta_);
 	if constexpr (A::exact_v) {
 		// like operator*, an exact square returns has_cache, adopting the
 		// pointwise product as the result's transform when the engine supports it
@@ -438,8 +433,8 @@ cached<typename A::engine_t, true> multiply_add2(
 	using E = typename A::engine_t;
 	using T = typename E::value_type;
 	fft::transformed<E> ta_, tb_, tc_, td_;
-	auto av = detail::whole_operand(a, ta_), bv = detail::whole_operand(b, tb_);
-	auto cv = detail::whole_operand(c, tc_), dv = detail::whole_operand(d, td_);
+	auto av = detail::as_cached_span(a, ta_), bv = detail::as_cached_span(b, tb_);
+	auto cv = detail::as_cached_span(c, tc_), dv = detail::as_cached_span(d, td_);
 	std::vector<T> coeffs;
 	fft::transformed<E> f;
 	fft::multiply_add2_cached<E>(
@@ -460,8 +455,8 @@ template <like A, exact_like B> requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v> middle_product(const A& a, const B& b) {
 	using E = typename A::engine_t;
 	fft::transformed<E> ta_, tb_;
-	auto av = detail::whole_operand(a, ta_);
-	auto bv = detail::whole_operand(b, tb_);
+	auto av = detail::as_cached_span(a, ta_);
+	auto bv = detail::as_cached_span(b, tb_);
 	return vec<E, A::exact_v>(fft::middle_product<E>(
 		av, av.cache(),
 		bv, bv.cache()
@@ -546,9 +541,10 @@ auto operator * (const A& a, const B& b) {
 	if constexpr (ea && eb) {
 		std::vector<T> coeffs;
 		fft::transformed<E> f;
+		auto ca = detail::as_cached_span(va, ta_), cb = detail::as_cached_span(vb, tb_);
 		fft::multiply_cached<E>(
-			va, detail::whole_cache_or(va, ta_),
-			vb, detail::whole_cache_or(vb, tb_),
+			ca, ca.cache(),
+			cb, cb.cache(),
 			coeffs, f
 		);
 		cached<E, true> w(exact<E>(std::move(coeffs)));
@@ -556,9 +552,10 @@ auto operator * (const A& a, const B& b) {
 		return w;
 	} else {
 		trunc<E> r(size_t(prec), T(0));
+		auto ca = detail::as_cached_span(va, ta_), cb = detail::as_cached_span(vb, tb_);
 		fft::multiply<E>(
-			va, detail::whole_cache_or(va, ta_),
-			vb, detail::whole_cache_or(vb, tb_),
+			ca, ca.cache(),
+			cb, cb.cache(),
 			std::span<T>(r)
 		);
 		return r;
