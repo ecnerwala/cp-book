@@ -33,9 +33,8 @@ struct span {
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.begin(); }
 	auto end() const { return s.end(); }
+	// engine primitives borrow through std::span's range constructor
 	std::span<const T> coeffs() const { return s; }
-	// a series-like operand borrows straight into the engine primitives
-	operator std::span<const T>() const { return s; }
 	span underlying() const { return *this; }
 	span first(int n) const { return span(s.first(size_t(n))); }
 
