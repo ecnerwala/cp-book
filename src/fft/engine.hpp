@@ -36,7 +36,7 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //      transform(span<const value_type> in, int n) -> transformed_t<unit_scale>
 //      mul(transformed_t<A>, transformed_t<B>, int n) -> product_t<A*B>
 //      mul2(a1, b1, a2, b2, int n) -> product_t<A1*B1 + A2*B2>, computing a1*b1 + a2*b2 in one pass
-//      finish(product_t<A>, span<value_type>& out, Op) -> void
+//      finish(product_t<A>, span<value_type> out, Op) -> void
 //
 //   Input span can be length up to 2n.
 //   Output spans can be length up to n; only the prefix that exists is filled.
