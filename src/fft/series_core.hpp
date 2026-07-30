@@ -187,6 +187,9 @@ concept has_cache = like<S> && requires(const S& s) {
 	{ s.cache() } -> std::same_as<fft::transformed<typename S::engine_t>&>;
 };
 
+template <fft::engine E, bool exact_>
+struct maybe_cached;
+
 // A borrowed series paired with the transform serving it: the
 // normalized operand form fed to the cached fft:: entry points. Models has_cache.
 template <fft::engine E, bool exact_>
@@ -206,7 +209,8 @@ struct cached_span {
 	const typename E::value_type& operator[](int i) const { return s[i]; }
 	operator std::span<const typename E::value_type>() const { return s.coeffs(); }
 	operator span<E, exact_>() const { return s; }
-	span<E, exact_> first(int n) const { return s.first(n); }
+	// truncation keeps the cache only when it still serves the whole borrow
+	maybe_cached<E, exact_> first(int n) const;
 	fft::transformed<E>& cache() const { return f; }
 };
 
@@ -260,6 +264,11 @@ struct maybe_cached {
 	}
 };
 
+template <fft::engine E, bool exact_>
+maybe_cached<E, exact_> cached_span<E, exact_>::first(int n) const {
+	return maybe_cached<E, exact_>(*this).first(n);
+}
+
 // A view of an operand widened to a longer logical length: the wrapped operand
 // holds the leading coefficients, everything past it is zero.
 // Whatever cache the operand carries rides along, so trunc algorithms at a
@@ -280,7 +289,7 @@ struct zero_extended {
 		return i < s.len() ? s[i] : zero;
 	}
 	operator std::span<const T>() const { return std::span<const T>(s); }
-	operator span<E, false>() const { return span<E, false>(span<E, S::exact_v>(s)); }
+	operator span<E, false>() const { return span<E, S::exact_v>(s); }
 	// shrink the zero tail, or delegate a real truncation to the wrapped operand
 	auto first(int k) const {
 		assert(0 <= k && k <= n);
@@ -291,11 +300,11 @@ struct zero_extended {
 	}
 };
 
-// widen any operand to logical length n >= len(); the tail reads zero
+// view any operand at logical length n: shorter delegates truncation to
+// first(), longer reads zero past the operand's coefficients
 template <like S>
-zero_extended<maybe_cached<typename S::engine_t, S::exact_v>> zero_extend(const S& s, int n) {
-	assert(n >= s.len());
-	return {maybe_cached<typename S::engine_t, S::exact_v>(s), n};
+auto with_len(const S& s, int n) {
+	return zero_extended<decltype(s.first(n))>{s.first(std::min(n, s.len())), n};
 }
 
 // carries transforms of power-of-two prefixes: first(n) comes back as a
@@ -329,8 +338,11 @@ struct cached {
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
-	operator span<E, exact_>() const { return span<E, exact_>(std::span<const T>(s)); }
-	span<E, exact_> first(int n) const { return span<E, exact_>(*this).first(n); }
+	operator span<E, exact_>() const { return s; }
+	// truncation keeps the cache only when it still serves the whole borrow
+	maybe_cached<E, exact_> first(int n) const {
+		return n == len() ? maybe_cached<E, exact_>(s, f) : maybe_cached<E, exact_>(s.first(n));
+	}
 	// the transform of the coefficients, fed to the cached fft:: entry points alongside them
 	fft::transformed<E>& cache() const { return f; }
 
@@ -582,7 +594,7 @@ struct prefix_cached {
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
-	operator span<E, false>() const { return span<E, false>(std::span<const T>(s)); }
+	operator span<E, false>() const { return s; }
 
 	// extend precision: appends coefficients, keeping all covering caches valid
 	void append(std::span<const T> tail) {
@@ -593,7 +605,7 @@ struct prefix_cached {
 	// lines up with k (k a power of two, or k == len()); uncached otherwise.
 	maybe_cached<E, false> first(int k) const {
 		assert(k <= len());
-		span<E, false> v(std::span<const T>(s).first(size_t(k)));
+		span<E, false> v = s.first(k);
 		int n = nextPow2(k);
 		if (std::min(n, len()) == k) return {v, prefix_cache(n)};
 		return maybe_cached<E, false>(v);
@@ -606,7 +618,7 @@ struct prefix_cached {
 		auto& c = caches[k];
 		int e = std::min(n, len());
 		if (c.len != e) {
-			c.t = E::transform(std::span<const T>(s).first(e), 2 * n);
+			c.t = E::transform(s.first(e), 2 * n);
 			c.len = e;
 		}
 		return c.t;

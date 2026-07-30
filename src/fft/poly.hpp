@@ -160,8 +160,8 @@ bool operator==(const A& a, const B& b) {
 }
 
 // Euclidean division: a = d*q + r with r.len() < d.len(). Requires d.leading() != 0.
-// rev(q) = rev(a) * inv(rev(d)) mod x^(a.len() - d.len() + 1); inverting rev(d)
-// past its length borrows it zero-extended, reusing one transform of it throughout.
+// rev(q) = rev(a) * inv(rev(d)) mod x^(a.len() - d.len() + 1); rev(d) is viewed
+// at that precision without copying, reusing one transform of it throughout.
 template <fft::engine E>
 std::pair<vec<E>, vec<E>> divmod(const vec<E>& a, const vec<E>& d) {
 	using T = typename E::value_type;
@@ -169,9 +169,7 @@ std::pair<vec<E>, vec<E>> divmod(const vec<E>& a, const vec<E>& d) {
 	int L = a.len() - d.len() + 1;
 	if (L <= 0) return {vec<E>{}, a};
 	series::cached_exact<E> revd(d.rev_series());
-	series::trunc<E> invd = L >= d.len()
-		? ps_inv(series::zero_extend(revd, L))
-		: ps_inv(series::trunc<E>(series::span<E, false>(revd).first(L)));
+	series::trunc<E> invd = ps_inv(series::with_len(revd, L));
 	vec<E> q = vec<E>::from_rev_series(series::exact<E>(a.rev_series() * invd));
 	vec<E> r = a - vec<E>(cached<E>::from_rev_series(revd * q.rev_series()));
 	r.resize(d.len() - 1);
