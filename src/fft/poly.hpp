@@ -160,8 +160,8 @@ bool operator==(const A& a, const B& b) {
 }
 
 // Euclidean division: a = d*q + r with r.len() < d.len(). Requires d.leading() != 0.
-// rev(q) = rev(a) * inv(rev(d)) mod x^(a.len() - d.len() + 1); rev(d) is viewed
-// at that precision without copying, reusing one transform of it throughout.
+// rev(q) = rev(a) * inv(rev(d)) mod x^(a.len() - d.len() + 1);
+// rev(d)'s whole transform also serves the remainder product.
 template <fft::engine E>
 std::pair<vec<E>, vec<E>> divmod(const vec<E>& a, const vec<E>& d) {
 	using T = typename E::value_type;
