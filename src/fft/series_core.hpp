@@ -367,18 +367,18 @@ cached_span<typename S::engine_t, S::exact_v> as_cached_span(const S& s, fft::tr
 // This is correct for non-commutative rings.
 // TODO: reuse/populate the operand's whole/prefix transform caches
 template <trunc_like S>
-trunc<typename S::engine_t> ps_inv(const S& a_) {
+trunc<typename S::engine_t> ps_inv(const S& a) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	int N = a_.len();
+	int N = a.len();
 	trunc<E> r(size_t(N), T{});
 	if (N == 0) return r;
 	int s = nextPow2(N);
 	std::vector<T> b(size_t(s), T{});
-	b[0] = inv(a_[0]);
+	b[0] = inv(a[0]);
 	for (int n = 1; n < N; n *= 2) {
 		int m = 2 * n;
-		auto ta = E::transform(a_.first(std::min(N, m)), m);
+		auto ta = E::transform(a.first(std::min(N, m)), m);
 		auto tb = E::transform(std::span<const T>(b).first(n), m);
 		// e = a*b mod x^m; only e[n..m) is needed (and is wraparound-free).
 		auto e = fft::buffer_pool<T>::get(m);
