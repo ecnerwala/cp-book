@@ -19,7 +19,7 @@ namespace ecnerwala::series {
 template <like S>
 vec<typename S::engine_t, S::exact_v> stretch(const S& a_, int n) {
 	using E = typename S::engine_t;
-	span<E, S::exact_v> a = a_.underlying();
+	span<E, S::exact_v> a = a_;
 	vec<E, S::exact_v> r(size_t(a.len()));
 	for (int i = 0; i*n < a.len(); i++) {
 		r[i*n] = a[i];
@@ -29,7 +29,7 @@ vec<typename S::engine_t, S::exact_v> stretch(const S& a_, int n) {
 template <like S>
 vec<typename S::engine_t, S::exact_v> deriv_shift(const S& a_) {
 	using E = typename S::engine_t;
-	span<E, S::exact_v> a = a_.underlying();
+	span<E, S::exact_v> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	for (int i = 0; i < r.len(); i++) {
 		r[i] *= i;
@@ -40,7 +40,7 @@ template <like S>
 vec<typename S::engine_t, S::exact_v> integ_shift(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, S::exact_v> a = a_.underlying();
+	span<E, S::exact_v> a = a_;
 	assert(a[0] == 0);
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	T f = 1;
@@ -59,7 +59,7 @@ template <like S>
 vec<typename S::engine_t, S::exact_v> integ_shift_offset(const S& a_, int offset) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, S::exact_v> a = a_.underlying();
+	span<E, S::exact_v> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	T f = 1;
 	for (int i = 0; i < r.len(); i++) {
@@ -80,7 +80,7 @@ trunc<typename S::engine_t> deriv_shift_log(const S& a) {
 }
 template <trunc_like S>
 trunc<typename S::engine_t> ps_log(const S& a) {
-	assert(a.underlying()[0] == 1);
+	assert(a[0] == 1);
 	return integ_shift(deriv_shift_log(a));
 }
 template <trunc_like S>
@@ -88,7 +88,7 @@ trunc<typename S::engine_t> ps_exp(const S& a_) {
 	// See https://mathexp.eu/bostan/publications/BoSc09a.pdf for details
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, false> a = a_.underlying();
+	span<E, false> a = a_;
 	assert(a.len() >= 1);
 	assert(a[0] == 0);
 	trunc<E> r(1, T(1)); r.reserve(size_t(a.len()));
@@ -123,7 +123,7 @@ trunc<typename S::engine_t> ps_exp(const S& a_) {
 template <trunc_like S>
 trunc<typename S::engine_t> ps_pow_monic(const S& a_, typename S::engine_t::value_type k) {
 	using E = typename S::engine_t;
-	span<E, false> a = a_.underlying();
+	span<E, false> a = a_;
 	if (a.len() == 0) return {};
 	assert(a[0] == 1);
 	trunc<E> l = ps_log(a_);
@@ -134,7 +134,7 @@ template <trunc_like S>
 trunc<typename S::engine_t> ps_pow(const S& a_, int64_t k) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, false> a = a_.underlying();
+	span<E, false> a = a_;
 	assert(k >= 0);
 	if (k == 0) {
 		trunc<E> r(size_t(a.len()), T(0));
@@ -169,7 +169,7 @@ trunc<typename S::engine_t> to_newton_sums(const S& a, int deg) {
 template <trunc_like S>
 trunc<typename S::engine_t> from_newton_sums(const S& s_, int deg) {
 	using E = typename S::engine_t;
-	span<E, false> s = s_.underlying();
+	span<E, false> s = s_;
 	assert(s[0] == deg);
 	trunc<E> r(s.begin(), s.end());
 	r[0] = 0;
@@ -261,8 +261,8 @@ template <trunc_like SF, trunc_like SG> requires fft::same_engine<SF, SG>
 trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
 	using E = typename SF::engine_t;
 	using T = typename E::value_type;
-	span<E, false> f = f_.underlying();
-	span<E, false> g = g_.underlying();
+	span<E, false> f = f_;
+	span<E, false> g = g_;
 	if (g.len() == 0) return {};
 
 	int m = f.len();
@@ -330,7 +330,7 @@ P::engine_t::value_type kth_term_of_rational_function(
 	using E = P::engine_t;
 	using T = E::value_type;
 
-	assert(q.len() > 0 && q.underlying()[0] != T(0));
+	assert(q.len() > 0 && q[0] != T(0));
 	// Check this here so we avoid accessing p[0]
 	if (p.len() == 0) return T(0);
 
@@ -340,27 +340,16 @@ P::engine_t::value_type kth_term_of_rational_function(
 
 	int n = nextPow2((d-1) + d - 1); // >= d
 
+	// Seed the loop transforms from any whole caches; the buffers below hold the
+	// current p, q (zero-padded, which extend_to tolerates).
 	fft::transformed<E> tq, tp;
-	// NOTE: Because we assert the coeffs are smaller than the existing transform, we must extend_to before padding
-	if constexpr (has_cache<Q>) {
-		E::extend_to(q.cache(), n, q.underlying().coeffs());
-		tq = q.cache();
-	}
-	if constexpr (has_cache<P>) {
-		E::extend_to(p.cache(), n, p.underlying().coeffs());
-		tp = p.cache();
-	}
+	if constexpr (has_cache<Q>) { E::extend_to(q.cache(), n, q); tq = q.cache(); }
+	if constexpr (has_cache<P>) { E::extend_to(p.cache(), n, p); tp = p.cache(); }
 
 	std::vector<T> p_buf(d-1, T(0));
-	{
-		auto p_span = p.underlying();
-		std::copy(p_span.begin(), p_span.end(), p_buf.begin());
-	}
+	std::ranges::copy(std::span<const T>(p), p_buf.begin());
 	std::vector<T> q_buf(d, T(0));
-	{
-		auto q_span = q.underlying();
-		std::copy(q_span.begin(), q_span.end(), q_buf.begin());
-	}
+	std::ranges::copy(std::span<const T>(q), q_buf.begin());
 
 	while (k > 0) {
 		E::extend_to(tq, n, q_buf);
@@ -375,7 +364,7 @@ P::engine_t::value_type kth_term_of_rational_function(
 		} else {
 			tp = {};
 		}
-		E::finish(std::move(ntp), std::span<T>(p_buf));
+		E::finish(std::move(ntp), std::span(p_buf));
 		k >>= 1;
 
 		// Save the last iteration if we're done
@@ -396,10 +385,10 @@ P::engine_t::value_type kth_term_of_rational_function(
 		if (n/2 == d-1) {
 			// Fix the wraparound
 			T v0 = q_buf[0] * q_buf[0];
-			E::finish(std::move(ntq), std::span<T>(q_buf).first(d-1));
+			E::finish(std::move(ntq), std::span(q_buf).first(d-1));
 			q_buf[d-1] = std::exchange(q_buf[0], v0) - v0;
 		} else {
-			E::finish(std::move(ntq), std::span<T>(q_buf));
+			E::finish(std::move(ntq), std::span(q_buf));
 		}
 	}
 	return p_buf[0] * inv(q_buf[0]);
@@ -415,16 +404,17 @@ S::engine_t::value_type kth_term_of_linear_recurrence(
 	using E = S::engine_t;
 	using T = E::value_type;
 
-	assert(q.len() > 0 && q.underlying()[0] != T(0));
+	assert(q.len() > 0 && q[0] != T(0));
 	assert(s.len() >= q.len()-1);
 
 	// Don't even bother with P so we don't have to do truncation checks
 	// TODO: Could use generic multiply for this whole part?
 	fft::transformed<E> tq;
-	auto q_cached = cached_span<E, true>{q, detail::whole_cache_or(q, tq)};
+	auto q_cached = detail::whole_operand(q, tq);
 
 	// Compute the prefix and then hard-cast it to exact
-	auto p = vec<E, true>(span<E, false>(s.underlying()).first(q.len()-1) * q_cached);
+	span<E, false> sv = s;
+	auto p = exact<E>(sv.first(q.len()-1) * q_cached);
 	return kth_term_of_rational_function(p, q_cached, k);
 }
 

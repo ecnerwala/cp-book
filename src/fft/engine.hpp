@@ -55,6 +55,8 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //   extend_to only operates on transformed_t<unit_scale>; the others are scale-generic.
 //   downsample is also defined on product_t (halving before finish saves inverse-transform work).
 //      extend_to       build (if empty) or grow a transform to size m by repeated doubling; feed the same coefficients (sz <= 2m) every time
+//                      (each doubling step reads only the coefficients that fit, so zero-padded buffers are fine:
+//                       coefficients past twice the existing transform's size must be zero, or it couldn't be a prefix)
 //      downsample      compute the half-sized transform/product of just the even (odd = false) or odd terms of the input
 //      negate_arg      size n transform of A(-x)
 template <typename E>

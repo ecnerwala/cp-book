@@ -38,10 +38,11 @@ template <typename num> struct ntt {
 		assert(!(m & (m-1)) && sz(coeffs) <= 2 * m);
 		if (t.size() >= m) return;
 		if (t.size() == 0) { t = transform(coeffs, m); return; }
-		assert(sz(coeffs) <= 2 * t.size());
 		while (t.size() < m) {
-			t.v.resize(2 * t.size());
-			core::extend(std::span<num>(t.v), coeffs);
+			int s = t.size();
+			t.v.resize(2 * s);
+			// coeffs past 2s are zero: they didn't fit in the transform we're a prefix of
+			core::extend(std::span<num>(t.v), coeffs.first(size_t(min(sz(coeffs), 2 * s))));
 		}
 	}
 	static transformed downsample(const transformed& t, int n, bool odd) {
