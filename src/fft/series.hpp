@@ -343,8 +343,8 @@ P::engine_t::value_type kth_term_of_rational_function(
 	// Seed the loop transforms from any whole caches; the buffers below hold the
 	// current p, q (zero-padded, which extend_to tolerates).
 	fft::transformed<E> tq, tp;
-	if constexpr (has_cache<Q>) { E::extend_to(q.cache(), n, q); tq = q.cache(); }
-	if constexpr (has_cache<P>) { E::extend_to(p.cache(), n, p); tp = p.cache(); }
+	if (auto cq = detail::cache_of(q)) { E::extend_to(cq->get(), n, q); tq = cq->get(); }
+	if (auto cp = detail::cache_of(p)) { E::extend_to(cp->get(), n, p); tp = cp->get(); }
 
 	std::vector<T> p_buf(d-1, T(0));
 	std::ranges::copy(std::span<const T>(p), p_buf.begin());
@@ -410,7 +410,7 @@ S::engine_t::value_type kth_term_of_linear_recurrence(
 	// Don't even bother with P so we don't have to do truncation checks
 	// TODO: Could use generic multiply for this whole part?
 	fft::transformed<E> tq;
-	auto q_cached = detail::whole_operand(q, tq);
+	auto q_cached = detail::as_cached_span(q, tq);
 
 	// Compute the prefix and then hard-cast it to exact
 	span<E, false> sv = s;

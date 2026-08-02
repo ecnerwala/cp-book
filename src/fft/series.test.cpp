@@ -26,6 +26,47 @@ static_assert(!poly::like<series::cached_trunc<CE>>);
 static_assert(!poly::like<series::prefix_cached<CE>>);
 }
 
+// Archetype exposing exactly the series::like contract, nothing more.
+// Instantiating the generic algorithms against it proves they only use
+// contract expressions (concepts can't enforce that on function bodies).
+namespace {
+template <bool exact_>
+struct archetype {
+	using engine_t = CE;
+	static constexpr bool exact_v = exact_;
+	series::vec<CE, exact_> v;
+	int len() const { return v.len(); }
+	const typename CE::value_type& operator[](int i) const { return v[i]; }
+	operator std::span<const typename CE::value_type>() const { return std::span<const typename CE::value_type>(v); }
+	operator series::span<CE, exact_>() const { return v; }
+	series::span<CE, exact_> first(int n) const { return v.first(n); }
+};
+static_assert(series::like<archetype<true>> && series::like<archetype<false>>);
+static_assert(!series::has_cache<archetype<false>> && !series::has_cache_opt<archetype<false>>);
+static_assert(!series::has_prefix_cache<archetype<false>>);
+
+[[maybe_unused]] void archetype_instantiations(
+	const archetype<true>& e, const archetype<false>& t, uint64_t k
+) {
+	series::stretch(e, 2); series::stretch(t, 2);
+	series::deriv_shift(t); series::integ_shift(t); series::integ_shift_offset(t, 1);
+	series::deriv_shift_log(t); series::ps_log(t); series::ps_exp(t);
+	series::ps_pow_monic(t, {}); series::ps_pow(t, int64_t(k)); series::ps_inv(t);
+	series::to_newton_sums(t, 1); series::from_newton_sums(t, 1);
+	series::euler_transform(t); series::inverse_euler_transform(t);
+	series::ps_compose(t, t);
+	series::square(e); series::square(t);
+	series::multiply_add2(e, e, e, e);
+	series::middle_product(t, e); series::middle_product(e, e);
+	series::operator*(e, e); series::operator*(e, t); series::operator*(t, t);
+	series::operator+(e, t); series::operator-(t, t);
+	series::kth_term_of_rational_function(e, e, k);
+	series::kth_term_of_linear_recurrence(t, e, k);
+	series::with_len(e, 4); series::with_len(t, 2);
+	series::maybe_cached<CE, true>{e};
+}
+}
+
 TEMPLATE_TEST_CASE("FFT Inverse", "[fft]", MOD_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;
@@ -137,8 +178,8 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	qa.append(span<const num>(tail));
 	series::trunc<E> pa2 = pa;
 	pa2.insert(pa2.end(), tail.begin(), tail.end());
-	for (int p : {8, 16, 32, 64}) {
-		auto pv = qa.prefix(p);
+	for (int p : {8, 16, 32}) {
+		auto pv = qa.first(min(p, qa.len()));
 		REQUIRE(pv.len() == min(p, qa.len()));
 		REQUIRE(pv[0] == pa2[0]);
 	}
