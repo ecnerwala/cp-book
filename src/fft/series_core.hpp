@@ -170,8 +170,9 @@ concept like = fft::engine<typename S::engine_t> && requires(const S& s, int i) 
 	{ std::span<const typename S::engine_t::value_type>(s) };
 	// and into the series layer's own span, keeping the exactness tag
 	requires std::convertible_to<const S&, span<typename S::engine_t, S::exact_v>>;
-	// first(n): the sequence truncated to its first n coefficients, borrowed;
-	// requires n <= len(). The result is itself like (concepts can't self-reference).
+	// first(n): the first n coefficients, borrowed; requires n <= len().
+	// The result is itself like (concepts can't self-reference).
+	// Cached types keep a cache in the result only when it still serves the whole borrow.
 	{ s.first(i) } -> std::convertible_to<span<typename S::engine_t, S::exact_v>>;
 };
 template <typename S>
@@ -207,7 +208,6 @@ struct cached_span {
 	const typename E::value_type& operator[](int i) const { return s[i]; }
 	operator std::span<const typename E::value_type>() const { return s.coeffs(); }
 	operator span<E, exact_>() const { return s; }
-	// truncation keeps the cache only when it still serves the whole borrow
 	maybe_cached<E, exact_> first(int n) const;
 	fft::transformed<E>& cache() const { return f; }
 };
@@ -251,7 +251,6 @@ struct maybe_cached {
 	const T& operator[](int i) const { return s[i]; }
 	operator std::span<const T>() const { return s.coeffs(); }
 	operator span<E, exact_>() const { return s; }
-	// truncation keeps the cache only when it still serves the whole borrow
 	maybe_cached first(int n) const {
 		return n == len() ? *this : maybe_cached(s.first(n));
 	}
@@ -263,11 +262,10 @@ maybe_cached<E, exact_> cached_span<E, exact_>::first(int n) const {
 	return maybe_cached<E, exact_>(*this).first(n);
 }
 
-// An owned copy of an operand at logical length n: extending zero-fills,
-// shrinking drops trailing coefficients.
-// It carries a reference to whichever of the operand's caches still serves the
-// copied coefficients (extending keeps the whole cache: the transform can't
-// tell a zero tail apart), so the operand must outlive the result.
+// An owned series copy at an adjusted logical length: the result of with_len.
+// Carries a reference to a source cache when it still serves the copied
+// coefficients (a zero tail doesn't change the transform), so the source
+// must outlive the result.
 template <fft::engine E>
 struct resized {
 	using T = typename E::value_type;
@@ -281,7 +279,6 @@ struct resized {
 	const T& operator[](int i) const { return s[size_t(i)]; }
 	operator std::span<const T>() const { return std::span<const T>(s); }
 	operator span<E, false>() const { return s; }
-	// truncation keeps the cache only when it still serves the whole borrow
 	maybe_cached<E, false> first(int n) const {
 		span<E, false> v = s;
 		if (n == len() && f) return {v, f->get()};
@@ -290,9 +287,7 @@ struct resized {
 	std::optional<std::reference_wrapper<fft::transformed<E>>> cache_opt() const { return f; }
 };
 
-// copy any operand to logical length n (see resized), keeping the cache
-// serving those coefficients: the whole cache when extending, whatever
-// first(n) carries when shrinking
+// copy any operand to logical length n: extending zero-fills, shrinking truncates
 template <like S>
 resized<typename S::engine_t> with_len(const S& s, int n) {
 	using E = typename S::engine_t;
@@ -337,7 +332,6 @@ struct cached {
 	auto begin() const { return s.cbegin(); }
 	auto end() const { return s.cend(); }
 	operator span<E, exact_>() const { return s; }
-	// truncation keeps the cache only when it still serves the whole borrow
 	maybe_cached<E, exact_> first(int n) const {
 		return n == len() ? maybe_cached<E, exact_>(s, f) : maybe_cached<E, exact_>(s.first(n));
 	}
@@ -492,7 +486,6 @@ auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t
 		return s.first(std::min(s.len(), nextPow2(prec)));
 	} else {
 		span<E, S::exact_v> v = s;
-		// clamp to the stored coefficients, which may already be fewer than prec
 		int used = std::min(v.len(), prec);
 		if (auto co = cache_of(s)) {
 			if (s.len() <= prec || fft::detail::conv_size_for(s.len() + prec - 1).n
@@ -599,8 +592,8 @@ struct prefix_cached {
 		s.insert(s.end(), tail.begin(), tail.end());
 	}
 
-	// The first k coefficients, paired with the covering prefix cache when one
-	// lines up with k (k a power of two, or k == len()); uncached otherwise.
+	// The first k coefficients, with the covering prefix cache when one lines
+	// up with k (k a power of two, or k == len()); uncached otherwise.
 	maybe_cached<E, false> first(int k) const {
 		assert(k <= len());
 		span<E, false> v = s.first(k);

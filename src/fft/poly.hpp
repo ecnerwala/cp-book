@@ -159,27 +159,6 @@ bool operator==(const A& a, const B& b) {
 	return a.rev_series() == b.rev_series();
 }
 
-// Euclidean division: a = d*q + r with r.len() < d.len(). Requires d.leading() != 0.
-// rev(q) = rev(a) * inv(rev(d)) mod x^(a.len() - d.len() + 1);
-// rev(d)'s whole transform also serves the remainder product.
-template <fft::engine E>
-std::pair<vec<E>, vec<E>> divmod(const vec<E>& a, const vec<E>& d) {
-	using T = typename E::value_type;
-	assert(d.len() > 0 && d.leading() != T(0));
-	int L = a.len() - d.len() + 1;
-	if (L <= 0) return {vec<E>{}, a};
-	series::cached_exact<E> revd(d.rev_series());
-	series::trunc<E> invd = ps_inv(series::with_len(revd, L));
-	vec<E> q = vec<E>::from_rev_series(series::exact<E>(a.rev_series() * invd));
-	vec<E> r = a - vec<E>(cached<E>::from_rev_series(revd * q.rev_series()));
-	r.resize(d.len() - 1);
-	return {std::move(q), std::move(r)};
-}
-template <fft::engine E>
-vec<E> operator/(const vec<E>& a, const vec<E>& d) { return divmod(a, d).first; }
-template <fft::engine E>
-vec<E> operator%(const vec<E>& a, const vec<E>& d) { return divmod(a, d).second; }
-
 // finite-support linear form
 // These are one side of the pairing <vec P, series::vec S> = [x^0] P(1/x) S(x).
 // (Strictly speaking, this is actually <>_d where we take polynomials of degree < d.)
