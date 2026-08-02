@@ -24,20 +24,26 @@ template <typename num> struct ntt {
 	template <int A = 0> using transformed_t = transformed;
 	template <int K = 0> using product_t = product;
 
-	static transformed transform(std::span<const num> a, int n) {
+	// Out-parameter forms overwrite out, reusing its capacity.
+	// out may alias an input to mul/downsample (they read forward of every write);
+	// it must not alias the input to transform/negate_arg.
+	static void transform(std::span<const num> a, int n, transformed& out) {
 		assert(sz(a) <= 2 * n);
-		transformed r;
-		r.v.assign(n, num(0));
+		out.v.assign(n, num(0));
 		int lo = min(sz(a), n);
-		std::copy(a.begin(), a.begin() + lo, r.v.begin());
-		for (int i = n; i < sz(a); i++) r.v[i - n] += a[i];
-		core::forward(std::span<num>(r.v));
+		std::copy(a.begin(), a.begin() + lo, out.v.begin());
+		for (int i = n; i < sz(a); i++) out.v[i - n] += a[i];
+		core::forward(std::span<num>(out.v));
+	}
+	static transformed transform(std::span<const num> a, int n) {
+		transformed r;
+		transform(a, n, r);
 		return r;
 	}
 	static void extend_to(transformed& t, int m, std::span<const num> coeffs) {
 		assert(!(m & (m-1)) && sz(coeffs) <= 2 * m);
 		if (t.size() >= m) return;
-		if (t.size() == 0) { t = transform(coeffs, m); return; }
+		if (t.size() == 0) { transform(coeffs, m, t); return; }
 		while (t.size() < m) {
 			int s = t.size();
 			t.v.resize(2 * s);
@@ -45,22 +51,37 @@ template <typename num> struct ntt {
 			core::extend(std::span<num>(t.v), coeffs.first(size_t(min(sz(coeffs), 2 * s))));
 		}
 	}
+	static void downsample(const transformed& t, int n, bool odd, transformed& out) {
+		auto in = std::span<const num>(t.v);
+		if (&out != &t) out.v.resize(n);
+		auto o = std::span<num>(out.v).first(size_t(n));
+		if (odd) core::odd_half(in, o);
+		else core::even_half(in, o);
+		if (&out == &t) out.v.resize(n);
+	}
 	static transformed downsample(const transformed& t, int n, bool odd) {
-		transformed r; r.v.resize(n);
-		if (odd) core::odd_half(std::span<const num>(t.v), std::span<num>(r.v));
-		else core::even_half(std::span<const num>(t.v), std::span<num>(r.v));
+		transformed r;
+		downsample(t, n, odd, r);
 		return r;
+	}
+	static void negate_arg(const transformed& t, int n, transformed& out) {
+		assert(n >= 2 && t.size() >= n && &out != &t);
+		out.v.resize(n);
+		for (int j = 0; j < n; j++) out.v[j] = t.v[j ^ 1];
 	}
 	static transformed negate_arg(const transformed& t, int n) {
-		assert(n >= 2 && t.size() >= n);
-		transformed r; r.v.resize(n);
-		for (int j = 0; j < n; j++) r.v[j] = t.v[j ^ 1];
+		transformed r;
+		negate_arg(t, n, r);
 		return r;
 	}
-	static product mul(const transformed& a, const transformed& b, int n) {
+	static void mul(const transformed& a, const transformed& b, int n, product& out) {
 		assert(a.size() >= n && b.size() >= n);
-		product p; p.v.resize(n);
-		for (int i = 0; i < n; i++) p.v[i] = a.v[i] * b.v[i];
+		out.v.resize(n);
+		for (int i = 0; i < n; i++) out.v[i] = a.v[i] * b.v[i];
+	}
+	static product mul(const transformed& a, const transformed& b, int n) {
+		product p;
+		mul(a, b, n, p);
 		return p;
 	}
 	static product sq(const transformed& a, int n) { return mul(a, a, n); }

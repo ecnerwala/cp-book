@@ -36,7 +36,7 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //      transform(span<const value_type> in, int n) -> transformed_t<unit_scale>
 //      mul(transformed_t<A>, transformed_t<B>, int n) -> product_t<A*B>
 //      mul2(a1, b1, a2, b2, int n) -> product_t<A1*B1 + A2*B2>, computing a1*b1 + a2*b2 in one pass
-//      finish(product_t<A>, span<value_type>& out, Op) -> void
+//      finish(product_t<A>, span<value_type> out, Op) -> void
 //
 //   Input span can be length up to 2n.
 //   Output spans can be length up to n; only the prefix that exists is filled.
@@ -70,23 +70,79 @@ concept engine = requires(
 	int n
 ) {
 	typename E::value_type;
+
+	// transform(std::span<const value_type> in, int n) -> transformed
 	{ E::transform(in, n) } -> std::same_as<typename E::transformed>;
+
+	// int transformed::size() const (likewise on product)
 	{ ct.size() } -> std::same_as<int>;
+
+	// extend_to(transformed& t, int m, std::span<const value_type> coeffs): grows t in place
 	E::extend_to(t, n, in);
+
+	// downsample(const transformed&, int n, bool odd) -> transformed (and the same on product)
 	{ E::downsample(ct, n, false) } -> std::same_as<typename E::transformed>;
 	{ E::downsample(cp, n, false) } -> std::same_as<typename E::product>;
+
+	// negate_arg(const transformed&, int n) -> transformed
 	{ E::negate_arg(ct, n) } -> std::same_as<typename E::transformed>;
+
+	// mul/sq/mul2(const transformed&..., int n) -> product: inputs borrowed, fresh product returned
 	{ E::mul(ct, ct, n) } -> std::same_as<typename E::product>;
 	{ E::sq(ct, n) } -> std::same_as<typename E::product>;
 	{ E::mul2(ct, ct, ct, ct, n) } -> std::same_as<typename E::template product_t<2 * E::unit_scale>>;
+
+	// finish(product&& p, std::span<value_type> out, Op = assign_op{}): sink;
+	// consumes p's contents (the inverse transform runs in p's buffer), but p keeps its allocation
 	E::finish(std::move(p), out);
 	E::finish(std::move(p), out, add_op{});
 	E::finish(E::add(std::move(p), std::move(p)), out);
+
+	// add(transformed&& a, const transformed& b) / add(product&& a, product b) -> the scale-summed type;
+	// a is a sink whose buffer is reused for the result; b is borrowed (product b may also be a sink)
 	{ E::add(E::transform(in, n), ct) } -> std::same_as<typename E::template transformed_t<2 * E::unit_scale>>;
 	{ E::add(std::move(p), std::move(p)) } -> std::same_as<typename E::template product_t<2 * E::unit_scale>>;
+
 	requires std::same_as<std::remove_cvref_t<decltype(E::commutative)>, bool>;
 	requires std::same_as<std::remove_cvref_t<decltype(E::unit_scale)>, int>;
 };
+
+// ==== storage/ownership conventions ====
+//
+// Parameter forms encode clobber permission:
+//   const&        borrowed, read-only
+//   && / by-value sink: the callee owns it and may clobber (finish works in the product's buffer)
+//   & out-param   overwritten, reusing the object's existing capacity
+//
+// Engines may additionally provide out-parameter forms of the value-returning
+// primitives so callers can pre-construct/reserve a transformed/product and
+// build into it (contiguous or reused storage across a loop):
+//   transform(in, n, transformed& out)
+//   mul(a, b, n, product& out)
+//   downsample(t, n, odd, out)
+//   negate_arg(t, n, transformed& out)
+// These are optional; the *_into helpers below dispatch to them when present
+// and fall back to move-assignment (fresh allocation) otherwise.
+template <typename E>
+void transform_into(std::span<const typename E::value_type> in, int n, typename E::transformed& out) {
+	if constexpr (requires { E::transform(in, n, out); }) E::transform(in, n, out);
+	else out = E::transform(in, n);
+}
+template <typename E, typename P>
+void mul_into(const typename E::transformed& a, const typename E::transformed& b, int n, P& out) {
+	if constexpr (requires { E::mul(a, b, n, out); }) E::mul(a, b, n, out);
+	else out = E::mul(a, b, n);
+}
+template <typename E, typename P>
+void downsample_into(const P& t, int n, bool odd, P& out) {
+	if constexpr (requires { E::downsample(t, n, odd, out); }) E::downsample(t, n, odd, out);
+	else out = E::downsample(t, n, odd);
+}
+template <typename E>
+void negate_arg_into(const typename E::transformed& t, int n, typename E::transformed& out) {
+	if constexpr (requires { E::negate_arg(t, n, out); }) E::negate_arg(t, n, out);
+	else out = E::negate_arg(t, n);
+}
 
 // Constrains two engine-parameterized value types to share the same engine.
 template <typename A, typename B>
