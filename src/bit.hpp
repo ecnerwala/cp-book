@@ -1,7 +1,8 @@
 #pragma once
 
-#include <vector>
 #include <cassert>
+#include <cstddef>
+#include <vector>
 
 /** Binary-indexed tree
  *

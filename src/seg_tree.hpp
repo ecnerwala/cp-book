@@ -1,6 +1,7 @@
-#include <cassert>
 #include <array>
+#include <cassert>
 #include <ostream>
+#include <utility>
 
 namespace seg_tree {
 

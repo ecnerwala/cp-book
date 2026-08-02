@@ -1,5 +1,11 @@
 #pragma once
-#include<bits/stdc++.h>
+
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <limits>
+#include <utility>
+#include <vector>
 // #include<bits/extc++.h>
 #include <ext/pb_ds/priority_queue.hpp>
 

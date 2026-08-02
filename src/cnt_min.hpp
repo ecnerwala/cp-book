@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "reverse_comparator.hpp"
 
 template <typename T, typename C = int, typename Comp = std::less<T>> struct cnt_min {

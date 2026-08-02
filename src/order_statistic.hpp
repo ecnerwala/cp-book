@@ -1,6 +1,9 @@
 #pragma once
 
 #include <ext/pb_ds/assoc_container.hpp>
+#include <ext/pb_ds/tag_and_trait.hpp>
+#include <ext/pb_ds/tree_policy.hpp>
+#include <functional>
 
 template <typename K, typename V, typename Comp = std::less<K>>
 using order_statistic_map = __gnu_pbds::tree<

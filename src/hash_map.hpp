@@ -1,8 +1,11 @@
 #pragma once
 
-#include<bits/stdc++.h>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 // #include<bits/extc++.h>
 #include <ext/pb_ds/assoc_container.hpp>
+#include <ext/pb_ds/tag_and_trait.hpp>
 
 struct splitmix64_hash {
 	static uint64_t splitmix64(uint64_t x) {

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <cassert>
 
 /**
  * manacher(S): return the maximum palindromic substring of S centered at each point

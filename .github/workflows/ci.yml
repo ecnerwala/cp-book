@@ -60,6 +60,36 @@ jobs:
       - name: Bundle and check all headers
         run: scripts/bundle.py --all --check
 
+  # Checks every library header with include-what-you-use, one stub
+  # translation unit per header (like the coverage stubs). .iwyu.imp maps
+  # away libstdc++ noise (C-header spellings, misattributed re-exports).
+  iwyu:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install include-what-you-use
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends iwyu
+
+      - name: Run include-what-you-use on all headers
+        run: |
+          mkdir -p iwyu-stubs
+          (cd src && find . -name '*.hpp' ! -name '*.test.hpp' | sed 's|^\./||' | sort) |
+            xargs -P "$(nproc)" -I{} bash -c '
+              h="$1"
+              stub="iwyu-stubs/$(echo "$h" | tr / _).cpp"
+              printf "#include \"%s\" // IWYU pragma: keep\n" "$h" > "$stub"
+              out=$(include-what-you-use -std=c++23 -I src \
+                -Xiwyu --error=1 \
+                -Xiwyu --mapping_file=.iwyu.imp \
+                -Xiwyu --check_also="src/$h" \
+                "$stub" 2>&1) || {
+                echo "::error file=src/$h::include-what-you-use has suggestions"
+                echo "$out" | grep -v "@headername mapping"
+                exit 1
+              }
+            ' _ {}
+
   setup-verify:
     runs-on: ubuntu-26.04
     outputs:

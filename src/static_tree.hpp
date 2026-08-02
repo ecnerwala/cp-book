@@ -1,7 +1,12 @@
 #pragma once
 
-#include "yc.hpp"
+#include <array>
+#include <cassert>
+#include <utility>
+#include <vector>
+
 #include "rmq.hpp"
+#include "yc.hpp"
 
 struct static_forest_t {
 	int N;

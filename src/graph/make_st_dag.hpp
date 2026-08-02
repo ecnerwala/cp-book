@@ -1,9 +1,9 @@
 #pragma once
 
-#include <vector>
+#include <algorithm>
 #include <array>
 #include <utility>
-#include <cassert>
+#include <vector>
 
 // Direct a graph into a DAG so that given source and sink are the unique sources/sinks.
 // If there are any biconnected components not on the path from the source to

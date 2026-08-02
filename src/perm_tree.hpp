@@ -1,8 +1,9 @@
 #pragma once
 
-#include <vector>
+#include <algorithm>
 #include <array>
 #include <cassert>
+#include <vector>
 
 class PermTree {
 	// The tree is "left-associative": INCR/DECR nodes are structured as (1 INCR 2) INCR 3...

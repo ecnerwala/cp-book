@@ -1,0 +1,25 @@
+# include-what-you-use mapping file (see ci.yml's iwyu job).
+[
+    # Prefer the C++ <c*> wrappers over the C headers.
+    { symbol: ["assert", public, "<cassert>", public] },
+    { symbol: ["size_t", public, "<cstddef>", public] },
+    { symbol: ["std::size_t", public, "<cstddef>", public] },
+    { symbol: ["int32_t", public, "<cstdint>", public] },
+    { symbol: ["uint32_t", public, "<cstdint>", public] },
+    { symbol: ["int64_t", public, "<cstdint>", public] },
+    { symbol: ["uint64_t", public, "<cstdint>", public] },
+    { symbol: ["abs", public, "<cstdlib>", public] },
+
+    # Pin common symbols to their canonical headers; libstdc++ re-exports
+    # these from unrelated headers (e.g. std::vector from <format>), which
+    # otherwise makes iwyu attribute them incorrectly.
+    { symbol: ["std::vector", public, "<vector>", public] },
+    { symbol: ["std::pair", public, "<utility>", public] },
+    { symbol: ["std::swap", private, "<utility>", public] },
+    { symbol: ["std::size", public, "<iterator>", public] },
+
+    # libstdc++ declares a std::swap overload for exception_ptr, which makes
+    # iwyu demand <exception> for plain std::swap calls; treat <utility> as
+    # providing it.
+    { include: ["<exception>", public, "<utility>", public] },
+]

@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "fft/common.hpp"
 #include "fft/core.hpp"
 #include "fft/engine.hpp"
 

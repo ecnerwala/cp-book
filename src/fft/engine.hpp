@@ -5,8 +5,6 @@
 #include <type_traits>
 #include <utility>
 
-#include "fft/common.hpp"
-
 namespace ecnerwala::fft {
 
 // ==== engine concept ====
