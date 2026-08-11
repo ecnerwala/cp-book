@@ -5,6 +5,7 @@
 #include <span>
 #include <utility>
 #include <vector>
+#include <concepts>
 
 #include "fft/core.hpp"
 #include "fft/engine.hpp"
@@ -84,7 +85,13 @@ template <typename num> struct ntt {
 		assert(sz(out) <= n);
 		core::inverse(std::span<num>(p.v));
 		num d = inv(num(n));
-		for (int i = 0; i < sz(out); i++) op(out[i], p.v[i] * d);
+		bool simd = false;
+		if constexpr (ntt_simd<num> && std::same_as<Op, assign_op>) {
+			if (cpu_has_avx2) { core::scale_simd(p.v.data(), out.data(), sz(out), d); simd = true; }
+		}
+		if (!simd) {
+			for (int i = 0; i < sz(out); i++) op(out[i], p.v[i] * d);
+		}
 	}
 };
 
