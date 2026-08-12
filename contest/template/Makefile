@@ -82,6 +82,7 @@ PCH_FILES := $(patsubst %,$(PCH_ROOT)/%.gch/$(PCH_FILENAME),$(PRECOMPILE_HEADERS
 $(PCH_ROOT)/%.gch/$(PCH_FILENAME):
 	rm -f $@
 	mkdir -p $(dir $@)
+	printf '#pragma once\n#include_next <%s>\n' '$*' > $(PCH_ROOT)/$*
 	$(LINK.cpp) -x c++-header "$$(echo '#include<$*>' | $(LINK.cpp) -H -E -x c++ - 2>&1 >/dev/null | head -1 | cut -d ' ' -f2)" -o $@
 .PRECIOUS: $(PCH_ROOT)/%.gch/$(PCH_FILENAME)
 
