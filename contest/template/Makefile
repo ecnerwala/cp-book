@@ -27,7 +27,7 @@ $(error "Unknown LANG '$(LANG)'; set TARGET, EXECUTE, and CLEAN_TARGETS (e.g. in
 endif
 
 CXX := g++
-CXXFLAGS := -std=c++23 -O2 -g -Wall -Wextra -pedantic -Wshadow -Wformat=2 -Wfloat-equal -Wconversion -Wlogical-op -Wshift-overflow=2 -Wduplicated-cond -Wcast-qual -Wcast-align -Wno-unused-result -Wno-sign-conversion
+CXXFLAGS := -std=c++23 -O2 -g -Wall -Wextra -pedantic -Wshadow -Wformat=2 -Wfloat-equal -Wconversion -Wlogical-op -Wshift-overflow=2 -Wduplicated-cond -Wcast-qual -Wcast-align -Wno-unused-result -Wno-sign-conversion -Winvalid-pch
 CXXFLAGS += $(EXTRA_CXXFLAGS)
 # No -D_FORTIFY_SOURCE: it rewrites libc calls to *_chk variants that bypass
 # ASan's interceptors, silently weakening both checkers.
@@ -79,8 +79,6 @@ PCH_ROOT := $(HOME)/.precompiled_headers
 PCH_KEY := $(shell sha256sum $$(which $(CXX)) | cut -d ' ' -f1)-$(shell echo '$(CXXFLAGS)' | sha256sum | cut -d ' ' -f1)
 PCH_DIR := $(PCH_ROOT)/$(PCH_KEY)
 PCH_FILES := $(patsubst %,$(PCH_DIR)/%.gch,$(PRECOMPILE_HEADERS))
-
-CXXFLAGS += -Winvalid-pch
 
 # Textual fallback for includes the PCH can't serve (e.g. a second
 # #include of the same header): a wrapper next to the .gch that defers
