@@ -20,6 +20,35 @@ cmake -B build && cmake --build build
 ctest --test-dir build          # or ./build/tests
 ```
 
+## Bundling
+
+Unfortunately, some files (e.g. full power series with all fft engines) are too long to fit in CF's submission limit,
+so we need to bundle/minify them for submission.
+
+```sh
+scripts/bundle.py verify/convolution_mod.test.cpp > submission.cpp
+scripts/bundle.py fft.hpp seg_tree.hpp     # bundle headers together
+scripts/bundle.py --minify fft.hpp         # compiler-directed minification
+scripts/bundle.py --all                    # pregenerate all headers
+```
+
+To run the bundler offline, first initialize the UV cache by running
+```sh
+uv sync --script scripts/bundle.py
+```
+
+Then, you can run
+```sh
+UV_OFFLINE=1 scripts/bundle.py ...
+uv run --offline --script scripts/bundle.py ...
+```
+
+Upgrade the bundler's lockfile with
+```sh
+uv lock --script scripts/bundle.py --upgrade
+```
+(Make sure to rerun the sync afterwards.)
+
 ## Library Checker verification
 
 `verify/` holds [Library Checker](https://judge.yosupo.jp/) solutions,
@@ -27,12 +56,6 @@ verified in CI with
 [competitive-verifier](https://github.com/competitive-verifier/competitive-verifier).
 
 ```sh
-# Single submittable file with headers inlined
-scripts/bundle.py verify/convolution_mod.test.cpp > submission.cpp
-scripts/bundle.py fft.hpp seg_tree.hpp     # bundle headers together
-scripts/bundle.py --minify fft.hpp         # compiler-directed minification
-scripts/bundle.py --all -o dist/           # pregenerate all headers
-
 # Run verification locally
 uvx competitive-verifier oj-resolve --include src verify --exclude third_party \
     --config .competitive-verifier/config.toml > verify_files.json
