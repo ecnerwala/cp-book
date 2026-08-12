@@ -79,10 +79,26 @@ SPACE := $(NULL) $(NULL)
 PCH_FILENAME := $(subst $(SPACE),_,$(shell sha256sum $$(which $(CXX)) | cut -d ' ' -f1)-$(shell echo '$(CXXFLAGS)' | sha256sum | cut -d ' ' -f1)).gch
 PCH_FILES := $(patsubst %,$(PCH_ROOT)/%.gch/$(PCH_FILENAME),$(PRECOMPILE_HEADERS))
 
-$(PCH_ROOT)/%.gch/$(PCH_FILENAME):
+# Textual fallback for includes the PCH can't serve (e.g. a second
+# #include of the same header): a wrapper next to the .gch that defers
+# to the real header.
+PCH_WRAPPERS := $(patsubst %,$(PCH_ROOT)/%,$(PRECOMPILE_HEADERS))
+
+$(PCH_WRAPPERS): $(PCH_ROOT)/%:
+	mkdir -p $(dir $@)
+	printf '#pragma once\n#include_next <%s>\n' '$*' > $@
+.PRECIOUS: $(PCH_WRAPPERS)
+
+# Precompile through a shim that includes the wrapper, exercising the same
+# include path user code takes (a header with #include_next can't be the
+# primary input of a PCH compile: its position in the search chain is only
+# defined when it's found via #include).
+$(PCH_ROOT)/%.gch/$(PCH_FILENAME): $(PCH_ROOT)/%
 	rm -f $@
 	mkdir -p $(dir $@)
-	$(LINK.cpp) -x c++-header "$$(echo '#include<$*>' | $(LINK.cpp) -H -E -x c++ - 2>&1 >/dev/null | head -1 | cut -d ' ' -f2)" -o $@
+	echo '#include <$*>' > $@.h
+	$(LINK.cpp) -isystem $(PCH_ROOT) -x c++-header $@.h -o $@
+	rm -f $@.h
 .PRECIOUS: $(PCH_ROOT)/%.gch/$(PCH_FILENAME)
 
 
