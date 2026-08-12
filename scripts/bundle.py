@@ -1,5 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # /// script
+# requires-python = ">=3.12"
 # dependencies = ["competitive-verifier @ git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration"]
 # ///
 """Inline cp-book headers to produce a single submittable file.
