@@ -28,6 +28,7 @@ installed).
 
 import argparse
 import pathlib
+import shlex
 import sys
 from typing import Literal
 
@@ -39,6 +40,14 @@ from competitive_verifier.oj.languages.cplusplus_minify import (
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
+REPO_URL = "https://github.com/ecnerwala/cp-book"
+
+
+def header_comment(args: list[str] | None = None) -> bytes:
+    if args is None:
+        args = sys.argv[1:]
+    cmd = shlex.join(["scripts/bundle.py", *args])
+    return f"// {REPO_URL} (`{cmd}`)\n".encode()
 
 
 def resolve_input(path: pathlib.Path) -> pathlib.Path:
@@ -76,7 +85,8 @@ def bundle_all(outdir: pathlib.Path, *, check: bool) -> None:
             dest = outdir / name / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             outputs[name] = bundle([header], level=level)
-            dest.write_bytes(outputs[name])
+            args = (["-m"] if level else []) + [str(rel)]
+            dest.write_bytes(header_comment(args) + outputs[name])
         if check and raw_token_stream(outputs["bundled"]) != raw_token_stream(
             outputs["minified"]
         ):
@@ -143,7 +153,9 @@ def main() -> None:
     if not args.paths:
         parser.error("no input files")
     level = args.minify_level or ("medium" if args.minify else None)
-    code = bundle(args.paths, level=level, line_markers=args.line_markers)
+    code = header_comment() + bundle(
+        args.paths, level=level, line_markers=args.line_markers
+    )
     if args.output:
         args.output.write_bytes(code)
     else:
