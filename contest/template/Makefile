@@ -74,17 +74,20 @@ endif
 
 PCH_ROOT := $(HOME)/.precompiled_headers
 
-NULL :=
-SPACE := $(NULL) $(NULL)
-PCH_FILENAME := $(subst $(SPACE),_,$(shell sha256sum $$(which $(CXX)) | cut -d ' ' -f1)-$(shell echo '$(CXXFLAGS)' | sha256sum | cut -d ' ' -f1)).gch
-PCH_FILES := $(patsubst %,$(PCH_ROOT)/%.gch/$(PCH_FILENAME),$(PRECOMPILE_HEADERS))
+# One directory per compiler+flags key, so each compile sees exactly one
+# PCH candidate and -Winvalid-pch only fires on a genuine mismatch.
+PCH_KEY := $(shell sha256sum $$(which $(CXX)) | cut -d ' ' -f1)-$(shell echo '$(CXXFLAGS)' | sha256sum | cut -d ' ' -f1)
+PCH_DIR := $(PCH_ROOT)/$(PCH_KEY)
+PCH_FILES := $(patsubst %,$(PCH_DIR)/%.gch,$(PRECOMPILE_HEADERS))
+
+CXXFLAGS += -Winvalid-pch
 
 # Textual fallback for includes the PCH can't serve (e.g. a second
 # #include of the same header): a wrapper next to the .gch that defers
 # to the real header.
-PCH_WRAPPERS := $(patsubst %,$(PCH_ROOT)/%,$(PRECOMPILE_HEADERS))
+PCH_WRAPPERS := $(patsubst %,$(PCH_DIR)/%,$(PRECOMPILE_HEADERS))
 
-$(PCH_WRAPPERS): $(PCH_ROOT)/%:
+$(PCH_WRAPPERS): $(PCH_DIR)/%:
 	mkdir -p $(dir $@)
 	printf '#pragma once\n#include_next <%s>\n' '$*' > $@
 .PRECIOUS: $(PCH_WRAPPERS)
@@ -93,13 +96,12 @@ $(PCH_WRAPPERS): $(PCH_ROOT)/%:
 # include path user code takes (a header with #include_next can't be the
 # primary input of a PCH compile: its position in the search chain is only
 # defined when it's found via #include).
-$(PCH_ROOT)/%.gch/$(PCH_FILENAME): $(PCH_ROOT)/%
+$(PCH_DIR)/%.gch: $(PCH_DIR)/%
 	rm -f $@
-	mkdir -p $(dir $@)
 	echo '#include <$*>' > $@.h
-	$(LINK.cpp) -isystem $(PCH_ROOT) -x c++-header $@.h -o $@
+	$(LINK.cpp) -isystem $(PCH_DIR) -x c++-header $@.h -o $@
 	rm -f $@.h
-.PRECIOUS: $(PCH_ROOT)/%.gch/$(PCH_FILENAME)
+.PRECIOUS: $(PCH_DIR)/%.gch
 
 
 %: %.cpp # Cancel the builtin rule
@@ -107,7 +109,7 @@ $(PCH_ROOT)/%.gch/$(PCH_FILENAME): $(PCH_ROOT)/%
 %: %.cpp $(PCH_FILES)
 	mkdir -p archive
 	cp $< archive/$*-$$(date +%Y-%m-%d-%H%M%S).cpp
-	$(LINK.cpp) -isystem $(PCH_ROOT) $< $(LOADLIBES) $(LDLIBS) -o $@
+	$(LINK.cpp) -isystem $(PCH_DIR) $< $(LOADLIBES) $(LDLIBS) -o $@
 .PRECIOUS: %
 
 
