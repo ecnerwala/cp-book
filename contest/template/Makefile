@@ -79,10 +79,19 @@ SPACE := $(NULL) $(NULL)
 PCH_FILENAME := $(subst $(SPACE),_,$(shell sha256sum $$(which $(CXX)) | cut -d ' ' -f1)-$(shell echo '$(CXXFLAGS)' | sha256sum | cut -d ' ' -f1)).gch
 PCH_FILES := $(patsubst %,$(PCH_ROOT)/%.gch/$(PCH_FILENAME),$(PRECOMPILE_HEADERS))
 
-$(PCH_ROOT)/%.gch/$(PCH_FILENAME):
+# Textual fallback for includes the PCH can't serve (e.g. a second
+# #include of the same header): a wrapper next to the .gch that defers
+# to the real header.
+PCH_WRAPPERS := $(patsubst %,$(PCH_ROOT)/%,$(PRECOMPILE_HEADERS))
+
+$(PCH_WRAPPERS): $(PCH_ROOT)/%:
+	mkdir -p $(dir $@)
+	printf '#pragma once\n#include_next <%s>\n' '$*' > $@
+.PRECIOUS: $(PCH_WRAPPERS)
+
+$(PCH_ROOT)/%.gch/$(PCH_FILENAME): $(PCH_ROOT)/%
 	rm -f $@
 	mkdir -p $(dir $@)
-	printf '#pragma once\n#include_next <%s>\n' '$*' > $(PCH_ROOT)/$*
 	$(LINK.cpp) -x c++-header "$$(echo '#include<$*>' | $(LINK.cpp) -H -E -x c++ - 2>&1 >/dev/null | head -1 | cut -d ' ' -f2)" -o $@
 .PRECIOUS: $(PCH_ROOT)/%.gch/$(PCH_FILENAME)
 
