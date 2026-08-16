@@ -234,10 +234,11 @@ template <fft::engine E> struct packed_bivariate {
 		int B = 4 << L;
 		auto tq = E::transform(std::span<const T>(c), B);
 		auto tn = E::negate_arg(tq, B);
-		E::finish(E::mul(tq, tn, B), std::span<T>(c));
+		E::finish(
+			E::downsample(E::mul(tq, tn, B), B/2, false),
+			std::span<T>(c).first(B/2)
+		);
 		l++;
-		// compactify x^2 -> x
-		for (int i = 1; i < (2 << L); i++) c[i] = c[2*i];
 		// undo the circular wraparound using monicity in y
 		for (int i = 0; i < (2 << (L - l)); i++) {
 			c[(2 << L) + i] = c[i];
