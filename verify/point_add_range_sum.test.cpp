@@ -3,7 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "seg_tree.hpp"
+#include "ds/seg_tree.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);

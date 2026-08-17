@@ -5,7 +5,7 @@
 
 #include "fft/online.hpp"
 #include "fft/test_util.test.hpp"
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 
 namespace ecnerwala {
 namespace fft {

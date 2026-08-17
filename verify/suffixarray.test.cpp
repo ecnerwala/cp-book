@@ -3,7 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "suffix_array.hpp"
+#include "seq/suffix_array.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);

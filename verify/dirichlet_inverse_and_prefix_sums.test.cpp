@@ -3,8 +3,8 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "dirichlet_series.hpp"
-#include "modnum.hpp"
+#include "nt/dirichlet_series.hpp"
+#include "num/modnum.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);

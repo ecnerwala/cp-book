@@ -3,8 +3,8 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "char_poly.hpp"
-#include "modnum.hpp"
+#include "linalg/char_poly.hpp"
+#include "num/modnum.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);

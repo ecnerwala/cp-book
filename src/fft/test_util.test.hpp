@@ -7,7 +7,7 @@
 #include "fft/engines/real.hpp"
 #include "fft/engines/split.hpp"
 #include "fft/engines/crt.hpp"
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 
 // Shared helpers for the fft/ unit tests.
 

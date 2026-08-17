@@ -3,7 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "level_ancestor.hpp"
+#include "tree/level_ancestor.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false); std::cin.tie(nullptr);

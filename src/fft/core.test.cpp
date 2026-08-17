@@ -3,7 +3,7 @@
 #include <catch2/catch_get_random_seed.hpp>
 
 #include "fft/core.hpp"
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 
 namespace ecnerwala {
 namespace fft {

@@ -4,7 +4,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 #include "fft/engines/crt.hpp"
 #include "fft/series_core.hpp"
 

@@ -3,7 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "rmq.hpp"
+#include "ds/rmq.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);

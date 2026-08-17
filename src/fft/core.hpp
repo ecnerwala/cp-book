@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "fft/common.hpp"
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 
 namespace ecnerwala::fft {
 

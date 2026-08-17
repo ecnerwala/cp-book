@@ -11,7 +11,7 @@
 #include <cstring>
 #include <type_traits>
 
-#include "rmq.hpp"
+#include "ds/rmq.hpp"
 
 template<class T> int sz(T&& arg) { using std::size; return int(size(std::forward<T>(arg))); }
 

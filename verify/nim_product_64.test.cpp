@@ -3,7 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "nim_prod.hpp"
+#include "num/nim_prod.hpp"
 
 constexpr nim_prod_t nimProd;
 

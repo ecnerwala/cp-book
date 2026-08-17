@@ -4,7 +4,7 @@
 #include <catch2/catch_get_random_seed.hpp>
 #include <bits/stdc++.h>
 
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 
 namespace dirichlet_series {
 

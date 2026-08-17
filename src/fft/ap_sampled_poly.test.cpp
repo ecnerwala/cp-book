@@ -4,7 +4,7 @@
 
 #include "fft/ap_sampled_poly.hpp"
 #include "fft/engines/ntt.hpp"
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 
 namespace ecnerwala {
 namespace fft {

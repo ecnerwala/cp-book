@@ -1,7 +1,7 @@
 #pragma once
 
 #include "yc.hpp"
-#include "rmq.hpp"
+#include "ds/rmq.hpp"
 
 struct static_forest_t {
 	int N;

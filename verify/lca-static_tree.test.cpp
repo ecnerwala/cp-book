@@ -3,7 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "static_tree.hpp"
+#include "tree/static_tree.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false); std::cin.tie(nullptr);
