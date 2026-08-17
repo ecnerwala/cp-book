@@ -15,10 +15,6 @@
 
 namespace wala {
 
-namespace suffix_array_detail {
-template<class T> int sz(T&& arg) { using std::size; return int(size(std::forward<T>(arg))); }
-} // namespace suffix_array_detail
-
 
 // Layered suffix array: SuffixArrayBase computes just sa/rank, each further
 // layer statically opts into one more derived structure. Use the leaf classes
@@ -41,8 +37,8 @@ public:
 
 	// Pass a function which returns a value in [0, sigma)
 	template <typename String, typename F> static Self map_and_construct(const String& S, const F& f, int sigma) {
-		std::vector<decltype((f(S[0])))> mapped(suffix_array_detail::sz(S));
-		for (int i = 0; i < suffix_array_detail::sz(S); i++) {
+		std::vector<decltype((f(S[0])))> mapped(int(std::size(S)));
+		for (int i = 0; i < int(std::size(S)); i++) {
 			mapped[i] = f(S[i]);
 			assert(0 <= int(mapped[i]) && int(mapped[i]) < sigma);
 		}
@@ -60,14 +56,14 @@ public:
 			index_t
 		>::type;
 
-		std::vector<compressed_value_type> compressed_s(suffix_array_detail::sz(S));
+		std::vector<compressed_value_type> compressed_s(int(std::size(S)));
 		int sigma = 0;
 
 		{
 			std::vector<value_type> vals(begin(S), end(S));
 			std::sort(vals.begin(), vals.end());
 			vals.resize(unique(vals.begin(), vals.end()) - vals.begin());
-			for (int i = 0; i < suffix_array_detail::sz(S); i++) {
+			for (int i = 0; i < int(std::size(S)); i++) {
 				compressed_s[i] = compressed_value_type(index_t(std::lower_bound(vals.begin(), vals.end(), S[i]) - vals.begin()));
 			}
 			sigma = int(vals.size());
@@ -82,17 +78,17 @@ public:
 		using std::end;
 		using value_type = typename std::iterator_traits<decltype(begin(S))>::value_type;
 
-		std::vector<value_type> compressed_s(suffix_array_detail::sz(S));
+		std::vector<value_type> compressed_s(int(std::size(S)));
 		int sigma = 0;
 
-		if (suffix_array_detail::sz(S) > 0) {
+		if (int(std::size(S)) > 0) {
 			value_type lo = *begin(S), hi = *begin(S);
 			for (const auto& x : S) {
 				if (x < lo) lo = x;
 				if (x > hi) hi = x;
 			}
 
-			for (int i = 0; i < suffix_array_detail::sz(S); i++) {
+			for (int i = 0; i < int(std::size(S)); i++) {
 				compressed_s[i] = value_type(S[i] - lo);
 			}
 			sigma = int(hi - lo + 1);
@@ -113,10 +109,10 @@ public:
 			index_t
 		>::type;
 
-		std::vector<compressed_value_type> compressed_s(suffix_array_detail::sz(S));
+		std::vector<compressed_value_type> compressed_s(int(std::size(S)));
 		int sigma = 0;
 
-		if (suffix_array_detail::sz(S) > 0) {
+		if (int(std::size(S)) > 0) {
 			value_type lo = *begin(S), hi = *begin(S);
 			for (const auto& x : S) {
 				if (x < lo) lo = x;
@@ -131,7 +127,7 @@ public:
 				if (buckets[v]) buckets[v] = compressed_value_type(sigma++);
 			}
 
-			for (int i = 0; i < suffix_array_detail::sz(S); i++) {
+			for (int i = 0; i < int(std::size(S)); i++) {
 				compressed_s[i] = buckets[S[i] - lo];
 			}
 		}
@@ -141,7 +137,7 @@ public:
 
 protected:
 	template <typename String> void build(const String& S, index_t sigma) {
-		N = suffix_array_detail::sz(S);
+		N = int(std::size(S));
 		build_sa(S, sigma);
 		build_rank();
 	}
@@ -418,7 +414,7 @@ private:
 		int N = this->N;
 		const auto& sa = this->sa;
 		const auto& rank = this->rank;
-		assert(suffix_array_detail::sz(S) == N);
+		assert(int(std::size(S)) == N);
 		lcp = std::vector<index_t>(N);
 		for (int i = 0, k = 0; i < N - 1; i++) {
 			int j = sa[rank[i]-1];
