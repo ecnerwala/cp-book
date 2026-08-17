@@ -175,6 +175,27 @@ TEMPLATE_TEST_CASE("product upsample", "[fft]", ALL_ENGINES) {
 	}
 }
 
+TEMPLATE_TEST_CASE("graeffe", "[fft]", ALL_ENGINES) {
+	using E = TestType;
+	using num = typename E::value_type;
+	mt19937 mt(Catch::getSeed());
+	for (int n : {2, 16, 64}) {
+		vector<num> a(n);
+		fill_rnd(a, mt);
+		auto ta = E::transform(span<const num>(a), n);
+		vector<num> got(n/2);
+		E::finish(E::graeffe(ta, n), span<num>(got));
+		// even part of a(x) * a(-x) mod x^n - 1
+		vector<num> b = a;
+		for (int i = 1; i < n; i += 2) b[i] = -b[i];
+		auto full = multiply_slow(a, b);
+		full.resize(size_t(2*n), num(0));
+		vector<num> want(n/2);
+		for (int i = 0; i < n/2; i++) want[i] = full[2*i] + full[2*i + n];
+		check_eq(got, want);
+	}
+}
+
 TEMPLATE_TEST_CASE("FFT Square", "[fft]", ALL_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;

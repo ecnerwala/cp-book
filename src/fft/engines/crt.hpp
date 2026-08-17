@@ -78,6 +78,9 @@ struct crt {
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {
 		return transformed_t<A>{E1::negate_arg(t.t1, n), E2::negate_arg(t.t2, n)};
 	}
+	template <int A> static product_t<A * A> graeffe(const transformed_t<A>& t, int n) {
+		return product_t<A * A>{E1::graeffe(t.t1, n), E2::graeffe(t.t2, n)};
+	}
 	// Exact per prime; the scale tracks the true (integer) coefficient growth.
 	template <int A, int B> static transformed_t<A + B> add(transformed_t<A>&& a, const transformed_t<B>& b) {
 		return transformed_t<A + B>{E1::add(std::move(a.t1), b.t1), E2::add(std::move(a.t2), b.t2)};

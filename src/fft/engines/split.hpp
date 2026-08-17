@@ -109,6 +109,26 @@ template <typename mnum> struct split {
 		add_into(r.v, b.v);
 		return r;
 	}
+	// One Graeffe step: the size-n/2 even half of A(x) * A(-x), with the negate_arg
+	// shuffle (b[i] = a[i^1]) and the even-half average fused into mul's unpacking pass.
+	template <int A> static product_t<A * A> graeffe(const transformed_t<A>& t, int n) {
+		assert(n >= 2 && t.size() >= n);
+		product_t<A * A> p; p.lo.resize(n/2); p.hi.resize(n/2);
+		for (int u = 0; u < n/2; u++) {
+			cnum lo(0), hi(0);
+			for (int i : {2*u, 2*u+1}) {
+				int ci = core::conj_index(i);
+				cnum g0 = (t.v[i^1] + conj(t.v[ci^1])) * cnum(0.5);
+				cnum s = (t.v[i^1] - conj(t.v[ci^1])) * cnum(0.5);
+				cnum g1 = cnum(s.y, -s.x);
+				lo = lo + t.v[i] * g0;
+				hi = hi + t.v[i] * g1;
+			}
+			p.lo[u] = lo * cnum(0.5);
+			p.hi[u] = hi * cnum(0.5);
+		}
+		return p;
+	}
 	// Unpacks b's transform into transforms of its low/high halves via conjugate
 	// symmetry, then multiplies both against a's (still packed) transform. The scale
 	// parameter only affects the bookkeeping, so the body is a shared untyped impl.

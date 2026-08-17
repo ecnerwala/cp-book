@@ -122,6 +122,28 @@ template <typename dbl = double> struct real {
 		if (odd) for (auto& z : r.v) z = cnum(-z.y, z.x);
 		return r;
 	}
+	// One Graeffe step: the size-n/2 packed product of the even part of A(x) * A(-x).
+	// The product takes the same value A(w) A(-w) at each pair +-w, so each value is
+	// already a spectrum value of the halved (real) result; repack adjacent pairs.
+	static product graeffe(const transformed& t, int n) {
+		int m = packed_size(n);
+		assert(n >= 2 && t.size() >= n);
+		core::init(2 * m);
+		auto val = [&](int j) {
+			cnum x = part(t, j, false), y = part(t, j, true) * core::rt[m + core::brev(j, m)];
+			return (x + y) * (x - y);
+		};
+		product p;
+		if (m == 1) {
+			p.v = {val(0)};
+		} else {
+			p.v.resize(m / 2);
+			for (int u = 0; u < m/2; u++) {
+				p.v[u] = retangle(val(2*u), val(2*u+1), m/2, core::brev(u, m/2));
+			}
+		}
+		return p;
+	}
 	static product mul(const transformed& a, const transformed& b, int n) {
 		int m = packed_size(n);
 		assert(a.size() >= n && b.size() >= n);
