@@ -10,6 +10,6 @@ TEST_CASE("Berlekamp Massey", "[bm]") {
 	vector<num> S({0, 1, 1, 2, 3, 5, 8, 13});
 	vector<num> tr = wala::BerlekampMassey(S);
 	REQUIRE(tr == vector<num>({num(1), num(1)}));
-	num res = linearRec(S, tr, 1000);
+	num res = wala::linearRec(S, tr, 1000);
 	REQUIRE(res == num(517691607));
 }
