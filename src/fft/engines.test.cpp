@@ -196,6 +196,48 @@ TEMPLATE_TEST_CASE("graeffe", "[fft]", ALL_ENGINES) {
 	}
 }
 
+TEMPLATE_TEST_CASE("padded transform and finish", "[fft]", ALL_ENGINES) {
+	using E = TestType;
+	using num = typename E::value_type;
+	mt19937 mt(Catch::getSeed());
+	for (int n : {4, 16, 64}) {
+		for (int C : {2, 4, n}) {
+			INFO("n = " << n << ", C = " << C);
+			vector<num> a(n), b(n);
+			fill_rnd(b, mt);
+			for (int i = 0; i < n; i++) {
+				if (i % C < C/2) a[i] = rnd_val<num>(mt);
+			}
+			auto ta = E::transform_padded(span<const num>(a), n, C);
+			auto tb = E::transform(span<const num>(b), n);
+			vector<num> want(n);
+			multiply_circular<E>(span<const num>(a), span<const num>(b), span<num>(want), n);
+			// transform_padded matches the plain transform
+			vector<num> got(n);
+			E::finish(E::mul(ta, tb, n), span<num>(got));
+			check_eq(got, want);
+			// finish_padded writes the live positions and leaves the rest unspecified
+			vector<num> got_padded(n);
+			E::finish_padded(E::mul(ta, tb, n), span<num>(got_padded), C);
+			for (int i = 0; i < n; i++) {
+				if (i % C >= C/2) { got_padded[i] = num(0); want[i] = num(0); }
+			}
+			check_eq(got_padded, want);
+			// and composes with a non-assign op on the live positions
+			vector<num> acc(n), expected(n);
+			fill_rnd(acc, mt);
+			for (int i = 0; i < n; i++) {
+				expected[i] = i % C < C/2 ? acc[i] + want[i] : acc[i];
+			}
+			E::finish_padded(E::mul(ta, tb, n), span<num>(acc), C, add_op{});
+			for (int i = 0; i < n; i++) {
+				if (i % C >= C/2) acc[i] = expected[i];
+			}
+			check_eq(acc, expected);
+		}
+	}
+}
+
 TEMPLATE_TEST_CASE("FFT Square", "[fft]", ALL_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;

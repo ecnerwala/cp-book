@@ -148,6 +148,79 @@ template <typename num> struct fft_core {
 		}
 	}
 
+	// Bivariate packings (y = x^C) leave structured zeros: the stride-C rows are only
+	// half-occupied, i.e. a[j] = 0 whenever (j mod C) >= C/2.
+	// `forward_padded` is `forward` specialized for such inputs.
+	// The zero columns pass through the cross-row stages (k >= C) untouched, so those
+	// stages only do the live half of the work, and the stage pairing (j, j + C/2)
+	// reads known zeros, degenerating to a copy and twiddle.
+	// The result is the ordinary full transform.
+	static void forward_padded(std::span<num> a, int C) {
+		int n = sz(a);
+		assert(C >= 2 && !(C & (C-1)) && n % C == 0);
+		init(n);
+		int h = C / 2;
+		for (int k = n/2; k >= C; k /= 2) {
+			for (int i = 0; i < n; i += 2*k) {
+				for (int jr = 0; jr < k; jr += C) {
+					for (int jc = 0; jc < h; jc++) {
+						int j = jr + jc;
+						num u = a[i+j], v = a[i+j+k];
+						a[i+j] = u + v;
+						a[i+j+k] = (u - v) * rt[j+k];
+					}
+				}
+			}
+		}
+		for (int i = 0; i < n; i += C) {
+			for (int j = 0; j < h; j++) a[i+j+h] = a[i+j] * rt[j+h];
+		}
+		for (int k = h/2; k >= 1; k /= 2) {
+			for (int i = 0; i < n; i += 2*k) {
+				for (int j = 0; j < k; j++) {
+					num u = a[i+j], v = a[i+j+k];
+					a[i+j] = u + v;
+					a[i+j+k] = (u - v) * rt[j+k];
+				}
+			}
+		}
+	}
+
+	// `inverse` when only the half-occupied outputs (j mod C) < C/2 are needed.
+	// The dead columns feed no live output, so the final in-row stage only computes the
+	// live halves and the cross-row stages (k >= C) skip the dead columns entirely,
+	// leaving their entries unspecified.
+	static void inverse_padded(std::span<num> a, int C) {
+		int n = sz(a);
+		assert(C >= 2 && !(C & (C-1)) && n % C == 0);
+		init(n);
+		int h = C / 2;
+		for (int k = 1; k < h; k *= 2) {
+			for (int i = 0; i < n; i += 2*k) {
+				for (int j = 0; j < k; j++) {
+					num t = inv_rt[j+k] * a[i+j+k];
+					a[i+j+k] = a[i+j] - t;
+					a[i+j] = a[i+j] + t;
+				}
+			}
+		}
+		for (int i = 0; i < n; i += C) {
+			for (int j = 0; j < h; j++) a[i+j] = a[i+j] + inv_rt[j+h] * a[i+j+h];
+		}
+		for (int k = C; k < n; k *= 2) {
+			for (int i = 0; i < n; i += 2*k) {
+				for (int jr = 0; jr < k; jr += C) {
+					for (int jc = 0; jc < h; jc++) {
+						int j = jr + jc;
+						num t = inv_rt[j+k] * a[i+j+k];
+						a[i+j+k] = a[i+j] - t;
+						a[i+j] = a[i+j] + t;
+					}
+				}
+			}
+		}
+	}
+
 	// Extend a size 2^{k-1} transform to size 2^k; we need the coefficients.
 	// t must have size 2^k, and coeffs must have size at most 2^{k+1}.
 	static void extend(std::span<num> t, std::span<const num> coeffs) {

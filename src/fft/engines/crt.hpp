@@ -63,6 +63,16 @@ struct crt {
 		E1::extend_to(t.t1, m, std::span<const num1>(b1.span()));
 		E2::extend_to(t.t2, m, std::span<const num2>(b2.span()));
 	}
+	static transformed transform_padded(std::span<const mnum> a, int n, int C) {
+		assert(sz(a) == n);
+		auto b1 = buffer_pool<num1>::get(n);
+		auto b2 = buffer_pool<num2>::get(n);
+		for (int i = 0; i < n; i++) { int64_t v = a[i].balanced(); b1[i] = num1(v); b2[i] = num2(v); }
+		return transformed{
+			E1::transform_padded(std::span<const num1>(b1.span()), n, C),
+			E2::transform_padded(std::span<const num2>(b2.span()), n, C),
+		};
+	}
 	template <int A> static transformed_t<A> downsample(const transformed_t<A>& t, int n, bool odd) {
 		return transformed_t<A>{E1::downsample(t.t1, n, odd), E2::downsample(t.t2, n, odd)};
 	}
@@ -103,10 +113,29 @@ struct crt {
 	template <int K1, int K2> static product_t<K1 + K2> add(product_t<K1>&& a, product_t<K2>&& b) {
 		return product_t<K1 + K2>{E1::add(std::move(a.p1), b.p1), E2::add(std::move(a.p2), b.p2)};
 	}
+	// The reconstruction needs |c| < whole/2; balanced inputs bound each addend's
+	// true coefficients by n (MOD/2)^2, so the safe length is divided by the
+	// accumulated scale. K <= 2 is very conservative (~2^35 even for MOD ~ 2^30).
+	struct reconstructor {
+		// TODO: Could hardcode these
+		num1 inv_n2 = inv(num1(num2::MOD));
+		num2 inv_n1 = inv(num2(num1::MOD));
+		__int128_t whole = __int128_t(num1::MOD) * __int128_t(num2::MOD);
+		mnum m1_mod = mnum(num1::MOD);
+		mnum m2_mod = mnum(num2::MOD);
+		mnum whole_mod = m1_mod * m2_mod;
+		mnum operator()(num1 o1, num2 o2) const {
+			num1 v1 = o1 * inv_n2;
+			num2 v2 = o2 * inv_n1;
+			mnum o_mod = mnum(uint64_t(v1)) * m2_mod + mnum(int(v2)) * m1_mod;
+			__int128_t o_exact = __int128_t(uint64_t(v1)) * __int128_t(num2::MOD) + __int128_t(int(v2)) * __int128_t(num1::MOD);
+			if (o_exact >= whole) { o_exact -= whole; o_mod -= whole_mod; }
+			// Balanced representatives: |o| <= whole/2
+			if (o_exact > whole / 2) o_mod -= whole_mod;
+			return o_mod;
+		}
+	};
 	template <int K = 1, typename Op = assign_op> static void finish(product_t<K>&& p, std::span<mnum> out, Op op = {}) {
-		// The reconstruction needs |c| < whole/2; balanced inputs bound each addend's
-		// true coefficients by n (MOD/2)^2, so the safe length is divided by the
-		// accumulated scale. K <= 2 is very conservative (~2^35 even for MOD ~ 2^30).
 		static_assert(K <= 2, "crt: accumulated scale too large");
 		int n = p.size();
 		assert(sz(out) <= n);
@@ -114,24 +143,20 @@ struct crt {
 		auto o2 = buffer_pool<num2>::get(sz(out));
 		E1::finish(std::move(p.p1), o1.span());
 		E2::finish(std::move(p.p2), o2.span());
-
-		// TODO: Could hardcode these
-		num1 inv_n2 = inv(num1(num2::MOD));
-		num2 inv_n1 = inv(num2(num1::MOD));
-		__int128_t whole = __int128_t(num1::MOD) * __int128_t(num2::MOD);
-
-		mnum m1_mod = mnum(num1::MOD);
-		mnum m2_mod = mnum(num2::MOD);
-		mnum whole_mod = m1_mod * m2_mod;
-		for (int i = 0; i < sz(out); i++) {
-			num1 v1 = o1[i] * inv_n2;
-			num2 v2 = o2[i] * inv_n1;
-			mnum o_mod = mnum(uint64_t(v1)) * m2_mod + mnum(int(v2)) * m1_mod;
-			__int128_t o_exact = __int128_t(uint64_t(v1)) * __int128_t(num2::MOD) + __int128_t(int(v2)) * __int128_t(num1::MOD);
-			if (o_exact >= whole) { o_exact -= whole; o_mod -= whole_mod; }
-			// Balanced representatives: |o| <= whole/2
-			if (o_exact > whole / 2) o_mod -= whole_mod;
-			op(out[i], o_mod);
+		reconstructor rec;
+		for (int i = 0; i < sz(out); i++) op(out[i], rec(o1[i], o2[i]));
+	}
+	template <int K = 1, typename Op = assign_op> static void finish_padded(product_t<K>&& p, std::span<mnum> out, int C, Op op = {}) {
+		static_assert(K <= 2, "crt: accumulated scale too large");
+		int n = p.size();
+		assert(sz(out) == n);
+		auto o1 = buffer_pool<num1>::get(n);
+		auto o2 = buffer_pool<num2>::get(n);
+		E1::finish_padded(std::move(p.p1), o1.span(), C);
+		E2::finish_padded(std::move(p.p2), o2.span(), C);
+		reconstructor rec;
+		for (int i = 0; i < n; i += C) {
+			for (int j = 0; j < C/2; j++) op(out[i+j], rec(o1[i+j], o2[i+j]));
 		}
 	}
 };

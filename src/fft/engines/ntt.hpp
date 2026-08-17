@@ -45,6 +45,13 @@ template <typename num> struct ntt {
 			core::extend(std::span<num>(t.v), coeffs.first(size_t(min(sz(coeffs), 2 * s))));
 		}
 	}
+	static transformed transform_padded(std::span<const num> a, int n, int C) {
+		assert(sz(a) == n);
+		transformed r;
+		r.v.assign(a.begin(), a.end());
+		core::forward_padded(std::span<num>(r.v), C);
+		return r;
+	}
 	static transformed downsample(const transformed& t, int n, bool odd) {
 		transformed r; r.v.resize(n);
 		core::downsample(std::span<const num>(t.v), std::span<num>(r.v), odd);
@@ -98,6 +105,15 @@ template <typename num> struct ntt {
 		core::inverse(std::span<num>(p.v));
 		num d = inv(num(n));
 		for (int i = 0; i < sz(out); i++) op(out[i], p.v[i] * d);
+	}
+	template <typename Op = assign_op> static void finish_padded(product&& p, std::span<num> out, int C, Op op = {}) {
+		int n = p.size();
+		assert(sz(out) == n);
+		core::inverse_padded(std::span<num>(p.v), C);
+		num d = inv(num(n));
+		for (int i = 0; i < n; i += C) {
+			for (int j = 0; j < C/2; j++) op(out[i+j], p.v[i+j] * d);
+		}
 	}
 };
 
