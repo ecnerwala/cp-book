@@ -217,5 +217,6 @@ std::vector<value_t<T>> smawk(int N, int M, Get&& get, Select&& select) {
 		}
 	}
 	return res;
-} // namespace wala::smawk
 }
+
+} // namespace wala::smawk
