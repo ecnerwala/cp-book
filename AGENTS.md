@@ -6,10 +6,17 @@ programming reference library).
 ## Repository layout
 
 - `src/`: the library — header-only C++ (`.hpp`), plus Catch2 unit tests
-  (`src/*.test.cpp`). Headers are included with bare names (`#include
-  "fft.hpp"`), resolved via `-I src`.
+  (`src/**/*.test.cpp`). Everything lives in `namespace wala`. Headers are
+  organized into area folders (`num/`, `nt/`, `linalg/`, `ds/`, `seq/`,
+  `tree/`, `graph/`, `geometry/`, `fft/`, `combo_games/`, plus
+  uncategorized headers at the top level) and included with src-relative
+  paths (`#include "fft/series.hpp"`, `#include "ds/seg_tree.hpp"`),
+  resolved via `-I src`. Same-directory includes may use bare names.
 - `verify/`: Library Checker (https://judge.yosupo.jp/) solutions, one
   `<problem_slug>.test.cpp` per problem, verified by competitive-verifier.
+  Organized into the same area folders as `src/`
+  (`verify/fft/convolution_mod.test.cpp`), chosen by the solution's primary
+  header.
 - `scripts/bundle.py`: inlines library headers to produce a single
   submittable file; takes one or more headers/solutions, `--minify` for a
   compiler-directed minification pass, and `--all` to pregenerate
@@ -33,7 +40,7 @@ uvx competitive-verifier oj-resolve --include src verify --exclude third_party \
 uvx competitive-verifier verify --verify-json verify_files.json
 
 # Single-file submission with headers inlined
-scripts/bundle.py verify/convolution_mod.test.cpp > submission.cpp
+scripts/bundle.py verify/fft/convolution_mod.test.cpp > submission.cpp
 ```
 
 Compile a single file: `g++ -std=c++23 -O2 -I src file.cpp`.
@@ -43,9 +50,10 @@ Compile a single file: `g++ -std=c++23 -O2 -I src file.cpp`.
 Match the existing code exactly. In particular:
 
 - **Indent with tabs.**
-- **No `using namespace std;`** — qualify with `std::` everywhere, including
-  in `main`. Library names (e.g. `modnum`, `SuffixArray`) live in the global
-  namespace or their own namespaces; that's intentional.
+- **No `using namespace`** — qualify with `std::` everywhere, including in
+  `main`. The library lives in `namespace wala`; qualify library names with
+  `wala::` in tests and verify solutions (e.g. `wala::modnum`,
+  `wala::SuffixArray`, `wala::seg_tree::point`).
 - **verify/ files** follow this template:
 
   ```cpp
@@ -66,7 +74,8 @@ Match the existing code exactly. In particular:
   ```
 
   - Start with `#include <bits/stdc++.h>`, then `#include <cassert>`, then a
-    blank line, then the library includes (bare names, never `../src/...`).
+    blank line, then the library includes (src-relative paths like
+    `"ds/seg_tree.hpp"`, never `../src/...`).
   - Always include `<cassert>` right after `<bits/stdc++.h>`, for
     consistency: it is not included in `<bits/stdc++.h>` in recent versions
     of g++, and ecnerwala loves `assert()`s.
@@ -139,13 +148,12 @@ use it correctly. Concretely:
 
 ## Library notes
 
-- `src/fft.hpp`: everything lives in `namespace ecnerwala` (transform
-  machinery in `ecnerwala::fft`, engines in `ecnerwala::fft::engines`, value
-  types in `ecnerwala::series` / `ecnerwala::poly`).
+- `src/fft/`: transform machinery in `wala::fft`, engines in
+  `wala::fft::engines`, value types in `wala::series` / `wala::poly`.
   `poly::vec<E>` stores coefficients reversed but iterates and
   indexes in natural (x^0-first) order; `poly::multipoint` / `poly::interpolate`
-  live in `ecnerwala::poly`.
-- `src/dirichlet_series.hpp`: `div_vector_layout` is passed as a template
+  live in `wala::poly`.
+- `src/nt/dirichlet_series.hpp`: `div_vector_layout` is passed as a template
   non-type reference parameter, so declare it `static` and assign the size at
   runtime.
 - Unit tests (`src/*.test.cpp`) use Catch2 and are built by CMake; they are
@@ -153,7 +161,7 @@ use it correctly. Concretely:
 
 ## When adding a verify solution
 
-1. Create `verify/<problem_slug>.test.cpp` following the template above,
+1. Create `verify/<area>/<problem_slug>.test.cpp` following the template above,
    using book headers (don't vendor code into the file). If a problem can't
    be solved with book code, flag it instead of adding standalone code.
 2. `git add` it, then run the verification commands above; all testcases

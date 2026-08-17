@@ -8,8 +8,9 @@ This is my library of reference code for competitive programming. The goal is to
 write generic, fast, and clean algorithm implementations for use in contests
 like CodeForces or ICPC.
 
-The library lives in `src/` as standalone headers (`#include "fft.hpp"`,
-compiled with `-I src`). The library requires C++23 (the whole toolchain
+The library lives in `src/` as standalone headers organized by area
+(`#include "fft/series.hpp"`, `#include "ds/seg_tree.hpp"`, compiled with
+`-I src`), all inside `namespace wala`. The library requires C++23 (the whole toolchain
 builds with `-std=c++23`, e.g. g++ >= 13). Browsable source, verification
 results, and coverage are hosted at https://ecnerwala.github.io/cp-book/.
 
@@ -26,10 +27,10 @@ Unfortunately, some files (e.g. full power series with all fft engines) are too 
 so we need to bundle/minify them for submission.
 
 ```sh
-scripts/bundle.py verify/convolution_mod.test.cpp > submission.cpp
-scripts/bundle.py fft.hpp seg_tree.hpp     # bundle headers together
-scripts/bundle.py --minify fft.hpp         # compiler-directed minification
-scripts/bundle.py --all                    # pregenerate all headers
+scripts/bundle.py verify/fft/convolution_mod.test.cpp > submission.cpp
+scripts/bundle.py fft/series.hpp ds/seg_tree.hpp   # bundle headers together
+scripts/bundle.py --minify fft/series.hpp          # compiler-directed minification
+scripts/bundle.py --all                            # pregenerate all headers
 ```
 
 To run the bundler offline, first initialize the UV cache by running
