@@ -76,19 +76,26 @@ template <typename mnum> struct split {
 			);
 		}
 	}
-	static void downsample_core(std::span<const cnum> in, std::span<cnum> out, bool odd) {
-		if (odd) core::odd_half(in, out);
-		else core::even_half(in, out);
-	}
 	template <int A> static transformed_t<A> downsample(const transformed_t<A>& t, int n, bool odd) {
 		transformed_t<A> r; r.v.resize(n);
-		downsample_core(std::span<const cnum>(t.v), std::span<cnum>(r.v), odd);
+		core::downsample(std::span<const cnum>(t.v), std::span<cnum>(r.v), odd);
 		return r;
 	}
 	template <int K> static product_t<K> downsample(const product_t<K>& p, int n, bool odd) {
 		product_t<K> r; r.lo.resize(n); r.hi.resize(n);
-		downsample_core(std::span<const cnum>(p.lo), std::span<cnum>(r.lo), odd);
-		downsample_core(std::span<const cnum>(p.hi), std::span<cnum>(r.hi), odd);
+		core::downsample(std::span<const cnum>(p.lo), std::span<cnum>(r.lo), odd);
+		core::downsample(std::span<const cnum>(p.hi), std::span<cnum>(r.hi), odd);
+		return r;
+	}
+	template <int A> static transformed_t<A> upsample(const transformed_t<A>& t, int n, bool odd) {
+		transformed_t<A> r; r.v.resize(n);
+		core::upsample(std::span<const cnum>(t.v), std::span<cnum>(r.v), odd);
+		return r;
+	}
+	template <int K> static product_t<K> upsample(const product_t<K>& p, int n, bool odd) {
+		product_t<K> r; r.lo.resize(n); r.hi.resize(n);
+		core::upsample(std::span<const cnum>(p.lo), std::span<cnum>(r.lo), odd);
+		core::upsample(std::span<const cnum>(p.hi), std::span<cnum>(r.hi), odd);
 		return r;
 	}
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {

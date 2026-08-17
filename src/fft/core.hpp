@@ -184,6 +184,33 @@ template <typename num> struct fft_core {
 			out[j] = (t[2*j] - t[2*j+1]) * half * inv_rt[n + brev(j, n)];
 		}
 	}
+	static void downsample(std::span<const num> t, std::span<num> out, bool odd) {
+		if (odd) odd_half(t, out);
+		else even_half(t, out);
+	}
+
+	static void upsample_as_evens(std::span<const num> t, std::span<num> out) {
+		int n = sz(out);
+		assert(2 * sz(t) >= n);
+		for (int j = 0; j < n; j++) out[j] = t[j>>1];
+	}
+	// TODO: We could just implement a generic "cyclic-shift" primitive; at least we should make it not involve brev
+	static void upsample_as_odds(std::span<const num> t, std::span<num> out) {
+		int n = sz(out);
+		assert(n >= 2);
+		assert(sz(t) >= n / 2);
+		init(n);
+		// TODO: I think this is right?
+		for (int j = 0; j < n/2; j++) {
+			num v = t[j] * rt[n/2 + brev(j, n/2)];
+			out[2*j+0] = v;
+			out[2*j+1] = -v;
+		}
+	}
+	static void upsample(std::span<const num> t, std::span<num> out, bool odd) {
+		if (odd) upsample_as_odds(t, out);
+		else upsample_as_evens(t, out);
+	}
 };
 
 /* namespace ecnerwala::fft */ }

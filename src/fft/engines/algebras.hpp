@@ -125,6 +125,16 @@ struct componentwise {
 		for (int c = 0; c < P; c++) r.t[c] = E::downsample(p.t[c], n, odd);
 		return r;
 	}
+	template <int A> static transformed_t<A> upsample(const transformed_t<A>& t, int n, bool odd) {
+		transformed_t<A> r;
+		for (int c = 0; c < L; c++) r.t[c] = E::upsample(t.t[c], n, odd);
+		return r;
+	}
+	template <int K> static product_t<K> upsample(const product_t<K>& p, int n, bool odd) {
+		product_t<K> r;
+		for (int c = 0; c < P; c++) r.t[c] = E::upsample(p.t[c], n, odd);
+		return r;
+	}
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {
 		transformed_t<A> r;
 		for (int c = 0; c < L; c++) r.t[c] = E::negate_arg(t.t[c], n);

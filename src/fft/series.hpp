@@ -305,13 +305,10 @@ trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
 		}
 	}
 	for (int l = L-1; l >= 0; l--) {
-		// Spread it out, clear the high terms
-		for (int i = (2 << L) - 1; i > 0; i--) {
-			T v = P[i];
-			P[2*i] = ((2*i) & (1 << (L-l))) ? T(0) : v;
-			P[i] = T(0);
+		for (int i = 0; i < (2 << L); i++) {
+			if ((2*i) & (1 << (L-l))) P[i] = 0;
 		}
-		auto tp = E::transform(std::span<const T>(P), B);
+		auto tp = E::upsample(E::transform(std::span<const T>(P), B/2), B, false);
 		E::finish(E::mul(tneg[l], tp, B), std::span<T>(P));
 		for (int i = 0; i < (2 << L); i++) {
 			P[i] = P[(2 << L) + i];

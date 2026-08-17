@@ -47,8 +47,12 @@ template <typename num> struct ntt {
 	}
 	static transformed downsample(const transformed& t, int n, bool odd) {
 		transformed r; r.v.resize(n);
-		if (odd) core::odd_half(std::span<const num>(t.v), std::span<num>(r.v));
-		else core::even_half(std::span<const num>(t.v), std::span<num>(r.v));
+		core::downsample(std::span<const num>(t.v), std::span<num>(r.v), odd);
+		return r;
+	}
+	static transformed upsample(const transformed& t, int n, bool odd) {
+		transformed r; r.v.resize(n);
+		core::upsample(std::span<const num>(t.v), std::span<num>(r.v), odd);
 		return r;
 	}
 	static transformed negate_arg(const transformed& t, int n) {

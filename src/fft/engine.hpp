@@ -75,6 +75,8 @@ concept engine = requires(
 	E::extend_to(t, n, in);
 	{ E::downsample(ct, n, false) } -> std::same_as<typename E::transformed>;
 	{ E::downsample(cp, n, false) } -> std::same_as<typename E::product>;
+	{ E::upsample(ct, n, false) } -> std::same_as<typename E::transformed>;
+	{ E::upsample(cp, n, false) } -> std::same_as<typename E::product>;
 	{ E::negate_arg(ct, n) } -> std::same_as<typename E::transformed>;
 	{ E::mul(ct, ct, n) } -> std::same_as<typename E::product>;
 	{ E::sq(ct, n) } -> std::same_as<typename E::product>;

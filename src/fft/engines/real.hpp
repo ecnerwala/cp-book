@@ -78,6 +78,10 @@ template <typename dbl = double> struct real {
 		}
 	}
 	static transformed downsample(const transformed& t, int n, bool odd) { return half(t, n, odd); }
+	static transformed upsample(const transformed& t, int n, bool odd) {
+		// TODO
+		assert(false);
+	}
 	// A(-x) negates the odd (imaginary-slot) coefficients, i.e. conjugates the packed
 	// sequence; the transform of a conjugated sequence is the conjugate at w^(-k).
 	static transformed negate_arg(const transformed& t, int n) {

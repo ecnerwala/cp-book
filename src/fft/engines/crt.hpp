@@ -69,6 +69,12 @@ struct crt {
 	template <int K> static product_t<K> downsample(const product_t<K>& p, int n, bool odd) {
 		return product_t<K>{E1::downsample(p.p1, n, odd), E2::downsample(p.p2, n, odd)};
 	}
+	template <int A> static transformed_t<A> upsample(const transformed_t<A>& t, int n, bool odd) {
+		return transformed_t<A>{E1::upsample(t.t1, n, odd), E2::upsample(t.t2, n, odd)};
+	}
+	template <int K> static product_t<K> upsample(const product_t<K>& p, int n, bool odd) {
+		return product_t<K>{E1::upsample(p.p1, n, odd), E2::upsample(p.p2, n, odd)};
+	}
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {
 		return transformed_t<A>{E1::negate_arg(t.t1, n), E2::negate_arg(t.t2, n)};
 	}
