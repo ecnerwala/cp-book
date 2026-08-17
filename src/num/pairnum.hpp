@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 
 namespace wala {
 

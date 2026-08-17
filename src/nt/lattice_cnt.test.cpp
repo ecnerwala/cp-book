@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "lattice_cnt.hpp"
+#include "nt/lattice_cnt.hpp"
 
 using namespace std;
 

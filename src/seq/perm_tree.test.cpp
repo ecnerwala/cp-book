@@ -1,4 +1,4 @@
-#include "perm_tree.hpp"
+#include "seq/perm_tree.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <bits/stdc++.h>

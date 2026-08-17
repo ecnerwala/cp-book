@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "bm.hpp"
+#include "fft/bm.hpp"
 #include "num/modnum.hpp"
 
 using namespace std;

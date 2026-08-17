@@ -1,6 +1,6 @@
 #include <catch2/catch_template_test_macros.hpp>
 
-#include "seg_tree.hpp"
+#include "ds/seg_tree.hpp"
 
 #include <type_traits>
 

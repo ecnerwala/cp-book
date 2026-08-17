@@ -1,4 +1,4 @@
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 #include <numeric> // Include for std::lcm and std::gcd
 #include <random>
 #include <catch2/catch_test_macros.hpp>
