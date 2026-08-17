@@ -7,13 +7,13 @@
 
 Usage:
     scripts/bundle.py path/to/solution.cpp > submission.cpp
-    scripts/bundle.py fft.hpp seg_tree.hpp | xclip -selection clipboard
-    scripts/bundle.py --minify fft.hpp > fft.min.cpp
+    scripts/bundle.py fft/series.hpp ds/seg_tree.hpp | xclip -selection clipboard  # or wl-copy
+    scripts/bundle.py --minify fft/series.hpp > fft_series.min.cpp
     scripts/bundle.py --all -o dist/       # pregenerate all headers
 
 Any `#include "foo.hpp"` resolved from src/ (or relative to the including
-file) is expanded in place, like `oj-bundle -I src`. Bare header names
-(e.g. `fft.hpp`) are looked up in src/. Multiple inputs are bundled into
+file) is expanded in place, like `oj-bundle -I src`. Header names relative
+to src/ (e.g. `fft/series.hpp`) are looked up in src/. Multiple inputs are bundled into
 one output with shared includes deduplicated.
 
 --minify additionally strips comments (compiler-directed, via

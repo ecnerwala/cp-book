@@ -7,7 +7,7 @@
 
 #include "fft/multiply.hpp"
 
-namespace ecnerwala {
+namespace wala {
 
 // ==== online multiplication ====
 
@@ -114,4 +114,4 @@ template <fft::engine E> struct online_squarer {
 	}
 };
 
-/* namespace ecnerwala */ }
+/* namespace wala */ }

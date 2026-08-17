@@ -9,9 +9,9 @@
 #include "fft/engines/crt.hpp"
 #include "fft/multiply.hpp"
 #include "fft/test_util.test.hpp"
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 
-namespace ecnerwala {
+namespace wala {
 namespace fft {
 
 using namespace std;
@@ -347,4 +347,4 @@ TEMPLATE_TEST_CASE("negate_arg transforms", "[fft]", ALL_ENGINES) {
 	}
 }
 
-}} // namespace ecnerwala::fft
+}} // namespace wala::fft

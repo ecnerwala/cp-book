@@ -7,9 +7,9 @@
 
 #include "fft/engine.hpp"
 #include "fft/engines/ntt.hpp"
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 
-namespace ecnerwala::fft::engines {
+namespace wala::fft::engines {
 
 // Multiplies mod `mnum` by running NTTs modulo two FFT-friendly primes and CRT'ing.
 // Inputs use balanced representatives (|v| <= MOD/2), so the true integer coefficients
@@ -133,4 +133,4 @@ struct crt {
 	}
 };
 
-/* namespace ecnerwala::fft::engines */ }
+/* namespace wala::fft::engines */ }

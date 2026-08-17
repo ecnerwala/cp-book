@@ -3,6 +3,9 @@
 #include <type_traits>
 #include <cstring>
 
+namespace wala {
+
+
 // Copied from https://en.cppreference.com/w/cpp/numeric/bit_cast
 
 template <class To, class From>
@@ -21,3 +24,5 @@ bit_cast(const From& src) noexcept
 	std::memcpy(&dst, &src, sizeof(To));
 	return dst;
 }
+
+} // namespace wala

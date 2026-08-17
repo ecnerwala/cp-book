@@ -11,7 +11,7 @@
 #include "fft/core.hpp"
 #include "fft/engine.hpp"
 
-namespace ecnerwala::fft::engines {
+namespace wala::fft::engines {
 
 // Multiplies mod `mnum` by splitting values into balanced 15-bit halves (each limb in
 // [-2^14, 2^14], from the balanced representative |v| <= MOD/2) packed into one complex
@@ -181,4 +181,4 @@ template <typename mnum> struct split {
 	}
 };
 
-/* namespace ecnerwala::fft::engines */ }
+/* namespace wala::fft::engines */ }

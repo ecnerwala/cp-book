@@ -6,6 +6,9 @@
 #include <array>
 #include <cassert>
 
+namespace wala {
+
+
 // TODO: Make this generic over numerator type, e.g. bignum
 struct dyadic {
 	int n = 0, d = 0;
@@ -142,3 +145,5 @@ inline std::optional<cold_ish> cold_ish_game(std::array<std::vector<cold_ish>, 2
 	assert(fuzzy_less(best[0], cnd) && fuzzy_less(cnd, best[1]));
 	return flip ? -cnd : cnd;
 }
+
+} // namespace wala

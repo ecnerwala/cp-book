@@ -4,9 +4,9 @@
 
 #include "fft/ap_sampled_poly.hpp"
 #include "fft/engines/ntt.hpp"
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 
-namespace ecnerwala {
+namespace wala {
 namespace fft {
 
 using namespace std;
@@ -44,4 +44,4 @@ TEST_CASE("ap_sampled_poly eval", "[fft,ap_sampled_poly]") {
 	}
 }
 
-}} // namespace ecnerwala::fft
+}} // namespace wala::fft

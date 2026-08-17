@@ -4,8 +4,8 @@
 
 #include <string>
 
-TEST_CASE("Tensor", "[tensor]") {
-	using ten = tensor<std::string, 2>;
+TEST_CASE("Tensor", "[wala::tensor]") {
+	using ten = wala::tensor<std::string, 2>;
 	ten a({2, 3});
 	a[{0,0}] = "0";
 	a[{0,1}] = "1";

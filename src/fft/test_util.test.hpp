@@ -7,11 +7,11 @@
 #include "fft/engines/real.hpp"
 #include "fft/engines/split.hpp"
 #include "fft/engines/crt.hpp"
-#include "modnum.hpp"
+#include "num/modnum.hpp"
 
 // Shared helpers for the fft/ unit tests.
 
-namespace ecnerwala {
+namespace wala {
 namespace fft {
 
 template <typename T> std::vector<T> multiply_slow(const std::vector<T>& a, const std::vector<T>& b) {
@@ -49,4 +49,4 @@ template <typename T> void check_eq(const std::vector<T>& got, const std::vector
 		engines::ntt<modnum<998244353>>, engines::ntt<mod_goldilocks>, \
 		engines::split<modnum<int(1e9)+7>>, engines::crt<modnum<int(1e9)+7>>
 
-}} // namespace ecnerwala::fft
+}} // namespace wala::fft

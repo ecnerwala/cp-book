@@ -9,7 +9,7 @@
 #include "fft/core.hpp"
 #include "fft/engine.hpp"
 
-namespace ecnerwala::fft::engines {
+namespace wala::fft::engines {
 
 template <typename num> struct ntt {
 	using value_type = num;
@@ -92,4 +92,4 @@ template <typename num> struct ntt {
 	}
 };
 
-/* namespace ecnerwala::fft::engines */ }
+/* namespace wala::fft::engines */ }

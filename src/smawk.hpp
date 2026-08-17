@@ -5,7 +5,7 @@
 #include <optional>
 #include <concepts>
 
-namespace smawk {
+namespace wala::smawk {
 
 template <typename T> struct value_t {
 	T v;
@@ -219,5 +219,4 @@ std::vector<value_t<T>> smawk(int N, int M, Get&& get, Select&& select) {
 	return res;
 }
 
-// namespace smawk
-}
+} // namespace wala::smawk

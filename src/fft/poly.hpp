@@ -12,7 +12,7 @@
 
 #include "fft/series_core.hpp"
 
-namespace ecnerwala::poly {
+namespace wala::poly {
 
 // polynomial class
 // As above, we represent polynomials by a series::exact containing the coefficients in reverse order.
@@ -331,4 +331,4 @@ vec<E> interpolate(
 	return tree.combine_up(std::span<const T>(leaf_vals));
 }
 
-/* namespace ecnerwala::poly */ }
+/* namespace wala::poly */ }

@@ -8,7 +8,7 @@
 
 #include "fft/engine.hpp"
 
-namespace ecnerwala::fft::engines {
+namespace wala::fft::engines {
 
 // Small NxN matrix over num, row-major
 // ==== wrapper engines ====
@@ -363,4 +363,4 @@ struct trunc_stable
 	}
 };
 
-/* namespace ecnerwala::fft::engines */ }
+/* namespace wala::fft::engines */ }

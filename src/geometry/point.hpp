@@ -5,6 +5,9 @@
 #include <iostream>
 #include <numeric>
 
+namespace wala {
+
+
 template <typename T, typename AreaT=T> struct Point {
 public:
 	T x, y;
@@ -111,3 +114,5 @@ public:
 		return angle_less_from(s, p, t) ? 1 : -1;
 	}
 };
+
+} // namespace wala

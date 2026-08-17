@@ -14,7 +14,7 @@
 // and writes a fresh result.
 // TODO: reuse/populate the operands' whole/prefix transform caches
 
-namespace ecnerwala::series {
+namespace wala::series {
 
 template <like S>
 vec<typename S::engine_t, S::exact_v> stretch(const S& a_, int n) {
@@ -416,4 +416,4 @@ S::engine_t::value_type kth_term_of_linear_recurrence(
 	return kth_term_of_rational_function(p, q_cached, k);
 }
 
-/* namespace ecnerwala::series */ }
+/* namespace wala::series */ }

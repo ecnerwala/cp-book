@@ -6,7 +6,7 @@
 
 #include "fft/multiply.hpp"
 
-namespace ecnerwala {
+namespace wala {
 
 // A polynomial represented by its values evaluated at an Arithmetic Progression (AP).
 // TODO: The AP is always assumed to be 0..length-1; store an explicit offset/gap instead?
@@ -176,4 +176,4 @@ struct ap_sampled_poly : public std::vector<typename E::value_type> {
 	}
 };
 
-/* namespace ecnerwala */ }
+/* namespace wala */ }
