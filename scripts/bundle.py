@@ -7,7 +7,7 @@
 
 Usage:
     scripts/bundle.py path/to/solution.cpp > submission.cpp
-    scripts/bundle.py fft/series.hpp ds/seg_tree.hpp | xclip -selection clipboard
+    scripts/bundle.py fft/series.hpp ds/seg_tree.hpp | xclip -selection clipboard  # or wl-copy
     scripts/bundle.py --minify fft/series.hpp > fft_series.min.cpp
     scripts/bundle.py --all -o dist/       # pregenerate all headers
 
