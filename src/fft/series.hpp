@@ -232,12 +232,14 @@ template <fft::engine E> struct packed_bivariate {
 
 	fft::transformed<E> advance() {
 		int B = 4 << L;
-		auto tq = E::transform(std::span<const T>(c), B);
+		// the x truncation keeps only the low half of each stride-2^(L-l+1) row,
+		// and the output is consumed at the halved stride 2^(L-l)
+		auto tq = E::transform_padded(std::span<const T>(c), B, 2 << (L - l));
 		auto tn = E::negate_arg(tq, B);
-		E::finish(E::graeffe(tq, B), std::span<T>(c).first(B/2));
+		E::finish_padded(E::graeffe(tq, B), std::span<T>(c).first(B/2), 1 << (L - l));
 		l++;
 		// undo the circular wraparound using monicity in y
-		for (int i = 0; i < (2 << (L - l)); i++) {
+		for (int i = 0; i < (1 << (L - l)); i++) {
 			c[(2 << L) + i] = c[i];
 			c[i] = T(0);
 		}
@@ -305,8 +307,14 @@ trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
 		for (int i = 0; i < (2 << L); i++) {
 			if ((2*i) & (1 << (L-l))) P[i] = 0;
 		}
-		auto tp = E::upsample(E::transform(std::span<const T>(P).first(B/2), B/2), B, false);
-		E::finish(E::mul(tneg[l], tp, B), std::span<T>(P));
+		// the mask above leaves only the low half of each stride-2^(L-l) row, and for
+		// l > 0 the next level's mask discards the same pattern at the doubled stride
+		auto tp = E::upsample(E::transform_padded(std::span<const T>(P).first(B/2), B/2, 1 << (L - l)), B, false);
+		if (l > 0) {
+			E::finish_padded(E::mul(tneg[l], tp, B), std::span<T>(P), 2 << (L - l));
+		} else {
+			E::finish(E::mul(tneg[l], tp, B), std::span<T>(P));
+		}
 		for (int i = 0; i < (2 << L); i++) {
 			P[i] = P[(2 << L) + i];
 			P[(2 << L) + i] = T(0);

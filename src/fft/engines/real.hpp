@@ -77,6 +77,17 @@ template <typename dbl = double> struct real {
 			);
 		}
 	}
+	// The complex packing pairs adjacent slots, so the packed buffer keeps the row
+	// structure at stride C/2; C == 2 packs a whole row into one slot, so fall back.
+	static transformed transform_padded(std::span<const dbl> a, int n, int C) {
+		assert(sz(a) == n);
+		if (C < 4) return transform(a, n);
+		transformed r;
+		r.v.assign(packed_size(n), cnum(0));
+		pack(a, std::span<cnum>(r.v));
+		core::forward_padded(std::span<cnum>(r.v), C / 2);
+		return r;
+	}
 	static transformed downsample(const transformed& t, int n, bool odd) { return half(t, n, odd); }
 	static transformed upsample(const transformed& t, int n, bool odd) { return unhalf(t, n, odd); }
 	// A(-x) negates the odd (imaginary-slot) coefficients, i.e. conjugates the packed
@@ -195,6 +206,16 @@ template <typename dbl = double> struct real {
 		core::inverse(std::span<cnum>(p.v));
 		dbl d = dbl(1) / dbl(m);
 		for (int i = 0; i < sz(out); i++) op(out[i], (i & 1 ? p.v[i/2].y : p.v[i/2].x) * d);
+	}
+	template <typename Op = assign_op> static void finish_padded(product&& p, std::span<dbl> out, int C, Op op = {}) {
+		int m = sz(p.v);
+		assert(sz(out) == 2 * m);
+		if (C < 4) { finish(std::move(p), out, op); return; }
+		core::inverse_padded(std::span<cnum>(p.v), C / 2);
+		dbl d = dbl(1) / dbl(m);
+		for (int i = 0; i < 2 * m; i += C) {
+			for (int j = 0; j < C/2; j++) op(out[i+j], ((i+j) & 1 ? p.v[(i+j)/2].y : p.v[(i+j)/2].x) * d);
+		}
 	}
 };
 

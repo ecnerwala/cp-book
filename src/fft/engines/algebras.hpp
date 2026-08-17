@@ -115,6 +115,15 @@ struct componentwise {
 			E::extend_to(t.t[c], m, std::span<const S>(buf.span()));
 		}
 	}
+	static transformed transform_padded(std::span<const V> a, int n, int C) {
+		transformed r;
+		auto buf = buffer_pool<S>::get(sz(a));
+		for (int c = 0; c < L; c++) {
+			for (int i = 0; i < sz(a); i++) buf[i] = a[i].data()[c];
+			r.t[c] = E::transform_padded(std::span<const S>(buf.span()), n, C);
+		}
+		return r;
+	}
 	template <int A> static transformed_t<A> downsample(const transformed_t<A>& t, int n, bool odd) {
 		transformed_t<A> r;
 		for (int c = 0; c < L; c++) r.t[c] = E::downsample(t.t[c], n, odd);
@@ -168,6 +177,30 @@ struct componentwise {
 			auto vbuf = buffer_pool<V>::get(sz(out));
 			emit(vbuf.span());
 			for (int i = 0; i < sz(out); i++) op(out[i], vbuf.span()[i]);
+		}
+	}
+	template <int K, typename Op = assign_op> static void finish_padded(product_t<K>&& p, std::span<V> out, int C, Op op = {}) {
+		auto buf = buffer_pool<S>::get(sz(out));
+		auto emit = [&](std::span<V> dst) {
+			for (int c = 0; c < L; c++) {
+				E::finish_padded(std::move(p.t[Ofs[size_t(c)]]), buf.span(), C);
+				for (int j = Ofs[size_t(c)] + 1; j < Ofs[size_t(c) + 1]; j++)
+					E::finish_padded(std::move(p.t[j]), buf.span(), C, add_op{});
+				for (int i = 0; i < sz(dst); i += C) {
+					for (int j = 0; j < C/2; j++) dst[i+j].data()[c] = buf[i+j];
+				}
+			}
+		};
+		// Op must see each out element whole, exactly once, so compose
+		// non-assign ops through an element buffer.
+		if constexpr (std::same_as<Op, assign_op>) {
+			emit(out);
+		} else {
+			auto vbuf = buffer_pool<V>::get(sz(out));
+			emit(vbuf.span());
+			for (int i = 0; i < sz(out); i += C) {
+				for (int j = 0; j < C/2; j++) op(out[i+j], vbuf.span()[i+j]);
+			}
 		}
 	}
 };

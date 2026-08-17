@@ -76,6 +76,16 @@ template <typename mnum> struct split {
 			);
 		}
 	}
+	static transformed transform_padded(std::span<const mnum> a, int n, int C) {
+		assert(sz(a) == n);
+		transformed r;
+		r.v.assign(n, cnum(0));
+		for (int i = 0; i < n; i += C) {
+			for (int j = 0; j < C/2; j++) r.v[i+j] = pack(a[i+j]);
+		}
+		core::forward_padded(std::span<cnum>(r.v), C);
+		return r;
+	}
 	template <int A> static transformed_t<A> downsample(const transformed_t<A>& t, int n, bool odd) {
 		transformed_t<A> r; r.v.resize(n);
 		core::downsample(std::span<const cnum>(t.v), std::span<cnum>(r.v), odd);
@@ -197,6 +207,26 @@ template <typename mnum> struct split {
 					+ (llround(p.hi[i].y * d) % m << 30)) % m;
 			if (v < 0) v += m;
 			op(out[i], mnum(v));
+		}
+	}
+	template <int K = 1, typename Op = assign_op> static void finish_padded(product_t<K>&& p, std::span<mnum> out, int C, Op op = {}) {
+		static_assert(K <= 2, "split: accumulated scale too large");
+		int n = p.size();
+		assert(sz(out) == n);
+		core::inverse_padded(std::span<cnum>(p.lo), C);
+		core::inverse_padded(std::span<cnum>(p.hi), C);
+		const int64_t m = mnum::MOD;
+		double d = 1.0 / double(n);
+		for (int i0 = 0; i0 < n; i0 += C) {
+			for (int j = 0; j < C/2; j++) {
+				int i = i0 + j;
+				int64_t v = (llround(p.lo[i].x * d)
+						+ (llround(p.lo[i].y * d) % m << 15)
+						+ (llround(p.hi[i].x * d) % m << 15)
+						+ (llround(p.hi[i].y * d) % m << 30)) % m;
+				if (v < 0) v += m;
+				op(out[i], mnum(v));
+			}
 		}
 	}
 };

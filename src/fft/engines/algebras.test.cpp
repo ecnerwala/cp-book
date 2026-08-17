@@ -109,4 +109,68 @@ TEMPLATE_TEST_CASE("trunc_series engine", "[fft]",
 	test_trunc_series_engine<engines::trunc_stable<IE, 3>, num, 3>(mt);
 }
 
+template <typename E, typename RndV>
+void test_padded_engine(mt19937& mt, RndV rnd_v) {
+	using V = typename E::value_type;
+	for (int n : {4, 16}) {
+		for (int C : {2, 4, n}) {
+			vector<V> a(n), b(n);
+			for (V& v : b) v = rnd_v();
+			for (int i = 0; i < n; i++) {
+				if (i % C < C/2) a[i] = rnd_v();
+			}
+			auto p = E::mul(
+				E::transform_padded(span<const V>(a), n, C),
+				E::transform(span<const V>(b), n),
+				n
+			);
+			vector<V> want(n);
+			E::finish(auto(p), span<V>(want));
+			vector<V> got(n), acc(n);
+			for (V& v : acc) v = rnd_v();
+			auto acc0 = acc;
+			E::finish_padded(auto(p), span<V>(got), C);
+			E::finish_padded(std::move(p), span<V>(acc), C, add_op{});
+			for (int i = 0; i < n; i++) {
+				INFO("n = " << n << ", C = " << C << ", i = " << i);
+				if (i % C >= C/2) continue;
+				REQUIRE(got[i] == want[i]);
+				REQUIRE(acc[i] == acc0[i] + want[i]);
+			}
+		}
+	}
+}
+
+TEMPLATE_TEST_CASE("padded transform and finish algebras", "[fft]",
+		engines::ntt<modnum<998244353>>,
+		engines::split<modnum<int(1e9)+7>>,
+		engines::crt<modnum<int(1e9)+7>>) {
+	using IE = TestType;
+	using num = typename IE::value_type;
+	constexpr int N = IE::unit_scale == 0 ? 3 : 2;
+	mt19937 mt(Catch::getSeed());
+	auto rnd_mat = [&]() {
+		typename engines::matrix<IE, N>::value_type m;
+		for (int r = 0; r < N; r++) for (int c = 0; c < N; c++) m[{r, c}] = rnd_val<num>(mt);
+		return m;
+	};
+	auto rnd_p = [&]() {
+		typename engines::trunc<IE, N>::value_type p;
+		for (int i = 0; i < N; i++) p[i] = rnd_val<num>(mt);
+		return p;
+	};
+	test_padded_engine<engines::matrix<IE, N>>(mt, rnd_mat);
+	test_padded_engine<engines::trunc<IE, N>>(mt, rnd_p);
+	test_padded_engine<engines::matrix_stable<IE, 3>>(mt, [&]() {
+		typename engines::matrix_stable<IE, 3>::value_type m;
+		for (int r = 0; r < 3; r++) for (int c = 0; c < 3; c++) m[{r, c}] = rnd_val<num>(mt);
+		return m;
+	});
+	test_padded_engine<engines::trunc_stable<IE, 3>>(mt, [&]() {
+		typename engines::trunc_stable<IE, 3>::value_type p;
+		for (int i = 0; i < 3; i++) p[i] = rnd_val<num>(mt);
+		return p;
+	});
+}
+
 }} // namespace wala::fft

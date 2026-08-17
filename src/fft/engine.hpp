@@ -62,6 +62,13 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //      negate_arg      size n transform of A(-x)
 //      graeffe         size n/2 product of the even part of A(x) * A(-x) (one Graeffe/root-squaring step);
 //                      equals downsample(mul(t, negate_arg(t, n), n), n/2, false) but engines can fuse the passes
+//
+//   Bivariate packings (y = x^C) leave structured zeros in their buffers; these paths exploit them.
+//   C must be a power of 2 with 2 <= C <= n, and the spans must have length exactly n.
+//      transform_padded  transform of an input that is zero wherever (j mod C) >= C/2,
+//                        skipping the transform work on the dead columns
+//      finish_padded     finish writing only the outputs with (j mod C) < C/2, skipping inverse-transform
+//                        work on the rest; the other positions of out are left unspecified
 template <typename E>
 concept engine = requires(
 	std::span<const typename E::value_type> in,
@@ -82,6 +89,9 @@ concept engine = requires(
 	{ E::upsample(cp, n, false) } -> std::same_as<typename E::product>;
 	{ E::negate_arg(ct, n) } -> std::same_as<typename E::transformed>;
 	{ E::graeffe(ct, n) } -> std::same_as<typename E::product>;
+	{ E::transform_padded(in, n, n) } -> std::same_as<typename E::transformed>;
+	E::finish_padded(std::move(p), out, n);
+	E::finish_padded(std::move(p), out, n, add_op{});
 	{ E::mul(ct, ct, n) } -> std::same_as<typename E::product>;
 	{ E::sq(ct, n) } -> std::same_as<typename E::product>;
 	{ E::mul2(ct, ct, ct, ct, n) } -> std::same_as<typename E::template product_t<2 * E::unit_scale>>;
