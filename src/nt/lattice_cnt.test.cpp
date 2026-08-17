@@ -35,7 +35,7 @@ TEST_CASE("Lattice Count", "[lattice_cnt]") {
 				INFO("a = " << a);
 				INFO("b = " << b);
 				INFO("c = " << c);
-				REQUIRE(lattice_cnt(a, b, c) == lattice_cnt_slow(a, b, c));
+				REQUIRE(wala::lattice_cnt(a, b, c) == lattice_cnt_slow(a, b, c));
 			}
 		}
 	}
@@ -53,7 +53,7 @@ TEST_CASE("Mod Count (positive)", "[lattice_cnt]") {
 					INFO("n = " << n);
 
 					trueAns += (a * (n-1) % m) < c;
-					REQUIRE(mod_count(a, m, c, n) == trueAns);
+					REQUIRE(wala::mod_count(a, m, c, n) == trueAns);
 				}
 			}
 		}
@@ -70,7 +70,7 @@ TEST_CASE("Mod Count (negatives)", "[lattice_cnt]") {
 				for (int nlo : cnds) {
 					INFO("clo = " << clo);
 					INFO("nlo = " << nlo);
-					REQUIRE(mod_count_range(a, m, clo, 47, nlo, 49) == mod_count_range_slow(a, m, clo, 47, nlo, 49));
+					REQUIRE(wala::mod_count_range(a, m, clo, 47, nlo, 49) == mod_count_range_slow(a, m, clo, 47, nlo, 49));
 				}
 			}
 
@@ -78,7 +78,7 @@ TEST_CASE("Mod Count (negatives)", "[lattice_cnt]") {
 				for (int nhi : cnds) {
 					INFO("chi = " << chi);
 					INFO("nhi = " << nhi);
-					REQUIRE(mod_count_range(a, m, -55, chi, -57, nhi) == mod_count_range_slow(a, m, -55, chi, -57, nhi));
+					REQUIRE(wala::mod_count_range(a, m, -55, chi, -57, nhi) == mod_count_range_slow(a, m, -55, chi, -57, nhi));
 				}
 			}
 		}

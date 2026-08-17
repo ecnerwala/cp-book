@@ -8,7 +8,7 @@
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
-	using pt_t = Point<int, int64_t>;
+	using pt_t = wala::Point<int, int64_t>;
 
 	int N; std::cin >> N;
 	std::vector<pt_t> P(N);

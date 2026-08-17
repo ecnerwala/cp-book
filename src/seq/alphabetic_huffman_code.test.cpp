@@ -26,7 +26,7 @@ template <typename T> T alphabetic_huffman_code_naive(std::vector<T> weights) {
 	return dp[(N-1) * N + 0];
 }
 
-TEST_CASE("Alphabetic Huffman Code", "[alphabetic_huffman_code]") {
+TEST_CASE("Alphabetic Huffman Code", "[wala::alphabetic_huffman_code]") {
 	std::mt19937 mt(Catch::getSeed());
 	for (int z = 0; z <= 1000; z++) {
 		int N = std::uniform_int_distribution(1, 60)(mt);
@@ -35,8 +35,8 @@ TEST_CASE("Alphabetic Huffman Code", "[alphabetic_huffman_code]") {
 		for (auto& w : weights) w = std::uniform_int_distribution(0, MX-1)(mt);
 		auto naive_tot = alphabetic_huffman_code_naive(weights);
 
-		auto code_depths = alphabetic_huffman_code(weights);
-		auto code_lcp = binary_code_depths_to_lca_depths(code_depths);
+		auto code_depths = wala::alphabetic_huffman_code(weights);
+		auto code_lcp = wala::binary_code_depths_to_lca_depths(code_depths);
 		int tot = 0;
 		for (int i = 0; i < N; i++) {
 			tot += weights[i] * code_depths[i];

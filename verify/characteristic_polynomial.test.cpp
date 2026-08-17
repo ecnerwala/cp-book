@@ -4,7 +4,7 @@
 #include <cassert>
 
 #include "linalg/char_poly.hpp"
-#include "num/wala::modnum.hpp"
+#include "num/modnum.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);

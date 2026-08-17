@@ -14,7 +14,7 @@ int main() {
 		int64_t N; std::cin >> N;
 		static wala::dirichlet_series::div_vector_layout layout;
 		layout = N;
-		using num = modnum<998244353>;
+		using num = wala::modnum<998244353>;
 		using ds_prefix = wala::dirichlet_series::prefix<layout, num>;
 		ds_prefix F;
 		for (int i = 1; i < layout.len; i++) std::cin >> F.st[i];

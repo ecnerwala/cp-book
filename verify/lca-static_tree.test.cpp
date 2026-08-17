@@ -19,7 +19,7 @@ int main() {
 		adj[i].push_back(P[i]);
 	}
 
-	static_forest_t tree(adj, {0});
+	wala::static_forest_t tree(adj, {0});
 
 	for (int q = 0; q < Q; q++) {
 		int u, v; std::cin >> u >> v;

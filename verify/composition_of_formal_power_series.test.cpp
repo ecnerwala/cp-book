@@ -3,7 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "num/wala::modnum.hpp"
+#include "num/modnum.hpp"
 #include "fft/engines/ntt.hpp"
 #include "fft/series.hpp"
 

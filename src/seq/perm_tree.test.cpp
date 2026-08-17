@@ -18,14 +18,14 @@ void check_tree(std::vector<int> A) {
 		}
 	}
 
-	PermTree tree(A);
+	wala::PermTree tree(A);
 	std::vector<std::pair<std::array<int, 2>, std::array<int, 2>>> computed_ranges;
 	for (int n = 0; n < tree.size(); n++) {
 		const auto& node = tree[n];
-		if (node.type != PermTree::NodeType::PARTIAL) {
+		if (node.type != wala::PermTree::NodeType::PARTIAL) {
 			computed_ranges.push_back({{node.l, node.r}, {node.lo, node.hi}});
 		}
-		if (node.type == PermTree::NodeType::LEAF) {
+		if (node.type == wala::PermTree::NodeType::LEAF) {
 			REQUIRE(node.c[0] == -1);
 			REQUIRE(node.c[1] == -1);
 			REQUIRE(node.l == n/2);
@@ -41,27 +41,27 @@ void check_tree(std::vector<int> A) {
 		REQUIRE(tree[node.c[0]].r + 1 == tree[node.c[1]].l);
 		REQUIRE(node.lo == std::min(tree[node.c[0]].lo, tree[node.c[1]].lo));
 		REQUIRE(node.hi == std::max(tree[node.c[0]].hi, tree[node.c[1]].hi));
-		if (node.type == PermTree::NodeType::FULL) {
+		if (node.type == wala::PermTree::NodeType::FULL) {
 			// There should be at least 3 pieces
 			REQUIRE((
-				tree[node.c[0]].type == PermTree::NodeType::PARTIAL
-				|| tree[node.c[1]].type == PermTree::NodeType::PARTIAL
+				tree[node.c[0]].type == wala::PermTree::NodeType::PARTIAL
+				|| tree[node.c[1]].type == wala::PermTree::NodeType::PARTIAL
 			));
 		}
-		if (node.type == PermTree::NodeType::INCR) {
+		if (node.type == wala::PermTree::NodeType::INCR) {
 			REQUIRE(tree[node.c[0]].hi + 1 == tree[node.c[1]].lo);
 
-			REQUIRE(tree[node.c[1]].type != PermTree::NodeType::INCR);
-			for (int cur = node.c[0]; tree[cur].type == PermTree::NodeType::INCR; cur = tree[cur].c[0]) {
+			REQUIRE(tree[node.c[1]].type != wala::PermTree::NodeType::INCR);
+			for (int cur = node.c[0]; tree[cur].type == wala::PermTree::NodeType::INCR; cur = tree[cur].c[0]) {
 				int ch = tree[cur].c[1];
 				computed_ranges.push_back({{tree[ch].l, node.r}, {tree[ch].lo, node.hi}});
 			}
 		}
-		if (node.type == PermTree::NodeType::DECR) {
+		if (node.type == wala::PermTree::NodeType::DECR) {
 			REQUIRE(tree[node.c[0]].lo - 1 == tree[node.c[1]].hi);
 
-			REQUIRE(tree[node.c[1]].type != PermTree::NodeType::DECR);
-			for (int cur = node.c[0]; tree[cur].type == PermTree::NodeType::DECR; cur = tree[cur].c[0]) {
+			REQUIRE(tree[node.c[1]].type != wala::PermTree::NodeType::DECR);
+			for (int cur = node.c[0]; tree[cur].type == wala::PermTree::NodeType::DECR; cur = tree[cur].c[0]) {
 				int ch = tree[cur].c[1];
 				computed_ranges.push_back({{tree[ch].l, node.r}, {node.lo, tree[ch].hi}});
 			}

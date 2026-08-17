@@ -5,7 +5,7 @@
 
 #include "num/nim_prod.hpp"
 
-constexpr nim_prod_t nimProd;
+constexpr wala::nim_prod_t nimProd;
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);

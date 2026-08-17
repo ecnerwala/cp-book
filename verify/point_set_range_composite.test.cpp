@@ -9,7 +9,7 @@
 int main() {
 	std::ios_base::sync_with_stdio(false); std::cin.tie(nullptr);
 
-	using num = modnum<998244353>;
+	using num = wala::modnum<998244353>;
 
 	int N, Q; std::cin >> N >> Q;
 	struct linear_fn {

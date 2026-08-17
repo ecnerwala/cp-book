@@ -11,7 +11,7 @@ TEST_CASE("Cartesian Tree", "[cartesian_tree]") {
 		iota(v.begin(), v.end(), 0);
 		shuffle(v.begin(), v.end(), mt);
 		{
-			CartesianTree t = CartesianTree::build_min_tree(v);
+			wala::CartesianTree t = wala::CartesianTree::build_min_tree(v);
 			for (int i = 1; i < int(t.size()); i += 2) {
 				REQUIRE(t[i].m == i/2);
 				REQUIRE(t[i].l <= t[i].m);
@@ -28,7 +28,7 @@ TEST_CASE("Cartesian Tree", "[cartesian_tree]") {
 			}
 		}
 		{
-			CartesianTree t = CartesianTree::build_max_tree(v);
+			wala::CartesianTree t = wala::CartesianTree::build_max_tree(v);
 			for (int i = 1; i < int(t.size()); i += 2) {
 				REQUIRE(t[i].m == i/2);
 				REQUIRE(t[i].l <= t[i].m);

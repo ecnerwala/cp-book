@@ -10,7 +10,7 @@ int main() {
 
 	std::string S; std::cin >> S;
 	int N = int(S.size());
-	auto sa = SuffixArrayLCP::shift_and_construct(S);
+	auto sa = wala::SuffixArrayLCP::shift_and_construct(S);
 	int64_t ans = int64_t(N) * int64_t(N+1) / 2;
 	for (int i = 0; i < N; i++) ans -= sa.lcp[i];
 	std::cout << ans << '\n';

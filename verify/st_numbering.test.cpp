@@ -18,7 +18,7 @@ int main() {
 			adj[v].push_back(u);
 		}
 
-		auto res = make_st_dag(adj, S, T);
+		auto res = wala::make_st_dag(adj, S, T);
 		if (int(res.size()) == N) {
 			std::cout << "Yes" << '\n';
 

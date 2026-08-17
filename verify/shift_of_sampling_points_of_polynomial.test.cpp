@@ -10,7 +10,7 @@
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
-	using num = modnum<998244353>;
+	using num = wala::modnum<998244353>;
 	using E = wala::fft::engines::ntt<num>;
 	using ap_vals = wala::ap_sampled_poly<E>;
 
