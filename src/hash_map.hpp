@@ -4,6 +4,9 @@
 // #include<bits/extc++.h>
 #include <ext/pb_ds/assoc_container.hpp>
 
+namespace wala {
+
+
 struct splitmix64_hash {
 	static uint64_t splitmix64(uint64_t x) {
 		// http://xorshift.di.unimi.it/splitmix64.c
@@ -24,3 +27,5 @@ using hash_map = __gnu_pbds::gp_hash_table<K, V, Hash>;
 
 template <typename K, typename Hash = splitmix64_hash>
 using hash_set = hash_map<K, __gnu_pbds::null_type, Hash>;
+
+} // namespace wala

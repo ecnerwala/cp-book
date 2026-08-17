@@ -9,7 +9,7 @@
 #include "fft/core.hpp"
 #include "fft/engine.hpp"
 
-namespace ecnerwala::fft::engines {
+namespace wala::fft::engines {
 
 // Convolve real (floating point) values by packing into complex numbers with
 //   a'[t] = a[2t] + i * a[2t+1]
@@ -176,4 +176,4 @@ template <typename dbl = double> struct real {
 	}
 };
 
-/* namespace ecnerwala::fft::engines */ }
+/* namespace wala::fft::engines */ }

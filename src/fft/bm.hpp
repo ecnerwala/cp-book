@@ -1,6 +1,9 @@
 #pragma once
 #include<bits/stdc++.h>
 
+namespace wala {
+
+
 template <typename num>
 std::vector<num> BerlekampMassey(const std::vector<num>& s) {
 	int n = int(s.size()), L = 0, m = 0;
@@ -59,3 +62,5 @@ num linearRec(const std::vector<num>& S, const std::vector<num>& tr, int64_t k) 
 	for (int i = 0; i < n; i++) res += pol[i] * S[i];
 	return res;
 }
+
+} // namespace wala

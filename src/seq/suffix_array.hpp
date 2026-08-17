@@ -13,6 +13,9 @@
 
 #include "ds/rmq.hpp"
 
+namespace wala {
+
+
 template<class T> int sz(T&& arg) { using std::size; return int(size(std::forward<T>(arg))); }
 
 // Layered suffix array: SuffixArrayBase computes just sa/rank, each further
@@ -481,3 +484,5 @@ public:
 		return SuffixArrayRMQ::get_lcp(N - a, N - b);
 	}
 };
+
+} // namespace wala

@@ -6,7 +6,7 @@
 #include <type_traits>
 #include <array>
 
-namespace dirichlet_series {
+namespace wala::dirichlet_series {
 
 inline int inv(int v) {
 	assert(v == 1);

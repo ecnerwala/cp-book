@@ -3,6 +3,9 @@
 #include <iostream>
 #include <numeric>
 
+namespace wala {
+
+
 template <typename T, typename MulT=T> struct fraction_t {
 	T numer = 0, denom = 1;
 
@@ -71,3 +74,5 @@ template <typename T, typename MulT=T> struct fraction_t {
 		return *this;
 	}
 };
+
+} // namespace wala

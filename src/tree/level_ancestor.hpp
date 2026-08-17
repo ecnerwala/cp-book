@@ -6,7 +6,7 @@
 
 #include "yc.hpp"
 
-namespace ecnerwala {
+namespace wala {
 
 using std::swap;
 
@@ -104,4 +104,4 @@ struct level_ancestor {
 	}
 };
 
-} // namespace ecnerwala
+} // namespace wala

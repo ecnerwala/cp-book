@@ -25,7 +25,7 @@ int main() {
 			self(nxt, cur, d+1);
 		}
 	}(0, -1, 0);
-	ecnerwala::level_ancestor la(par);
+	wala::level_ancestor la(par);
 
 
 	for (int q = 0; q < Q; q++) {

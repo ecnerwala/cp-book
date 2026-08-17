@@ -5,6 +5,9 @@
 #include <tuple>
 #include <iostream>
 
+namespace wala {
+
+
 template<typename num = int>
 struct hurwitz_quaternion {
 	// we store the doubled quaternion
@@ -158,3 +161,5 @@ struct hurwitz_quaternion {
 		return b;
 	}
 };
+
+} // namespace wala

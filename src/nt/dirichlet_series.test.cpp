@@ -6,7 +6,7 @@
 
 #include "num/modnum.hpp"
 
-namespace dirichlet_series {
+namespace wala::dirichlet_series {
 
 namespace test {
 

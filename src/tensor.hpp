@@ -2,6 +2,9 @@
 
 #include <array>
 
+namespace wala {
+
+
 template <typename T, int NDIMS> struct tensor_view {
 	static_assert(NDIMS >= 0, "NDIMS must be nonnegative");
 
@@ -157,3 +160,5 @@ public:
 		return *view();
 	}
 };
+
+} // namespace wala

@@ -5,6 +5,9 @@
 #include <cassert>
 #include <cstdint>
 
+namespace wala {
+
+
 template <typename T, class Compare = std::less<T>> class RangeMinQuery : private Compare {
 	static const int BUCKET_SIZE = 32;
 	static const int BUCKET_SIZE_LOG = 5;
@@ -108,3 +111,5 @@ public:
 };
 
 template <typename T> using RangeMaxQuery = RangeMinQuery<T, std::greater<T>>;
+
+} // namespace wala

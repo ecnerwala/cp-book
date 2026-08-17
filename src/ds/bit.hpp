@@ -3,6 +3,9 @@
 #include <vector>
 #include <cassert>
 
+namespace wala {
+
+
 /** Binary-indexed tree
  *
  *  A binary indexed tree with N nodes of type T provides the
@@ -149,3 +152,5 @@ public:
 		return prefix_range{prefix_iterator{dat.data(), a}, prefix_iterator{nullptr, 0}};
 	}
 };
+
+} // namespace wala

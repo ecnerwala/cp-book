@@ -12,10 +12,10 @@ int main() {
 	std::vector<int> A(N); for (auto& a : A) std::cin >> a;
 	std::vector<int> B(M); for (auto& b : B) std::cin >> b;
 	const int INF = *std::max_element(A.begin(), A.end()) + *std::max_element(B.begin(), B.end()) + 1;
-	auto res = smawk::smawk(N+M-1, M, [&](int row, int col) -> int {
+	auto res = wala::smawk::smawk(N+M-1, M, [&](int row, int col) -> int {
 		int i = row - col;
 		return i < 0 ? INF + M + (~i) : i >= N ? INF + (i-N) : (A[i] + B[col]);
-	}, [&]([[maybe_unused]] int row, smawk::value_t<int> col1, smawk::value_t<int> col2) -> bool {
+	}, [&]([[maybe_unused]] int row, wala::smawk::value_t<int> col1, wala::smawk::value_t<int> col2) -> bool {
 		return col1.v < col2.v ? 0 : 1;
 	});
 	for (int i = 0; i < N+M-1; i++) {

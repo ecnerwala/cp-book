@@ -68,11 +68,11 @@ std::vector<std::vector<int>> generate_totally_monotone(int N, int M, auto&& rng
 }
 
 void check_smawk(int N, int M, std::vector<std::vector<int>> mat) {
-	auto result = smawk::smawk(N, M, [&](int row, int col) -> move_only_t {
+	auto result = wala::smawk::smawk(N, M, [&](int row, int col) -> move_only_t {
 		REQUIRE(0 <= row); REQUIRE(row < N);
 		REQUIRE(0 <= col); REQUIRE(col < M);
 		return move_only_t{mat[row][col]};
-	}, [&](int r, const smawk::value_t<move_only_t>& cnd1, const smawk::value_t<move_only_t>& cnd2) -> bool {
+	}, [&](int r, const wala::smawk::value_t<move_only_t>& cnd1, const wala::smawk::value_t<move_only_t>& cnd2) -> bool {
 		REQUIRE(0 <= r); REQUIRE(r < N);
 		REQUIRE(0 <= cnd1.col); REQUIRE(cnd1.col < M);
 		REQUIRE(0 <= cnd2.col); REQUIRE(cnd2.col < M);
@@ -104,12 +104,12 @@ TEST_CASE("SMAWK", "[smawk]") {
 
 void check_larsch(int N, std::vector<std::vector<int>> mat, bool is_totally_monotone = true) {
 	const int M = N;
-	smawk::LARSCH l(N, [&](int row, int col) -> move_only_t {
+	wala::smawk::LARSCH l(N, [&](int row, int col) -> move_only_t {
 		REQUIRE(0 <= row); REQUIRE(row < N);
 		REQUIRE(0 <= col); REQUIRE(col < M);
 		REQUIRE(col <= row);
 		return move_only_t{mat[row][col]};
-	}, [&](int r, const smawk::value_t<move_only_t>& cnd1, const smawk::value_t<move_only_t>& cnd2) -> bool {
+	}, [&](int r, const wala::smawk::value_t<move_only_t>& cnd1, const wala::smawk::value_t<move_only_t>& cnd2) -> bool {
 		REQUIRE(0 <= r); REQUIRE(r < N);
 		REQUIRE(0 <= cnd1.col); REQUIRE(cnd1.col < M);
 		REQUIRE(0 <= cnd2.col); REQUIRE(cnd2.col < M);

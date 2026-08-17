@@ -9,7 +9,7 @@
 #include "fft/common.hpp"
 #include "num/modnum.hpp"
 
-namespace ecnerwala::fft {
+namespace wala::fft {
 
 // ==== core: roots, buffers, raw transforms ====
 
@@ -213,4 +213,4 @@ template <typename num> struct fft_core {
 	}
 };
 
-/* namespace ecnerwala::fft */ }
+/* namespace wala::fft */ }

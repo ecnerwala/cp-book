@@ -3,6 +3,9 @@
 #include <utility>
 #include <cstdint>
 
+namespace wala {
+
+
 // Usage:
 //   constexpr nim_prod_t nimProd;
 // C++20:
@@ -31,3 +34,5 @@ struct nim_prod_t {
 		return res;
 	}
 };
+
+} // namespace wala

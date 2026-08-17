@@ -3,16 +3,16 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
-#include "num/modnum.hpp"
+#include "num/wala::modnum.hpp"
 #include "fft/engines/ntt.hpp"
 #include "fft/series.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
-	using num = modnum<998244353>;
-	using E = ecnerwala::fft::engines::ntt<num>;
-	using ps = ecnerwala::series::trunc<E>;
+	using num = wala::modnum<998244353>;
+	using E = wala::fft::engines::ntt<num>;
+	using ps = wala::series::trunc<E>;
 
 	int N; std::cin >> N;
 	ps A(N); for (auto& a : A) std::cin >> a;

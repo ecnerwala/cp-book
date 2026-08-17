@@ -3,6 +3,9 @@
 #include <vector>
 #include <cassert>
 
+namespace wala {
+
+
 /**
  * manacher(S): return the maximum palindromic substring of S centered at each point
  *
@@ -60,3 +63,5 @@ template <typename V> std::vector<int> manacher_odd(const V& S) {
 	}
 	return res;
 }
+
+} // namespace wala

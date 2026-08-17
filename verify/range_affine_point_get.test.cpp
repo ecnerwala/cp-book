@@ -19,12 +19,12 @@ int main() {
 	auto apply = [&](linear_fn a, linear_fn b) -> linear_fn {
 		return {a.v[0] + a.v[1] * b.v[0], a.v[1] * b.v[1]};
 	};
-	seg_tree::in_order_layout layout(N);
+	wala::seg_tree::in_order_layout layout(N);
 	std::vector<linear_fn> seg(2*layout.N);
-	auto apply_lazy = [&](seg_tree::point a, linear_fn f) -> void {
+	auto apply_lazy = [&](wala::seg_tree::point a, linear_fn f) -> void {
 		seg[a] = apply(f, seg[a]);
 	};
-	auto downdate_node = [&](seg_tree::point a) -> void {
+	auto downdate_node = [&](wala::seg_tree::point a) -> void {
 		apply_lazy(a.c(0), seg[a]);
 		apply_lazy(a.c(1), seg[a]);
 		seg[a] = {num(0), num(1)};
@@ -33,7 +33,7 @@ int main() {
 		auto a = layout.get_point(i);
 		seg[a] = {A[i], 0};
 	}
-	for (seg_tree::point a(N-1); a > 0; a--) {
+	for (wala::seg_tree::point a(N-1); a > 0; a--) {
 		seg[a] = {0, 1};
 	}
 
@@ -44,7 +44,7 @@ int main() {
 			linear_fn f; std::cin >> f.v[1] >> f.v[0];
 			auto rng = layout.get_range(l, r);
 			rng.for_parents_down(downdate_node);
-			rng.for_each([&](seg_tree::point a) -> void {
+			rng.for_each([&](wala::seg_tree::point a) -> void {
 				apply_lazy(a, f);
 			});
 		} else if (op == 1) {

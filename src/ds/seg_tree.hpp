@@ -2,7 +2,7 @@
 #include <array>
 #include <ostream>
 
-namespace seg_tree {
+namespace wala::seg_tree {
 
 // Floor of log_2(a); index of highest 1-bit
 inline int floor_log_2(int a) {
@@ -288,4 +288,4 @@ struct circular_layout {
 	}
 };
 
-} // namespace seg_tree
+} // namespace wala::seg_tree

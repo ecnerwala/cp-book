@@ -7,7 +7,7 @@
 
 #include "fft/common.hpp"
 
-namespace ecnerwala::fft {
+namespace wala::fft {
 
 // ==== engine concept ====
 
@@ -98,4 +98,4 @@ concept same_engine = std::same_as<typename A::engine_t, typename B::engine_t>;
 // short spelling for E::transformed at use sites
 template <engine E> using transformed = typename E::transformed;
 
-/* namespace ecnerwala::fft */ }
+/* namespace wala::fft */ }

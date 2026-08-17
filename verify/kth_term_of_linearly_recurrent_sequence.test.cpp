@@ -11,9 +11,9 @@ int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
 	using num = modnum<998244353>;
-	using E = ecnerwala::fft::engines::ntt<num>;
-	using ps = ecnerwala::series::trunc<E>;
-	using pse = ecnerwala::series::exact<E>;
+	using E = wala::fft::engines::ntt<num>;
+	using ps = wala::series::trunc<E>;
+	using pse = wala::series::exact<E>;
 
 	int D; int64_t K; std::cin >> D >> K;
 	ps S(D); for (auto& v : S) std::cin >> v;

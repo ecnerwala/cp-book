@@ -4,6 +4,9 @@
 #include <cassert>
 #include <array>
 
+namespace wala {
+
+
 /**
  * Top tree!
  *
@@ -566,3 +569,5 @@ struct sample_top_tree_node : public top_tree_node_base<sample_top_tree_node> {
 		}
 	}
 };
+
+} // namespace wala

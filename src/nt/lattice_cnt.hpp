@@ -3,6 +3,9 @@
 #include <utility>
 #include <cassert>
 
+namespace wala {
+
+
 // number of integer solutions to Ax + By <= C and x,y >= 0
 inline long long lattice_cnt(long long A, long long B, long long C) {
 	using ll = long long;
@@ -78,3 +81,5 @@ inline long long mod_count(long long a, long long m, long long c, long long n) {
 inline long long mod_count_range(long long a, long long m, long long clo, long long chi, long long nlo, long long nhi) {
 	return mod_count(a, m, chi, nhi) - mod_count(a, m, chi, nlo) - mod_count(a, m, clo, nhi) + mod_count(a, m, clo, nlo);
 }
+
+} // namespace wala

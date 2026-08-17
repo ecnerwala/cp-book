@@ -4,6 +4,9 @@
 #include <bitset>
 #include <cassert>
 
+namespace wala {
+
+
 // Compute the characteristic polynomial of a square matrix A over some field.
 // Not numerically stable at all.
 // Takes argument by value, use std::move if you can.
@@ -111,3 +114,5 @@ template <std::size_t MAXS> std::bitset<MAXS> charPoly(std::vector<std::bitset<M
 	}
 	return ans;
 }
+
+} // namespace wala

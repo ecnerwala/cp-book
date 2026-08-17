@@ -5,7 +5,7 @@
 #include "fft/core.hpp"
 #include "num/modnum.hpp"
 
-namespace ecnerwala {
+namespace wala {
 namespace fft {
 
 using namespace std;
@@ -79,4 +79,4 @@ TEST_CASE("FFT transform prefix is transform mod x^n - 1", "[fft]") {
 	for (int i = 0; i < n; i++) REQUIRE(t[i] == folded[i]);
 }
 
-}} // namespace ecnerwala::fft
+}} // namespace wala::fft

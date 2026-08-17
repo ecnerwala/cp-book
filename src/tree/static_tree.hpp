@@ -3,6 +3,9 @@
 #include "yc.hpp"
 #include "ds/rmq.hpp"
 
+namespace wala {
+
+
 struct static_forest_t {
 	int N;
 
@@ -167,3 +170,5 @@ public:
 	std::array<int, 2> get_range(int a) const { return {idx[a], idx[a] + sz[idx[a]]}; }
 	bool is_ancestor(int a, int b) { return idx[a] <= idx[b] && idx[b] < idx[a] + sz[idx[a]]; }
 };
+
+} // namespace wala

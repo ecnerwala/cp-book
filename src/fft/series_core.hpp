@@ -14,7 +14,7 @@
 
 // ==== value types ====
 
-namespace ecnerwala::series {
+namespace wala::series {
 
 // A series is either exact (a finite series, R[x] sitting inside R[[x]]: the
 // length is just the support bound) or trunc (a known prefix of an infinite
@@ -624,4 +624,4 @@ private:
 	mutable std::vector<entry> caches;
 };
 
-/* namespace ecnerwala::series */ }
+/* namespace wala::series */ }

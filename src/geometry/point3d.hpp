@@ -2,6 +2,9 @@
 
 #include<bits/stdc++.h>
 
+namespace wala {
+
+
 const double PI = acos(-1.);
 const double TAU = 2 * PI;
 
@@ -60,3 +63,5 @@ template <typename T, typename AreaT=T, typename VolT=T> struct Point3D {
 		return lexLess(a, P()) == lexLess(b, P());
 	}
 };
+
+} // namespace wala

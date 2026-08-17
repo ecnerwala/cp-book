@@ -4,6 +4,9 @@
 #include <array>
 #include <cassert>
 
+namespace wala {
+
+
 class PermTree {
 	// The tree is "left-associative": INCR/DECR nodes are structured as (1 INCR 2) INCR 3...
 public:
@@ -116,3 +119,5 @@ public:
 		root = stk.back().node;
 	}
 };
+
+} // namespace wala

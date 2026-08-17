@@ -11,7 +11,7 @@ int main() {
 	int N; std::cin >> N;
 	std::vector<int> A(N); for (auto& a : A) std::cin >> a;
 
-	auto ct = CartesianTree::build_min_tree(A);
+	auto ct = wala::CartesianTree::build_min_tree(A);
 	for (int i = 0; i < N; i++) {
 		int p = ct[2*i+1].p;
 		if (p == -1) {

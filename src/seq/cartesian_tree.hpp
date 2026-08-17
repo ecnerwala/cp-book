@@ -5,6 +5,9 @@
 
 #include "reverse_comparator.hpp"
 
+namespace wala {
+
+
 class CartesianTree {
 public:
 	struct Node {
@@ -66,3 +69,5 @@ public:
 		return build_min_tree(v, reverse_comparator(comp));
 	}
 };
+
+} // namespace wala

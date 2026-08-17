@@ -8,7 +8,7 @@
 #include "fft/test_util.test.hpp"
 #include "num/modnum.hpp"
 
-namespace ecnerwala {
+namespace wala {
 namespace fft {
 
 using namespace std;
@@ -317,4 +317,4 @@ TEST_CASE("series::vec compose", "[fft]") {
 	}
 }
 
-}} // namespace ecnerwala::fft
+}} // namespace wala::fft

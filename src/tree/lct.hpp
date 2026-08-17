@@ -3,7 +3,7 @@
 #include <cassert>
 #include <utility>
 
-namespace lct {
+namespace wala::lct {
 
 struct node {
 	node* p;
@@ -145,4 +145,4 @@ struct node {
 
 };
 
-} // namespace lct
+} // namespace wala::lct

@@ -34,7 +34,7 @@
  *                   ap_sampled_poly<E> - a polynomial stored as its evaluations on an arithmetic progression
  */
 
-namespace ecnerwala {
+namespace wala {
 
 template<class T> int sz(T&& arg) { using std::size; return int(size(std::forward<T>(arg))); }
 inline int nextPow2(int s) { return 1 << (s > 1 ? 32 - __builtin_clz(s-1) : 0); }
@@ -76,4 +76,4 @@ template <typename T> struct buffer_pool {
 
 /* namespace fft */ }
 
-/* namespace ecnerwala */ }
+/* namespace wala */ }

@@ -7,6 +7,8 @@
 
 // See https://codeforces.com/blog/entry/96344
 
+namespace wala {
+
 inline void disable_denormal_floats() {
 	// https://stackoverflow.com/a/8217313
 	#define CSR_FLUSH_TO_ZERO         (1 << 15)
@@ -15,3 +17,5 @@ inline void disable_denormal_floats() {
 	__builtin_ia32_ldmxcsr(csr);
 	#undef CSR_FLUSH_TO_ZERO
 }
+
+} // namespace wala
