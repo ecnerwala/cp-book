@@ -120,6 +120,61 @@ TEMPLATE_TEST_CASE("product downsample", "[fft]", ALL_ENGINES) {
 	}
 }
 
+TEMPLATE_TEST_CASE("transform upsample", "[fft]", ALL_ENGINES) {
+	using E = TestType;
+	using num = typename E::value_type;
+	mt19937 mt(Catch::getSeed());
+	for (int n : {2, 16, 64}) {
+		vector<num> a(n), b(2*n);
+		fill_rnd(a, mt);
+		fill_rnd(b, mt);
+		auto ta = E::transform(span<const num>(a), n);
+		auto tb = E::transform(span<const num>(b), 2*n);
+		for (bool odd : {false, true}) {
+			// multiplying the upsampled transform recovers the product with the spread input
+			auto tu = E::upsample(ta, 2*n, odd);
+			vector<num> spread(2*n);
+			for (int i = 0; i < n; i++) spread[2*i + odd] = a[i];
+			vector<num> got(2*n), want(2*n);
+			E::finish(E::mul(tu, tb, 2*n), span<num>(got));
+			multiply_circular<E>(span<const num>(spread), span<const num>(b), span<num>(want), 2*n);
+			check_eq(got, want);
+			// round trip: downsample recovers the input transform, the other parity is zero
+			// (tb's size-n prefix is the transform of b wrapped mod x^n - 1)
+			vector<num> bw(n);
+			for (int i = 0; i < n; i++) bw[i] = b[i] + b[n + i];
+			vector<num> rt_got(n), rt_want(n), zero(n);
+			E::finish(E::mul(E::downsample(tu, n, odd), tb, n), span<num>(rt_got));
+			multiply_circular<E>(span<const num>(a), span<const num>(bw), span<num>(rt_want), n);
+			check_eq(rt_got, rt_want);
+			E::finish(E::mul(E::downsample(tu, n, !odd), tb, n), span<num>(rt_got));
+			check_eq(rt_got, zero);
+		}
+	}
+}
+
+TEMPLATE_TEST_CASE("product upsample", "[fft]", ALL_ENGINES) {
+	using E = TestType;
+	using num = typename E::value_type;
+	mt19937 mt(Catch::getSeed());
+	for (int n : {2, 16, 64}) {
+		vector<num> a(n), b(n);
+		fill_rnd(a, mt);
+		fill_rnd(b, mt);
+		auto p = E::mul(E::transform(span<const num>(a), n), E::transform(span<const num>(b), n), n);
+		vector<num> full(n);
+		E::finish(auto(p), span<num>(full));
+		for (bool odd : {false, true}) {
+			auto pu = E::upsample(p, 2*n, odd);
+			vector<num> got(2*n);
+			E::finish(std::move(pu), span<num>(got));
+			vector<num> want(2*n);
+			for (int i = 0; i < n; i++) want[2*i + odd] = full[i];
+			check_eq(got, want);
+		}
+	}
+}
+
 TEMPLATE_TEST_CASE("FFT Square", "[fft]", ALL_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;

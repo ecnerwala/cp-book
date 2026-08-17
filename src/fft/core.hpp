@@ -19,6 +19,7 @@ template <typename dbl> struct cplx { /// start-hash
 	cplx(dbl x_ = 0, dbl y_ = 0) : x(x_), y(y_) { }
 	friend cplx operator+(cplx a, cplx b) { return cplx(a.x + b.x, a.y + b.y); }
 	friend cplx operator-(cplx a, cplx b) { return cplx(a.x - b.x, a.y - b.y); }
+	friend cplx operator-(cplx a) { return cplx(-a.x, -a.y); }
 	friend cplx operator*(cplx a, cplx b) { return cplx(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
 	friend cplx conj(cplx a) { return cplx(a.x, -a.y); }
 	friend cplx inv(cplx a) { dbl n = (a.x*a.x+a.y*a.y); return cplx(a.x/n,-a.y/n); }
@@ -200,7 +201,6 @@ template <typename num> struct fft_core {
 		assert(n >= 2);
 		assert(sz(t) >= n / 2);
 		init(n);
-		// TODO: I think this is right?
 		for (int j = 0; j < n/2; j++) {
 			num v = t[j] * rt[n/2 + brev(j, n/2)];
 			out[2*j+0] = v;

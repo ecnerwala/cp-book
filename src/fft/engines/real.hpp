@@ -78,10 +78,7 @@ template <typename dbl = double> struct real {
 		}
 	}
 	static transformed downsample(const transformed& t, int n, bool odd) { return half(t, n, odd); }
-	static transformed upsample(const transformed& t, int n, bool odd) {
-		// TODO
-		assert(false);
-	}
+	static transformed upsample(const transformed& t, int n, bool odd) { return unhalf(t, n, odd); }
 	// A(-x) negates the odd (imaginary-slot) coefficients, i.e. conjugates the packed
 	// sequence; the transform of a conjugated sequence is the conjugate at w^(-k).
 	static transformed negate_arg(const transformed& t, int n) {
@@ -99,6 +96,30 @@ template <typename dbl = double> struct real {
 		for (int u = 0; u < mo; u++) {
 			r.v[u] = retangle(part(f, 2*u, odd), part(f, 2*u+1, odd), mo, core::brev(u, mo));
 		}
+		return r;
+	}
+	// Inverse of half: the size-n packed transform of the input spread as evens or odds.
+	static transformed unhalf(const transformed& f, int n, bool odd) {
+		assert(n >= 2 && 2 * f.size() >= n);
+		int mo = packed_size(n);
+		transformed r; r.v.resize(mo);
+		if (mo == 1) {
+			r.v[0] = part(f, 0, false);
+		} else {
+			// The spread-as-evens sequence packs to the plain (purely real) input sequence,
+			// so untangle its packed transform into the full spectrum:
+			// A(w) = E(w^2) + w O(w^2) at w = +-w_{2mi}^brev(u, mi).
+			int mi = mo / 2;
+			core::init(2 * mi);
+			for (int u = 0; u < mi; u++) {
+				cnum e = part(f, u, false);
+				cnum o = part(f, u, true) * core::rt[mi + core::brev(u, mi)];
+				r.v[2*u+0] = e + o;
+				r.v[2*u+1] = e - o;
+			}
+		}
+		// spreading as odds instead packs into the imaginary slots, scaling the spectrum by i
+		if (odd) for (auto& z : r.v) z = cnum(-z.y, z.x);
 		return r;
 	}
 	static product mul(const transformed& a, const transformed& b, int n) {

@@ -58,6 +58,7 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //                      (each doubling step reads only the coefficients that fit, so zero-padded buffers are fine:
 //                       coefficients past twice the existing transform's size must be zero, or it couldn't be a prefix)
 //      downsample      compute the half-sized transform/product of just the even (odd = false) or odd terms of the input
+//      upsample        size n (n >= 2) transform/product of the input spread as evens (odd = false) or odds (odd = true); inverse of downsample
 //      negate_arg      size n transform of A(-x)
 template <typename E>
 concept engine = requires(
