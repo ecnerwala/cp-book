@@ -11,7 +11,8 @@ programming reference library).
   `tree/`, `graph/`, `geometry/`, `fft/`, `combo_games/`, plus
   uncategorized headers at the top level) and included with src-relative
   paths (`#include "fft/series.hpp"`, `#include "ds/seg_tree.hpp"`),
-  resolved via `-I src`. Same-directory includes may use bare names.
+  resolved via `-I src`. Always use the full src-relative path, even for
+  same-directory includes.
 - `verify/`: Library Checker (https://judge.yosupo.jp/) solutions, one
   `<problem_slug>.test.cpp` per problem, verified by competitive-verifier.
   Organized into the same area folders as `src/`
