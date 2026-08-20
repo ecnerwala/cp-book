@@ -35,11 +35,10 @@ int main() {
 		} else if (op == 1) {
 			int l, r; std::cin >> l >> r;
 			num x; std::cin >> x;
-			linear_fn res;
 			layout.get_range(l, r).for_each_l_to_r([&](wala::seg_tree::point a) -> void {
-				res = seg[a] * res;
+				x = seg[a](x);
 			});
-			std::cout << res(x) << '\n';
+			std::cout << x << '\n';
 		} else assert(false);
 	}
 
