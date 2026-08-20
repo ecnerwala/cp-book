@@ -54,6 +54,7 @@ int main() {
 		verts[i].is_vert = verts[i].is_path = true;
 		verts[i].update();
 	}
+	// NB: Important to reserve() here so we pointers stay stable.
 	std::vector<mst_top_tree_node> edges; edges.reserve(N-1);
 	std::vector<int> edge_ids; edge_ids.reserve(N-1);
 	std::vector<int> ans; ans.reserve(M);
@@ -72,6 +73,7 @@ int main() {
 			// A moved, so we're looking for the edge to cut
 			auto pth = b->p;
 			if (w < pth->max_val) {
+				// NB: We're playing with fire by not downdating, but it's okay for this particular tree
 				while (pth->max_val != pth->val) {
 					pth = pth->c[pth->c[1]->max_val > pth->c[0]->max_val];
 				}
