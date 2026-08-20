@@ -7,51 +7,12 @@
 #include <utility>
 
 #include "fft/engine.hpp"
+#include "num/mat.hpp"
+#include "num/trunc_series.hpp"
 
 namespace wala::fft::engines {
 
-// Small NxN matrix over num, row-major
 // ==== wrapper engines ====
-
-template <typename num, int N> struct mat {
-	std::array<num, size_t(N) * N> a{};
-	num& operator[](std::array<int, 2> rc) { return a[size_t(rc[0]) * N + rc[1]]; }
-	const num& operator[](std::array<int, 2> rc) const { return a[size_t(rc[0]) * N + rc[1]]; }
-	num* data() { return a.data(); }
-	const num* data() const { return a.data(); }
-	mat& operator+=(const mat& o) { for (int i = 0; i < N*N; i++) a[i] += o.a[i]; return *this; }
-	friend mat operator+(mat x, const mat& y) { x += y; return x; }
-	mat& operator-=(const mat& o) { for (int i = 0; i < N*N; i++) a[i] -= o.a[i]; return *this; }
-	friend mat operator-(mat x, const mat& y) { x -= y; return x; }
-	friend mat operator*(const mat& x, const mat& y) {
-		mat r;
-		for (int i = 0; i < N; i++) for (int k = 0; k < N; k++) for (int j = 0; j < N; j++)
-			r[{i, j}] += x[{i, k}] * y[{k, j}];
-		return r;
-	}
-	mat& operator*=(const mat& o) { return *this = *this * o; }
-	friend bool operator==(const mat&, const mat&) = default;
-};
-
-// Truncated polynomial mod x^N over num
-template <typename num, int N> struct trunc_series {
-	std::array<num, size_t(N)> a{};
-	num& operator[](int i) { return a[size_t(i)]; }
-	const num& operator[](int i) const { return a[size_t(i)]; }
-	num* data() { return a.data(); }
-	const num* data() const { return a.data(); }
-	trunc_series& operator+=(const trunc_series& o) { for (int i = 0; i < N; i++) a[i] += o.a[i]; return *this; }
-	friend trunc_series operator+(trunc_series x, const trunc_series& y) { x += y; return x; }
-	trunc_series& operator-=(const trunc_series& o) { for (int i = 0; i < N; i++) a[i] -= o.a[i]; return *this; }
-	friend trunc_series operator-(trunc_series x, const trunc_series& y) { x -= y; return x; }
-	friend trunc_series operator*(const trunc_series& x, const trunc_series& y) {
-		trunc_series r;
-		for (int i = 0; i < N; i++) for (int j = 0; j < N - i; j++) r[i + j] += x[i] * y[j];
-		return r;
-	}
-	trunc_series& operator*=(const trunc_series& o) { return *this = *this * o; }
-	friend bool operator==(const trunc_series&, const trunc_series&) = default;
-};
 
 // componentwise
 
