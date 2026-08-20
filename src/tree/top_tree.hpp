@@ -34,8 +34,9 @@ namespace wala {
  *   Updates:
  *     auto cur = get_path(va, vb); // or get_subtree(va, vb)
  *     cur->do_stuff();
- *     cur->downdate();
- *     cur->update_all();
+ *     cur->update_parents(); or cur->downdate(), cur->update_all();
+ *
+ *   IMPORTANT: Call downdate() before any manual update()
  *
  * Node types:
  *   path edges: compress(c[0], self, c[1])
@@ -106,8 +107,12 @@ public:
 
 	// Returns the root
 	top_tree_node* update_all() {
+		derived_this()->update();
+		return update_parents();
+	}
+
+	top_tree_node* update_parents() {
 		top_tree_node* cur = derived_this();
-		cur->update();
 		while (cur->p) {
 			cur = cur->p;
 			cur->update();
