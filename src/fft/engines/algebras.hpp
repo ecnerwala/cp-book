@@ -159,6 +159,9 @@ struct matrix : componentwise<E, mat<typename E::value_type, N>, N * N> {
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int A> static product_t<A * A> graeffe(const transformed_t<A>& t, int n) {
+		return base::downsample(mul(t, base::negate_arg(t, n), n), n/2, false);
+	}
 	template <int A1, int B1, int A2, int B2, int k = 0>
 	static auto entry2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
@@ -212,6 +215,9 @@ struct trunc : componentwise<E, trunc_series<typename E::value_type, N>, N> {
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int A> static product_t<A * A> graeffe(const transformed_t<A>& t, int n) {
+		return base::downsample(mul(t, base::negate_arg(t, n), n), n/2, false);
+	}
 	template <int A1, int B1, int A2, int B2, int s, int i = 0>
 	static auto entry2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
@@ -265,6 +271,9 @@ struct matrix_stable
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int A> static product_t<A * A> graeffe(const transformed_t<A>& t, int n) {
+		return base::downsample(mul(t, base::negate_arg(t, n), n), n/2, false);
+	}
 	template <int A1, int B1, int A2, int B2>
 	static product_t<A1 * B1 + A2 * B2> mul2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,
@@ -307,6 +316,9 @@ struct trunc_stable
 		return p;
 	}
 	template <int A> static auto sq(const transformed_t<A>& a, int n) { return mul(a, a, n); }
+	template <int A> static product_t<A * A> graeffe(const transformed_t<A>& t, int n) {
+		return base::downsample(mul(t, base::negate_arg(t, n), n), n/2, false);
+	}
 	template <int A1, int B1, int A2, int B2>
 	static product_t<A1 * B1 + A2 * B2> mul2(
 		const transformed_t<A1>& a1, const transformed_t<B1>& b1,

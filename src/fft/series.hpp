@@ -234,10 +234,7 @@ template <fft::engine E> struct packed_bivariate {
 		int B = 4 << L;
 		auto tq = E::transform(std::span<const T>(c), B);
 		auto tn = E::negate_arg(tq, B);
-		E::finish(
-			E::downsample(E::mul(tq, tn, B), B/2, false),
-			std::span<T>(c).first(B/2)
-		);
+		E::finish(E::graeffe(tq, B), std::span<T>(c).first(B/2));
 		l++;
 		// undo the circular wraparound using monicity in y
 		for (int i = 0; i < (2 << (L - l)); i++) {
@@ -372,8 +369,8 @@ P::engine_t::value_type kth_term_of_rational_function(
 			break;
 		}
 
-		// Q <- downsample(Q(x) * Q(-x))
-		auto ntq = E::downsample(E::mul(tq, tnq, n), n/2, false);
+		// Q <- even part of Q(x) * Q(-x)
+		auto ntq = E::graeffe(tq, n);
 		assert(ntq.size() == n/2);
 		if constexpr (std::same_as<typename E::product, typename E::transformed>) {
 			tq = ntq;
