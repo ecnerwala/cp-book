@@ -279,6 +279,10 @@ private:
 	// Tree edges have v = {child, parent}
 	// Backedges edges have v = {top, bottom}
 
+	// estack is the stack of live edges that we're adding to the tree
+	// tstack is the stack of candidate 2-vertex cuts
+	// vestack is a stack of completed edges of the component below the estack edges, which are not finalized just in case the component expands from S/P merging
+
 	struct vestack_t {
 		std::array<int, 2> vs;
 		bool is_tree = false;
@@ -399,59 +403,21 @@ private:
 		return ve;
 	}
 
-	void push_estack(estack_t e_ins) {
-		if constexpr (PRINT_DEBUG) std::cerr << "push_estack " << e_ins.vs[0] << '-' << e_ins.vs[1] << ' ' << e_ins.is_tree << '\n';
-		estack.push_back(e_ins);
-		int v = e_ins.vs[0];
-		if (first_occurrence[v] == -1) {
-			first_occurrence[v] = int(estack.size()) - 1;
-		}
-	}
-
-	void push_estack_p(estack_t e_ins) {
-		if constexpr (PRINT_DEBUG) std::cerr << "push_estack_p " << e_ins.vs[0] << '-' << e_ins.vs[1] << ' ' << e_ins.is_tree << '\n';
-		if (estack.back().type == node_type::P) {
-			int st = e_ins.vestack_range.st;
-			vestack[st] = finalize_estack(e_ins);
-			vestack.resize(st+1);
-			assert(estack.back().vestack_range.en == st);
-			estack.back().vestack_range.en ++;
-		} else {
-			int st = estack.back().vestack_range.st;
-			vestack[st] = finalize_estack(estack.back());
-			vestack[st+1] = finalize_estack(e_ins);
-			vestack.resize(st+2);
-			estack.back().vestack_range = {st, st+2};
-			estack.back().type = node_type::P;
-		}
-	}
-
-	void prepare_pop_estack(int z) {
-		int v = estack[z].vs[0];
-		if (first_occurrence[v] == z) {
-			first_occurrence[v] = -1;
-		}
-	}
-	void pop_estack() {
-		prepare_pop_estack(int(estack.size()) - 1);
-		estack.pop_back();
-	}
-
-	// push_estack_p is a lot like push_estack + pop_estack_range, but their
-	// handling of first_occurrence would differ, so we'll leave them separate
-	std::pair<vestack_range_t, node_type> pop_estack_range(int idx) {
+	void merge_to_tstack(int cur, int nxt, bool is_tree) {
+		int idx = tstack.back().idx;
 		assert(int(estack.size()) - idx > 1);
-		for (int z = idx; z < int(estack.size()); z++) {
-			prepare_pop_estack(z);
+		node_type type;
+		bool should_reuse;
+		if (int(estack.size()) - idx == 2) {
+			type = (estack[idx].vs[1] == estack[idx+1].vs[0] && estack[idx].vs[0] != estack[idx+1].vs[1]) ? node_type::S : node_type::P;
+			assert(estack[idx+1].type != type);
+			should_reuse = estack[idx].type == type;
+		} else {
+			type = node_type::R;
+			should_reuse = false;
 		}
 
-		bool is_S = (int(estack.size()) - idx == 2);
-		if (is_S) {
-			assert(estack.back().type != node_type::S);
-		}
-		bool should_reuse = (is_S && estack[idx].type == node_type::S);
 		int st = estack[idx].vestack_range.st;
-
 		int sidx = idx + should_reuse;
 		int en = estack[sidx].vestack_range.st;
 		for (int z = sidx; z < int(estack.size()); z++) {
@@ -460,10 +426,10 @@ private:
 
 		vestack.resize(en);
 		estack.resize(idx);
-		return {{st, en}, is_S ? node_type::S : node_type::R};
+		estack.push_back({{nxt, cur}, {st, en}, type, is_tree});
 	}
 
-	estack_t make_q_node(int e, int cur, int nxt, bool is_tree) {
+	void push_q_node(int e, int cur, int nxt, bool is_tree) {
 		vedges[e].vs = {cur, nxt};
 		vedges[e].component = cur_component;
 		vedges[e].block = cur_block;
@@ -483,7 +449,7 @@ private:
 		node_vertices[2*e] = cur;
 		node_vertices[2*e+1] = nxt;
 
-		return estack_t{{nxt, cur}, {int(vestack.size()) - 1, int(vestack.size())}, node_type::Q, is_tree};
+		estack.push_back({{nxt, cur}, {int(vestack.size()) - 1, int(vestack.size())}, node_type::Q, is_tree});
 	}
 
 	void dfs_spqr(int cur, int cur_low) {
@@ -497,46 +463,22 @@ private:
 
 			bool is_tree = (depth[nxt] > cur_depth);
 			if (is_tree) {
+				first_occurrence[cur] = (cur == cur_low) ? orig_size : NE;
 				dfs_spqr(nxt, cur_low);
-			}
 
-			// Deal with the current vedge
-			estack_t e_ins = make_q_node(e, cur, nxt, is_tree);
+				// Deal with the current tree edge
+				push_q_node(e, cur, nxt, true);
 
-			if (is_tree) {
 				while (tstack.back().top_depth >= cur_depth) {
-					if (estack.back().vs == std::array<int, 2>{cur, nxt}) {
-						push_estack_p(e_ins);
-
-						assert(tstack.back().idx == int(estack.size()) - 1);
-						tstack.pop_back();
-
-						// Pop it all the way off since we need to
-						// change the backedge to a tree edge
-						e_ins.vestack_range = estack.back().vestack_range;
-						assert(estack.back().type == node_type::P);
-						e_ins.type = node_type::P;
-
-						pop_estack();
-						continue;
-					}
-
-					push_estack(e_ins);
-
-					int idx = tstack.back().idx;
-					assert(idx > orig_size);
 					nxt = tstack.back().vstart;
+					merge_to_tstack(cur, nxt, true);
 					tstack.pop_back();
-					auto [vestack_range, type] = pop_estack_range(idx);
-					e_ins = estack_t{{nxt, cur}, vestack_range, type, true};
 				}
 
-				push_estack(e_ins);
-
+				// This guy is the 2-tree-edge special case: it can only be used as part of a nxt-cur-par S-node
 				tstack.push_back({int(estack.size())-1, nxt, cur_depth});
 
-				int pop_until = cur_low == cur ? orig_size : first_occurrence[cur];
-				while (pop_until != -1 && tstack.back().idx > pop_until) {
+				while (tstack.back().idx > first_occurrence[cur]) {
 					int top_depth = tstack.back().top_depth;
 					tstack.pop_back();
 					tstack.back().top_depth = std::min(tstack.back().top_depth, top_depth);
@@ -545,7 +487,6 @@ private:
 
 			if (is_type_1) {
 				// Handle a backedge or type 1 split
-
 				if (is_tree) {
 					// This must equal lowval[nxt]
 					nxt = estack[orig_size].vs[0];
@@ -558,22 +499,21 @@ private:
 					assert(tstack.back().idx == orig_size);
 					assert(tstack.back().vstart == cur_low && tstack.back().top_depth == depth[nxt]);
 
-					int idx = orig_size;
-					auto [vestack_range, type] = pop_estack_range(idx);
-					e_ins = estack_t{{nxt, cur}, vestack_range, type, false};
-					tstack.pop_back();
+					merge_to_tstack(cur, nxt, false);
+					// tstack is already fine
+				} else {
+					push_q_node(e, cur, nxt, false);
+					tstack.push_back({int(estack.size()) - 1, cur_low, depth[nxt]});
 				}
 
-				if (!estack.empty() && estack.back().vs == e_ins.vs) {
-					push_estack_p(e_ins);
-					// Don't change tstack, keep its old low value
-				} else {
-					push_estack(e_ins);
+				first_occurrence[nxt] = std::min(first_occurrence[nxt], int(estack.size()) - 1);
 
-					// nxt should be shallower
-					assert(depth[cur_low] > depth[nxt]);
-					tstack_t t_ins{int(estack.size()) - 1, cur_low, depth[nxt]};
-					tstack.push_back(t_ins);
+				if (estack.size() >= 2 && estack.end()[-2].vs == estack.end()[-1].vs) {
+					// Pop the single-element tstack
+					tstack.pop_back();
+
+					assert(!tstack.empty() && tstack.back().idx == int(estack.size()) - 2);
+					merge_to_tstack(cur, nxt, false);
 				}
 			}
 
@@ -617,13 +557,13 @@ private:
 		}
 
 		// Make the q node and immediately overwrite its spot with our desired one
-		auto q_estack = make_q_node(e, cur, nxt, cur != nxt);
-		vestack.back() = finalize_estack(q_estack);
+		push_q_node(e, cur, nxt, cur != nxt);
+		vestack.back() = finalize_estack(estack.back());
+		estack.pop_back();
 
-		auto es = estack.back();
-		pop_estack();
-		finalize_node(es, vestack.back());
-		vestack.resize(es.vestack_range.st);
+		finalize_node(estack.back(), vestack.back());
+		vestack.resize(estack.back().vestack_range.st);
+		estack.pop_back();
 
 		assert(tstack.empty());
 		assert(estack.empty());
@@ -695,7 +635,8 @@ private:
 
 		vertex_blocks_buf.reserve(NE);
 		vestack.reserve(NE);
-		estack.reserve(NE);
+		// Reserve a little extra for the dummies for bridges/loops
+		estack.reserve(std::max(2, NE));
 		tstack.reserve(NE);
 		first_occurrence.assign(NV, -1);
 
