@@ -498,49 +498,30 @@ private:
 			bool is_tree = (depth[nxt] > cur_depth);
 			if (is_tree) {
 				dfs_spqr(nxt, cur_low);
-
-				// Before we insert our edge, we may have to fix the single-tree-edge tstack
-				assert(!tstack.empty());
-				if (tstack.back().top_depth == cur_depth + 1) {
-					assert(tstack.back().idx == int(estack.size())-1);
-					tstack.back().top_depth = cur_depth;
-				}
 			}
 
 			// Deal with the current vedge
 			estack_t e_ins = make_q_node(e, cur, nxt, is_tree);
+
 			if (is_tree) {
-				while (true) {
+				while (tstack.back().top_depth >= cur_depth) {
 					if (estack.back().vs == std::array<int, 2>{cur, nxt}) {
 						push_estack_p(e_ins);
+
+						assert(tstack.back().idx == int(estack.size()) - 1);
+						tstack.pop_back();
+
+						// Pop it all the way off since we need to
+						// change the backedge to a tree edge
 						e_ins.vestack_range = estack.back().vestack_range;
 						assert(estack.back().type == node_type::P);
 						e_ins.type = node_type::P;
 
-						assert(!tstack.empty());
-						if (tstack.back().idx == int(estack.size()) - 1) {
-							tstack.pop_back();
-						}
-						// Pop it all the way off since we need to
-						// change the backedge to a tree edge
 						pop_estack();
+						continue;
 					}
 
 					push_estack(e_ins);
-
-					assert(!tstack.empty());
-					if (tstack.back().top_depth != cur_depth) break;
-					assert(tstack.back().idx > orig_size);
-					if (estack[tstack.back().idx].is_tree) {
-						assert(estack[tstack.back().idx].vs[0] == tstack.back().vstart);
-						if (int(estack.size()) - tstack.back().idx > 2) {
-							tstack.push_back({
-								tstack.back().idx + 1,
-								estack[tstack.back().idx].vs[1],
-								tstack.back().top_depth
-							});
-						}
-					}
 
 					int idx = tstack.back().idx;
 					assert(idx > orig_size);
@@ -550,52 +531,39 @@ private:
 					e_ins = estack_t{{nxt, cur}, vestack_range, type, true};
 				}
 
-				if (is_type_1) {
-					// Handle type 1 split
+				push_estack(e_ins);
 
+				tstack.push_back({int(estack.size())-1, nxt, cur_depth});
+
+				int pop_until = cur_low == cur ? orig_size : first_occurrence[cur];
+				while (pop_until != -1 && tstack.back().idx > pop_until) {
+					int top_depth = tstack.back().top_depth;
+					tstack.pop_back();
+					tstack.back().top_depth = std::min(tstack.back().top_depth, top_depth);
+				}
+			}
+
+			if (is_type_1) {
+				// Handle a backedge or type 1 split
+
+				if (is_tree) {
+					// This must equal lowval[nxt]
 					nxt = estack[orig_size].vs[0];
 
-					// It's possible there are candidates before orig_size
-					// on the stack, but those are doomed to fail, so
-					// it's fine to pop them prematurely.
-					while (tstack.back().idx > orig_size) tstack.pop_back();
-					assert(!tstack.empty());
-					if (tstack.back().idx == orig_size) {
-						assert(tstack.back().vstart == cur_low && tstack.back().top_depth == depth[nxt]);
+					// There's at most 1 extra tstack entry left after the previous poppping
+					if (tstack.back().idx > orig_size) {
+						assert(tstack.back().idx == orig_size + 1);
+						tstack.pop_back();
 					}
+					assert(tstack.back().idx == orig_size);
+					assert(tstack.back().vstart == cur_low && tstack.back().top_depth == depth[nxt]);
 
 					int idx = orig_size;
 					auto [vestack_range, type] = pop_estack_range(idx);
 					e_ins = estack_t{{nxt, cur}, vestack_range, type, false};
-					if (!estack.empty() && estack.back().vs == e_ins.vs) {
-						push_estack_p(e_ins);
-						// Pop our tstack and use the previous value
-						if (tstack.back().idx == orig_size) tstack.pop_back();
-					} else {
-						push_estack(e_ins);
-						// We don't need to change tstack at all
-					}
-				} else if (cur_low == cur) {
-					// Pop until we get to the entire range; that's
-					// the only permissible one, since we previously use something
-					while (tstack.back().idx > orig_size) tstack.pop_back();
-					assert(!tstack.empty());
-				} else if (first_occurrence[cur] != -1) {
-					// We're the first node, so cur can be interior, but we must include all backedges to cur
-					while (tstack.back().idx > first_occurrence[cur]) tstack.pop_back();
-					assert(!tstack.empty());
-				} else {
-					// This is the only case where we can have the tree-edge start the cut.
-					// Notably, this is the only tstack entry with top == cur
-					// (otherwise it's always strictly shallower)
-					// By the time it's resolved, top will be
-					// shallower than cur, but that depends on the
-					// next edge, so we'll fix it then.
-					// We'll also omit the following (equivalent) entry entirely and
-					// handle it when we pop it out.
-					tstack.push_back({int(estack.size())-1, nxt, cur_depth});
+					tstack.pop_back();
 				}
-			} else {
+
 				if (!estack.empty() && estack.back().vs == e_ins.vs) {
 					push_estack_p(e_ins);
 					// Don't change tstack, keep its old low value
@@ -604,13 +572,7 @@ private:
 
 					// nxt should be shallower
 					assert(depth[cur_low] > depth[nxt]);
-					tstack_t t_ins{int(estack.size())-1, cur_low, depth[nxt]};
-					assert(tstack.empty() || tstack.back().top_depth <= depth[cur_low]);
-					while (!tstack.empty() && tstack.back().top_depth > t_ins.top_depth) {
-						t_ins.idx = tstack.back().idx;
-						t_ins.vstart = tstack.back().vstart;
-						tstack.pop_back();
-					}
+					tstack_t t_ins{int(estack.size()) - 1, cur_low, depth[nxt]};
 					tstack.push_back(t_ins);
 				}
 			}
@@ -634,6 +596,7 @@ private:
 		if (nxt != cur) {
 			dfs_spqr(nxt, nxt);
 			if (estack.empty()) {
+				// Bridge case
 				estack.push_back(estack_t{{cur, nxt}, {int(vestack.size()), int(vestack.size())}, node_type::I, false});
 			} else {
 				assert(int(estack.size()) == 1);
