@@ -403,7 +403,9 @@ private:
 		return ve;
 	}
 
-	void merge_to_tstack(int cur, int nxt, bool is_tree) {
+	void merge_tstack_range_to_node(int cur, int nxt, bool is_tree) {
+		// Merges the suffix of estack corresponding to tstack.back() into a single estack edge (cur, nxt, is_tree)
+		// Doesn't pop tstack.back(), so afterwards, we always have tstack.back().idx == int(estack.size()) - 1.
 		int idx = tstack.back().idx;
 		assert(int(estack.size()) - idx > 1);
 		node_type type;
@@ -463,7 +465,9 @@ private:
 
 			bool is_tree = (depth[nxt] > cur_depth);
 			if (is_tree) {
-				first_occurrence[cur] = (cur == cur_low) ? orig_size : NE;
+				// If we're type 1, we'll want to merge the entire subtree, so just do it here to be a little smoother.
+				// It results in at most 1 extra merge of the lowval edge with something bigger, so just do keep the merge code closer together.
+				first_occurrence[cur] = (cur == cur_low || is_type_1) ? orig_size : NE;
 				dfs_spqr(nxt, cur_low);
 
 				// Deal with the current tree edge
@@ -471,7 +475,9 @@ private:
 
 				while (tstack.back().top_depth >= cur_depth) {
 					nxt = tstack.back().vstart;
-					merge_to_tstack(cur, nxt, true);
+					merge_tstack_range_to_node(cur, nxt, true);
+					// Pop the size-1 tstack suffix so we can keep scanning underneath for nontrivial ranges to collapse.
+					assert(tstack.back().idx == int(estack.size()) - 1);
 					tstack.pop_back();
 				}
 
@@ -479,6 +485,7 @@ private:
 				tstack.push_back({int(estack.size())-1, nxt, cur_depth});
 
 				while (tstack.back().idx > first_occurrence[cur]) {
+					// The last tstack entry is invalid (pierced by first_occurrence[cur]), so we must merge it with its predecessor.
 					int top_depth = tstack.back().top_depth;
 					tstack.pop_back();
 					tstack.back().top_depth = std::min(tstack.back().top_depth, top_depth);
@@ -491,15 +498,10 @@ private:
 					// This must equal lowval[nxt]
 					nxt = estack[orig_size].vs[0];
 
-					// There's at most 1 extra tstack entry left after the previous poppping
-					if (tstack.back().idx > orig_size) {
-						assert(tstack.back().idx == orig_size + 1);
-						tstack.pop_back();
-					}
 					assert(tstack.back().idx == orig_size);
 					assert(tstack.back().vstart == cur_low && tstack.back().top_depth == depth[nxt]);
 
-					merge_to_tstack(cur, nxt, false);
+					merge_tstack_range_to_node(cur, nxt, false);
 					// tstack is already fine
 				} else {
 					push_q_node(e, cur, nxt, false);
@@ -509,11 +511,12 @@ private:
 				first_occurrence[nxt] = std::min(first_occurrence[nxt], int(estack.size()) - 1);
 
 				if (estack.size() >= 2 && estack.end()[-2].vs == estack.end()[-1].vs) {
-					// Pop the single-element tstack
+					// Pop the size-1 tstack
+					assert(tstack.back().idx == int(estack.size()) - 1);
 					tstack.pop_back();
 
 					assert(!tstack.empty() && tstack.back().idx == int(estack.size()) - 2);
-					merge_to_tstack(cur, nxt, false);
+					merge_tstack_range_to_node(cur, nxt, false);
 				}
 			}
 
