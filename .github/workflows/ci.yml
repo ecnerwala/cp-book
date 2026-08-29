@@ -713,7 +713,9 @@ jobs:
 
       # Run the docs CLI directly (rather than competitive-verifier/actions/docs)
       # to pass --coverage-json, which renders per-page coverage summaries and
-      # a per-line coverage tab.
+      # a per-line coverage tab. --write-summary writes the verification
+      # summary to $GITHUB_STEP_SUMMARY; snapshot it so it can also be posted
+      # as a PR comment below.
       - name: Docs
         run: |
           competitive-verifier docs \
@@ -721,6 +723,7 @@ jobs:
             --coverage-json coverage/coverage.json \
             --write-summary \
             --destination _jekyll
+          cp "$GITHUB_STEP_SUMMARY" '${{ runner.temp }}/verify-summary.md'
 
       # The front page (docs/index.md) renders the README via include_relative.
       - name: Copy README into docs
@@ -763,6 +766,13 @@ jobs:
           name: Coverage-${{ runner.os }}
           path: coverage/
           retention-days: 7
+
+      - name: Comment verification summary on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: verify
+          path: ${{ runner.temp }}/verify-summary.md
 
       - name: Comment coverage on PR
         if: github.event_name == 'pull_request'
