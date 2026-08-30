@@ -481,11 +481,12 @@ private:
 					tstack.pop_back();
 				}
 
+				// Push the size-1 cut back on tstack.
 				// This guy is the 2-tree-edge special case: it can only be used as part of a nxt-cur-par S-node
 				tstack.push_back({int(estack.size())-1, nxt, cur_depth});
 
+				// Now, merge tstack entries which are pierced by first_occurrence[cur] (all entries if cur_low == cur)
 				while (tstack.back().idx > first_occurrence[cur]) {
-					// The last tstack entry is invalid (pierced by first_occurrence[cur]), so we must merge it with its predecessor.
 					int top_depth = tstack.back().top_depth;
 					tstack.pop_back();
 					tstack.back().top_depth = std::min(tstack.back().top_depth, top_depth);
@@ -502,21 +503,21 @@ private:
 					assert(tstack.back().vstart == cur_low && tstack.back().top_depth == depth[nxt]);
 
 					merge_tstack_range_to_node(cur, nxt, false);
-					// tstack is already fine
+					// Pop the size-1 tstack so we can check for a P-node merge under it
+					tstack.pop_back();
 				} else {
 					push_q_node(e, cur, nxt, false);
-					tstack.push_back({int(estack.size()) - 1, cur_low, depth[nxt]});
 				}
 
 				first_occurrence[nxt] = std::min(first_occurrence[nxt], int(estack.size()) - 1);
 
 				if (estack.size() >= 2 && estack.end()[-2].vs == estack.end()[-1].vs) {
-					// Pop the size-1 tstack
-					assert(tstack.back().idx == int(estack.size()) - 1);
-					tstack.pop_back();
-
 					assert(!tstack.empty() && tstack.back().idx == int(estack.size()) - 2);
+					// Necessarily a P-type merge
 					merge_tstack_range_to_node(cur, nxt, false);
+					// Leave the existing tstack entry since it has the right vstart.
+				} else {
+					tstack.push_back({int(estack.size()) - 1, cur_low, depth[nxt]});
 				}
 			}
 
