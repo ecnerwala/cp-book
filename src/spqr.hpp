@@ -454,8 +454,9 @@ private:
 		estack.push_back({{nxt, cur}, {int(vestack.size()) - 1, int(vestack.size())}, node_type::Q, is_tree});
 	}
 
-	void dfs_spqr(int cur, int cur_low) {
+	void dfs_spqr(int cur) {
 		int cur_depth = depth[cur];
+		bool must_merge_all = false;
 		for (auto [nxt, e] : adj[cur].bind(*this)) {
 			if (e < 0) continue;
 			bool is_type_1 = !(e & 1);
@@ -467,8 +468,10 @@ private:
 			if (is_tree) {
 				// If we're type 1, we'll want to merge the entire subtree, so just do it here to be a little smoother.
 				// It results in at most 1 extra merge of the lowval edge with something bigger, so just do keep the merge code closer together.
-				first_occurrence[cur] = (cur == cur_low || is_type_1) ? orig_size : NE;
-				dfs_spqr(nxt, cur_low);
+				if (is_type_1) must_merge_all = true;
+
+				first_occurrence[cur] = must_merge_all ? orig_size : NE;
+				dfs_spqr(nxt);
 
 				// Deal with the current tree edge
 				push_q_node(e, cur, nxt, true);
@@ -489,7 +492,13 @@ private:
 				while (tstack.back().idx > first_occurrence[cur]) {
 					int top_depth = tstack.back().top_depth;
 					tstack.pop_back();
+					// Keep the former's vstart
 					tstack.back().top_depth = std::min(tstack.back().top_depth, top_depth);
+				}
+
+				// We merged everything, so now the actual start should be cur
+				if (must_merge_all) {
+					tstack.back().vstart = cur;
 				}
 			}
 
@@ -498,9 +507,9 @@ private:
 				if (is_tree) {
 					// This must equal lowval[nxt]
 					nxt = estack[orig_size].vs[0];
-
 					assert(tstack.back().idx == orig_size);
-					assert(tstack.back().vstart == cur_low && tstack.back().top_depth == depth[nxt]);
+					assert(tstack.back().vstart == cur);
+					assert(tstack.back().top_depth == depth[nxt]);
 
 					merge_tstack_range_to_node(cur, nxt, false);
 					// Pop the size-1 tstack so we can check for a P-node merge under it
@@ -514,14 +523,15 @@ private:
 				if (estack.size() >= 2 && estack.end()[-2].vs == estack.end()[-1].vs) {
 					assert(!tstack.empty() && tstack.back().idx == int(estack.size()) - 2);
 					// Necessarily a P-type merge
+					assert(tstack.back().vstart == cur);
+					assert(tstack.back().top_depth == depth[nxt]);
 					merge_tstack_range_to_node(cur, nxt, false);
-					// Leave the existing tstack entry since it has the right vstart.
 				} else {
-					tstack.push_back({int(estack.size()) - 1, cur_low, depth[nxt]});
+					tstack.push_back({int(estack.size()) - 1, cur, depth[nxt]});
 				}
 			}
 
-			cur_low = cur;
+			must_merge_all = true;
 		}
 
 		block_vertices.push_back(cur);
@@ -538,7 +548,7 @@ private:
 		cur_block = block;
 
 		if (nxt != cur) {
-			dfs_spqr(nxt, nxt);
+			dfs_spqr(nxt);
 			if (estack.empty()) {
 				// Bridge case
 				estack.push_back(estack_t{{cur, nxt}, {int(vestack.size()), int(vestack.size())}, node_type::I, false});
