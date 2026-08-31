@@ -470,7 +470,7 @@ private:
 				// It results in at most 1 extra merge of the lowval edge with something bigger, so just do keep the merge code closer together.
 				if (is_type_1) must_merge_all = true;
 
-				first_occurrence[cur] = must_merge_all ? orig_size : NE;
+				first_occurrence[cur_depth] = must_merge_all ? orig_size : NE;
 				dfs_spqr(nxt);
 
 				// Deal with the current tree edge
@@ -488,8 +488,10 @@ private:
 				// This guy is the 2-tree-edge special case: it can only be used as part of a nxt-cur-par S-node
 				tstack.push_back({int(estack.size())-1, nxt, cur_depth});
 
+				int pop_until = std::min(first_occurrence[cur_depth], int(estack.size()) - 1);
+
 				// Now, merge tstack entries which are pierced by first_occurrence[cur] (all entries if cur_low == cur)
-				while (tstack.back().idx > first_occurrence[cur]) {
+				while (tstack.back().idx > pop_until) {
 					int top_depth = tstack.back().top_depth;
 					tstack.pop_back();
 					// Keep the former's vstart
@@ -497,6 +499,7 @@ private:
 				}
 
 				// We merged everything, so now the actual start should be cur
+				// We could do this unconditionally on tstack[orig_tstack_size], but that makes a little less semantic sense.
 				if (must_merge_all) {
 					tstack.back().vstart = cur;
 				}
@@ -504,27 +507,27 @@ private:
 
 			if (is_type_1) {
 				// Handle a backedge or type 1 split
+				int nxt_depth;
 				if (is_tree) {
 					// This must equal lowval[nxt]
 					nxt = estack[orig_size].vs[0];
+					nxt_depth = depth[nxt];
 					assert(tstack.back().idx == orig_size);
 					assert(tstack.back().vstart == cur);
-					assert(tstack.back().top_depth == depth[nxt]);
+					assert(tstack.back().top_depth == nxt_depth);
 
 					merge_tstack_range_to_node(cur, nxt, false);
 					// Pop the size-1 tstack so we can check for a P-node merge under it
 					tstack.pop_back();
 				} else {
+					nxt_depth = depth[nxt];
 					push_q_node(e, cur, nxt, false);
 				}
 
-				first_occurrence[nxt] = std::min(first_occurrence[nxt], int(estack.size()) - 1);
+				first_occurrence[nxt_depth] = std::min(first_occurrence[nxt_depth], int(estack.size()) - 1);
 
-				if (estack.size() >= 2 && estack.end()[-2].vs == estack.end()[-1].vs) {
-					assert(!tstack.empty() && tstack.back().idx == int(estack.size()) - 2);
-					// Necessarily a P-type merge
-					assert(tstack.back().vstart == cur);
-					assert(tstack.back().top_depth == depth[nxt]);
+				if (!tstack.empty() && tstack.back().idx == int(estack.size()) - 2 && tstack.back().vstart == cur && tstack.back().top_depth == nxt_depth) {
+					// Do the P-type merge
 					merge_tstack_range_to_node(cur, nxt, false);
 				} else {
 					tstack.push_back({int(estack.size()) - 1, cur, depth[nxt]});
