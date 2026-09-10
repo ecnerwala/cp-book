@@ -198,6 +198,7 @@ struct spqr_tree {
 						assert(dir == stack_dir[t.top_depth]);
 						assert(t.lst[!dir].v[0] == -1);
 						t.lst[dir] = alloc_node(t.v_start, cur_path[t.top_depth], !dir, type, t.lst[dir]);
+						t.num_edges = 1;
 						return t;
 					};
 
