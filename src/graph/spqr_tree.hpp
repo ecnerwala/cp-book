@@ -183,7 +183,7 @@ struct spqr_tree {
 
 					// edge_dir convention: false is forwards, true is backwards.
 					// That means that cur is on the edge_dir side and nxt is on the !edge_dir side.
-					bool edge_dir = (lowval < 0 ? false : !stack_dir[lowval]);
+					bool edge_dir = (val < 0 ? false : !stack_dir[lowval]);
 					stack_dir[cur_depth] = edge_dir;
 
 					auto make_node = [&](tstack_t t, bool dir) -> tstack_t {
