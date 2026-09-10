@@ -218,7 +218,7 @@ struct spqr_tree {
 							// Bridges and components
 							if (lowval == cur_depth + 1) {
 								// tstack.back() is currently just smuggling out the child vertex, prepend the bridge component
-								block_list = concat(alloc_node(cur, nxt, edge_dir, node_type::O, st_list{}), tstack.back().lst[1]);
+								block_list = concat(alloc_node(cur, nxt, edge_dir, node_type::I, st_list{}), tstack.back().lst[1]);
 							} else {
 								block_list = concat(tstack.back().lst[0], tstack.back().lst[1]);
 							}
@@ -265,6 +265,7 @@ struct spqr_tree {
 							// Fold everything to the correct side now that we're leaving the child
 							// The entire subtree should go to the !edge_dir side
 							cur_tstack.lst[!edge_dir] = concat(cur_tstack.lst[0], cur_tstack.lst[1]);
+							cur_tstack.lst[edge_dir] = st_list{};
 							cur_tstack.v_start = cur;
 
 							// TODO: Planarity has some logic here
