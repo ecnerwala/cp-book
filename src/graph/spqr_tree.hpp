@@ -179,12 +179,12 @@ struct spqr_tree {
 			int v_start;
 			int top_depth;
 			int first_idx;
-			int num_items; // Edges have weight 2 and vertices have weight 1
+			int size; // Edges have weight 2 and vertices have weight 1
 			std::array<et_span, 2> spans;
 		};
 		std::vector<tstack_t> tstack; tstack.reserve(std::max(1, NE));
-		auto make_tstack = [&](int v_start, int top_depth, int num_items, int item, et_span inner = {}) -> tstack_t {
-			tstack_t t{ v_start, top_depth, nxt_edge_idx, num_items, {} };
+		auto make_tstack = [&](int v_start, int top_depth, int size, int item, et_span inner = {}) -> tstack_t {
+			tstack_t t{ v_start, top_depth, nxt_edge_idx, size, {} };
 			t.spans[stack_dir[top_depth]] = wrap_et(item, inner);
 			return t;
 		};
@@ -193,17 +193,17 @@ struct spqr_tree {
 				a.v_start,
 				std::min(a.top_depth, b.top_depth),
 				a.first_idx,
-				a.num_items + b.num_items,
+				a.size + b.size,
 				{concat_et(b.spans[0], a.spans[0]), concat_et(a.spans[1], b.spans[1])}
 			};
 		};
 		auto finish_tstack = [&](tstack_t t) -> tstack_t {
-			assert(t.num_items >= 4);
+			assert(t.size >= 4);
 			node_type type;
-			if (t.num_items == 4) {
+			if (t.size == 4) {
 				// TODO: figure out the reuse story
 				type = node_type::P;
-			} else if (t.num_items == 5) {
+			} else if (t.size == 5) {
 				type = node_type::S;
 			} else {
 				type = node_type::R;
@@ -213,7 +213,7 @@ struct spqr_tree {
 			assert(t.spans[!dir].empty());
 			int node = alloc_node(make_node(t.v_start, t.top_depth, type));
 			t.spans[dir] = wrap_et(node_item(node), t.spans[dir]);
-			t.num_items = 2;
+			t.size = 2;
 			return t;
 		};
 
@@ -320,7 +320,7 @@ struct spqr_tree {
 					}
 
 					// NB: We can do this check in lots of ways, maybe there's a cleaner check
-					if (is_type_1 && has_return_edge && tstack.back().num_items == 2 && tstack.back().v_start == cur && tstack.back().top_depth == lowval) {
+					if (is_type_1 && has_return_edge && tstack.back().size == 2 && tstack.back().v_start == cur && tstack.back().top_depth == lowval) {
 						tstack.back() = finish_tstack(merge_tstack(tstack.back(), cur_tstack));
 					} else {
 						tstack.push_back(cur_tstack);
