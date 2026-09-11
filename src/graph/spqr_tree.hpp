@@ -220,10 +220,13 @@ struct spqr_tree {
 							if (lowval == cur_depth + 1) {
 								// tstack.back() is currently just smuggling out the child vertex, prepend the bridge component
 								block_list = concat(alloc_node(cur, nxt, edge_dir, node_type::I, st_list{}), tstack.back().lst[1]);
+								tstack.pop_back();
 							} else {
-								block_list = concat(tstack.back().lst[0], tstack.back().lst[1]);
+								// tstack.end()[-2] is the vertex and tstack.end()[-1] is the backedge
+								block_list = concat(tstack.end()[-1].lst[0], tstack.end()[-2].lst[1]);
+								tstack.pop_back();
+								tstack.pop_back();
 							}
-							tstack.pop_back();
 						} else {
 							// self loops
 							assert(nxt == cur);
@@ -294,7 +297,7 @@ struct spqr_tree {
 					}
 
 					// NB: We can do this check in lots of ways, maybe there's a cleaner check
-					if (is_type_1 && !tstack.empty() && tstack.back().num_edges == 1 && tstack.back().v_start == cur && tstack.back().top_depth == lowval) {
+					if (is_type_1 && has_return_edge && tstack.back().num_edges == 1 && tstack.back().v_start == cur && tstack.back().top_depth == lowval) {
 						tstack.back() = make_node(merge_tstack(tstack.back(), cur_tstack), !edge_dir);
 					} else {
 						tstack.push_back(cur_tstack);
