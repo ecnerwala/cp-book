@@ -202,7 +202,7 @@ struct spqr_tree {
 						return t;
 					};
 
-					int orig_idx = nxt_edge_idx;
+					int orig_tstack = int(tstack.size());
 					if (is_tree) {
 						first_occurrence[cur_depth] = NE;
 						self(nxt, cur_depth + 1, lowval);
@@ -250,7 +250,6 @@ struct spqr_tree {
 						};
 						cur_tstack.lst[edge_dir] = wrap_st_list(e_n, st_list{});
 						bool must_merge_all = has_return_edge || is_type_1;
-						if (must_merge_all) first_occurrence[cur_depth] = orig_idx;
 						while (!tstack.empty() && tstack.back().top_depth >= cur_depth) {
 							cur_tstack = make_node(merge_tstack(tstack.back(), cur_tstack), edge_dir);
 							tstack.pop_back();
@@ -261,6 +260,12 @@ struct spqr_tree {
 						}
 
 						if (must_merge_all) {
+							// Merge the rest
+							while (int(tstack.size()) > orig_tstack) {
+								cur_tstack = merge_tstack(tstack.back(), cur_tstack);
+								tstack.pop_back();
+							}
+
 							assert(cur_tstack.top_depth == lowval);
 
 							// Fold everything to the correct side now that we're leaving the child
@@ -270,10 +275,10 @@ struct spqr_tree {
 							cur_tstack.v_start = cur;
 
 							// TODO: Planarity has some logic here
-						}
-						if (is_type_1) {
-							// merge it into a single edge
-							cur_tstack = make_node(cur_tstack, !edge_dir);
+							if (is_type_1) {
+								// merge it into a single edge
+								cur_tstack = make_node(cur_tstack, !edge_dir);
+							}
 						}
 					} else {
 						assert(is_type_1);
@@ -297,17 +302,24 @@ struct spqr_tree {
 
 					if (!has_return_edge) {
 						// Throw cur_vert_node onto the tstack so it'll get interleaved correctly
-						// TODO: This should be *after* any potential type 1 things get P-merged in
 						tstack_t cur_vert_node{
 							cur,
 							cur_depth,
-							nxt_edge_idx,
+							// Copy the back's idx
+							tstack.back().first_idx,
 							0,
 							{st_list{}, st_list{}}
 						};
-						// TODO: I think this is the correct direction?
 						cur_vert_node.lst[edge_dir] = wrap_st_list(1 + cur, cur_subtree);
-						tstack.back() = merge_tstack(tstack.back(), cur_vert_node);
+
+						assert(!tstack.empty());
+						if (is_type_1) {
+							// Insert it underneath the backedge
+							tstack.insert(tstack.end() - 1, cur_vert_node);
+						} else {
+							// Could insert it over, but if we merge this way we prevent some spurious merges
+							tstack.back() = merge_tstack(tstack.back(), cur_vert_node);
+						}
 						has_return_edge = true;
 					}
 				}
