@@ -31,7 +31,7 @@ TEST_CASE("SQPR Tree", "[spqr_tree]") {
 			};
 
 			// Use like this; it affects the next REQUIRE only
-			UNSCOPED_INFO_graph();
+			//UNSCOPED_INFO_graph();
 
 			auto tree = wala::spqr_tree::build(NV, edges);
 
