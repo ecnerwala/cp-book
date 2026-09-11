@@ -198,19 +198,23 @@ struct spqr_tree {
 			};
 		};
 		auto finish_tstack = [&](tstack_t t) -> tstack_t {
+			bool dir = stack_dir[t.top_depth];
+			assert(t.spans[!dir].empty());
+
 			assert(t.size >= 4);
 			node_type type;
-			if (t.size == 4) {
-				// TODO: figure out the reuse story
-				type = node_type::P;
-			} else if (t.size == 5) {
-				type = node_type::S;
+			if (t.size <= 5) {
+				type = t.size == 5 ? node_type::S : node_type::P;
+				// We can potentially reuse the inner one
+				int node = (t.spans[dir].v[!dir] >> 1) - (1 + NV);
+				if (nodes[node].type == type) {
+					// We can reuse this guy.
+					// TODO: What do here? Do we need to make it doubly linked?
+				}
 			} else {
 				type = node_type::R;
 			}
 
-			bool dir = stack_dir[t.top_depth];
-			assert(t.spans[!dir].empty());
 			int node = alloc_node(make_node(t.v_start, t.top_depth, type));
 			t.spans[dir] = wrap_et(node_item(node), t.spans[dir]);
 			t.size = 2;
