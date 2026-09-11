@@ -6,7 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-TEST_CASE("SQPR Tree", "[spqr_tree]") {
+TEST_CASE("SPQR Tree", "[spqr_tree]") {
 	int NV = 10;
 	for (int NE = 0; NE <= NV * NV; NE++) {
 		for (int seed = 0; seed < 50; seed++) {

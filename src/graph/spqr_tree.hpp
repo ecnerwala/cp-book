@@ -211,7 +211,7 @@ struct spqr_tree {
 				for (auto [_, nxt, e, val] : ch[cur]) {
 					int lowval = (val + 6) / 3 - 2;
 					bool is_tree = (val + 6) % 3 != 1;
-					bool is_type_1 = ((val + 6) % 3) < 2;
+					bool is_type_1 = (val + 6) % 3 <= 1;
 
 					if (lowval < 0) lowval = cur_depth + ~lowval;
 
@@ -267,7 +267,7 @@ struct spqr_tree {
 							nxt,
 							cur_depth,
 							nxt_edge_idx++,
-							1,
+							2,
 							{st_list{}, st_list{}}
 						};
 						cur_tstack.lst[edge_dir] = wrap_st_list(e_n, st_list{});
@@ -308,7 +308,7 @@ struct spqr_tree {
 							cur,
 							lowval,
 							nxt_edge_idx++,
-							1,
+							2,
 							{st_list{}, st_list{}}
 						};
 						cur_tstack.lst[!edge_dir] = wrap_st_list(e_n, st_list{});
@@ -340,7 +340,7 @@ struct spqr_tree {
 				}
 				if (!has_return_edge) {
 					// Either our parent is a bridge edge, or we're just a root; either way, we'll just leave it on tstack for future cleanup, it'll just get popped of immediately
-					// edge_dir == !edge_dir[lowval == cur_depth - 1] == true
+					// edge_dir == !stack_dir[lowval == cur_depth - 1] == true
 					bool edge_dir = true;
 					tstack.push_back(finalize_cur_subtree(edge_dir));
 				}
@@ -353,6 +353,7 @@ struct spqr_tree {
 		// Cap it off
 		st_nxt[all_comps.v[1]] = 1;
 		all_comps.v[1] = 1;
+
 
 		return tree;
 	}
