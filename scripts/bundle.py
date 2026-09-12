@@ -23,6 +23,11 @@ keeping `#line` markers at file boundaries.
 --all writes bundled (and minified) copies of every src/ header to
 `<outdir>/bundled/` and `<outdir>/minified/`.
 
+The output is wrapped in a single fold so the pasted block can be
+collapsed in an editor: an `#if 1` / `#endif` pair (treesitter and other
+syntax-aware folding) carrying `// region ...` / `// endregion` comments
+(IntelliJ region folding).
+
 Runs via `uv run` (or plain python3 with the competitive-verifier fork
 installed).
 """
@@ -44,11 +49,13 @@ SRC = ROOT / "src"
 REPO_URL = "https://github.com/ecnerwala/cp-book"
 
 
-def header_comment(args: list[str] | None = None) -> bytes:
+def wrap_fold(code: bytes, args: list[str] | None = None) -> bytes:
     if args is None:
         args = sys.argv[1:]
     cmd = shlex.join(["scripts/bundle.py", *args])
-    return f"// {REPO_URL} (`{cmd}`)\n".encode()
+    head = f"#if 1 // region {REPO_URL} (`{cmd}`)\n".encode()
+    tail = b"#endif // endregion\n"
+    return head + code + tail
 
 
 def resolve_input(path: pathlib.Path) -> pathlib.Path:
@@ -87,7 +94,7 @@ def bundle_all(outdir: pathlib.Path, *, check: bool) -> None:
             dest.parent.mkdir(parents=True, exist_ok=True)
             outputs[name] = bundle([header], level=level)
             args = (["-m"] if level else []) + [str(rel)]
-            dest.write_bytes(header_comment(args) + outputs[name])
+            dest.write_bytes(wrap_fold(outputs[name], args))
         if check and raw_token_stream(outputs["bundled"]) != raw_token_stream(
             outputs["minified"]
         ):
@@ -154,8 +161,8 @@ def main() -> None:
     if not args.paths:
         parser.error("no input files")
     level = args.minify_level or ("medium" if args.minify else None)
-    code = header_comment() + bundle(
-        args.paths, level=level, line_markers=args.line_markers
+    code = wrap_fold(
+        bundle(args.paths, level=level, line_markers=args.line_markers)
     )
     if args.output:
         args.output.write_bytes(code)
