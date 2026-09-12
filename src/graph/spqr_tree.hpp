@@ -71,12 +71,13 @@ struct spqr_tree {
 			auto dfs = [&](this auto&& self, int cur, int d, int prv_e) -> std::array<int, 2> {
 				depth[cur] = d;
 				std::array<int, 2> lowvals{d, d};
-				for (int z = 0; z < int(adj[cur].size()); z++) {
-					auto [nxt, e] = adj[cur][z];
+				for (auto [nxt, e] : adj[cur]) {
 					if (e == prv_e) continue;
-					if (depth[nxt] > depth[cur]) continue;
+					if (depth[nxt] > d) continue;
 
-					auto n_lowvals = depth[nxt] == -1 ? self(nxt, d+1, e) : std::array<int, 2>{depth[nxt], d};
+					bool is_tree = depth[nxt] == -1;
+
+					auto n_lowvals = is_tree ? self(nxt, d+1, e) : std::array<int, 2>{depth[nxt], d};
 
 					{
 						// Extra bit is 0 for type-1 children, 1 for backedges, 2 for children with lowval2
@@ -84,7 +85,7 @@ struct spqr_tree {
 						// We don't really need to distinguish backedges vs type-1 children, but do it just for fun?
 						int lowval = n_lowvals[0];
 						if (lowval >= d) lowval = ~(lowval - d);
-						int kind = 2 * (n_lowvals[1] < d) + (depth[nxt] <= depth[cur]);
+						int kind = 2 * (n_lowvals[1] < d) + !is_tree;
 						outedges.push_back({cur, nxt, e, 3 * (lowval + 2) + kind});
 					}
 
@@ -122,10 +123,15 @@ struct spqr_tree {
 		// We're going to build a tree of all SPQR *nodes* + all original *vertices* (collectively *items*).
 		// Vertices will hang off the first SPQR node containing them, and blocks will be rooted at a topmost Q node for the top edge.
 
-		// As we build, we will represent the Euler tour of nodes/vertices as a linked list.
+		// As we build, we will represent the children of our nodes/vertices as linked lists.
 		constexpr int ROOT_ITEM = 0;
 		auto vert_item = [&](int v) -> int { return 1 + v; };
 		auto edge_item = [&](int e) -> int { return 1 + NV + e; };
+
+		// return arr[dir] == a, arr[!dir] == b
+		auto on_side = []<typename T>(bool dir, T a, T b) -> std::array<T, 2> {
+			return dir ? std::array<T, 2>{b, a} : std::array<T, 2>{a, b};
+		};
 
 		struct item_list {
 			std::array<int, 2> v{-1, -1};
@@ -142,15 +148,15 @@ struct spqr_tree {
 			return {{item, item}};
 		};
 
-		struct item_t {
-			std::array<int, 2> vs;
-			item_list ch;
-			node_type type;
-		};
-		std::vector<item_t> items; items.reserve(1 + NV + 2 * NE); items.resize(1 + NV + NE);
-		auto alloc_item = [&](item_t dat) -> int {
-			int item = int(items.size());
-			items.push_back(dat);
+		std::vector<std::array<int, 2>> item_vs; item_vs.reserve(1 + NV + 2 * NE); item_vs.resize(1 + NV + NE, {-1, -1});
+		std::vector<item_list> item_ch; item_ch.reserve(1 + NV + 2 * NE); item_ch.resize(1 + NV + NE, item_list{});
+		// TODO: node_type::V?
+		std::vector<node_type> item_types; item_types.reserve(1 + NV + 2 * NE); item_types.resize(1 + NV + NE, node_type::Q);
+		auto alloc_item = [&](node_type type) -> int {
+			int item = int(item_vs.size());
+			item_vs.push_back({});
+			item_ch.push_back({});
+			item_types.push_back(type);
 			ch_nxt.push_back(-1);
 			return item;
 		};
@@ -159,12 +165,8 @@ struct spqr_tree {
 		std::vector<int> stack_verts(NV);
 		std::vector<int> stack_dir(NV);
 
-		auto make_node = [&](int v_start, int top_depth, node_type type, item_list inner = item_list{}) -> item_t {
-			bool dir = stack_dir[top_depth];
-			std::array<int, 2> vs{};
-			vs[dir] = stack_verts[top_depth];
-			vs[!dir] = v_start;
-			return {vs, inner, type};
+		auto make_vs = [&](int v_start, int top_depth) -> std::array<int, 2> {
+			return on_side(stack_dir[top_depth], stack_verts[top_depth], v_start);
 		};
 
 		int nxt_edge_idx = 0; // Counts backedges only
@@ -178,9 +180,7 @@ struct spqr_tree {
 		};
 		std::vector<tstack_t> tstack; tstack.reserve(NV + NE);
 		auto make_tstack = [&](int v_start, int top_depth, int item) -> tstack_t {
-			tstack_t t{ v_start, top_depth, nxt_edge_idx, {} };
-			t.spans[stack_dir[top_depth]] = unit_list(item);
-			return t;
+			return { v_start, top_depth, nxt_edge_idx, on_side(stack_dir[top_depth], unit_list(item), {}) };
 		};
 		auto merge_tstack = [&](tstack_t a, tstack_t b) -> tstack_t {
 			return {
@@ -192,6 +192,8 @@ struct spqr_tree {
 		};
 
 		auto maybe_unwrap = [&](tstack_t& t, node_type type) -> int {
+			if (type == node_type::R) return alloc_item(type);
+
 			assert(type == node_type::P || type == node_type::S);
 			// TODO: This is the wrong dir for is-tree S-type checks, should we just dir in?
 			//bool dir = stack_dir[t.top_depth];
@@ -200,34 +202,30 @@ struct spqr_tree {
 			assert(t.spans[!dir].empty());
 			int item = t.spans[dir].v[0];
 			assert(item == t.spans[dir].v[1]);
-			if (items[item].type == type) {
-				t.spans[dir] = items[item].ch;
+			if (item_types[item] == type) {
+				t.spans[dir] = item_ch[item];
 				return item;
 			} else {
-				return -1;
+				return alloc_item(type);
 			}
 		};
 
-		auto finish_tstack = [&](tstack_t t, node_type type, int item) -> tstack_t {
+		auto finish_tstack = [&](tstack_t t, int item) -> tstack_t {
 			bool dir = stack_dir[t.top_depth];
 			assert(t.spans[!dir].empty());
 
-			auto item_dat = make_node(t.v_start, t.top_depth, type, t.spans[dir]);
-			if (item == -1) item = alloc_item(item_dat);
-			else items[item] = item_dat;
-			t.spans[dir] = {item, item};
+			item_vs[item] = make_vs(t.v_start, t.top_depth);
+			item_ch[item] = t.spans[dir];
+			t.spans[dir] = unit_list(item);
 			return t;
 		};
 
-		// TODO: What node type
-		items[ROOT_ITEM] = {{-1, -1}, item_list{}, node_type::O};
 		for (auto rt : roots) {
 			[&](this auto&& self, int cur, int cur_depth) -> void {
 				stack_verts[cur_depth] = cur;
 				bool has_return_edge = false;
 
-				// TODO: node_type::V?
-				items[vert_item(cur)] = {{cur, cur}, item_list{}, node_type::O};
+				item_vs[vert_item(cur)] = {cur, cur};
 
 				for (auto [_, nxt, e, key] : ch[cur]) {
 					int lowval = key / 3 - 2; if (lowval < 0) lowval = cur_depth + ~lowval;
@@ -246,7 +244,7 @@ struct spqr_tree {
 						self(nxt, cur_depth + 1);
 					}
 
-					items[edge_item(e)] = make_node(nxt, cur_depth, node_type::Q);
+					item_vs[edge_item(e)] = make_vs(nxt, cur_depth);
 
 					if (lowval >= cur_depth) {
 						if (is_tree) {
@@ -254,22 +252,24 @@ struct spqr_tree {
 							if (lowval == cur_depth + 1) {
 								// tstack.back() is currently just smuggling out the child vertex, prepend the bridge component
 								// This is just a shortcut for allocating a full I-type tstack
-								int item = alloc_item(make_node(nxt, cur_depth, node_type::I));
-								items[edge_item(e)].ch = concat(unit_list(item), tstack.back().spans[1]);
+								int item = alloc_item(node_type::I);
+								item_vs[item] = make_vs(nxt, cur_depth);
+								item_ch[edge_item(e)] = concat(unit_list(item), tstack.back().spans[1]);
 								tstack.pop_back();
 							} else {
 								// tstack.end()[-2] is the vertex and tstack.end()[-1] is the backedge
-								items[edge_item(e)].ch = concat(tstack.end()[-1].spans[0], tstack.end()[-2].spans[1]);
+								item_ch[edge_item(e)] = concat(tstack.end()[-1].spans[0], tstack.end()[-2].spans[1]);
 								tstack.pop_back();
 								tstack.pop_back();
 							}
 						} else {
 							// self loops
 							assert(nxt == cur);
-							int item = alloc_item(make_node(nxt, cur_depth, node_type::O));
-							items[edge_item(e)].ch = unit_list(item);
+							int item = alloc_item(node_type::O);
+							item_vs[item] = make_vs(nxt, cur_depth);
+							item_ch[edge_item(e)] = unit_list(item);
 						}
-						items[vert_item(cur)].ch = concat(items[vert_item(cur)].ch, unit_list(edge_item(e)));
+						item_ch[vert_item(cur)] = concat(item_ch[vert_item(cur)], unit_list(edge_item(e)));
 						continue;
 					}
 
@@ -283,23 +283,22 @@ struct spqr_tree {
 						// The span lives on side edge_dir
 						cur_tstack = make_tstack(nxt, cur_depth, edge_item(e));
 						while (!tstack.empty() && tstack.back().top_depth >= cur_depth) {
+							node_type type;
 							if (tstack.back().top_depth > cur_depth) {
 								// This will be an S node: merge the vertex in first
 								cur_tstack = merge_tstack(tstack.back(), cur_tstack);
 								tstack.pop_back();
 
-								int item = maybe_unwrap(tstack.back(), node_type::S);
-								cur_tstack = finish_tstack(merge_tstack(tstack.back(), cur_tstack), node_type::S, item);
-								tstack.pop_back();
+								type = node_type::S;
 							} else if (tstack.back().v_start == cur_tstack.v_start) {
 								// This will be a P node
-								int item = maybe_unwrap(tstack.back(), node_type::P);
-								cur_tstack = finish_tstack(merge_tstack(tstack.back(), cur_tstack), node_type::P, item);
-								tstack.pop_back();
+								type = node_type::P;
 							} else {
-								cur_tstack = finish_tstack(merge_tstack(tstack.back(), cur_tstack), node_type::R, -1);
-								tstack.pop_back();
+								type = node_type::R;
 							}
+							int item = maybe_unwrap(tstack.back(), type);
+							cur_tstack = finish_tstack(merge_tstack(tstack.back(), cur_tstack), item);
+							tstack.pop_back();
 						}
 						while (cur_tstack.first_idx > first_occurrence[cur_depth]) {
 							is_single = false;
@@ -313,10 +312,8 @@ struct spqr_tree {
 							if (is_type_1) assert(int(tstack.size()) == orig_tstack + 2);
 
 							int item;
-							if (is_type_1 && is_single) {
-								item = maybe_unwrap(tstack.back(), node_type::S);
-							} else {
-								item = -1;
+							if (is_type_1) {
+								item = maybe_unwrap(tstack.back(), is_single ? node_type::S : node_type::R);
 							}
 
 							while (int(tstack.size()) > orig_tstack) {
@@ -329,13 +326,12 @@ struct spqr_tree {
 
 							// Fold everything to the correct side now that we're leaving the child.
 							// The entire subtree should go to the !edge_dir side.
-							cur_tstack.spans[!edge_dir] = concat(cur_tstack.spans[0], cur_tstack.spans[1]);
-							cur_tstack.spans[edge_dir] = item_list{};
+							cur_tstack.spans = on_side(!edge_dir, concat(cur_tstack.spans[0], cur_tstack.spans[1]), {});
 
 							// TODO: There's some planarity folding to do here
 
 							if (is_type_1) {
-								cur_tstack = finish_tstack(cur_tstack, is_single ? node_type::S : node_type::R, item);
+								cur_tstack = finish_tstack(cur_tstack, item);
 								is_single = true;
 							}
 						}
@@ -351,7 +347,7 @@ struct spqr_tree {
 					if (is_type_1 && has_return_edge && tstack.back().v_start == cur && tstack.back().top_depth == lowval) {
 						// This will be a P node
 						int item = maybe_unwrap(tstack.back(), node_type::P);
-						cur_tstack = finish_tstack(merge_tstack(tstack.back(), cur_tstack), node_type::P, item);
+						cur_tstack = finish_tstack(merge_tstack(tstack.back(), cur_tstack), item);
 						tstack.pop_back();
 					}
 
@@ -365,7 +361,8 @@ struct spqr_tree {
 						if (is_type_1) {
 							// Insert it underneath the backedge
 							cur_vert_node.first_idx = tstack.back().first_idx;
-							tstack.insert(tstack.end() - 1, cur_vert_node);
+							std::swap(tstack.back(), cur_vert_node);
+							tstack.push_back(cur_vert_node);
 						} else if (is_single) {
 							// This could be an S node, so leave it separate
 							tstack.push_back(cur_vert_node);
@@ -387,7 +384,7 @@ struct spqr_tree {
 
 			auto component_val = tstack.back();
 			tstack.pop_back();
-			items[ROOT_ITEM].ch = concat(items[ROOT_ITEM].ch, component_val.spans[1]);
+			item_ch[ROOT_ITEM] = concat(item_ch[ROOT_ITEM], component_val.spans[1]);
 		}
 
 		return tree;
