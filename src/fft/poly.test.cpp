@@ -138,6 +138,49 @@ TEST_CASE("poly::cached products", "[fft]") {
 	REQUIRE(q == a);
 }
 
+TEST_CASE("poly::taylor_shift and the D basis", "[fft]") {
+	using num = modnum<998244353>;
+	using E = engines::ntt<num>;
+	mt19937 mt(Catch::getSeed());
+	for (int n : {0, 1, 2, 3, 8, 37}) {
+		INFO("n = " << n);
+		vector<num> pa(n);
+		fill_rnd(pa, mt);
+		poly::vec<E> a((span<const num>(pa)));
+		// to_D_basis scales [x^k] by k!; from_D_basis undoes it
+		poly::vec<E> d = poly::to_D_basis(a);
+		num f = 1;
+		for (int k = 0; k < n; k++) {
+			if (k > 0) f *= k;
+			REQUIRE(d[k] == pa[k] * f);
+		}
+		REQUIRE(poly::from_D_basis(d) == a);
+		// P(x + c) evaluates as P at x + c, and shifts compose additively
+		num c = num(mt()), c2 = num(mt()), x = num(mt());
+		poly::vec<E> s = poly::taylor_shift(a, c);
+		REQUIRE(s.len() == n);
+		REQUIRE(s(x) == a(x + c));
+		REQUIRE(poly::taylor_shift(s, c2) == poly::taylor_shift(a, c + c2));
+		REQUIRE(poly::taylor_shift(s, -c) == a);
+	}
+	// binomial inversion: g[k] = sum_l C(l, k) f[l] is f(x + 1)
+	vector<num> fv(20);
+	fill_rnd(fv, mt);
+	poly::vec<E> f((span<const num>(fv)));
+	poly::vec<E> g = poly::taylor_shift(f, num(1));
+	vector<vector<num>> binom(20, vector<num>(20));
+	for (int l = 0; l < 20; l++) {
+		binom[l][0] = 1;
+		for (int k = 1; k <= l; k++) binom[l][k] = binom[l-1][k-1] + binom[l-1][k];
+	}
+	for (int k = 0; k < 20; k++) {
+		num want{};
+		for (int l = k; l < 20; l++) want += binom[l][k] * fv[l];
+		REQUIRE(g[k] == want);
+	}
+	REQUIRE(poly::taylor_shift(g, num(-1)) == f);
+}
+
 TEST_CASE("poly::multipoint and poly::interpolate", "[fft]") {
 	using num = modnum<998244353>;
 	mt19937 mt(Catch::getSeed());

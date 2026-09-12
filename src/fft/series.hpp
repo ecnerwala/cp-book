@@ -74,6 +74,36 @@ vec<typename S::engine_t, S::exact_v> integ_shift_offset(const S& a_, int offset
 	}
 	return r;
 }
+// OGF <-> EGF of the same sequence: x^k -> x^k / k! and its inverse.
+// Diagonal, so valid at any precision.
+template <like S>
+vec<typename S::engine_t, S::exact_v> ogf_to_egf(const S& a_) {
+	using E = typename S::engine_t;
+	using T = typename E::value_type;
+	span<E, S::exact_v> a = a_;
+	vec<E, S::exact_v> r(a.begin(), a.end());
+	T f = 1;
+	for (int i = 1; i < r.len(); i++) f *= i;
+	f = inv(f);
+	for (int i = r.len() - 1; i > 0; i--) {
+		r[i] *= f;
+		f *= i;
+	}
+	return r;
+}
+template <like S>
+vec<typename S::engine_t, S::exact_v> egf_to_ogf(const S& a_) {
+	using E = typename S::engine_t;
+	using T = typename E::value_type;
+	span<E, S::exact_v> a = a_;
+	vec<E, S::exact_v> r(a.begin(), a.end());
+	T f = 1;
+	for (int i = 1; i < r.len(); i++) {
+		f *= i;
+		r[i] *= f;
+	}
+	return r;
+}
 template <trunc_like S>
 trunc<typename S::engine_t> deriv_shift_log(const S& a) {
 	return deriv_shift(a) * ps_inv(a);
