@@ -265,7 +265,7 @@ vec<E> from_D_basis(vec<E> p) {
 // P(x + c) = e^{cD} P; length p.len().
 // Polynomials only: [x^k] P(x + c) depends on every higher coefficient of P, so there is no trunc version.
 template <fft::engine E>
-vec<E> taylor_shift(const vec<E>& p, typename E::value_type c) {
+vec<E> taylor_shift(vec<E> p, typename E::value_type c) {
 	using T = typename E::value_type;
 	int n = p.len();
 	// e^{cx} mod x^n: [x^i] = c^i / i!
@@ -279,7 +279,7 @@ vec<E> taylor_shift(const vec<E>& p, typename E::value_type c) {
 		e[i] *= f;
 		f *= i;
 	}
-	return from_D_basis(vec<E>::from_rev_series(series::exact<E>(to_D_basis(p).rev_series() * e)));
+	return from_D_basis(vec<E>::from_rev_series(series::exact<E>(to_D_basis(std::move(p)).rev_series() * e)));
 }
 
 // ==== multipoint evaluation / interpolation ====
