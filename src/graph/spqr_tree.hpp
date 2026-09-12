@@ -182,7 +182,7 @@ struct spqr_tree {
 			int size; // Edges have weight 2 and vertices have weight 1
 			std::array<et_span, 2> spans;
 		};
-		std::vector<tstack_t> tstack; tstack.reserve(std::max(1, NE));
+		std::vector<tstack_t> tstack; tstack.reserve(NV + NE);
 		auto make_tstack = [&](int v_start, int top_depth, int size, int item, et_span inner = {}) -> tstack_t {
 			tstack_t t{ v_start, top_depth, nxt_edge_idx, size, {} };
 			t.spans[stack_dir[top_depth]] = wrap_et(item, inner);
@@ -197,24 +197,19 @@ struct spqr_tree {
 				{concat_et(b.spans[0], a.spans[0]), concat_et(a.spans[1], b.spans[1])}
 			};
 		};
-		auto finish_tstack = [&](tstack_t t) -> tstack_t {
+		auto finish_tstack = [&](tstack_t a, tstack_t b, node_type type) -> tstack_t {
+			if (type == node_type::S || type == node_type::P) {
+				// TODO: Maybe unwrap a
+				assert(a.size == 2);
+				assert(b.size == (type == node_type::S ? 3 : 2));
+			} else {
+				assert(type == node_type::R);
+				assert(a.size + b.size >= 6);
+			}
+			tstack_t t = merge_tstack(a, b);
 			bool dir = stack_dir[t.top_depth];
 			assert(t.spans[!dir].empty());
-
 			assert(t.size >= 4);
-			node_type type;
-			if (t.size <= 5) {
-				type = t.size == 5 ? node_type::S : node_type::P;
-				// We can potentially reuse the inner one
-				int node = (t.spans[dir].v[!dir] >> 1) - (1 + NV);
-				if (nodes[node].type == type) {
-					// We can reuse this guy.
-					// TODO: What do here? Do we need to make it doubly linked?
-				}
-			} else {
-				type = node_type::R;
-			}
-
 			int node = alloc_node(make_node(t.v_start, t.top_depth, type));
 			t.spans[dir] = wrap_et(node_item(node), t.spans[dir]);
 			t.size = 2;
@@ -279,41 +274,71 @@ struct spqr_tree {
 
 					assert(lowval < cur_depth);
 
+					bool is_single = true;
+
 					// make_q_node
 					tstack_t cur_tstack;
 					if (is_tree) {
 						// The span lives on side edge_dir
 						cur_tstack = make_tstack(nxt, cur_depth, 2, edge_item(e));
 						while (!tstack.empty() && tstack.back().top_depth >= cur_depth) {
-							cur_tstack = finish_tstack(merge_tstack(tstack.back(), cur_tstack));
-							tstack.pop_back();
+							if (tstack.back().top_depth > cur_depth) {
+								// This will be an S node: merge the vertex in first
+								assert(tstack.back().size == 1);
+								cur_tstack = merge_tstack(tstack.back(), cur_tstack);
+								tstack.pop_back();
+
+								assert(tstack.back().size == 2);
+								cur_tstack = finish_tstack(tstack.back(), cur_tstack, node_type::S);
+								tstack.pop_back();
+							} else if (tstack.back().v_start == cur_tstack.v_start) {
+								// This will be a P node
+								assert(tstack.back().size == 2);
+								cur_tstack = finish_tstack(tstack.back(), cur_tstack, node_type::P);
+								tstack.pop_back();
+							} else {
+								cur_tstack = finish_tstack(tstack.back(), cur_tstack, node_type::R);
+								tstack.pop_back();
+							}
 						}
 						while (cur_tstack.first_idx > first_occurrence[cur_depth]) {
+							is_single = false;
 							cur_tstack = merge_tstack(tstack.back(), cur_tstack);
 							tstack.pop_back();
 						}
 
 						if (has_return_edge || is_type_1) {
+							assert(int(tstack.size()) >= orig_tstack + 2);
+
+							// Swap the bottom vertex + backedge to the natural order
+							std::swap(tstack[orig_tstack], tstack[orig_tstack + 1]);
+							assert(tstack[orig_tstack].size == 2);
+							assert(tstack[orig_tstack+1].size == 1);
+
+							if (is_type_1) assert(int(tstack.size()) == orig_tstack + 2);
+
 							// Merge the rest
-							while (int(tstack.size()) > orig_tstack) {
+							while (int(tstack.size()) > orig_tstack + 1) {
 								cur_tstack = merge_tstack(tstack.back(), cur_tstack);
 								tstack.pop_back();
 							}
-
-							cur_tstack.v_start = cur;
-							assert(cur_tstack.top_depth == lowval);
 
 							// Fold everything to the correct side now that we're leaving the child
 							// The entire subtree should go to the !edge_dir side
 							cur_tstack.spans[!edge_dir] = concat_et(cur_tstack.spans[0], cur_tstack.spans[1]);
 							cur_tstack.spans[edge_dir] = et_span{};
 
-							// TODO: Planarity has some logic here
-
 							if (is_type_1) {
-								// merge it into a single edge
-								cur_tstack = finish_tstack(cur_tstack);
+								// Do the final S/P type merge
+								cur_tstack = finish_tstack(tstack.back(), cur_tstack, is_single ? node_type::S : node_type::R);
+								is_single = true;
+							} else {
+								cur_tstack = merge_tstack(tstack.back(), cur_tstack);
 							}
+							tstack.pop_back();
+							assert(int(tstack.size()) == orig_tstack);
+
+							cur_tstack.v_start = cur;
 						}
 					} else {
 						assert(is_type_1);
@@ -324,8 +349,9 @@ struct spqr_tree {
 					}
 
 					// NB: We can do this check in lots of ways, maybe there's a cleaner check
-					if (is_type_1 && has_return_edge && tstack.back().size == 2 && tstack.back().v_start == cur && tstack.back().top_depth == lowval) {
-						tstack.back() = finish_tstack(merge_tstack(tstack.back(), cur_tstack));
+					if (is_type_1 && has_return_edge && tstack.back().v_start == cur && tstack.back().top_depth == lowval) {
+						// This will be a P node
+						tstack.back() = finish_tstack(tstack.back(), cur_tstack, node_type::P);
 					} else {
 						tstack.push_back(cur_tstack);
 					}
@@ -339,8 +365,11 @@ struct spqr_tree {
 							// Insert it underneath the backedge
 							cur_vert_node.first_idx = tstack.back().first_idx;
 							tstack.insert(tstack.end() - 1, cur_vert_node);
+						} else if (is_single) {
+							// This could be an S node, so leave it separate
+							tstack.push_back(cur_vert_node);
 						} else {
-							// Merge it eagerly to prevent spurious finish_tstack calls
+							// Just eagerly merge it to avoid a later finalize_node
 							tstack.back() = merge_tstack(tstack.back(), cur_vert_node);
 						}
 						has_return_edge = true;
