@@ -133,8 +133,11 @@ struct spqr_tree {
 		auto edge_item = [&](int e) -> int { return 1 + NV + e; };
 
 		// return arr[dir] == a, arr[!dir] == b
-		auto on_side = []<typename T>(bool dir, T a, T b) -> std::array<T, 2> {
+		auto set_sides = []<typename T>(bool dir, T a, T b) -> std::array<T, 2> {
 			return dir ? std::array<T, 2>{b, a} : std::array<T, 2>{a, b};
+		};
+		auto get_side = []<typename T>(std::array<T, 2> a, bool dir) -> T{
+			return dir ? a[1] : a[0];
 		};
 
 		struct item_list {
@@ -170,7 +173,7 @@ struct spqr_tree {
 		std::vector<int> stack_dir(NV);
 
 		auto make_vs = [&](int v_start, int top_depth) -> std::array<int, 2> {
-			return on_side(stack_dir[top_depth], stack_verts[top_depth], v_start);
+			return set_sides(stack_dir[top_depth], stack_verts[top_depth], v_start);
 		};
 
 		int nxt_edge_idx = 0; // Counts backedges only
@@ -183,7 +186,7 @@ struct spqr_tree {
 			std::array<item_list, 2> spans;
 		};
 		auto make_tstack = [&](int v_start, int top_depth, int item) -> tstack_t {
-			return { v_start, top_depth, nxt_edge_idx, on_side(stack_dir[top_depth], unit_list(item), {}) };
+			return { v_start, top_depth, nxt_edge_idx, set_sides(stack_dir[top_depth], unit_list(item), {}) };
 		};
 		auto merge_tstack = [&](tstack_t a, tstack_t b) -> tstack_t {
 			return {
@@ -202,11 +205,11 @@ struct spqr_tree {
 			//bool dir = stack_dir[t.top_depth];
 
 			bool dir = t.spans[0].empty();
-			assert(t.spans[!dir].empty());
-			int item = t.spans[dir].v[0];
-			assert(item == t.spans[dir].v[1]);
+			assert(get_side(t.spans, !dir).empty());
+			int item = get_side(t.spans, dir).v[0];
+			assert(item == get_side(t.spans, dir).v[1]);
 			if (item_types[item] == type) {
-				t.spans = on_side(dir, item_ch[item], {});
+				t.spans = set_sides(dir, item_ch[item], {});
 				return item;
 			} else {
 				return alloc_item(type);
@@ -215,11 +218,11 @@ struct spqr_tree {
 
 		auto finish_tstack = [&](tstack_t& t, int item) {
 			bool dir = stack_dir[t.top_depth];
-			assert(t.spans[!dir].empty());
+			assert(get_side(t.spans, !dir).empty());
 
 			item_vs[item] = make_vs(t.v_start, t.top_depth);
-			item_ch[item] = t.spans[dir];
-			t.spans = on_side(dir, unit_list(item), {});
+			item_ch[item] = get_side(t.spans, dir);
+			t.spans = set_sides(dir, unit_list(item), {});
 		};
 
 		std::vector<tstack_t> tstack; tstack.reserve(NV + NE);
@@ -339,7 +342,7 @@ struct spqr_tree {
 
 							// Fold everything to the correct side now that we're leaving the child.
 							// The entire subtree should go to the !edge_dir side.
-							cur_tstack.spans = on_side(!edge_dir, concat(cur_tstack.spans[0], cur_tstack.spans[1]), {});
+							cur_tstack.spans = set_sides(!edge_dir, concat(cur_tstack.spans[0], cur_tstack.spans[1]), {});
 
 							// TODO: There's some planarity folding to do here
 
