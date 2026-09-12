@@ -53,7 +53,7 @@ def wrap_fold(code: bytes, args: list[str] | None = None) -> bytes:
     if args is None:
         args = sys.argv[1:]
     cmd = shlex.join(["scripts/bundle.py", *args])
-    head = f"// region {REPO_URL} (`{cmd}`)\n#if 1\n".encode()
+    head = f"// region {REPO_URL} (`{cmd}`)\n#if 1 // cp-book bundle\n".encode()
     tail = b"#endif\n// endregion\n"
     return head + code + tail
 
