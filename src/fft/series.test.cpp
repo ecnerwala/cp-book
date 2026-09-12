@@ -50,6 +50,7 @@ static_assert(!series::has_prefix_cache<archetype<false>>);
 ) {
 	series::stretch(e, 2); series::stretch(t, 2);
 	series::deriv_shift(t); series::integ_shift(t); series::integ_shift_offset(t, 1);
+	series::ogf_to_egf(e); series::egf_to_ogf(t);
 	series::deriv_shift_log(t); series::ps_log(t); series::ps_exp(t);
 	series::ps_pow_monic(t, {}); series::ps_pow(t, int64_t(k)); series::ps_inv(t);
 	series::to_newton_sums(t, 1); series::from_newton_sums(t, 1);

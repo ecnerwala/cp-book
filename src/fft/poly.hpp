@@ -232,6 +232,50 @@ struct form {
 	}
 };
 
+// ==== the D basis ====
+
+// P(x) = sum p_k x^k viewed as the operator polynomial P(D) = sum p_k k! D^k (x^k = k! D^k, as in form).
+// to_D_basis scales [x^k] by k!, from_D_basis undoes it.
+// In this basis D acts as the backward shift (divide by x, dropping the constant term),
+// so the shift operator e^{cD} is multiplication by e^{c/x}, i.e. by e^{cx} mod x^len on rev_series.
+template <fft::engine E>
+vec<E> to_D_basis(vec<E> p) {
+	using T = typename E::value_type;
+	T f = 1;
+	for (int i = 1; i < p.len(); i++) {
+		f *= i;
+		p[i] *= f;
+	}
+	return p;
+}
+template <fft::engine E>
+vec<E> from_D_basis(vec<E> p) {
+	using T = typename E::value_type;
+	T f = 1;
+	for (int i = 1; i < p.len(); i++) f *= i;
+	f = inv(f);
+	for (int i = p.len() - 1; i > 0; i--) {
+		p[i] *= f;
+		f *= i;
+	}
+	return p;
+}
+
+// P(x + c) = e^{cD} P; length p.len().
+// Polynomials only: [x^k] P(x + c) depends on every higher coefficient of P, so there is no trunc version.
+template <fft::engine E>
+vec<E> taylor_shift(const vec<E>& p, typename E::value_type c) {
+	using T = typename E::value_type;
+	int n = p.len();
+	// e^{cx} mod x^n, as from_D_basis(1/(1-cx)) in natural order
+	vec<E> g(n);
+	if (n > 0) g[0] = T(1);
+	for (int i = 1; i < n; i++) g[i] = g[i-1] * c;
+	g = from_D_basis(std::move(g));
+	series::trunc<E> e(g.begin(), g.end());
+	return from_D_basis(vec<E>::from_rev_series(series::exact<E>(to_D_basis(p).rev_series() * e)));
+}
+
 // ==== multipoint evaluation / interpolation ====
 
 // Subproduct tree over points a[0:N]
