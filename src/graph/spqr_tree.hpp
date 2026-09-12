@@ -201,7 +201,10 @@ struct spqr_tree {
 		auto maybe_unwrap = [&](tstack_t& t, node_type type) -> int {
 			assert(type == node_type::P || type == node_type::S);
 			assert(t.size == 2);
-			bool dir = stack_dir[t.top_depth];
+			// TODO: This is the wrong dir for is-tree S-type checks, should we just pass it in?
+			//bool dir = stack_dir[t.top_depth];
+
+			bool dir = t.spans[0].empty();
 			assert(t.spans[!dir].empty());
 			int node = (t.spans[dir].v[0] >> 1) - (1 + NV);
 			if (nodes[node].type == type) {
@@ -220,7 +223,7 @@ struct spqr_tree {
 			assert(t.spans[!dir].empty());
 
 			auto node_dat = make_node(t.v_start, t.top_depth, type);
-			if (node == -1) alloc_node(node_dat);
+			if (node == -1) node = alloc_node(node_dat);
 			else nodes[node] = node_dat;
 
 			t.spans[dir] = wrap_et(node_item(node), t.spans[dir]);
