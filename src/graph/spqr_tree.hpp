@@ -197,26 +197,32 @@ struct spqr_tree {
 				{concat_et(b.spans[0], a.spans[0]), concat_et(a.spans[1], b.spans[1])}
 			};
 		};
-		auto finish_tstack = [&](tstack_t a, tstack_t b, node_type type) -> tstack_t {
-			if (type == node_type::S || type == node_type::P) {
-				// TODO: Maybe unwrap a
-				assert(a.size == 2);
-				assert(b.size == (type == node_type::S ? 3 : 2));
+
+		auto maybe_unwrap = [&](tstack_t& t, node_type type) -> int {
+			assert(type == node_type::P || type == node_type::S);
+			assert(t.size == 2);
+			bool dir = stack_dir[t.top_depth];
+			assert(t.spans[!dir].empty());
+			int node = (t.spans[dir].v[0] >> 1) - (1 + NV);
+			if (nodes[node].type == type) {
+				return -1;
+				// TODO: Unwrap
+				//t.spans[dir] = nodes[node].inner_span
+				return node;
 			} else {
-				assert(type == node_type::R);
-				assert(a.size + b.size >= 6);
+				return -1;
 			}
-			tstack_t t = merge_tstack(a, b);
+		};
+
+		auto finish_tstack = [&](tstack_t t, node_type type, int node) -> tstack_t {
 			assert(t.size >= 4);
 			bool dir = stack_dir[t.top_depth];
-
-			{
-				// TODO: this is only for the is_type_1 merge case
-				t.spans[dir] = concat_et(t.spans[0], t.spans[1]);
-				t.spans[!dir] = {};
-			}
 			assert(t.spans[!dir].empty());
-			int node = alloc_node(make_node(t.v_start, t.top_depth, type));
+
+			auto node_dat = make_node(t.v_start, t.top_depth, type);
+			if (node == -1) alloc_node(node_dat);
+			else nodes[node] = node_dat;
+
 			t.spans[dir] = wrap_et(node_item(node), t.spans[dir]);
 			t.size = 2;
 			return t;
@@ -295,15 +301,17 @@ struct spqr_tree {
 								tstack.pop_back();
 
 								assert(tstack.back().size == 2);
-								cur_tstack = finish_tstack(tstack.back(), cur_tstack, node_type::S);
+								int node = maybe_unwrap(tstack.back(), node_type::S);
+								cur_tstack = finish_tstack(merge_tstack(tstack.back(), cur_tstack), node_type::S, node);
 								tstack.pop_back();
 							} else if (tstack.back().v_start == cur_tstack.v_start) {
 								// This will be a P node
 								assert(tstack.back().size == 2);
-								cur_tstack = finish_tstack(tstack.back(), cur_tstack, node_type::P);
+								int node = maybe_unwrap(tstack.back(), node_type::P);
+								cur_tstack = finish_tstack(merge_tstack(tstack.back(), cur_tstack), node_type::P, node);
 								tstack.pop_back();
 							} else {
-								cur_tstack = finish_tstack(tstack.back(), cur_tstack, node_type::R);
+								cur_tstack = finish_tstack(merge_tstack(tstack.back(), cur_tstack), node_type::R, -1);
 								tstack.pop_back();
 							}
 						}
@@ -316,37 +324,37 @@ struct spqr_tree {
 						if (has_return_edge || is_type_1) {
 							assert(int(tstack.size()) >= orig_tstack + 2);
 
-							// Swap the bottom vertex + backedge to the natural order
-							std::swap(tstack[orig_tstack], tstack[orig_tstack + 1]);
-							assert(tstack[orig_tstack].size == 2);
-							assert(tstack[orig_tstack+1].size == 1);
-
+							// NB: We have a vertex and then a frond; maybe we should reverse them?
+							assert(tstack[orig_tstack].size == 1);
+							assert(tstack[orig_tstack+1].size == 2);
 							if (is_type_1) assert(int(tstack.size()) == orig_tstack + 2);
 
-							// Merge the rest
-							while (int(tstack.size()) > orig_tstack + 1) {
+							int node;
+							if (is_type_1 && is_single) {
+								node = maybe_unwrap(tstack.back(), node_type::S);
+							} else {
+								node = -1;
+							}
+
+							while (int(tstack.size()) > orig_tstack) {
 								cur_tstack = merge_tstack(tstack.back(), cur_tstack);
 								tstack.pop_back();
 							}
 
-							// Hack to get the correct v_start for the merge
-							tstack.back().v_start = cur;
+							cur_tstack.v_start = cur;
+							assert(cur_tstack.top_depth == lowval);
+
+							// Fold everything to the correct side now that we're leaving the child.
+							// The entire subtree should go to the !edge_dir side.
+							cur_tstack.spans[!edge_dir] = concat_et(cur_tstack.spans[0], cur_tstack.spans[1]);
+							cur_tstack.spans[edge_dir] = et_span{};
+
+							// TODO: There's some planarity folding to do here
 
 							if (is_type_1) {
-								// Do the final S/P type merge
-								// NB: finish_tstack does the right folding for us.
-								cur_tstack = finish_tstack(tstack.back(), cur_tstack, is_single ? node_type::S : node_type::R);
+								cur_tstack = finish_tstack(cur_tstack, is_single ? node_type::S : node_type::R, node);
 								is_single = true;
-							} else {
-								cur_tstack = merge_tstack(tstack.back(), cur_tstack);
-
-								// Fold everything to the correct side now that we're leaving the child.
-								// The entire subtree should go to the !edge_dir side.
-								cur_tstack.spans[!edge_dir] = concat_et(cur_tstack.spans[0], cur_tstack.spans[1]);
-								cur_tstack.spans[edge_dir] = et_span{};
 							}
-							tstack.pop_back();
-							assert(int(tstack.size()) == orig_tstack);
 						}
 					} else {
 						assert(is_type_1);
@@ -359,10 +367,12 @@ struct spqr_tree {
 					// NB: We can do this check in lots of ways, maybe there's a cleaner check
 					if (is_type_1 && has_return_edge && tstack.back().v_start == cur && tstack.back().top_depth == lowval) {
 						// This will be a P node
-						tstack.back() = finish_tstack(tstack.back(), cur_tstack, node_type::P);
-					} else {
-						tstack.push_back(cur_tstack);
+						int node = maybe_unwrap(tstack.back(), node_type::P);
+						cur_tstack = finish_tstack(merge_tstack(tstack.back(), cur_tstack), node_type::P, node);
+						tstack.pop_back();
 					}
+
+					tstack.push_back(cur_tstack);
 
 					if (!has_return_edge) {
 						// Throw cur_vert_node onto the tstack so it'll get interleaved correctly
