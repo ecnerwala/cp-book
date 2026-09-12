@@ -24,9 +24,9 @@ keeping `#line` markers at file boundaries.
 `<outdir>/bundled/` and `<outdir>/minified/`.
 
 The output is wrapped in a single fold so the pasted block can be
-collapsed in an editor: `// region ... {{{` / `// endregion }}}` comments
-(IntelliJ region folding, vim marker folding) around an `#if 1` / `#endif`
-pair (treesitter and other syntax-aware folding).
+collapsed in an editor: `// region ...` / `// endregion` comments
+(IntelliJ region folding) around an `#if 1` / `#endif` pair (treesitter
+and other syntax-aware folding).
 
 Runs via `uv run` (or plain python3 with the competitive-verifier fork
 installed).
@@ -53,8 +53,8 @@ def wrap_fold(code: bytes, args: list[str] | None = None) -> bytes:
     if args is None:
         args = sys.argv[1:]
     cmd = shlex.join(["scripts/bundle.py", *args])
-    head = f"// region {REPO_URL} (`{cmd}`) {{{{{{\n#if 1\n".encode()
-    tail = b"#endif\n// endregion }}}\n"
+    head = f"// region {REPO_URL} (`{cmd}`)\n#if 1\n".encode()
+    tail = b"#endif\n// endregion\n"
     return head + code + tail
 
 
