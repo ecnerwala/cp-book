@@ -234,9 +234,10 @@ struct form {
 
 // ==== the D basis ====
 
-// P(x) = sum p_k x^k viewed as the operator polynomial P(D) = sum p_k k! D^k (x^k = k! D^k, as in form).
-// to_D_basis scales [x^k] by k!, from_D_basis undoes it.
-// In this basis D acts as the backward shift (divide by x, dropping the constant term),
+// to_D_basis writes P in the iterated-integral basis x^k / k! = I^k 1 (I = D^{-1}, integration from 0), scaling [x^k] by k!:
+// Q = to_D_basis(P) means P = Q(I) 1.
+// from_D_basis undoes it.
+// In this basis D is division by the variable (dropping the constant term),
 // so the shift operator e^{cD} is multiplication by e^{c/x}, i.e. by e^{cx} mod x^len on rev_series.
 template <fft::engine E>
 vec<E> to_D_basis(vec<E> p) {
