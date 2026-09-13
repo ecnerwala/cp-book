@@ -5,6 +5,8 @@
  */
 
 #include <algorithm>
+#include <bit>
+#include <memory>
 #include <vector>
 #include <string>
 #include <cassert>
@@ -148,10 +150,16 @@ private:
 		assert(sigma >= 0);
 		for (auto s : S) assert(0 <= index_t(s) && index_t(s) < sigma);
 		sa = std::vector<index_t>(N+1);
-		// Scratch for sais: the work array (N+1), then lms_pos (N/2+1).
-		// The recursion (on at most N/2 pieces) fits in the work array.
+		// All of sais's scratch, so the recursion doesn't allocate.
+		// tmp is the work array (N+1), then lms_pos (N/2+1); the recursion (on at most N/2 pieces) fits in the
+		// work array.
+		// Each level carves its per-bucket tables (4*sigma+1 pointers, sigma ints) out of the pools.
+		// The level-k alphabet is smaller than N/2^k, so all levels together use less than sigma + N entries,
+		// plus the dead slot per level; the pools are left uninitialized so only what's used is touched.
 		std::vector<index_t> tmp(N+1 + N/2+1);
-		SuffixArrayBase::sais<String>(N, S, sa.data(), sigma, tmp.data());
+		auto ptr_pool = std::make_unique_for_overwrite<index_t*[]>(4*(sigma + N) + std::bit_width(unsigned(N)));
+		auto bkt_pool = std::make_unique_for_overwrite<index_t[]>(sigma + N);
+		SuffixArrayBase::sais<String>(N, S, sa.data(), sigma, tmp.data(), ptr_pool.get(), bkt_pool.get());
 	}
 
 	// Suffix array by induced sorting (SA-IS): computes sa[0..N] for S plus a sentinel.
@@ -168,7 +176,10 @@ private:
 	// The L pass fills A and B front to back; the S pass fills D back to front, and writes the C entries
 	// back to front into W[0..num_pieces), where they come out as the sorted list of LMS positions.
 	// The LMS round uses sa itself as W; the final round has to write sa, so it uses tmp as W.
-	template <typename String> static void sais(int N, const String& S, index_t* sa, int sigma, index_t* tmp) {
+	template <typename String> static void sais(
+		int N, const String& S, index_t* sa, int sigma,
+		index_t* tmp, index_t** ptr_pool, index_t* bkt_pool
+	) {
 		if (N == 0) {
 			sa[0] = 0;
 			return;
@@ -189,8 +200,11 @@ private:
 		// induce, which also uses bkt for |D_c| in the LMS round).
 		// (Pointers rather than indices into W: the indexed stores that indices compile to measured 2x
 		// slower on inputs with long same-bucket chains, presumably by defeating memory renaming.)
-		std::vector<index_t*> ptr(4*sigma + 1, sa);
-		std::vector<index_t> bkt(sigma);
+		index_t** const ptr = ptr_pool;
+		index_t* const bkt = bkt_pool;
+		ptr_pool += 4*sigma + 1;
+		bkt_pool += sigma;
+		std::fill(ptr, ptr_pool, sa);
 
 		// Phase 1: classify, counting each class/bucket and recording the LMS positions.
 		int num_pieces = 0;
@@ -210,8 +224,8 @@ private:
 
 		// Phase 2: sort the LMS substrings, if there's more than one.
 		if (num_pieces > 1) {
-			induce<false>(N, S, sigma, ptr.data(), bkt.data(), sa, lms_pos, num_pieces, sa);
-			recover_counts(sigma, ptr.data(), bkt.data(), sa, num_pieces);
+			induce<false>(N, S, sigma, ptr, bkt, sa, lms_pos, num_pieces, sa);
+			recover_counts(sigma, ptr, bkt, sa, num_pieces);
 			index_t* const pieces = sa;
 
 			// Compute the lengths of the pieces in preparation for equality
@@ -256,7 +270,7 @@ private:
 					next_S[num_pieces-1-k] = tmp[lms_pos[k]>>1];
 				}
 
-				sais<const index_t*>(num_pieces, next_S, sa, next_sigma, tmp);
+				sais<const index_t*>(num_pieces, next_S, sa, next_sigma, tmp, ptr_pool, bkt_pool);
 
 				// Map the suffix array of the names back up to piece start points
 				for (int i = 1; i <= num_pieces; i++) {
@@ -268,7 +282,7 @@ private:
 		}
 
 		// Phase 3: induce everything from the sorted pieces, now in sa[1..num_pieces].
-		induce<true>(N, S, sigma, ptr.data(), bkt.data(), W_final, sa+1, num_pieces, sa);
+		induce<true>(N, S, sigma, ptr, bkt, W_final, sa+1, num_pieces, sa);
 	}
 
 	// One round of induced sorting from the given seeds (the LMS positions, sorted if FINAL).
