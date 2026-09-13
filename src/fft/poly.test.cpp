@@ -117,24 +117,40 @@ TEST_CASE("poly::cached products", "[fft]") {
 	fill_rnd(pa, mt);
 	fill_rnd(pb, mt);
 	poly::vec<E> a((span<const num>(pa))), b((span<const num>(pb)));
-	// poly::vec products return poly::cached, adopting the product transform
+	// products are plain vecs; keep asks for a cached seeded with the product transform
 	auto p = a * b;
-	static_assert(std::is_same_v<decltype(p), poly::cached<E>>);
-	REQUIRE(p.rev_series().cache().size() > 0);
-	poly::vec<E> pp = a * b; // naming the plain type moves out and drops the transform
-	check_eq(vector<num>(pp.begin(), pp.end()), multiply_slow(pa, pb));
+	static_assert(std::is_same_v<decltype(p), poly::vec<E>>);
+	check_eq(vector<num>(p.begin(), p.end()), multiply_slow(pa, pb));
+	auto k = multiply(a, b, poly::keep);
+	static_assert(std::is_same_v<decltype(k), poly::cached<E>>);
+	REQUIRE(k == p);
+	REQUIRE(k.rev_series().spectrum().size() > 0);
 	// cached operands reuse and chain; results compare across representations
 	poly::cached<E> ca(a), cb(b);
 	REQUIRE(ca == a);
 	REQUIRE(ca * cb == p);
 	REQUIRE(ca * b == p);
-	auto sq = square(ca);
+	REQUIRE(ca.rev_series().spectrum().size() > 0);
+	auto sq = square(ca, poly::keep);
 	static_assert(std::is_same_v<decltype(sq), poly::cached<E>>);
 	REQUIRE(sq == a * a);
+	static_assert(std::is_same_v<decltype(square(ca)), poly::vec<E>>);
+	REQUIRE(multiply_add2(ca, cb, a, b) == p + p);
 	num x = num(mt());
 	REQUIRE(p(x) == ca(x) * cb(x));
-	// moving out drops down to a plain mutable poly::vec
-	poly::vec<E> q = std::move(ca);
+	// into: reuse a caller-owned vec or cached, including one of the operands
+	poly::vec<E> out;
+	multiply(ca, b, poly::into(out));
+	REQUIRE(out == p);
+	poly::cached<E> kout;
+	multiply(a, cb, poly::into(kout));
+	REQUIRE(kout == p);
+	poly::vec<E> a2 = a;
+	a2 *= b;
+	REQUIRE(a2 == p);
+	// leaving cached: coeffs() copies, or moves out and drops the transform
+	REQUIRE(ca.coeffs() == a);
+	poly::vec<E> q = std::move(ca).coeffs();
 	REQUIRE(q == a);
 }
 

@@ -236,11 +236,12 @@ TEMPLATE_TEST_CASE("FFT cached multiply", "[fft]", ALL_ENGINES) {
 		check_eq(out, multiply_slow(a, a));
 	}
 	{
-		// multiply_cached: coefficients match, and the seeded (or lazily built)
+		// keep form: coefficients match, and the seeded (or lazily built)
 		// transform is directly usable in further products, including after extend
-		vector<num> ab;
+		vector<num> ab(a.size() + b.size() - 1);
 		fft::transformed<E> cab;
-		multiply_cached<E>(span<const num>(a), ca, span<const num>(b), cb, ab, cab);
+		multiply<E>(span<const num>(a), ca, span<const num>(b), cb, span<num>(ab), cab);
+		if constexpr (std::same_as<typename E::product, fft::transformed<E>>) REQUIRE(cab.size() > 0);
 		check_eq(ab, multiply_slow(a, b));
 		vector<num> out(ab.size() + c.size() - 1);
 		multiply<E>(span<const num>(ab), cab, span<const num>(c), cc, span<num>(out));
@@ -266,9 +267,9 @@ TEMPLATE_TEST_CASE("FFT cached multiply", "[fft]", ALL_ENGINES) {
 		fill_rnd(d, mt);
 		fill_rnd(e, mt);
 		fft::transformed<E> cd, ce;
-		vector<num> de;
+		vector<num> de(d.size() + e.size() - 1);
 		fft::transformed<E> cde;
-		multiply_cached<E>(span<const num>(d), cd, span<const num>(e), ce, de, cde);
+		multiply<E>(span<const num>(d), cd, span<const num>(e), ce, span<num>(de), cde);
 		check_eq(de, multiply_slow(d, e));
 		vector<num> out(de.size() + c.size() - 1);
 		multiply<E>(span<const num>(de), cde, span<const num>(c), cc, span<num>(out));

@@ -91,9 +91,16 @@ concept engine = requires(
 	requires std::same_as<std::remove_cvref_t<decltype(E::unit_scale)>, int>;
 };
 
-// Constrains two engine-parameterized value types to share the same engine.
+// How a result is folded into an output slot: op(dest, value).
+template <typename Op, typename T>
+concept fold_op = std::invocable<const Op&, T&, T>;
+
+// Constrains two engine-parameterized value types (possibly cv/ref-qualified) to share the same engine.
 template <typename A, typename B>
-concept same_engine = std::same_as<typename A::engine_t, typename B::engine_t>;
+concept same_engine = std::same_as<
+	typename std::remove_cvref_t<A>::engine_t,
+	typename std::remove_cvref_t<B>::engine_t
+>;
 
 // short spelling for E::transformed at use sites
 template <engine E> using transformed = typename E::transformed;

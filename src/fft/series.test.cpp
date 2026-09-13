@@ -23,7 +23,20 @@ static_assert(!poly::like<series::exact<CE>>);
 static_assert(!poly::like<series::trunc<CE>>);
 static_assert(!poly::like<series::cached_exact<CE>>);
 static_assert(!poly::like<series::cached_trunc<CE>>);
-static_assert(!poly::like<series::prefix_cached<CE>>);
+static_assert(!poly::like<series::operand<CE, true>>);
+// every owning type and view is a series operand, cv/ref-qualified or not
+static_assert(series::like<series::exact<CE>> && series::like<const series::trunc<CE>&>);
+static_assert(series::like<series::cached_exact<CE>&> && series::like<const series::cached_trunc<CE>&>);
+static_assert(series::like<series::operand<CE, true>> && series::like<series::operand<CE, false>>);
+// exact widens to trunc, cached to operand, never the other way implicitly
+static_assert(std::is_convertible_v<series::cached_exact<CE>&, series::operand<CE, false>>);
+static_assert(!std::is_convertible_v<series::cached_trunc<CE>&, series::operand<CE, true>>);
+static_assert(!std::is_convertible_v<series::cached_exact<CE>, series::exact<CE>>);
+static_assert(!std::is_convertible_v<series::exact<CE>, series::cached_exact<CE>>);
+static_assert(!std::is_convertible_v<std::span<const CE::value_type>, series::operand<CE, true>>);
+static_assert(std::is_constructible_v<series::operand<CE, true>, std::span<const CE::value_type>>);
+static_assert(!std::is_convertible_v<series::operand<CE, true>, series::exact<CE>>);
+static_assert(std::is_constructible_v<series::exact<CE>, series::operand<CE, false>>);
 }
 
 // Archetype exposing exactly the series::like contract, nothing more.
@@ -37,13 +50,9 @@ struct archetype {
 	series::vec<CE, exact_> v;
 	int len() const { return v.len(); }
 	const typename CE::value_type& operator[](int i) const { return v[i]; }
-	operator std::span<const typename CE::value_type>() const { return std::span<const typename CE::value_type>(v); }
-	operator series::span<CE, exact_>() const { return v; }
-	series::span<CE, exact_> first(int n) const { return v.first(n); }
+	operator series::operand<CE, exact_>() const { return v; }
 };
 static_assert(series::like<archetype<true>> && series::like<archetype<false>>);
-static_assert(!series::has_cache<archetype<false>> && !series::has_cache_opt<archetype<false>>);
-static_assert(!series::has_prefix_cache<archetype<false>>);
 
 [[maybe_unused]] void archetype_instantiations(
 	const archetype<true>& e, const archetype<false>& t, uint64_t k
@@ -63,8 +72,9 @@ static_assert(!series::has_prefix_cache<archetype<false>>);
 	series::operator+(e, t); series::operator-(t, t);
 	series::kth_term_of_rational_function(e, e, k);
 	series::kth_term_of_linear_recurrence(t, e, k);
-	series::with_len(e, 4); series::with_len(t, 2);
-	series::maybe_cached<CE, true>{e};
+	series::multiply(e, t, series::keep); series::square(t, series::keep);
+	series::cached_exact<CE> ce;
+	series::multiply(e, e, series::into(ce));
 }
 }
 
@@ -139,67 +149,111 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_linear_recurrence", "[fft]", MOD_ENG
 	}
 }
 
-TEST_CASE("series::vec cached wrappers", "[fft]") {
-	using num = modnum<998244353>;
-	using E = engines::ntt<num>;
+TEMPLATE_TEST_CASE("series result placement: plain, keep, into", "[fft]", MOD_ENGINES) {
+	using E = TestType;
+	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
-	// series::cached works with the cached fft:: entry points
-	series::exact<E> a(37), b(21);
+	series::exact<E> a(37), b(21), c(5);
 	fill_rnd(a, mt);
 	fill_rnd(b, mt);
-	series::cached_exact<E> ca(a), cb(b);
-	series::exact<E> got(size_t(a.len() + b.len() - 1));
-	fft::multiply<E>(span<const num>(ca), ca.cache(),
-			span<const num>(cb), cb.cache(), span<num>(got));
-	REQUIRE(got == a * b);
-	REQUIRE((ca * cb) == (a * b));
-	REQUIRE(middle_product(ca, cb) == fft::middle_product<E>(a, b));
-	REQUIRE(square(ca) == square(a));
-	// the same transform serves multiply and square of the same coefficients
-	fft::transformed<E> fa, fb;
-	series::exact<E> got2(size_t(a.len() + b.len() - 1));
-	fft::multiply<E>(span<const num>(a), fa, span<const num>(b), fb, span<num>(got2));
-	REQUIRE(got2 == a * b);
-	fft::square<E>(span<const num>(a), fa, span<num>(got2));
-	series::exact<E> asq = square(a);
-	REQUIRE(equal(got2.begin(), got2.end(), asq.begin()));
-	// cached_power_series products match plain products at all mixed shapes (see the
-	// templated multiply_cached test for the transform-seeding path on all engines)
-	series::trunc<E> pa(40), pb(25);
+	fill_rnd(c, mt);
+	series::trunc<E> t(30);
+	fill_rnd(t, mt);
+	// ordinary products are plain vecs of the natural exactness
+	auto p = a * b;
+	static_assert(std::is_same_v<decltype(p), series::exact<E>>);
+	check_eq(std::vector<num>(p), multiply_slow(a, b));
+	static_assert(std::is_same_v<decltype(a * t), series::trunc<E>>);
+	static_assert(std::is_same_v<decltype(series::square(t)), series::trunc<E>>);
+	static_assert(std::is_same_v<decltype(series::middle_product(t, b)), series::trunc<E>>);
+	// keep returns a cached whose transform (when the engine seeds it) is directly usable
+	auto k = series::multiply(a, b, series::keep);
+	static_assert(std::is_same_v<decltype(k), series::cached_exact<E>>);
+	REQUIRE(k == p);
+	if constexpr (std::same_as<typename E::product, fft::transformed<E>>) {
+		REQUIRE(k.spectrum().size() > 0);
+	}
+	REQUIRE(k * c == p * c);
+	REQUIRE(series::square(k, series::keep) == p * p);
+	REQUIRE(series::multiply_add2(a, b, b, a, series::keep) == p + p);
+	static_assert(std::is_same_v<decltype(series::multiply(a, t, series::keep)), series::cached_trunc<E>>);
+	REQUIRE(series::multiply(a, t, series::keep) == a * t);
+	// into: caller-owned outputs are resized (vec, cached) or filled up to their size (span)
+	series::exact<E> out;
+	series::multiply(a, b, series::into(out));
+	REQUIRE(out == p);
+	series::multiply(a, c, series::into(out));
+	REQUIRE(out == a * c);
+	series::cached_exact<E> kout;
+	series::multiply(a, b, series::into(kout));
+	REQUIRE(kout == p);
+	REQUIRE(kout * c == p * c);
+	std::vector<num> buf(10);
+	series::multiply(a, b, series::into(std::span<num>(buf)));
+	REQUIRE(equal(buf.begin(), buf.end(), p.begin()));
+	series::trunc<E> tout;
+	series::multiply(t, a, series::into(tout));
+	REQUIRE(tout == t * a);
+	// aliasing an operand is fine: the inputs are transformed before the output is written
+	series::exact<E> a2 = a;
+	series::multiply(a2, b, series::into(a2));
+	REQUIRE(a2 == p);
+	a2 = a;
+	a2 *= b;
+	REQUIRE(a2 == p);
+	series::cached_exact<E> ca2(a);
+	series::multiply(ca2, b, series::into(ca2));
+	REQUIRE(ca2 == p);
+}
+
+TEMPLATE_TEST_CASE("series::cached operands: growth and const reuse", "[fft]", MOD_ENGINES) {
+	using E = TestType;
+	mt19937 mt(Catch::getSeed());
+	series::exact<E> a(37), b(21), big(300);
+	fill_rnd(a, mt);
+	fill_rnd(b, mt);
+	fill_rnd(big, mt);
+	// a cached built from coefficients has no transform until a non-const use grows it
+	series::cached_exact<E> ca(a);
+	REQUIRE(ca.spectrum().size() == 0);
+	REQUIRE(ca * b == a * b);
+	int n1 = ca.spectrum().size();
+	REQUIRE(n1 == fft::conv_size_for(a.len() + b.len() - 1).n);
+	REQUIRE(ca * big == a * big);
+	REQUIRE(ca.spectrum().size() == fft::conv_size_for(a.len() + big.len() - 1).n);
+	// a const cached is reused when large enough, otherwise left alone
+	const series::cached_exact<E> cb(b, 64);
+	REQUIRE(cb.spectrum().size() == 64);
+	REQUIRE(cb * a == a * b);
+	REQUIRE(cb * big == b * big);
+	REQUIRE(cb.spectrum().size() == 64);
+	REQUIRE(series::middle_product(big, cb) == series::middle_product(big, b));
+	// cached and plain operands are interchangeable at every mixed shape
+	series::trunc<E> pa(40), pb(25), small(3);
 	fill_rnd(pa, mt);
 	fill_rnd(pb, mt);
-	series::prefix_cached<E> qa(pa), qb(pb);
-	REQUIRE((qa * qb) == (pa * pb));
-	REQUIRE((qa * pb) == (pa * pb));
-	REQUIRE((pa * qb) == (pa * pb));
-	// prefix caches survive precision extension: covered prefixes are reused, the
-	// clamped full cache is rebuilt, and results still match
-	series::trunc<E> tail(15);
-	fill_rnd(tail, mt);
-	qa.append(span<const num>(tail));
-	series::trunc<E> pa2 = pa;
-	pa2.insert(pa2.end(), tail.begin(), tail.end());
-	for (int p : {8, 16, 32}) {
-		auto pv = qa.first(min(p, qa.len()));
-		REQUIRE(pv.len() == min(p, qa.len()));
-		REQUIRE(pv[0] == pa2[0]);
-	}
-	REQUIRE((qa * qb) == (pa2 * pb));
-	// products against many smaller operands reuse per-scale prefix caches
-	for (int k : {1, 2, 3, 5, 17, 33, 100}) {
-		series::trunc<E> small(size_t(k), num{});
-		fill_rnd(small, mt);
-		REQUIRE((qa * small) == (pa2 * small));
-		REQUIRE((small * qa) == (small * pa2));
-	}
-	// a whole cache also serves truncated products when the operand fits under
-	// the precision; oversized operands fall back to a truncated span
-	series::cached_trunc<E> wt{series::trunc<E>(pa)};
-	series::trunc<E> big(100);
-	fill_rnd(big, mt);
-	REQUIRE((wt * big) == (pa * big));
-	REQUIRE((big * wt) == (big * pa));
-	REQUIRE((wt * pb) == (pa * pb));
+	fill_rnd(small, mt);
+	series::cached_trunc<E> qa(pa);
+	const series::cached_trunc<E> qb(pb, 32);
+	REQUIRE(qa * qb == pa * pb);
+	REQUIRE(qa * pb == pa * pb);
+	REQUIRE(pa * qb == pa * pb);
+	REQUIRE(qa * small == pa * small);
+	REQUIRE(small * qa == small * pa);
+	REQUIRE(qa * a == pa * a);
+	REQUIRE(ca * pb == a * pb);
+	// leaving cached: coeffs() by const& or by move
+	const series::exact<E>& ref = ca.coeffs();
+	REQUIRE(ref == a);
+	series::exact<E> moved = std::move(ca).coeffs();
+	REQUIRE(moved == a);
+	// views: first() keeps the transform only for the whole series
+	series::operand<E, true> ob = cb;
+	REQUIRE(ob.has_spectrum(64));
+	REQUIRE(!ob.has_spectrum(128));
+	REQUIRE(!ob.first(10).has_spectrum(1));
+	REQUIRE(ob.first(b.len()).has_spectrum(64));
+	REQUIRE(series::exact<E>(ob.first(10)) == series::exact<E>(b.begin(), b.begin() + 10));
 }
 
 TEST_CASE("series::vec mixed exactness operators", "[fft]") {
