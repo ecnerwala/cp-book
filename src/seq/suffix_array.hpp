@@ -176,16 +176,15 @@ private:
 		// LMS positions in decreasing order. This lives above W_final so that it survives the recursion.
 		index_t* const lms_pos = tmp + (N+1);
 
-		// hist[cls*sigma + c] counts the positions of class cls in bucket c, excluding position 0.
-		// bkt[c] is the sa bucket pointer for the final round.
-		// ptr[cls*sigma + c] is the write pointer into W for X_c, and ptr[4*sigma] a dead slot for position
-		// 0, which nothing is induced from.
+		// The per-bucket tables, which are all we hold across the recursion (where sigma is up to N/2):
+		// ptr[cls*sigma + c] is the write pointer into W for X_c, and ptr[4*sigma] a dead slot for position 0,
+		// which nothing is induced from; bkt[c] is the sa bucket pointer for the final round.
+		// Between rounds the same tables encode the class sizes as ptr[cls*sigma + c] = sa + |X_c| (see
+		// induce, which also uses bkt for |D_c| in the LMS round).
 		// (Pointers rather than indices into W: the indexed stores that indices compile to measured 2x
 		// slower on inputs with long same-bucket chains, presumably by defeating memory renaming.)
-		std::vector<index_t> book(5*sigma);
-		std::vector<index_t*> ptr(4*sigma + 1);
-		index_t* const hist = book.data();
-		index_t* const bkt = hist + 4*sigma;
+		std::vector<index_t*> ptr(4*sigma + 1, sa);
+		std::vector<index_t> bkt(sigma);
 
 		// Phase 1: classify, counting each class/bucket and recording the LMS positions.
 		int num_pieces = 0;
@@ -197,7 +196,7 @@ private:
 				c0 = S[i];
 				isS0 = (c0 < c1) | ((c0 == c1) & isS1);
 				bool lms = isS1 & !isS0;
-				hist[(2*isS1 + (isS0 ^ isS1))*sigma + c1]++;
+				ptr[(2*isS1 + (isS0 ^ isS1))*sigma + c1]++;
 				lms_pos[num_pieces] = i+1;
 				num_pieces += lms;
 			}
@@ -205,7 +204,8 @@ private:
 
 		// Phase 2: sort the LMS substrings, if there's more than one.
 		if (num_pieces > 1) {
-			induce<false>(N, S, sigma, hist, bkt, ptr.data(), sa, lms_pos, num_pieces, nullptr);
+			induce<false>(N, S, sigma, ptr.data(), bkt.data(), sa, lms_pos, num_pieces, sa);
+			recover_counts(sigma, ptr.data(), bkt.data(), sa, num_pieces);
 			index_t* const pieces = sa;
 
 			// Compute the lengths of the pieces in preparation for equality
@@ -262,21 +262,21 @@ private:
 		}
 
 		// Phase 3: induce everything from the sorted pieces, now in sa[1..num_pieces].
-		induce<true>(N, S, sigma, hist, bkt, ptr.data(), W_final, sa+1, num_pieces, sa);
+		induce<true>(N, S, sigma, ptr.data(), bkt.data(), W_final, sa+1, num_pieces, sa);
 	}
 
 	// One round of induced sorting from the given seeds (the LMS positions, sorted if FINAL).
 	// If FINAL, also writes every suffix into sa in its final position.
 	// Every entry v read induces u = v-1; only u = 0 induces nothing, which we route to the dead slot.
+	// On entry ptr[cls*sigma + c] = sa + |X_c|.
+	// On exit, the pointers hold the boundaries of the layout: ptrA[c] and ptrB[c] are the ends of A_c and
+	// B_c, ptrC[c] the start of bucket c's part of the sorted LMS list, ptrD[c] the start of D_c, and, if
+	// not FINAL, bkt[c] = |D_c|.
 	template <bool FINAL, typename String> static void induce(
 		int N, const String& S, int sigma,
-		const index_t* hist, index_t* bkt, index_t** ptr,
+		index_t** ptr, index_t* bkt,
 		index_t* W, const index_t* seeds, int num_seeds, index_t* sa
 	) {
-		const index_t* const histA = hist;
-		const index_t* const histB = hist + sigma;
-		const index_t* const histD = hist + 2*sigma;
-		const index_t* const histC = hist + 3*sigma;
 		index_t** const ptrA = ptr;
 		index_t** const ptrB = ptr + sigma;
 		index_t** const ptrD = ptr + 2*sigma;
@@ -285,13 +285,25 @@ private:
 
 		index_t* p = W;
 		for (int c = 0; c < sigma; c++) {
-			ptrA[c] = p, p += histA[c];
-			ptrC[c] = p, p += histC[c];
+			index_t nA = index_t(ptrA[c] - sa), nC = index_t(ptrC[c] - sa);
+			ptrA[c] = p, p += nA;
+			ptrC[c] = p, p += nC;
 		}
 		index_t* const W_mid = p;
-		for (int c = 0; c < sigma; c++) {
-			ptrB[c] = p, p += histB[c] + histD[c];
-			ptrD[c] = p;
+		{
+			int cur = 1;
+			for (int c = 0; c < sigma; c++) {
+				index_t nB = index_t(ptrB[c] - sa), nD = index_t(ptrD[c] - sa);
+				if constexpr (FINAL) {
+					index_t nAC = index_t((c+1 < sigma ? ptrA[c+1] : W_mid) - ptrA[c]);
+					bkt[c] = cur;
+					cur += nAC + nB + nD + (c == index_t(S[0]));
+				} else {
+					bkt[c] = nD;
+				}
+				ptrB[c] = p, p += nB + nD;
+				ptrD[c] = p;
+			}
 		}
 		assert(p == W + N-1);
 
@@ -302,14 +314,7 @@ private:
 
 		// L pass
 		{
-			if constexpr (FINAL) {
-				int cur = 1;
-				for (int c = 0; c < sigma; c++) {
-					bkt[c] = cur;
-					cur += histA[c] + histB[c] + histD[c] + histC[c] + (c == index_t(S[0]));
-				}
-				sa[0] = N;
-			}
+			if constexpr (FINAL) sa[0] = N;
 			ptr[dead] = W + N-1;
 
 			auto push = [&](int u) {
@@ -326,19 +331,21 @@ private:
 
 		// S pass
 		{
-			if constexpr (FINAL) {
-				int cur = 1;
-				for (int c = 0; c < sigma; c++) {
-					cur += histA[c] + histB[c] + histD[c] + histC[c] + (c == index_t(S[0]));
+			// Now [ptrC[c-1], ptrC[c]) is A_c C_c and [ptrD[c-1], ptrD[c]) is B_c D_c, from which we get the
+			// bucket ends, and [ptrA[c], ptrC[c]) is C_c, from which we lay out the sorted LMS list.
+			index_t* q = W;
+			int cur = 1;
+			index_t* prvC = W;
+			index_t* prvD = W_mid;
+			for (int c = 0; c < sigma; c++) {
+				index_t* endC = ptrC[c];
+				if constexpr (FINAL) {
+					cur += index_t(endC - prvC) + index_t(ptrD[c] - prvD) + (c == index_t(S[0]));
 					bkt[c] = cur;
+					prvC = endC, prvD = ptrD[c];
 				}
-			}
-			{
-				index_t* q = W;
-				for (int c = 0; c < sigma; c++) {
-					q += histC[c];
-					ptrC[c] = q;
-				}
+				q += endC - ptrA[c];
+				ptrC[c] = q;
 			}
 			ptr[dead] = W + N;
 
@@ -351,6 +358,30 @@ private:
 				*--ptr[k] = u;
 			};
 			for (index_t* rd = W + N-1; rd > W_mid; ) push(*--rd - 1);
+		}
+	}
+
+	// Turns the boundaries left by the LMS round (with W = sa) back into the class sizes induce takes.
+	static void recover_counts(int sigma, index_t** ptr, const index_t* bkt, index_t* sa, int num_pieces) {
+		index_t** const ptrA = ptr;
+		index_t** const ptrB = ptr + sigma;
+		index_t** const ptrD = ptr + 2*sigma;
+		index_t** const ptrC = ptr + 3*sigma;
+
+		index_t* start = sa;
+		for (int c = 0; c < sigma; c++) {
+			index_t nC = index_t((c+1 < sigma ? ptrC[c+1] : sa + num_pieces) - ptrC[c]);
+			index_t nA = index_t(ptrA[c] - start);
+			start = ptrA[c] + nC;
+			ptrA[c] = sa + nA;
+			ptrC[c] = sa + nC;
+		}
+		for (int c = 0; c < sigma; c++) {
+			index_t nD = bkt[c];
+			index_t nB = index_t(ptrB[c] - start);
+			start = ptrB[c] + nD;
+			ptrB[c] = sa + nB;
+			ptrD[c] = sa + nD;
 		}
 	}
 
