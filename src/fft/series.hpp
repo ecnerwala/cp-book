@@ -10,16 +10,16 @@
 #include "fft/series_core.hpp"
 
 // ==== analytic ops ====
-// Free functions over series-like operands; each borrows the operand's span
-// and writes a fresh result.
-// TODO: reuse/populate the operands' whole/prefix transform caches
+// Free functions over series operands; each views the operand and writes a
+// fresh result.
+// TODO: reuse/populate the operands' transforms
 
 namespace wala::series {
 
 template <like S>
 vec<typename S::engine_t, S::exact_v> stretch(const S& a_, int n) {
 	using E = typename S::engine_t;
-	span<E, S::exact_v> a = a_;
+	operand<E, exact_of<S>> a = a_;
 	vec<E, S::exact_v> r(size_t(a.len()));
 	for (int i = 0; i*n < a.len(); i++) {
 		r[i*n] = a[i];
@@ -29,7 +29,7 @@ vec<typename S::engine_t, S::exact_v> stretch(const S& a_, int n) {
 template <like S>
 vec<typename S::engine_t, S::exact_v> deriv_shift(const S& a_) {
 	using E = typename S::engine_t;
-	span<E, S::exact_v> a = a_;
+	operand<E, exact_of<S>> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	for (int i = 0; i < r.len(); i++) {
 		r[i] *= i;
@@ -40,7 +40,7 @@ template <like S>
 vec<typename S::engine_t, S::exact_v> integ_shift(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, S::exact_v> a = a_;
+	operand<E, exact_of<S>> a = a_;
 	assert(a[0] == 0);
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	T f = 1;
@@ -59,7 +59,7 @@ template <like S>
 vec<typename S::engine_t, S::exact_v> integ_shift_offset(const S& a_, int offset) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, S::exact_v> a = a_;
+	operand<E, exact_of<S>> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	T f = 1;
 	for (int i = 0; i < r.len(); i++) {
@@ -80,7 +80,7 @@ template <like S>
 vec<typename S::engine_t, S::exact_v> ogf_to_egf(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, S::exact_v> a = a_;
+	operand<E, exact_of<S>> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	T f = 1;
 	for (int i = 1; i < r.len(); i++) f *= i;
@@ -95,7 +95,7 @@ template <like S>
 vec<typename S::engine_t, S::exact_v> egf_to_ogf(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, S::exact_v> a = a_;
+	operand<E, exact_of<S>> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	T f = 1;
 	for (int i = 1; i < r.len(); i++) {
@@ -118,7 +118,7 @@ trunc<typename S::engine_t> ps_exp(const S& a_) {
 	// See https://mathexp.eu/bostan/publications/BoSc09a.pdf for details
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, false> a = a_;
+	operand<E, false> a = a_;
 	assert(a.len() >= 1);
 	assert(a[0] == 0);
 	trunc<E> r(1, T(1)); r.reserve(size_t(a.len()));
@@ -153,7 +153,7 @@ trunc<typename S::engine_t> ps_exp(const S& a_) {
 template <trunc_like S>
 trunc<typename S::engine_t> ps_pow_monic(const S& a_, typename S::engine_t::value_type k) {
 	using E = typename S::engine_t;
-	span<E, false> a = a_;
+	operand<E, false> a = a_;
 	if (a.len() == 0) return {};
 	assert(a[0] == 1);
 	trunc<E> l = ps_log(a_);
@@ -164,7 +164,7 @@ template <trunc_like S>
 trunc<typename S::engine_t> ps_pow(const S& a_, int64_t k) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
-	span<E, false> a = a_;
+	operand<E, false> a = a_;
 	assert(k >= 0);
 	if (k == 0) {
 		trunc<E> r(size_t(a.len()), T(0));
@@ -199,7 +199,7 @@ trunc<typename S::engine_t> to_newton_sums(const S& a, int deg) {
 template <trunc_like S>
 trunc<typename S::engine_t> from_newton_sums(const S& s_, int deg) {
 	using E = typename S::engine_t;
-	span<E, false> s = s_;
+	operand<E, false> s = s_;
 	assert(s[0] == deg);
 	trunc<E> r(s.begin(), s.end());
 	r[0] = 0;
@@ -292,8 +292,8 @@ template <trunc_like SF, trunc_like SG> requires fft::same_engine<SF, SG>
 trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
 	using E = typename SF::engine_t;
 	using T = typename E::value_type;
-	span<E, false> f = f_;
-	span<E, false> g = g_;
+	operand<E, false> f = f_;
+	operand<E, false> g = g_;
 	if (g.len() == 0) return {};
 
 	int m = f.len();
@@ -368,16 +368,18 @@ P::engine_t::value_type kth_term_of_rational_function(
 
 	int n = nextPow2((d-1) + d - 1); // >= d
 
-	// Seed the loop transforms from any whole caches; the buffers below hold the
-	// current p, q (zero-padded, which extend_to tolerates).
+	// Seed the loop transforms from the operands' transforms when they are
+	// usable at size n; the buffers below hold the current p, q (zero-padded,
+	// which extend_to tolerates).
+	operand<E, true> po = p, qo = q;
 	fft::transformed<E> tq, tp;
-	if (auto cq = detail::cache_of(q)) { E::extend_to(cq->get(), n, q); tq = cq->get(); }
-	if (auto cp = detail::cache_of(p)) { E::extend_to(cp->get(), n, p); tp = cp->get(); }
+	if (qo.has_spectrum(n)) tq = qo.spectrum(n, tq);
+	if (po.has_spectrum(n)) tp = po.spectrum(n, tp);
 
 	std::vector<T> p_buf(d-1, T(0));
-	std::ranges::copy(std::span<const T>(p), p_buf.begin());
+	std::ranges::copy(po, p_buf.begin());
 	std::vector<T> q_buf(d, T(0));
-	std::ranges::copy(std::span<const T>(q), q_buf.begin());
+	std::ranges::copy(qo, q_buf.begin());
 
 	while (k > 0) {
 		E::extend_to(tq, n, q_buf);
@@ -437,13 +439,14 @@ S::engine_t::value_type kth_term_of_linear_recurrence(
 
 	// Don't even bother with P so we don't have to do truncation checks
 	// TODO: Could use generic multiply for this whole part?
+	// q's transform serves both the product below and the first Bostan-Mori step
 	fft::transformed<E> tq;
-	auto q_cached = detail::as_cached_span(q, tq);
+	operand<E, true> qo = operand<E, true>(q).with_scratch(tq);
 
 	// Compute the prefix and then hard-cast it to exact
-	span<E, false> sv = s;
-	auto p = exact<E>(sv.first(q.len()-1) * q_cached);
-	return kth_term_of_rational_function(p, q_cached, k);
+	operand<E, false> sv = s;
+	auto p = exact<E>(sv.first(q.len()-1) * qo);
+	return kth_term_of_rational_function(p, qo, k);
 }
 
 /* namespace wala::series */ }

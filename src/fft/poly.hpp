@@ -19,6 +19,9 @@ namespace wala::poly {
 // This representation should be internal-only:
 // all accesses/constructors use the logical order though: P[k] = [x^k] P.
 // To use the representation, use rev_series() / from_rev_series()
+//
+// Products follow the series layer: multiply(a, b) / a * b return a plain vec,
+// multiply(a, b, keep) a cached, multiply(a, b, into(x)) writes into a vec or cached x.
 template <fft::engine E> struct vec {
 	using T = typename E::value_type;
 	using engine_t = E;
@@ -31,7 +34,8 @@ template <fft::engine E> struct vec {
 	vec(std::initializer_list<T> coeffs) : c(std::rbegin(coeffs), std::rend(coeffs)) {}
 	explicit vec(std::span<const T> coeffs) : c(coeffs.rbegin(), coeffs.rend()) {}
 
-	const series::exact<E>& rev_series() const { return c; }
+	const series::exact<E>& rev_series() const& { return c; }
+	series::exact<E> rev_series() && { return std::move(c); }
 	static vec from_rev_series(series::exact<E> s) {
 		vec r;
 		r.c = std::move(s);
@@ -90,32 +94,39 @@ template <fft::engine E> struct vec {
 	friend vec operator*(vec a, const T& n) { a *= n; return a; }
 	friend vec operator*(const T& n, vec a) { a *= n; return a; }
 
-	vec& operator*=(const vec& o) { return *this = (*this) * o; }
+	template <typename O> requires requires(const O& o) { o.rev_series(); }
+	vec& operator*=(const O& o) {
+		multiply(*this, o, into(*this));
+		return *this;
+	}
 };
 
 // any polynomial representation exposing its reversed coefficient series
 template <typename P>
-concept like = requires(const P& p) {
-	typename P::engine_t;
+concept like = requires(const std::remove_cvref_t<P>& p) {
+	typename std::remove_cvref_t<P>::engine_t;
 	{ p.len() } -> std::same_as<int>;
 	p.rev_series();
-	requires series::like<std::remove_cvref_t<decltype(p.rev_series())>>;
-	requires std::remove_cvref_t<decltype(p.rev_series())>::exact_v;
+	requires series::exact_like<decltype(p.rev_series())>;
 };
 
-// immutable polynomial carrying the whole-sequence transform of its rev_series
+// A polynomial paired with the transform of its rev_series (see series::cached):
+// immutable coefficients, transform grown on non-const use.
 template <fft::engine E>
 struct cached {
 	using T = typename E::value_type;
 	using engine_t = E;
 
 	cached() = default;
-	// moving coefficients in or out is free: implicit on rvalues, explicit copy otherwise
-	cached(vec<E>&& p) : c(std::move(p.c)) {}
-	explicit cached(const vec<E>& p) : c(p.c) {}
-	operator vec<E>() && { return vec<E>::from_rev_series(std::move(c)); }
+	explicit cached(vec<E> p) : c(std::move(p).rev_series()) {}
+	cached(vec<E> p, int n) : c(std::move(p).rev_series(), n) {}
 
-	const series::cached_exact<E>& rev_series() const { return c; }
+	vec<E> coeffs() const& { return vec<E>::from_rev_series(c.coeffs()); }
+	vec<E> coeffs() && { return vec<E>::from_rev_series(std::move(c).coeffs()); }
+
+	const series::cached_exact<E>& rev_series() const& { return c; }
+	series::cached_exact<E>& rev_series() & { return c; }
+	series::cached_exact<E> rev_series() && { return std::move(c); }
 	static cached from_rev_series(series::cached_exact<E> s) {
 		cached r;
 		r.c = std::move(s);
@@ -133,27 +144,82 @@ struct cached {
 		return r;
 	}
 
+	friend bool operator==(const cached& a, const cached& b) { return a.c == b.c; }
+
 private:
 	series::cached_exact<E> c;
 };
 
-// rev(a*b) = rev(a)*rev(b); the series product reuses/adopts transforms
+template <typename P> using engine_of = series::engine_of<P>;
+using series::keep_t;
+using series::keep;
+
+// Result sinks: a vec or cached (never a raw span, whose order would be reversed).
+template <fft::engine E> series::vec_sink<E, true> into(vec<E>& out) { return {out.c}; }
+template <fft::engine E> series::cached_sink<E, true> into(cached<E>& out) { return series::into(out.rev_series()); }
+template <typename S, typename E>
+concept sink = series::sink<S, E> && S::exact_v;
+
+// rev(a*b) = rev(a)*rev(b)
+template <like A, like B, sink<engine_of<A>> S> requires fft::same_engine<A, B>
+void multiply(A&& a, B&& b, S out) {
+	series::multiply(a.rev_series(), b.rev_series(), out);
+}
 template <like A, like B> requires fft::same_engine<A, B>
-cached<typename A::engine_t> operator*(const A& a, const B& b) {
-	return cached<typename A::engine_t>::from_rev_series(a.rev_series() * b.rev_series());
+vec<engine_of<A>> multiply(A&& a, B&& b) {
+	vec<engine_of<A>> r;
+	multiply(a, b, into(r));
+	return r;
+}
+template <like A, like B> requires fft::same_engine<A, B>
+cached<engine_of<A>> multiply(A&& a, B&& b, keep_t) {
+	cached<engine_of<A>> r;
+	multiply(a, b, into(r));
+	return r;
+}
+template <like A, like B> requires fft::same_engine<A, B>
+vec<engine_of<A>> operator*(A&& a, B&& b) {
+	return multiply(a, b);
+}
+
+template <like A, sink<engine_of<A>> S>
+void square(A&& a, S out) {
+	series::square(a.rev_series(), out);
 }
 template <like A>
-cached<typename A::engine_t> square(const A& a) {
-	return cached<typename A::engine_t>::from_rev_series(square(a.rev_series()));
+vec<engine_of<A>> square(A&& a) {
+	vec<engine_of<A>> r;
+	square(a, into(r));
+	return r;
 }
+template <like A>
+cached<engine_of<A>> square(A&& a, keep_t) {
+	cached<engine_of<A>> r;
+	square(a, into(r));
+	return r;
+}
+
 // rev(a*b + c*d) = rev(a)*rev(b) + rev(c)*rev(d)
+template <like A, like B, like C, like D, sink<engine_of<A>> S>
+	requires fft::same_engine<A, B> && fft::same_engine<A, C> && fft::same_engine<A, D>
+void multiply_add2(A&& a, B&& b, C&& c, D&& d, S out) {
+	series::multiply_add2(a.rev_series(), b.rev_series(), c.rev_series(), d.rev_series(), out);
+}
 template <like A, like B, like C, like D>
 	requires fft::same_engine<A, B> && fft::same_engine<A, C> && fft::same_engine<A, D>
-cached<typename A::engine_t> multiply_add2(
-		const A& a, const B& b, const C& c, const D& d) {
-	return cached<typename A::engine_t>::from_rev_series(
-			multiply_add2(a.rev_series(), b.rev_series(), c.rev_series(), d.rev_series()));
+vec<engine_of<A>> multiply_add2(A&& a, B&& b, C&& c, D&& d) {
+	vec<engine_of<A>> r;
+	multiply_add2(a, b, c, d, into(r));
+	return r;
 }
+template <like A, like B, like C, like D>
+	requires fft::same_engine<A, B> && fft::same_engine<A, C> && fft::same_engine<A, D>
+cached<engine_of<A>> multiply_add2(A&& a, B&& b, C&& c, D&& d, keep_t) {
+	cached<engine_of<A>> r;
+	multiply_add2(a, b, c, d, into(r));
+	return r;
+}
+
 template <like A, like B> requires fft::same_engine<A, B>
 bool operator==(const A& a, const B& b) {
 	return a.rev_series() == b.rev_series();
@@ -173,27 +239,32 @@ bool operator==(const A& a, const B& b) {
 template <fft::engine E>
 struct form {
 	using T = typename E::value_type;
-	// coeffs of S in <*, S>; always whole-cached: the kernel transform is
-	// what repeated middle products against the same form reuse
+	// coeffs of S in <*, S>, with the kernel transform built at the size its
+	// middle products use, so composed_with reuses it even through a const form
 	series::cached_exact<E> c;
 
 	form() = default;
-	explicit form(int len) : c(series::exact<E>(size_t(len), T{})) {}
+	explicit form(int len) : form(from_rev_series(series::exact<E>(size_t(len), T{}))) {}
 	// We don't provide coefficient-list constructors, to avoid ordering confusion.
 
 	const series::cached_exact<E>& rev_series() const { return c; }
-	static form from_rev_series(series::cached_exact<E> s) {
+	static form from_rev_series(series::exact<E> s) {
 		form r;
-		r.c = std::move(s);
+		if (s.len() > 0) {
+			int n = fft::conv_size_for(s.len()).n;
+			r.c = series::cached_exact<E>(std::move(s), n);
+		} else {
+			r.c = series::cached_exact<E>(std::move(s));
+		}
 		return r;
 	}
-	static form from_poly(const vec<E>& p) { return from_rev_series(series::cached_exact<E>(p.rev_series())); }
+	static form from_poly(const vec<E>& p) { return from_rev_series(p.rev_series()); }
 
 	int len() const { return c.len(); }
 
 	// Restrict the form's domain: only valid against exact series of length n
 	form for_length(int n) const {
-		auto r = series::exact<E>(c);
+		auto r = c.coeffs();
 		if (n >= len()) r.insert(r.begin(), size_t(n - len()), T(0));
 		else r.erase(r.begin(), r.begin() + (len() - n));
 		return from_rev_series(std::move(r));
@@ -292,13 +363,16 @@ struct subproduct_tree {
 	int N;
 	std::vector<cached<E>> nodes;
 
+	// Each product grows its children's transforms to its own size, which is
+	// what pushdown's middle products and combine_up's products need from
+	// the (then const) nodes.
 	explicit subproduct_tree(std::span<const T> pts) : N(sz(pts)), nodes(size_t(2) * N) {
 		assert(N > 0);
 		for (int i = 0; i < N; i++) {
-			nodes[N + i] = vec<E>{-pts[i], T(1)};
+			nodes[N + i] = cached<E>(vec<E>{-pts[i], T(1)});
 		}
 		for (int i = N - 1; i > 0; i--) {
-			nodes[i] = nodes[2*i] * nodes[2*i+1];
+			multiply(nodes[2*i], nodes[2*i+1], into(nodes[i]));
 		}
 	}
 
@@ -324,18 +398,18 @@ struct subproduct_tree {
 	}
 
 	// Compute sum_i leaf_vals[i] prod_{j!=i} (x - a[j]) (transpose of pushdown)
-	cached<E> combine_up(std::span<const T> leaf_vals) const {
+	vec<E> combine_up(std::span<const T> leaf_vals) const {
 		assert(sz(leaf_vals) == N);
 		std::vector<cached<E>> up(size_t(2) * N);
 		for (int i = 0; i < N; i++) {
-			up[N + i] = vec<E>{leaf_vals[i]};
+			up[N + i] = cached<E>(vec<E>{leaf_vals[i]});
 		}
 		for (int i = N - 1; i > 0; i--) {
-			up[i] = multiply_add2(up[2*i+0], nodes[2*i+1], up[2*i+1], nodes[2*i+0]);
+			multiply_add2(up[2*i+0], nodes[2*i+1], up[2*i+1], nodes[2*i+0], into(up[i]));
 			up[2*i+0] = cached<E>{};
 			up[2*i+1] = cached<E>{};
 		}
-		return std::move(up[1]);
+		return std::move(up[1]).coeffs();
 	}
 };
 
@@ -347,7 +421,7 @@ std::vector<typename E::value_type> multipoint(
 	if (pts.empty()) return {};
 	int N = sz(pts);
 	subproduct_tree<E> tree{pts};
-	auto q = series::trunc<E>(tree.prod(1).rev_series());
+	auto q = series::trunc<E>(tree.prod(1).rev_series().coeffs());
 	q.resize(p.len()); // inverse precision must cover the form's window
 	form<E> f = form<E>::from_poly(p).composed_with(ps_inv(q));
 	return tree.pushdown(f.for_length(N));
@@ -364,7 +438,7 @@ vec<E> interpolate(
 	int N = sz(pts);
 	using ps = series::trunc<E>;
 	subproduct_tree<E> tree{pts};
-	auto root = ps(tree.prod(1).rev_series());
+	auto root = ps(tree.prod(1).rev_series().coeffs());
 	root.shrink(N);
 
 	// We need to evaluate the derivative of the root at each point
