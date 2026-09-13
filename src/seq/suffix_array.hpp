@@ -16,16 +16,16 @@
 namespace wala {
 
 
-// Layered suffix array: SuffixArrayBase computes just sa/rank, each further
+// Layered suffix array: SuffixArrayBase computes just sa, each further
 // layer statically opts into one more derived structure. Use the leaf classes
-// SuffixArray, SuffixArrayLCP, or SuffixArrayRMQ; the named constructors on
-// each return that type.
+// SuffixArray, SuffixArrayRank, SuffixArrayLCP, or SuffixArrayRMQ; the named
+// constructors on each return that type.
 template <typename Self> class SuffixArrayBase {
 public:
 	using index_t = int;
 	int N;
+	// sa[0] = N is the sentinel suffix.
 	std::vector<index_t> sa;
-	std::vector<index_t> rank;
 
 	SuffixArrayBase() : N(0) {}
 
@@ -138,19 +138,30 @@ public:
 protected:
 	template <typename String> void build(const String& S, index_t sigma) {
 		N = int(std::size(S));
-		build_sa(S, sigma);
-		build_rank();
-	}
-
-private:
-	template <typename String> void build_sa(const String& S, index_t sigma) {
-		sa = std::vector<index_t>(N+1);
 		assert(sigma >= 0);
 		for (auto s : S) assert(0 <= index_t(s) && index_t(s) < sigma);
-		std::vector<index_t> tmp(sigma + std::max(N, sigma));
+		sa = std::vector<index_t>(N+1);
+		// Scratch for sais: the work array (N+1), then lms_pos (N/2+1).
+		// The recursion (on at most N/2 pieces) fits in the work array.
+		std::vector<index_t> tmp(N+1 + N/2+1);
 		SuffixArrayBase::sais<String>(N, S, sa.data(), sigma, tmp.data());
 	}
 
+private:
+	// Suffix array by induced sorting (SA-IS): computes sa[0..N] for S plus a sentinel.
+	//
+	// We classify each position by (own type, predecessor's type): A = L/L, B = L/S, D = S/S, C = S/L
+	// (the LMS positions).
+	// Inducing from an entry only ever produces something in the L pass for A and C entries and in the S
+	// pass for B and D entries, so instead of scanning sa and skipping the rest, each pass reads exactly the
+	// entries it processes from a work array W laid out as
+	//   W = [A_0 C_0 A_1 C_1 ... A_{sigma-1} C_{sigma-1} | B_0 D_0 B_1 D_1 ... B_{sigma-1} D_{sigma-1}]
+	// where X_c holds the class X entries of bucket c in sa order.
+	// The L pass reads the first half front to back, and every A entry has been induced (from a smaller
+	// A or C entry) by the time it's read; the S pass reads the second half back to front, likewise.
+	// The L pass fills A and B front to back; the S pass fills D back to front, and writes the C entries
+	// back to front into W[0..num_pieces), where they come out as the sorted list of LMS positions.
+	// The LMS round uses sa itself as W; the final round has to write sa, so it uses tmp as W.
 	template <typename String> static void sais(int N, const String& S, index_t* sa, int sigma, index_t* tmp) {
 		if (N == 0) {
 			sa[0] = 0;
@@ -161,134 +172,59 @@ private:
 			return;
 		}
 
-		// Phase 1: Initialize the frequency array, which will let us lookup buckets.
-		index_t* freq = tmp; tmp += sigma;
-		memset(freq, 0, sizeof(*freq) * sigma);
-		for (int i = 0; i < N; i++) {
-			++freq[index_t(S[i])];
-		}
-		auto build_bucket_start = [&]() {
-			int cur = 1;
-			for (int v = 0; v < sigma; v++) {
-				tmp[v] = cur;
-				cur += freq[v];
-			}
-		};
-		auto build_bucket_end = [&]() {
-			int cur = 1;
-			for (int v = 0; v < sigma; v++) {
-				cur += freq[v];
-				tmp[v] = cur;
-			}
-		};
+		index_t* const W_final = tmp;
+		// LMS positions in decreasing order. This lives above W_final so that it survives the recursion.
+		index_t* const lms_pos = tmp + (N+1);
 
+		// hist[cls*sigma + c] counts the positions of class cls in bucket c, excluding position 0.
+		// bkt[c] is the sa bucket pointer for the final round.
+		// ptr[cls*sigma + c] is the write pointer into W for X_c, and ptr[4*sigma] a dead slot for position
+		// 0, which nothing is induced from.
+		// (Pointers rather than indices into W: the indexed stores that indices compile to measured 2x
+		// slower on inputs with long same-bucket chains, presumably by defeating memory renaming.)
+		std::vector<index_t> book(5*sigma);
+		std::vector<index_t*> ptr(4*sigma + 1);
+		index_t* const hist = book.data();
+		index_t* const bkt = hist + 4*sigma;
+
+		// Phase 1: classify, counting each class/bucket and recording the LMS positions.
 		int num_pieces = 0;
-
-		int first_endpoint = 0;
-		// Phase 2: find the right-endpoints of the pieces
 		{
-			build_bucket_end();
-
-			// Initialize the final endpoint out-of-band this way so that we don't try to look up tmp[-1].
-			// This doesn't count towards num_pieces.
-			sa[0] = N;
-
-			index_t c0 = S[N-1], c1 = -1; bool isS = false;
+			index_t c0 = S[N-1], c1;
+			bool isS0 = false, isS1;
 			for (int i = N-2; i >= 0; i--) {
-				c1 = c0;
+				c1 = c0, isS1 = isS0;
 				c0 = S[i];
-				if (c0 < c1) {
-					isS = true;
-				} else if (c0 > c1 && isS) {
-					isS = false;
-					// insert i+1
-					sa[first_endpoint = --tmp[c1]] = i+1;
-					++num_pieces;
-				}
+				isS0 = (c0 < c1) | ((c0 == c1) & isS1);
+				bool lms = isS1 & !isS0;
+				hist[(2*isS1 + (isS0 ^ isS1))*sigma + c1]++;
+				lms_pos[num_pieces] = i+1;
+				num_pieces += lms;
 			}
 		}
 
-		// If num_pieces <= 1, we don't need to actually run the recursion, it's just sorted automatically
-		// Otherwise, we're going to rebucket
+		// Phase 2: sort the LMS substrings, if there's more than one.
 		if (num_pieces > 1) {
-			// Remove the first endpoint, we don't need to run the IS on this
-			sa[first_endpoint] = 0;
-
-			// Run IS for L-type
-			{
-				build_bucket_start();
-				for (int z = 0; z <= N; z++) {
-					int v = sa[z];
-					if (!v) continue;
-
-					// Leave for the S-round
-					if (v < 0) continue;
-
-					// clear out our garbage
-					sa[z] = 0;
-
-					--v;
-					index_t c0 = S[v-1], c1 = S[v];
-					sa[tmp[c1]++] = (c0 < c1) ? ~v : v;
-				}
-			}
-
-			index_t* const sa_end = sa + N + 1;
-
-			index_t* pieces = sa_end;
-			// Run IS for S-type and compactify
-			{
-				build_bucket_end();
-				for (int z = N; z >= 0; z--) {
-					int v = sa[z];
-					if (!v) continue;
-
-					// clear our garbage
-					sa[z] = 0;
-
-					if (v > 0) {
-						*--pieces = v;
-						continue;
-					}
-
-					v = ~v;
-
-					--v;
-					index_t c0 = S[v-1], c1 = S[v];
-					sa[--tmp[c1]] = (c0 > c1) ? v : ~v;
-				}
-			}
+			induce<false>(N, S, sigma, hist, bkt, ptr.data(), sa, lms_pos, num_pieces, nullptr);
+			index_t* const pieces = sa;
 
 			// Compute the lengths of the pieces in preparation for equality
-			// comparison, and store them in sa[v/2]. We set the length of the
+			// comparison, and store them in tmp[v/2]. We set the length of the
 			// final piece to 0; it compares unequal to everything because of
 			// the sentinel.
-			{
-				int prv_start = N;
-				index_t c0 = S[N-1], c1 = -1; bool isS = false;
-				for (int i = N-2; i >= 0; i--) {
-					c1 = c0;
-					c0 = S[i];
-					if (c0 < c1) {
-						isS = true;
-					} else if (c0 > c1 && isS) {
-						isS = false;
-
-						// insert i+1
-						int v = i+1;
-						sa[v>>1] = prv_start == N ? 0 : prv_start - v;
-						prv_start = v;
-					}
-				}
+			tmp[lms_pos[0]>>1] = 0;
+			for (int k = 1; k < num_pieces; k++) {
+				int v = lms_pos[k];
+				tmp[v>>1] = lms_pos[k-1] - v;
 			}
 
-			// Compute the alphabet, storing the result into sa[v/2].
+			// Compute the alphabet, storing the result into tmp[v/2].
 			int next_sigma = 0;
 			{
 				int prv_len = -1, prv_v = 0;
 				for (int i = 0; i < num_pieces; i++) {
 					int v = pieces[i];
-					int len = sa[v>>1];
+					int len = tmp[v>>1];
 
 					bool eq = prv_len == len;
 					for (int a = 0; eq && a < len; ++a) {
@@ -300,112 +236,162 @@ private:
 						prv_v = v;
 					}
 
-					sa[v>>1] = next_sigma; // purposely leave this 1 large to check != 0
+					tmp[v>>1] = next_sigma - 1;
 				}
 			}
 
 			if (next_sigma == num_pieces) {
-				sa[0] = N;
-				memcpy(sa+1, pieces, sizeof(*sa) * num_pieces);
+				memmove(sa+1, pieces, sizeof(*sa) * num_pieces);
 			} else {
-				index_t* next_S = sa_end;
-
-				// Finally, pack the input to the SA
-				{
-					for (int i = (N-1)>>1; i >= 0; i--) {
-						int v = sa[i];
-						if (v) *--next_S = v-1;
-						sa[i] = 0;
-					}
+				// Pack the input to the recursion: the names in text order, at the top of sa.
+				// The recursion's output and scratch stay below it.
+				index_t* next_S = sa + N + 1 - num_pieces;
+				for (int k = 0; k < num_pieces; k++) {
+					next_S[num_pieces-1-k] = tmp[lms_pos[k]>>1];
 				}
 
-				memset(sa, 0, sizeof(*sa) * (num_pieces+1));
 				sais<const index_t*>(num_pieces, next_S, sa, next_sigma, tmp);
 
-				{ // Compute the piece start points again and use those to map up the suffix array
-					next_S = sa_end;
-					index_t c0 = S[N-1], c1 = -1; bool isS = false;
-					for (int i = N-2; i >= 0; i--) {
-						c1 = c0;
-						c0 = S[i];
-						if (c0 < c1) {
-							isS = true;
-						} else if (c0 > c1 && isS) {
-							isS = false;
-
-							int v = i+1;
-							*--next_S = v;
-						}
-					}
-					sa[0] = N;
-					for (int i = 1; i <= num_pieces; i++) {
-						sa[i] = next_S[sa[i]];
-					}
+				// Map the suffix array of the names back up to piece start points
+				for (int i = 1; i <= num_pieces; i++) {
+					sa[i] = lms_pos[num_pieces-1-sa[i]];
 				}
 			}
+		} else if (num_pieces == 1) {
+			sa[1] = lms_pos[0];
+		}
 
-			// zero everything else
-			memset(sa+num_pieces+1, 0, sizeof(*sa) * (N - num_pieces));
+		// Phase 3: induce everything from the sorted pieces, now in sa[1..num_pieces].
+		induce<true>(N, S, sigma, hist, bkt, ptr.data(), W_final, sa+1, num_pieces, sa);
+	}
 
+	// One round of induced sorting from the given seeds (the LMS positions, sorted if FINAL).
+	// If FINAL, also writes every suffix into sa in its final position.
+	// Every entry v read induces u = v-1; only u = 0 induces nothing, which we route to the dead slot.
+	template <bool FINAL, typename String> static void induce(
+		int N, const String& S, int sigma,
+		const index_t* hist, index_t* bkt, index_t** ptr,
+		index_t* W, const index_t* seeds, int num_seeds, index_t* sa
+	) {
+		const index_t* const histA = hist;
+		const index_t* const histB = hist + sigma;
+		const index_t* const histD = hist + 2*sigma;
+		const index_t* const histC = hist + 3*sigma;
+		index_t** const ptrA = ptr;
+		index_t** const ptrB = ptr + sigma;
+		index_t** const ptrD = ptr + 2*sigma;
+		index_t** const ptrC = ptr + 3*sigma;
+		const int dead = 4*sigma;
+
+		index_t* p = W;
+		for (int c = 0; c < sigma; c++) {
+			ptrA[c] = p, p += histA[c];
+			ptrC[c] = p, p += histC[c];
+		}
+		index_t* const W_mid = p;
+		for (int c = 0; c < sigma; c++) {
+			ptrB[c] = p, p += histB[c] + histD[c];
+			ptrD[c] = p;
+		}
+		assert(p == W + N-1);
+
+		for (int i = 0; i < num_seeds; i++) {
+			int v = seeds[i];
+			*ptrC[index_t(S[v])]++ = v;
+		}
+
+		// L pass
+		{
+			if constexpr (FINAL) {
+				int cur = 1;
+				for (int c = 0; c < sigma; c++) {
+					bkt[c] = cur;
+					cur += histA[c] + histB[c] + histD[c] + histC[c] + (c == index_t(S[0]));
+				}
+				sa[0] = N;
+			}
+			ptr[dead] = W + N-1;
+
+			auto push = [&](int u) {
+				index_t c1 = S[u];
+				index_t c0 = u ? S[u-1] : c1;
+				bool predS = c0 < c1;
+				if constexpr (FINAL) sa[bkt[c1]++] = u;
+				int k = u ? predS*sigma + c1 : dead;
+				*ptr[k]++ = u;
+			};
+			push(N-1);
+			for (index_t* rd = W; rd < W_mid; rd++) push(*rd - 1);
+		}
+
+		// S pass
+		{
+			if constexpr (FINAL) {
+				int cur = 1;
+				for (int c = 0; c < sigma; c++) {
+					cur += histA[c] + histB[c] + histD[c] + histC[c] + (c == index_t(S[0]));
+					bkt[c] = cur;
+				}
+			}
 			{
-				// Scatter the finished pieces
-				build_bucket_end();
-				for (int i = num_pieces; i > 0; i--) {
-					int v = sa[i];
-					sa[i] = 0;
-
-					index_t c1 = S[v];
-					sa[--tmp[c1]] = v;
+				index_t* q = W;
+				for (int c = 0; c < sigma; c++) {
+					q += histC[c];
+					ptrC[c] = q;
 				}
 			}
-		}
+			ptr[dead] = W + N;
 
-		// Home stretch! Just finish out with the L-type and then S-type
-		{
-			build_bucket_start();
-			for (int z = 0; z <= N; z++) {
-				int v = sa[z];
-				if (v <= 0) continue;
-				--v;
-				index_t c1 = S[v];
-				index_t c0 = v ? S[v-1] : c1; // if v = 0, we don't want to invert
-				sa[tmp[c1]++] = (c0 < c1) ? ~v : v;
-			}
-		}
-
-		// This just aggressively overwrites our original scattered pieces with the correct values
-		{
-			build_bucket_end();
-			for (int z = N; z >= 0; z--) {
-				int v = sa[z];
-				if (v >= 0) continue;
-				sa[z] = v = ~v;
-				--v;
-				index_t c1 = S[v];
-				index_t c0 = v ? S[v-1] : c1+1;
-				sa[--tmp[c1]] = (c0 > c1) ? v : ~v;
-			}
+			auto push = [&](int u) {
+				index_t c1 = S[u];
+				index_t c0 = u ? S[u-1] : c1+1;
+				bool predL = c0 > c1;
+				if constexpr (FINAL) sa[--bkt[c1]] = u;
+				int k = u ? (2 + predL)*sigma + c1 : dead;
+				*--ptr[k] = u;
+			};
+			for (index_t* rd = W + N-1; rd > W_mid; ) push(*--rd - 1);
 		}
 	}
 
+};
+
+class SuffixArray : public SuffixArrayBase<SuffixArray> {};
+
+template <typename Self> class SuffixArrayRankBase : public SuffixArrayBase<Self> {
+public:
+	using index_t = typename SuffixArrayBase<Self>::index_t;
+	// rank[sa[i]] = i
+	std::vector<index_t> rank;
+
+protected:
+	friend SuffixArrayBase<Self>;
+	template <typename String> void build(const String& S, index_t sigma) {
+		SuffixArrayBase<Self>::build(S, sigma);
+		build_rank();
+	}
+
+private:
 	void build_rank() {
+		int N = this->N;
+		const auto& sa = this->sa;
 		rank = std::vector<index_t>(N+1);
 		for (int i = 0; i <= N; i++) rank[sa[i]] = i;
 	}
 };
 
-class SuffixArray : public SuffixArrayBase<SuffixArray> {};
+class SuffixArrayRank : public SuffixArrayRankBase<SuffixArrayRank> {};
 
-template <typename Self> class SuffixArrayLCPBase : public SuffixArrayBase<Self> {
+template <typename Self> class SuffixArrayLCPBase : public SuffixArrayRankBase<Self> {
 public:
-	using index_t = typename SuffixArrayBase<Self>::index_t;
+	using index_t = typename SuffixArrayRankBase<Self>::index_t;
 	// lcp[i] = lcp(sa[i], sa[i+1])
 	std::vector<index_t> lcp;
 
 protected:
 	friend SuffixArrayBase<Self>;
 	template <typename String> void build(const String& S, index_t sigma) {
-		SuffixArrayBase<Self>::build(S, sigma);
+		SuffixArrayRankBase<Self>::build(S, sigma);
 		build_lcp(S);
 	}
 
