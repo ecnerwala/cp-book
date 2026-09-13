@@ -11,7 +11,8 @@
 namespace wala {
 
 // Buffered writer with fast integer formatting, for problems whose output would otherwise dominate the runtime.
-// Flushes on destruction; anything else written to the same FILE* must be ordered with explicit flush() calls.
+// flush() hands the buffer to the FILE* (not to the OS); it flushes on destruction, and anything else written
+// through the same FILE* must be ordered with explicit flush() calls.
 class FastWriter {
 	static constexpr int BUF_SIZE = 1 << 16;
 	static constexpr int MAX_ITEM = 32;
