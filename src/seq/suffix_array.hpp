@@ -16,16 +16,17 @@
 namespace wala {
 
 
-// Layered suffix array: SuffixArrayBase computes just sa, each further
+// Layered suffix array: SuffixArrayBase computes just sa/rank, each further
 // layer statically opts into one more derived structure. Use the leaf classes
-// SuffixArray, SuffixArrayRank, SuffixArrayLCP, or SuffixArrayRMQ; the named
-// constructors on each return that type.
+// SuffixArray, SuffixArrayLCP, or SuffixArrayRMQ; the named constructors on
+// each return that type.
 template <typename Self> class SuffixArrayBase {
 public:
 	using index_t = int;
 	int N;
 	// sa[0] = N is the sentinel suffix.
 	std::vector<index_t> sa;
+	std::vector<index_t> rank;
 
 	SuffixArrayBase() : N(0) {}
 
@@ -138,6 +139,12 @@ public:
 protected:
 	template <typename String> void build(const String& S, index_t sigma) {
 		N = int(std::size(S));
+		build_sa(S, sigma);
+		build_rank();
+	}
+
+private:
+	template <typename String> void build_sa(const String& S, index_t sigma) {
 		assert(sigma >= 0);
 		for (auto s : S) assert(0 <= index_t(s) && index_t(s) < sigma);
 		sa = std::vector<index_t>(N+1);
@@ -147,7 +154,6 @@ protected:
 		SuffixArrayBase::sais<String>(N, S, sa.data(), sigma, tmp.data());
 	}
 
-private:
 	// Suffix array by induced sorting (SA-IS): computes sa[0..N] for S plus a sentinel.
 	//
 	// We classify each position by (own type, predecessor's type): A = L/L, B = L/S, D = S/S, C = S/L
@@ -385,44 +391,24 @@ private:
 		}
 	}
 
-};
-
-class SuffixArray : public SuffixArrayBase<SuffixArray> {};
-
-template <typename Self> class SuffixArrayRankBase : public SuffixArrayBase<Self> {
-public:
-	using index_t = typename SuffixArrayBase<Self>::index_t;
-	// rank[sa[i]] = i
-	std::vector<index_t> rank;
-
-protected:
-	friend SuffixArrayBase<Self>;
-	template <typename String> void build(const String& S, index_t sigma) {
-		SuffixArrayBase<Self>::build(S, sigma);
-		build_rank();
-	}
-
-private:
 	void build_rank() {
-		int N = this->N;
-		const auto& sa = this->sa;
 		rank = std::vector<index_t>(N+1);
 		for (int i = 0; i <= N; i++) rank[sa[i]] = i;
 	}
 };
 
-class SuffixArrayRank : public SuffixArrayRankBase<SuffixArrayRank> {};
+class SuffixArray : public SuffixArrayBase<SuffixArray> {};
 
-template <typename Self> class SuffixArrayLCPBase : public SuffixArrayRankBase<Self> {
+template <typename Self> class SuffixArrayLCPBase : public SuffixArrayBase<Self> {
 public:
-	using index_t = typename SuffixArrayRankBase<Self>::index_t;
+	using index_t = typename SuffixArrayBase<Self>::index_t;
 	// lcp[i] = lcp(sa[i], sa[i+1])
 	std::vector<index_t> lcp;
 
 protected:
 	friend SuffixArrayBase<Self>;
 	template <typename String> void build(const String& S, index_t sigma) {
-		SuffixArrayRankBase<Self>::build(S, sigma);
+		SuffixArrayBase<Self>::build(S, sigma);
 		build_lcp(S);
 	}
 
