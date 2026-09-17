@@ -688,7 +688,7 @@ struct spqr_tree {
 					}
 
 					{
-						int off = 2 * ne_st + has_cap;
+						int off = 2 * ne_st;
 						for (int i = 2 * nv_st + 1; i <= 2 * nv_en; i++) {
 							off += std::exchange(node_darts.bounds[i], off);
 						}
