@@ -65,6 +65,21 @@ struct spqr_tree {
 		F = 'F', V = 'V', Q = 'Q', I = 'I', O = 'O', S = 'S', P = 'P', R = 'R'
 	};
 
+	// We have several id spaces:
+	// * items are in preorder
+	// * node_verts (nv's) are each node's vertices, given in node order then s-t order.
+	// * node_edges (ne's) are each node's vedges, given in node order then a s-t order.
+	// * node_darts (nd's) are each node_vert's incident vedges, given as 2 lists per nv: left/rightwards darts each in reverse s-t order.
+	// * original verts and original edges can be converted to items as vert_item / edge_item
+	//
+	// Children of a node will be sorted in s-t order.
+	// Specifically vertices are sorted, and edges are guaranteed to satisfy the strong "dominance" partial order:
+	// if a.nvs[0] <= b.nvs[0] and a.nvs[1] <= b.nvs[1], then a <= b. (In practice, we'll sort by midpoint.)
+	// Darts are sorted as "center-is-longest", which helps make laminar cases clean.
+	//   (5->4) (5->3) (5->2) (5->1) *vertex 5* (5->9) (5->8) (5->7) (5->6)
+	//
+	// All id's are item indices unless clearly nv/ne/nd id's.
+
 	std::vector<int> vert_index;
 	std::vector<int> edge_index;
 
@@ -476,19 +491,6 @@ struct spqr_tree {
 		}
 
 		// Phase 3: relabel the full tree in preorder
-		// We have several id spaces:
-		// * items are in preorder
-		// * node_verts (nv's) are nodes-vertex pairs, given in node-item order then bipolar orientation vertex order
-		// * node_edges (ne's) are node-vedge pairs, given in node-item order then a bipolar orientation vedge order
-		// * node_darts (nd's) are node-dart (half-vedge) pairs, given in attached nv order
-		//
-		// Children of a node will be sorted in s-t order.
-		// Specifically vertices are sorted, and edges are guaranteed to satisfy the strong "dominance" partial order:
-		// if a.nvs[0] <= b.nvs[0] and a.nvs[1] <= b.nvs[1], then a <= b. (In practice, we'll sort by midpoint.)
-		//
-		// All id's are item indices unless clearly nv/ne/nd id's.
-		//
-		// * original verts and original edges can be converted to items as vert_item / edge_item
 		int tot_items = int(item_types.size());
 		{
 			std::vector<int> vert_index(NV, -1);
@@ -690,7 +692,8 @@ struct spqr_tree {
 						}
 						assert(off == 2 * ne_en);
 					}
-					for (int i = ne_st; i < ne_en; i++) {
+					// Reverse order to get the darts
+					for (int i = ne_en - 1; i >= ne_st; i--) {
 						auto nvs = node_edges.dat[i].nvs;
 						int nd0 = node_darts.bounds[2 * nvs[0] + 2]++;
 						int nd1 = node_darts.bounds[2 * nvs[1] + 1]++;
@@ -724,7 +727,7 @@ struct spqr_tree {
 						int nxt_ne = int(node_edges.dat.size());
 						self(nxt_item, cur_idx);
 						if (nxt_item < 1 + NV) {
-							item_nv[nxt_item] = cur_nv++;
+							item_nv[nxt_idx] = cur_nv++;
 						} else if (is_node) {
 							node_edges.dat[cur_ne].twin_ne = nxt_ne;
 							node_edges.dat[nxt_ne].twin_ne = cur_ne;
