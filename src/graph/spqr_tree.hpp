@@ -680,20 +680,26 @@ struct spqr_tree {
 					// TODO: Could do other faster things for S nodes / Q nodes / whatever?
 					// I'm pretty sure this logic is fine for self-loops (if a little nonsensical).
 
-					// Handle cap as special: it's first in the node_edges, which means it's in the wrong place for the left endpoint.
-					// Reserve the spot at 2 * ne_st for it, the high bound doesn't need extra twiddling.
-					for (int i = ne_st + has_cap; i < ne_en; i++) {
+					for (int i = ne_st; i < ne_en; i++) {
 						auto nvs = node_edges.dat[i].nvs;
 						// Add to the counts
 						node_darts.bounds[2 * nvs[0] + 2]++;
 						node_darts.bounds[2 * nvs[1] + 1]++;
 					}
+
+					// Handle cap as special: it's first in the node_edges, which means it's in the wrong place for the left endpoint.
+					// Reserve the spot at 2 * ne_st for it, the high bound doesn't need extra twiddling.
+					// O nodes need an extra twiddle since the left endpoint of the cap is actually stored at 2 * ne_st + 1.
+					if (has_cap) {
+						node_darts.bounds[2 * nv_st + 2]--;
+					}
+
 					{
 						int off = 2 * ne_st + has_cap;
 						for (int i = 2 * nv_st + 1; i <= 2 * nv_en; i++) {
 							off += std::exchange(node_darts.bounds[i], off);
 						}
-						assert(off + has_cap == 2 * ne_en);
+						assert(off == 2 * ne_en);
 					}
 
 					// Reverse order to get the darts in bracket ordering.
@@ -701,7 +707,7 @@ struct spqr_tree {
 						auto nvs = node_edges.dat[i].nvs;
 						int nd0, nd1;
 						if (has_cap && i == ne_st) {
-							nd0 = 2 * ne_st;
+							nd0 = 2 * ne_st + (cur_type == node_type::O);
 						} else {
 							nd0 = node_darts.bounds[2 * nvs[0] + 2]++;
 						}
