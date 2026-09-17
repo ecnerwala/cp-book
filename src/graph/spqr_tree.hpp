@@ -701,6 +701,7 @@ struct spqr_tree {
 					int cap_nd0 = -1;
 					if (has_cap) {
 						cap_nd0 = node_darts.bounds[2 * nv_st + 2]++;
+						assert(cap_nd0 == 2 * ne_st + (cur_type == node_type::O));
 					}
 
 					// Reverse order to get the darts in bracket ordering.
