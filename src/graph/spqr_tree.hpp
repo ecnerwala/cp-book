@@ -75,7 +75,7 @@ struct spqr_tree {
 	// Children of a node will be sorted in s-t order.
 	// Specifically vertices are sorted, and edges are guaranteed to satisfy the strong "dominance" partial order:
 	// if a.nvs[0] <= b.nvs[0] and a.nvs[1] <= b.nvs[1], then a <= b. (In practice, we'll sort by midpoint.)
-	// Darts are sorted as "center-is-longest", which helps make laminar cases clean.
+	// Darts are sorted as "center-is-longest", which helps make laminar/bracket cases clean.
 	//   (5->4) (5->3) (5->2) (5->1) *vertex 5* (5->9) (5->8) (5->7) (5->6)
 	//
 	// All id's are item indices unless clearly nv/ne/nd id's.
@@ -679,6 +679,9 @@ struct spqr_tree {
 				} else {
 					// TODO: Could do other faster things for S nodes / Q nodes / whatever?
 					// I'm pretty sure this logic is fine for self-loops (if a little nonsensical).
+
+					// Handle cap as special: it's first in the node_edges, which means it's in the wrong place for the left endpoint.
+					// Reserve the spot at 2 * ne_st for it, the high bound doesn't need extra twiddling.
 					for (int i = ne_st + has_cap; i < ne_en; i++) {
 						auto nvs = node_edges.dat[i].nvs;
 						// Add to the counts
@@ -690,14 +693,19 @@ struct spqr_tree {
 						for (int i = 2 * nv_st + 1; i <= 2 * nv_en; i++) {
 							off += std::exchange(node_darts.bounds[i], off);
 						}
-						assert(off == 2 * ne_en);
+						assert(off + has_cap == 2 * ne_en);
 					}
 
-					// Reverse order to get the darts
-					for (int i = ne_en - 1; i >= ne_st + has_cap; i--) {
+					// Reverse order to get the darts in bracket ordering.
+					for (int i = ne_en - 1; i >= ne_st; i--) {
 						auto nvs = node_edges.dat[i].nvs;
-						int nd0 = node_darts.bounds[2 * nvs[0] + 2]++;
-						int nd1 = node_darts.bounds[2 * nvs[1] + 1]++;
+						int nd0, nd1;
+						if (has_cap && i == ne_st) {
+							nd0 = 2 * ne_st;
+						} else {
+							nd0 = node_darts.bounds[2 * nvs[0] + 2]++;
+						}
+						nd1 = node_darts.bounds[2 * nvs[1] + 1]++;
 						node_edges.dat[i].nds = {nd0, nd1};
 						node_darts.dat[nd0] = {
 							cur_idx,
@@ -713,28 +721,6 @@ struct spqr_tree {
 							i,
 							nd0,
 						};
-					}
-
-					if (has_cap) {
-						auto nvs = node_edges.dat[ne_st].nvs;
-						int nd0 = 2 * ne_st;
-						int nd1 = 2 * ne_en - 1;;
-						node_edges.dat[ne_st].nds = {nd0, nd1};
-						node_darts.dat[nd0] = {
-							cur_idx,
-							nvs[0],
-							nvs[1],
-							ne_st,
-							nd1,
-						};
-						node_darts.dat[nd1] = {
-							cur_idx,
-							nvs[1],
-							nvs[0],
-							ne_st,
-							nd0,
-						};
-						node_darts.bounds[2 * nv_en]++;
 					}
 				}
 
