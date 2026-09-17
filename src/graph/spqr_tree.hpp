@@ -679,21 +679,22 @@ struct spqr_tree {
 				} else {
 					// TODO: Could do other faster things for S nodes / Q nodes / whatever?
 					// I'm pretty sure this logic is fine for self-loops (if a little nonsensical).
-					for (int i = ne_st; i < ne_en; i++) {
+					for (int i = ne_st + has_cap; i < ne_en; i++) {
 						auto nvs = node_edges.dat[i].nvs;
 						// Add to the counts
 						node_darts.bounds[2 * nvs[0] + 2]++;
 						node_darts.bounds[2 * nvs[1] + 1]++;
 					}
 					{
-						int off = 2 * ne_st;
+						int off = 2 * ne_st + has_cap;
 						for (int i = 2 * nv_st + 1; i <= 2 * nv_en; i++) {
 							off += std::exchange(node_darts.bounds[i], off);
 						}
 						assert(off == 2 * ne_en);
 					}
+
 					// Reverse order to get the darts
-					for (int i = ne_en - 1; i >= ne_st; i--) {
+					for (int i = ne_en - 1; i >= ne_st + has_cap; i--) {
 						auto nvs = node_edges.dat[i].nvs;
 						int nd0 = node_darts.bounds[2 * nvs[0] + 2]++;
 						int nd1 = node_darts.bounds[2 * nvs[1] + 1]++;
@@ -712,6 +713,28 @@ struct spqr_tree {
 							i,
 							nd0,
 						};
+					}
+
+					if (has_cap) {
+						auto nvs = node_edges.dat[ne_st].nvs;
+						int nd0 = 2 * ne_st;
+						int nd1 = 2 * ne_en - 1;;
+						node_edges.dat[ne_st].nds = {nd0, nd1};
+						node_darts.dat[nd0] = {
+							cur_idx,
+							nvs[0],
+							nvs[1],
+							ne_st,
+							nd1,
+						};
+						node_darts.dat[nd1] = {
+							cur_idx,
+							nvs[1],
+							nvs[0],
+							ne_st,
+							nd0,
+						};
+						node_darts.bounds[2 * nv_en]++;
 					}
 				}
 
