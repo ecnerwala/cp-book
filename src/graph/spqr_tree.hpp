@@ -687,13 +687,6 @@ struct spqr_tree {
 						node_darts.bounds[2 * nvs[1] + 1]++;
 					}
 
-					// Handle cap as special: it's first in the node_edges, which means it's in the wrong place for the left endpoint.
-					// Reserve the spot at 2 * ne_st for it, the high bound doesn't need extra twiddling.
-					// O nodes need an extra twiddle since the left endpoint of the cap is actually stored at 2 * ne_st + 1.
-					if (has_cap) {
-						node_darts.bounds[2 * nv_st + 2]--;
-					}
-
 					{
 						int off = 2 * ne_st + has_cap;
 						for (int i = 2 * nv_st + 1; i <= 2 * nv_en; i++) {
@@ -702,12 +695,20 @@ struct spqr_tree {
 						assert(off == 2 * ne_en);
 					}
 
+					// Handle cap as special: it's first in the node_edges, which means it's in the wrong place for the left endpoint.
+					// Reserve the spot at 2 * ne_st for it, the high bound doesn't need extra twiddling.
+					// O nodes need an extra twiddle since the left endpoint of the cap is actually stored at 2 * ne_st + 1.
+					int cap_nd0 = -1;
+					if (has_cap) {
+						cap_nd0 = node_darts.bounds[2 * nv_st + 2]++;
+					}
+
 					// Reverse order to get the darts in bracket ordering.
 					for (int i = ne_en - 1; i >= ne_st; i--) {
 						auto nvs = node_edges.dat[i].nvs;
 						int nd0, nd1;
 						if (has_cap && i == ne_st) {
-							nd0 = 2 * ne_st + (cur_type == node_type::O);
+							nd0 = cap_nd0;
 						} else {
 							nd0 = node_darts.bounds[2 * nvs[0] + 2]++;
 						}
