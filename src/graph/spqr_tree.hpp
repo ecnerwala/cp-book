@@ -14,6 +14,7 @@ template <typename T> struct csr {
 	std::vector<int> bounds;
 	std::vector<T> dat;
 	std::span<T> operator [](int i) { return std::span<T>(dat.begin() + bounds[i], dat.begin() + bounds[i + 1]); }
+	std::span<const T> operator [](int i) const { return std::span<const T>(dat.begin() + bounds[i], dat.begin() + bounds[i + 1]); }
 };
 
 template <typename T> struct csr_builder {
@@ -38,7 +39,7 @@ struct spqr_tree {
 	// The SPQR tree of a graph is a canonical/"maximal" decomposition of the graph by 2-vertex cuts.
 	// The tree consists of nodes which are graphs of virtual edges (vedges), corresponding to nontrivial 2-vertex cuts.
 	// Virtual edges are paired, and we can reassemble the graph by gluing nodes at their matching vedges (and removing the vedge).
-	// Real edges are represented as a special Q nodes which each contain exactly 1 real edge and exactly 1 vedge.
+	// Real edges are represented as special Q nodes which each contain exactly 1 real edge and exactly 1 vedge.
 	//
 	// Traditionally, the SPQR tree is defined for each biconnected component,
 	// but we will embed the SPQR decompositions inside the block-cut tree to get a (rooted) decomposition of the entire graph.
@@ -48,29 +49,30 @@ struct spqr_tree {
 	//  - Each block will be a subtree of nodes rooted at a Q edge, which is the child of one of its vertices.
 	//
 	// Item types:
-	//   F - forest - a root node corresponding to the whole forst.
-	//   V - vertex - not really a node, just there because they're mixed into the tree a la block/cut tree
-	//   Q - real edge - has exactly 1 vedge and 1 real edg
-	//   I - bridge - has exactly 1 vedge connecting to a bridge Q node
-	//   O - self-loop - has exactly 1 vedge connecting to a self-loop Q node
-	//   S - series - a cycle of >= 3 vedges; note that any 2 vertices of the cycle form a cut
-	//   P - parallel - a parallel group of >= 3 vedges with the same endpoints
-	//   R - rigid - a 3-vertex-connected component
+	//  F - forest - a root node corresponding to the whole forest.
+	//  V - vertex - not really a node, just there because they're mixed into the tree a la block/cut tree
+	//  Q - real edge - has exactly 1 vedge and 1 real edge
+	//  I - bridge - has exactly 1 vedge connecting to a bridge Q node
+	//  O - self-loop - has exactly 1 vedge connecting to a self-loop Q node
+	//  S - series - a cycle of >= 3 vedges; note that any 2 vertices of the cycle form a cut
+	//  P - parallel - a parallel group of >= 3 vedges with the same endpoints
+	//  R - rigid - a 3-vertex-connected component
+	//
+	// Q nodes occur in 2 places: block roots and block leaves.
+	// Block leaf Q's simply have no children.
+	// Block root Q's have 2 children: their vedge, and their deeper vertex (unless it's a self-loop).
 	//
 	// Degenerate blocks:
 	//  - a block consisting of a self-loop is a Q node connected to an O node.
 	//  - a block consisting of a bridge is a Q node connected to an I node.
 	//  - a block consisting of exactly 2 parallel edges is represented by 2 glued Q nodes.
-	enum class node_type : char {
-		F = 'F', V = 'V', Q = 'Q', I = 'I', O = 'O', S = 'S', P = 'P', R = 'R'
-	};
-
+	//
 	// We have several id spaces:
-	// * items are in preorder
-	// * node_verts (nv's) are each node's vertices, given in node order then s-t order.
-	// * node_edges (ne's) are each node's vedges, given in node order then a s-t order.
-	// * node_darts (nd's) are each node_vert's incident vedges, given as 2 lists per nv: left/rightwards darts each in reverse s-t order.
-	// * original verts and original edges can be converted to items as vert_item / edge_item
+	//  - items are in preorder
+	//  - node_verts (nv's) are each node's vertices, given in node order then s-t order.
+	//  - node_edges (ne's) are each node's vedges, given in node order then a s-t order.
+	//  - node_darts (nd's) are each node_vert's incident vedges, given as 2 lists per nv: left/rightwards darts each in reverse s-t order.
+	//  - original verts and original edges can be converted to items as vert_item / edge_item
 	//
 	// Children of a node will be sorted in s-t order.
 	// Specifically vertices are sorted, and edges are guaranteed to satisfy the strong "dominance" partial order:
@@ -79,6 +81,14 @@ struct spqr_tree {
 	//   (5->4) (5->3) (5->2) (5->1) *vertex 5* (5->9) (5->8) (5->7) (5->6)
 	//
 	// All id's are item indices unless clearly nv/ne/nd id's.
+	//
+	// In general, there are 2 ways to use the SPQR tree: the rooted view and the unrooted view.
+	//  - The rooted view uses par / ch walks, and either treats the tree as 1 top-down big decomposition, or walks in paths up/down the tree with LCA-like queries.
+	//  - The unrooted view mostly uses nv/ne/nd lists and works locally within a node/sometimes jumps between them.
+
+	enum class node_type : char {
+		F = 'F', V = 'V', Q = 'Q', I = 'I', O = 'O', S = 'S', P = 'P', R = 'R'
+	};
 
 	std::vector<int> vert_index;
 	std::vector<int> edge_index;
@@ -90,14 +100,16 @@ struct spqr_tree {
 
 	csr<int> ch;
 	struct nv_t {
-		int node_item;
-		int vert_item;
+		int node;
+		int vert;
 	};
 	csr<nv_t> node_verts;
-	std::vector<int> item_nv;
+	// The nv index of a vertex within its parent node
+	std::vector<int> vert_par_nv;
+	// TODO: Should we store a vert_nodes CSR?
 
 	struct ne_t {
-		int node_item;
+		int node;
 		int twin_ne;
 		// TODO: Should we store the twin node, the twin node type, and/or twin node type == Q?
 		std::array<int, 2> nvs;
@@ -512,7 +524,7 @@ struct spqr_tree {
 			node_verts.bounds.reserve(tot_items + 1);
 			node_verts.bounds.push_back(0);
 			node_verts.dat.reserve(tot_node_verts);
-			std::vector<int> item_nv(tot_items, -1);
+			std::vector<int> vert_par_nv(tot_items, -1);
 
 			int tot_node_edges = (tot_items - 1 - NV - tot_blocks) * 2;
 			csr<ne_t> node_edges;
@@ -585,7 +597,7 @@ struct spqr_tree {
 				bool has_cap = is_node && !(cur_type == node_type::Q && ch_en - ch_st > 0);
 
 				for (int i = 0; i < n_verts; i++) {
-					vert_pos_buf[node_verts.dat[i + nv_st].vert_item] = i;
+					vert_pos_buf[node_verts.dat[i + nv_st].vert] = i;
 				}
 				if (cur_type == node_type::R) {
 					// Bucketsort the children by the midpoint if necessary
@@ -744,7 +756,7 @@ struct spqr_tree {
 						int nxt_ne = int(node_edges.dat.size());
 						self(nxt_item, cur_idx);
 						if (nxt_item < 1 + NV) {
-							item_nv[nxt_idx] = cur_nv++;
+							vert_par_nv[nxt_idx] = cur_nv++;
 						} else if (is_node) {
 							node_edges.dat[cur_ne].twin_ne = nxt_ne;
 							node_edges.dat[nxt_ne].twin_ne = cur_ne;
@@ -762,7 +774,7 @@ struct spqr_tree {
 
 			// Rewrite node_vertices to the correct index
 			for (auto& v : node_verts.dat) {
-				v.vert_item = vert_index[v.vert_item];
+				v.vert = vert_index[v.vert];
 			}
 
 			return spqr_tree{
@@ -774,7 +786,7 @@ struct spqr_tree {
 				std::move(orig_id),
 				std::move(ch),
 				std::move(node_verts),
-				std::move(item_nv),
+				std::move(vert_par_nv),
 				std::move(node_edges),
 				std::move(node_darts),
 			};

@@ -1,6 +1,5 @@
-#include "spqr_tree.hpp"
+#include "graph/spqr_tree.hpp"
 
-#include <map>
 #include <random>
 #include <algorithm>
 
