@@ -31,8 +31,8 @@ add_library(cp-book-test-flags INTERFACE)
 # TODO: Clean these up somehow
 # No -D_FORTIFY_SOURCE: it rewrites libc calls to *_chk variants that bypass
 # ASan's interceptors, silently weakening both checkers.
-target_compile_options(cp-book-test-flags INTERFACE -O2 -Wall -Wextra -pedantic -Wshadow -Wformat=2 -Wfloat-equal -Wconversion -Wlogical-op -Wshift-overflow=2 -Wduplicated-cond -Wcast-qual -Wcast-align -Wno-unused-result -Wno-sign-conversion -g -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fstack-protector)
-target_link_options(cp-book-test-flags INTERFACE -O2 -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all)
+target_compile_options(cp-book-test-flags INTERFACE $<IF:$<CONFIG:Debug>,-O0,-O2> -Wall -Wextra -pedantic -Wshadow -Wformat=2 -Wfloat-equal -Wconversion -Wlogical-op -Wshift-overflow=2 -Wduplicated-cond -Wcast-qual -Wcast-align -Wno-unused-result -Wno-sign-conversion -g -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fstack-protector)
+target_link_options(cp-book-test-flags INTERFACE $<IF:$<CONFIG:Debug>,-O0,-O2> -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all)
 
 # -O1 keeps line/branch data close to the source (gcovr's recommendation);
 # it is appended after -O2 above, and the last -O flag wins.
