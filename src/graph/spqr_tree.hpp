@@ -632,7 +632,7 @@ struct spqr_tree {
 					assert(n_edges == 1);
 					node_darts.bounds[2 * nv_st + 1] = 2 * ne_st + 1 * n_edges;
 					node_darts.bounds[2 * nv_st + 2] = 2 * ne_st + 2 * n_edges;
-					set_ne(ne_st, {nv_st, nv_st}, {2 * ne_st, 2 * ne_st + 1});
+					set_ne(ne_st, {nv_st, nv_st}, {2 * ne_st + 1, 2 * ne_st});
 				} else if (cur_type == node_type::Q || cur_type == node_type::I) {
 					assert(n_verts == 2);
 					assert(n_edges == 1);
