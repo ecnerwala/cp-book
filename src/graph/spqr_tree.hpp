@@ -535,7 +535,11 @@ struct spqr_tree {
 
 			std::vector<int> vert_pos_buf(NV, -1);
 			std::vector<int> cnts_buf(2 * NV, -1);
-			std::vector<std::pair<int, int>> ch_buf(tot_items);
+			struct ch_buf_t {
+				int loc;
+				int item_id;
+			};
+			std::vector<ch_buf_t> ch_buf(tot_items);
 
 			int nxt_unassigned_idx = 0;
 			[&](this auto&& self, int cur_item, int par_idx) -> void {
@@ -564,6 +568,7 @@ struct spqr_tree {
 				int ch_en = ch_st;
 				int nv_st = node_verts.bounds[cur_idx];
 				int nv_en = nv_st;
+				int n_edges = 0;
 				if (item_vs[cur_item][0] != -1) {
 					node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][0]};
 				}
@@ -572,6 +577,8 @@ struct spqr_tree {
 					assert(nxt_item >= 1);
 					if (nxt_item < 1 + NV) {
 						node_verts.dat[nv_en++] = {cur_idx, nxt_item - 1};
+					} else {
+						n_edges++;
 					}
 					if (nxt_item == item_ch[cur_item].v[1]) {
 						assert(ch_nxt[nxt_item] == -1);
@@ -588,35 +595,176 @@ struct spqr_tree {
 				bool is_node = cur_type != node_type::F && cur_type != node_type::V;
 				bool has_cap = is_node && !(cur_type == node_type::Q && ch_en - ch_st > 0);
 
-				if (cur_type == node_type::F || cur_type == node_type::V) {
-					// There's nothing happening here
+				if (!is_node) n_edges = 0;
+				if (has_cap) n_edges++;
+
+				int ne_st = node_edges.bounds[cur_idx];
+				int ne_en = node_edges.bounds[cur_idx+1] = ne_st + n_edges;
+				if (cur_type == node_type::F) {
+					// Just set node_darts bounds and we're good
+					for (int i = 2 * nv_st+1; i <= 2 * nv_en; i++) {
+						node_darts.bounds[i] = 2 * ne_st;
+					}
+				} else if (cur_type == node_type::V) {
+					// Just set node_darts bounds and we're good
 				} else if (n_verts == 1) {
 					assert(cur_type == node_type::Q || cur_type == node_type::O);
+					assert(n_edges == 1);
+					node_edges.dat[ne_st].node = cur_idx;
+					node_edges.dat[ne_st].nvs = {nv_st, nv_st};
+					node_edges.dat[ne_st].nds = {2 * ne_st, 2 * ne_st + 1};
+					node_darts.bounds[2 * nv_st + 1] = 2 * ne_st + 1 * n_edges;
+					node_darts.bounds[2 * nv_st + 2] = 2 * ne_st + 2 * n_edges;
+					int nd0 = 2 * ne_st + 0;
+					int nd1 = 2 * ne_st + 1;
+					node_darts.dat[nd0] = {
+						cur_idx,
+						nv_st,
+						nv_st,
+						ne_st,
+						nd1,
+					};
+					node_darts.dat[nd1] = {
+						cur_idx,
+						nv_st,
+						nv_st,
+						ne_st,
+						nd0,
+					};
 				} else if (cur_type == node_type::Q || cur_type == node_type::I) {
-					assert(n_verts >= 2);
+					assert(n_verts == 2);
+					assert(n_edges == 1);
+					node_edges.dat[ne_st].node = cur_idx;
+					node_edges.dat[ne_st].nvs = {nv_st, nv_st + 1};
+					node_edges.dat[ne_st].nds = {2 * ne_st, 2 * ne_st + 1};
+					node_darts.bounds[2 * nv_st + 1] = 2 * ne_st + 0 * n_edges;
+					node_darts.bounds[2 * nv_st + 2] = 2 * ne_st + 1 * n_edges;
+					node_darts.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
+					node_darts.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
+					int nd0 = 2 * ne_st + 0;
+					int nd1 = 2 * ne_st + 1;
+					node_darts.dat[nd0] = {
+						cur_idx,
+						nv_st,
+						nv_st+1,
+						ne_st,
+						nd1,
+					};
+					node_darts.dat[nd1] = {
+						cur_idx,
+						nv_st+1,
+						nv_st,
+						ne_st,
+						nd0,
+					};
 				} else if (cur_type == node_type::P) {
+					// Special case: tiebreak the parallel edges so they're reversed
+					assert(n_verts == 2);
+					assert(n_edges >= 3);
+					node_darts.bounds[2 * nv_st + 1] = 2 * ne_st + 0 * n_edges;
+					node_darts.bounds[2 * nv_st + 2] = 2 * ne_st + 1 * n_edges;
+					node_darts.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
+					node_darts.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
+					for (int ne = ne_st; ne < ne_en; ne++) {
+						node_edges.dat[ne].node = cur_idx;
+						node_edges.dat[ne].nvs = {nv_st, nv_st + 1};
+						int nd0 = 2 * ne_st + (ne - ne_st);
+						int nd1 = 2 * ne_en - 1 - (ne - ne_st);
+						node_edges.dat[ne].nds = {nd0, nd1};
+						node_darts.dat[nd0] = {
+							cur_idx,
+							nv_st,
+							nv_st+1,
+							ne,
+							nd1,
+						};
+						node_darts.dat[nd1] = {
+							cur_idx,
+							nv_st+1,
+							nv_st,
+							ne,
+							nd0,
+						};
+					}
 				} else if (cur_type == node_type::S) {
+					assert(n_verts == n_edges);
+					assert(n_verts >= 3);
+					for (int i = 2 * nv_st + 1; i <= 2 * nv_en; i++) {
+						node_darts.bounds[i] = i + 2 * (ne_st - nv_st);
+					}
+					// Cap goes separately
+					node_darts.bounds[2 * nv_st + 1]--;
+					node_darts.bounds[2 * nv_en - 1]++;
+					{
+						node_edges.dat[ne_st].node = cur_idx;
+						node_edges.dat[ne_st].nvs = {nv_st, nv_en - 1};
+						int nd0 = 2 * ne_st;
+						int nd1 = 2 * ne_en - 1;
+						node_darts.dat[nd0] = {
+							cur_idx,
+							nv_st,
+							nv_en - 1,
+							ne_st,
+							nd1,
+						};
+						node_darts.dat[nd1] = {
+							cur_idx,
+							nv_en - 1,
+							nv_st,
+							ne_st,
+							nd0,
+						};
+					}
+					for (int i = 1; i < n_edges; i++) {
+						int ne = ne_st + i;
+						node_edges.dat[ne].node = cur_idx;
+						node_edges.dat[ne].nvs = {nv_st + i - 1, nv_st + i};
+						int nd0 = 2 * ne_st + 2 * i - 1;
+						int nd1 = 2 * ne_st + 2 * i - 0;
+						node_edges.dat[ne].nds = {nd0, nd1};
+						node_darts.dat[nd0] = {
+							cur_idx,
+							nv_st + i - 1,
+							nv_st + i,
+							ne,
+							nd1,
+						};
+						node_darts.dat[nd1] = {
+							cur_idx,
+							nv_st + i,
+							nv_st + i - 1,
+							ne,
+							nd0,
+						};
+					}
 				} else if (cur_type == node_type::R) {
-				} else assert(false);
-
-				for (int i = 0; i < n_verts; i++) {
-					vert_pos_buf[node_verts.dat[i + nv_st].vert] = i;
-				}
-				if (cur_type == node_type::R) {
+					for (int nv = nv_st; nv < nv_en; nv++) {
+						vert_pos_buf[node_verts.dat[nv].vert] = nv;
+					}
 					// Bucketsort the children by the midpoint if necessary
 					cnts_buf.assign(n_verts * 2 - 1, 0);
 					ch_buf.clear();
 
+					assert(has_cap);
+
+					// Cap node_darts bounds
+					node_darts.bounds[2 * nv_st + 2]++;
+					node_darts.bounds[2 * nv_en - 1]++;
+
 					for (int i = ch_st; i < ch_en; i++) {
-						int n = ch.dat[i];
-						assert(n >= 1);
-						int loc;
-						if (n < 1 + NV) {
-							loc = 2 * vert_pos_buf[n-1];
+						int item = ch.dat[i];
+						assert(item >= 1);
+						std::array<int, 2> nvs;
+						if (item < 1 + NV) {
+							nvs = {vert_pos_buf[item-1], vert_pos_buf[item-1]};
 						} else {
-							loc = vert_pos_buf[item_vs[n][0]] + vert_pos_buf[item_vs[n][1]];
+							nvs = {vert_pos_buf[item_vs[item][0]], vert_pos_buf[item_vs[item][1]]};
+							assert(nvs[0] < nvs[1]);
+							node_darts.bounds[2 * nvs[0] + 2]++;
+							node_darts.bounds[2 * nvs[1] + 1]++;
 						}
-						ch_buf.emplace_back(loc, n);
+						int loc = (nvs[0] - nv_st) + (nvs[1] - nv_st);
+						ch_buf.emplace_back(loc, item);
 						cnts_buf[loc]++;
 					}
 					int offset = ch_st;
@@ -626,72 +774,6 @@ struct spqr_tree {
 					}
 					for (auto [loc, n] : std::views::reverse(ch_buf)) {
 						ch.dat[--cnts_buf[loc]] = n;
-					}
-				}
-
-				// Fill in node_edges and node_darts
-				int ne_st = node_edges.bounds[cur_idx];
-				int ne_en = ne_st;
-				if (is_node) {
-					auto insert_ne = [&](int item) -> void {
-						auto [v0, v1] = item_vs[item];
-						if (v1 == -1) v1 = v0;
-						node_edges.dat[ne_en].node = cur_idx;
-						node_edges.dat[ne_en].nvs = {nv_st + vert_pos_buf[v0], nv_st + vert_pos_buf[v1]};
-						ne_en++;
-					};
-					if (has_cap) {
-						insert_ne(cur_item);
-					}
-					for (int i = ch_st; i < ch_en; i++) {
-						int n = ch.dat[i];
-						assert(n >= 1);
-						if (n < 1 + NV) continue;
-						insert_ne(n);
-					}
-				}
-				node_edges.bounds[cur_idx+1] = ne_en;
-
-				int n_edges = ne_en - ne_st;
-
-				// Fill in nd
-				if (cur_type == node_type::P) {
-					// Special case: tiebreak the parallel edges so they're reversed
-					assert(nv_en - nv_st == 2);
-					node_darts.bounds[2 * nv_st + 1] = 2 * ne_st + 0 * n_edges;
-					node_darts.bounds[2 * nv_st + 2] = 2 * ne_st + 1 * n_edges;
-					node_darts.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
-					node_darts.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
-					for (int i = ne_st; i < ne_en; i++) {
-						int nd0 = 2 * ne_st + (i - ne_st);
-						int nd1 = 2 * ne_en - 1 - (i - ne_st);
-						assert(node_edges.dat[i].nvs[0] == nv_st);
-						assert(node_edges.dat[i].nvs[1] == nv_st+1);
-						node_edges.dat[i].nds = {nd0, nd1};
-						node_darts.dat[nd0] = {
-							cur_idx,
-							nv_st,
-							nv_st+1,
-							i,
-							nd1,
-						};
-						node_darts.dat[nd1] = {
-							cur_idx,
-							nv_st+1,
-							nv_st,
-							i,
-							nd0,
-						};
-					}
-				} else {
-					// TODO: Could do other faster things for S nodes / Q nodes / whatever?
-					// I'm pretty sure this logic is fine for self-loops (if a little nonsensical).
-
-					for (int i = ne_st; i < ne_en; i++) {
-						auto nvs = node_edges.dat[i].nvs;
-						// Add to the counts
-						node_darts.bounds[2 * nvs[0] + 2]++;
-						node_darts.bounds[2 * nvs[1] + 1]++;
 					}
 
 					{
@@ -704,19 +786,34 @@ struct spqr_tree {
 
 					// Handle cap as special: it's first in the node_edges, which means it's in the wrong place for the left endpoint.
 					// Reserve the spot at 2 * ne_st for it, the high bound doesn't need extra twiddling.
-					// O nodes need an extra twiddle since the left endpoint of the cap is actually stored at 2 * ne_st + 1.
-					int cap_nd0 = -1;
-					if (has_cap) {
-						cap_nd0 = node_darts.bounds[2 * nv_st + 2]++;
-						assert(cap_nd0 == 2 * ne_st + (cur_type == node_type::O));
+					node_darts.bounds[2 * nv_st + 2]++;
+
+					// Fill in node_edges and node_darts
+					{
+						int nxt_ne = ne_st;
+						auto insert_ne = [&](int item) -> void {
+							auto [v0, v1] = item_vs[item];
+							node_edges.dat[nxt_ne].node = cur_idx;
+							// TODO: Reuse the vert_pos_buf lookup from before?
+							node_edges.dat[nxt_ne].nvs = {vert_pos_buf[v0], vert_pos_buf[v1]};
+							nxt_ne++;
+						};
+						insert_ne(cur_item);
+						for (int i = ch_st; i < ch_en; i++) {
+							int n = ch.dat[i];
+							assert(n >= 1);
+							if (n < 1 + NV) continue;
+							insert_ne(n);
+						}
+						assert(nxt_ne == ne_en);
 					}
 
 					// Reverse order to get the darts in bracket ordering.
 					for (int i = ne_en - 1; i >= ne_st; i--) {
 						auto nvs = node_edges.dat[i].nvs;
 						int nd0, nd1;
-						if (has_cap && i == ne_st) {
-							nd0 = cap_nd0;
+						if (i == ne_st) {
+							nd0 = 2 * ne_st;
 						} else {
 							nd0 = node_darts.bounds[2 * nvs[0] + 2]++;
 						}
@@ -737,9 +834,8 @@ struct spqr_tree {
 							nd0,
 						};
 					}
-				}
+				} else assert(false);
 
-				// Safe because ch is reserved to the right size
 				{
 					int cur_nv = nv_st + (item_vs[cur_item][0] != -1);
 					int cur_ne = ne_st + has_cap;
