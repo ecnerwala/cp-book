@@ -626,7 +626,7 @@ struct spqr_tree {
 						node_darts.bounds[i] = 2 * ne_st;
 					}
 				} else if (cur_type == node_type::V) {
-					// Just set node_darts bounds and we're good
+					// Nothing to do
 				} else if (n_verts == 1) {
 					assert(cur_type == node_type::Q || cur_type == node_type::O);
 					assert(n_edges == 1);
@@ -666,10 +666,10 @@ struct spqr_tree {
 						set_ne(ne_st + i, {nv_st + i - 1, nv_st + i}, {2 * ne_st + 2 * i - 1, 2 * ne_st + 2 * i});
 					}
 				} else if (cur_type == node_type::R) {
+					// Bucketsort the children by the midpoint
 					for (int nv = nv_st; nv < nv_en; nv++) {
 						vert_pos_buf[node_verts.dat[nv].vert] = nv;
 					}
-					// Bucketsort the children by the midpoint if necessary
 					cnts_buf.assign(n_verts * 2 - 1, 0);
 					ch_buf.clear();
 
@@ -713,54 +713,28 @@ struct spqr_tree {
 					}
 
 					// Handle cap as special: it's first in the node_edges, which means it's in the wrong place for the left endpoint.
-					// Reserve the spot at 2 * ne_st for it, the high bound doesn't need extra twiddling.
 					node_darts.bounds[2 * nv_st + 2]++;
 
-					// Fill in node_edges and node_darts
-					{
-						int nxt_ne = ne_st;
-						auto insert_ne = [&](int item) -> void {
-							auto [v0, v1] = item_vs[item];
-							node_edges.dat[nxt_ne].node = cur_idx;
-							// TODO: Reuse the vert_pos_buf lookup from before?
-							node_edges.dat[nxt_ne].nvs = {vert_pos_buf[v0], vert_pos_buf[v1]};
-							nxt_ne++;
-						};
-						insert_ne(cur_item);
-						for (int i = ch_st; i < ch_en; i++) {
-							int n = ch.dat[i];
-							assert(n >= 1);
-							if (n < 1 + NV) continue;
-							insert_ne(n);
-						}
-						assert(nxt_ne == ne_en);
-					}
-
+					// Fill in node_edges and node_darts.
 					// Reverse order to get the darts in bracket ordering.
-					for (int ne = ne_en - 1; ne >= ne_st; ne--) {
-						auto nvs = node_edges.dat[ne].nvs;
-						int nd0, nd1;
-						if (ne == ne_st) {
-							nd0 = 2 * ne_st;
-						} else {
-							nd0 = node_darts.bounds[2 * nvs[0] + 2]++;
+					{
+						int nxt_ne = ne_en;
+						for (int i = ch_en; i >= ch_st; i--) {
+							int item = ch.dat[i];
+							assert(item >= 1);
+							if (item < 1 + NV) continue;
+							nxt_ne--;
+							auto [v0, v1] = item_vs[item];
+							// TODO: Reuse this from the ch pass?
+							std::array<int, 2> nvs = {vert_pos_buf[v0], vert_pos_buf[v1]};
+							set_ne(nxt_ne, nvs, {
+								node_darts.bounds[2 * nvs[0] + 2]++,
+								node_darts.bounds[2 * nvs[1] + 1]++,
+							});
 						}
-						nd1 = node_darts.bounds[2 * nvs[1] + 1]++;
-						node_edges.dat[ne].nds = {nd0, nd1};
-						node_darts.dat[nd0] = {
-							cur_idx,
-							nvs[0],
-							nvs[1],
-							ne,
-							nd1,
-						};
-						node_darts.dat[nd1] = {
-							cur_idx,
-							nvs[1],
-							nvs[0],
-							ne,
-							nd0,
-						};
+						assert(nxt_ne == ne_st + 1);
+						// Insert the cap
+						set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1});
 					}
 				} else assert(false);
 
