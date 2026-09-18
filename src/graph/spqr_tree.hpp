@@ -719,7 +719,7 @@ struct spqr_tree {
 					// Reverse order to get the darts in bracket ordering.
 					{
 						int nxt_ne = ne_en;
-						for (int i = ch_en; i >= ch_st; i--) {
+						for (int i = ch_en - 1; i >= ch_st; i--) {
 							int item = ch.dat[i];
 							assert(item >= 1);
 							if (item < 1 + NV) continue;
