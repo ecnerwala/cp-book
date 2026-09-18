@@ -712,12 +712,12 @@ struct spqr_tree {
 						assert(off == 2 * ne_en);
 					}
 
-					// Handle cap as special: it's first in the node_edges, which means it's in the wrong place for the left endpoint.
-					node_darts.bounds[2 * nv_st + 2]++;
-
 					// Fill in node_edges and node_darts.
 					// Reverse order to get the darts in bracket ordering.
 					{
+						// Handle cap as special: it's first in the node_edges, which means it's in the wrong place for the left endpoint.
+						node_darts.bounds[2 * nv_st + 2]++;
+
 						int nxt_ne = ne_en;
 						for (int i = ch_en - 1; i >= ch_st; i--) {
 							int item = ch.dat[i];
@@ -733,8 +733,10 @@ struct spqr_tree {
 							});
 						}
 						assert(nxt_ne == ne_st + 1);
-						// Insert the cap
+
+						// Insert the cap / bump its bound
 						set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1});
+						node_darts.bounds[2 * nv_en - 1]++;
 					}
 				} else assert(false);
 
