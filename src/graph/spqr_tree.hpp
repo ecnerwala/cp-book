@@ -600,6 +600,26 @@ struct spqr_tree {
 
 				int ne_st = node_edges.bounds[cur_idx];
 				int ne_en = node_edges.bounds[cur_idx+1] = ne_st + n_edges;
+
+				auto set_ne = [&](int ne, std::array<int, 2> nvs, std::array<int, 2> nds) -> void {
+					node_edges.dat[ne].node = cur_idx;
+					node_edges.dat[ne].nvs = nvs;
+					node_edges.dat[ne].nds = nds;
+					node_darts.dat[nds[0]] = {
+						cur_idx,
+						nvs[0],
+						nvs[1],
+						ne,
+						nds[1],
+					};
+					node_darts.dat[nds[1]] = {
+						cur_idx,
+						nvs[1],
+						nvs[0],
+						ne,
+						nds[0],
+					};
+				};
 				if (cur_type == node_type::F) {
 					// Just set node_darts bounds and we're good
 					for (int i = 2 * nv_st+1; i <= 2 * nv_en; i++) {
@@ -610,53 +630,17 @@ struct spqr_tree {
 				} else if (n_verts == 1) {
 					assert(cur_type == node_type::Q || cur_type == node_type::O);
 					assert(n_edges == 1);
-					node_edges.dat[ne_st].node = cur_idx;
-					node_edges.dat[ne_st].nvs = {nv_st, nv_st};
-					node_edges.dat[ne_st].nds = {2 * ne_st, 2 * ne_st + 1};
 					node_darts.bounds[2 * nv_st + 1] = 2 * ne_st + 1 * n_edges;
 					node_darts.bounds[2 * nv_st + 2] = 2 * ne_st + 2 * n_edges;
-					int nd0 = 2 * ne_st + 0;
-					int nd1 = 2 * ne_st + 1;
-					node_darts.dat[nd0] = {
-						cur_idx,
-						nv_st,
-						nv_st,
-						ne_st,
-						nd1,
-					};
-					node_darts.dat[nd1] = {
-						cur_idx,
-						nv_st,
-						nv_st,
-						ne_st,
-						nd0,
-					};
+					set_ne(ne_st, {nv_st, nv_st}, {2 * ne_st, 2 * ne_st + 1});
 				} else if (cur_type == node_type::Q || cur_type == node_type::I) {
 					assert(n_verts == 2);
 					assert(n_edges == 1);
-					node_edges.dat[ne_st].node = cur_idx;
-					node_edges.dat[ne_st].nvs = {nv_st, nv_st + 1};
-					node_edges.dat[ne_st].nds = {2 * ne_st, 2 * ne_st + 1};
 					node_darts.bounds[2 * nv_st + 1] = 2 * ne_st + 0 * n_edges;
 					node_darts.bounds[2 * nv_st + 2] = 2 * ne_st + 1 * n_edges;
 					node_darts.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
 					node_darts.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
-					int nd0 = 2 * ne_st + 0;
-					int nd1 = 2 * ne_st + 1;
-					node_darts.dat[nd0] = {
-						cur_idx,
-						nv_st,
-						nv_st+1,
-						ne_st,
-						nd1,
-					};
-					node_darts.dat[nd1] = {
-						cur_idx,
-						nv_st+1,
-						nv_st,
-						ne_st,
-						nd0,
-					};
+					set_ne(ne_st, {nv_st, nv_st + 1}, {2 * ne_st, 2 * ne_st + 1});
 				} else if (cur_type == node_type::P) {
 					// Special case: tiebreak the parallel edges so they're reversed
 					assert(n_verts == 2);
@@ -666,25 +650,7 @@ struct spqr_tree {
 					node_darts.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
 					node_darts.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
 					for (int ne = ne_st; ne < ne_en; ne++) {
-						node_edges.dat[ne].node = cur_idx;
-						node_edges.dat[ne].nvs = {nv_st, nv_st + 1};
-						int nd0 = 2 * ne_st + (ne - ne_st);
-						int nd1 = 2 * ne_en - 1 - (ne - ne_st);
-						node_edges.dat[ne].nds = {nd0, nd1};
-						node_darts.dat[nd0] = {
-							cur_idx,
-							nv_st,
-							nv_st+1,
-							ne,
-							nd1,
-						};
-						node_darts.dat[nd1] = {
-							cur_idx,
-							nv_st+1,
-							nv_st,
-							ne,
-							nd0,
-						};
+						set_ne(ne, {nv_st, nv_st + 1}, {2 * ne_st + (ne - ne_st), 2 * ne_en - 1 - (ne - ne_st)});
 					}
 				} else if (cur_type == node_type::S) {
 					assert(n_verts == n_edges);
@@ -692,51 +658,12 @@ struct spqr_tree {
 					for (int i = 2 * nv_st + 1; i <= 2 * nv_en; i++) {
 						node_darts.bounds[i] = i + 2 * (ne_st - nv_st);
 					}
-					// Cap goes separately
+					// Fix bounds for the cap
 					node_darts.bounds[2 * nv_st + 1]--;
 					node_darts.bounds[2 * nv_en - 1]++;
-					{
-						node_edges.dat[ne_st].node = cur_idx;
-						node_edges.dat[ne_st].nvs = {nv_st, nv_en - 1};
-						int nd0 = 2 * ne_st;
-						int nd1 = 2 * ne_en - 1;
-						node_edges.dat[ne_st].nds = {nd0, nd1};
-						node_darts.dat[nd0] = {
-							cur_idx,
-							nv_st,
-							nv_en - 1,
-							ne_st,
-							nd1,
-						};
-						node_darts.dat[nd1] = {
-							cur_idx,
-							nv_en - 1,
-							nv_st,
-							ne_st,
-							nd0,
-						};
-					}
+					set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1});
 					for (int i = 1; i < n_edges; i++) {
-						int ne = ne_st + i;
-						node_edges.dat[ne].node = cur_idx;
-						node_edges.dat[ne].nvs = {nv_st + i - 1, nv_st + i};
-						int nd0 = 2 * ne_st + 2 * i - 1;
-						int nd1 = 2 * ne_st + 2 * i - 0;
-						node_edges.dat[ne].nds = {nd0, nd1};
-						node_darts.dat[nd0] = {
-							cur_idx,
-							nv_st + i - 1,
-							nv_st + i,
-							ne,
-							nd1,
-						};
-						node_darts.dat[nd1] = {
-							cur_idx,
-							nv_st + i,
-							nv_st + i - 1,
-							ne,
-							nd0,
-						};
+						set_ne(ne_st + i, {nv_st + i - 1, nv_st + i}, {2 * ne_st + 2 * i - 1, 2 * ne_st + 2 * i});
 					}
 				} else if (cur_type == node_type::R) {
 					for (int nv = nv_st; nv < nv_en; nv++) {
@@ -810,28 +737,28 @@ struct spqr_tree {
 					}
 
 					// Reverse order to get the darts in bracket ordering.
-					for (int i = ne_en - 1; i >= ne_st; i--) {
-						auto nvs = node_edges.dat[i].nvs;
+					for (int ne = ne_en - 1; ne >= ne_st; ne--) {
+						auto nvs = node_edges.dat[ne].nvs;
 						int nd0, nd1;
-						if (i == ne_st) {
+						if (ne == ne_st) {
 							nd0 = 2 * ne_st;
 						} else {
 							nd0 = node_darts.bounds[2 * nvs[0] + 2]++;
 						}
 						nd1 = node_darts.bounds[2 * nvs[1] + 1]++;
-						node_edges.dat[i].nds = {nd0, nd1};
+						node_edges.dat[ne].nds = {nd0, nd1};
 						node_darts.dat[nd0] = {
 							cur_idx,
 							nvs[0],
 							nvs[1],
-							i,
+							ne,
 							nd1,
 						};
 						node_darts.dat[nd1] = {
 							cur_idx,
 							nvs[1],
 							nvs[0],
-							i,
+							ne,
 							nd0,
 						};
 					}
