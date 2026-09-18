@@ -508,93 +508,96 @@ struct spqr_tree {
 			std::vector<int> vert_index(NV, -1);
 			std::vector<int> edge_index(NE, -1);
 
-			std::vector<int> par; par.reserve(tot_items);
-			std::vector<int> subtree_end; subtree_end.reserve(tot_items);
-			std::vector<node_type> types; types.reserve(tot_items);
-			std::vector<int> orig_id; orig_id.reserve(tot_items);
+			std::vector<int> par(tot_items, -1);
+			std::vector<int> subtree_end(tot_items, -1);
+			std::vector<node_type> types(tot_items, node_type::F);
+			std::vector<int> orig_id(tot_items, -1);
 
 			csr<int> ch;
-			ch.bounds.reserve(tot_items + 1);
-			ch.bounds.push_back(0);
-			ch.dat.reserve(tot_items - 1);
+			ch.bounds.resize(tot_items + 1, 0);
+			ch.dat.resize(tot_items - 1);
 
 			// Each node is a child, and additionally most non-block node has 2 cap verts; blocks have 1, and O nodes have 1
 			int tot_node_verts = NV + (tot_items - 1 - NV) * 2 - tot_blocks - tot_self_loops;
 			csr<nv_t> node_verts;
-			node_verts.bounds.reserve(tot_items + 1);
-			node_verts.bounds.push_back(0);
-			node_verts.dat.reserve(tot_node_verts);
+			node_verts.bounds.resize(tot_items + 1);
+			node_verts.dat.resize(tot_node_verts);
 			std::vector<int> vert_par_nv(tot_items, -1);
 
 			int tot_node_edges = (tot_items - 1 - NV - tot_blocks) * 2;
 			csr<ne_t> node_edges;
-			node_edges.bounds.reserve(tot_items + 1);
-			node_edges.bounds.push_back(0);
-			node_edges.dat.reserve(tot_node_edges);
+			node_edges.bounds.resize(tot_items + 1);
+			node_edges.dat.resize(tot_node_edges);
 
 			csr<nd_t> node_darts;
-			node_darts.bounds.reserve(tot_node_verts * 2 + 1);
-			node_darts.bounds.push_back(0);
-			node_darts.dat.reserve(tot_node_edges * 2);
+			node_darts.bounds.resize(tot_node_verts * 2 + 1);
+			node_darts.dat.resize(tot_node_edges * 2);
 
 			std::vector<int> vert_pos_buf(NV, -1);
 			std::vector<int> cnts_buf(2 * NV, -1);
 			std::vector<std::pair<int, int>> ch_buf(tot_items);
 
+			int nxt_unassigned_idx = 0;
 			[&](this auto&& self, int cur_item, int par_idx) -> void {
-				int cur_idx = int(par.size());
-				par.push_back(par_idx);
-				subtree_end.push_back(-1);
-				node_type cur_type = item_types[cur_item];
-				types.push_back(cur_type);
+				int cur_idx = nxt_unassigned_idx++;
+				par[cur_idx] = par_idx;
+				node_type cur_type = types[cur_idx] = item_types[cur_item];
 				if (cur_type == node_type::F) {
 					assert(cur_item == 0);
-					orig_id.push_back(-1);
 				} else if (cur_type == node_type::V) {
 					assert(1 <= cur_item && cur_item < 1 + NV);
 					int orig_vert = cur_item - 1;
-					orig_id.push_back(orig_vert);
+					orig_id[cur_idx] = orig_vert;
 					vert_index[orig_vert] = cur_idx;
 				} else if (cur_type == node_type::Q) {
 					assert(1 + NV <= cur_item && cur_item < 1 + NV + NE);
 					int orig_edge = cur_item - 1 - NV;
-					orig_id.push_back(orig_edge);
+					orig_id[cur_idx] = orig_edge;
 					edge_index[orig_edge] = cur_idx;
 				} else {
 					assert(1 + NV + NE <= cur_item);
-					orig_id.push_back(-1);
 				}
 
 				// HACK: Fill ch and vert_items in with orig items / orig verts for now,
 				// because we don't have the final item id's yet.
-				assert(ch.bounds.back() == int(ch.dat.size()));
-				int ch_st = int(ch.dat.size());
-				int nv_st = int(node_verts.dat.size());
+				int ch_st = ch.bounds[cur_idx];
+				int ch_en = ch_st;
+				int nv_st = node_verts.bounds[cur_idx];
+				int nv_en = nv_st;
 				if (item_vs[cur_item][0] != -1) {
-					node_verts.dat.push_back({cur_idx, item_vs[cur_item][0]});
+					node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][0]};
 				}
 				for (int nxt_item = item_ch[cur_item].v[0]; nxt_item != -1; nxt_item = ch_nxt[nxt_item]) {
-					ch.dat.push_back(nxt_item);
+					ch.dat[ch_en++] = nxt_item;
 					assert(nxt_item >= 1);
 					if (nxt_item < 1 + NV) {
-						node_verts.dat.push_back({cur_idx, nxt_item - 1});
+						node_verts.dat[nv_en++] = {cur_idx, nxt_item - 1};
 					}
 					if (nxt_item == item_ch[cur_item].v[1]) {
 						assert(ch_nxt[nxt_item] == -1);
 					}
 				}
 				if (item_vs[cur_item][1] != -1) {
-					node_verts.dat.push_back({cur_idx, item_vs[cur_item][1]});
+					node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][1]};
 				}
-				int ch_en = int(ch.dat.size());
-				ch.bounds.push_back(ch_en);
-				int nv_en = int(node_verts.dat.size());
-				node_verts.bounds.push_back(nv_en);
+				ch.bounds[cur_idx+1] = ch_en;
+				node_verts.bounds[cur_idx+1] = nv_en;
 
 				int n_verts = nv_en - nv_st;
 
 				bool is_node = cur_type != node_type::F && cur_type != node_type::V;
 				bool has_cap = is_node && !(cur_type == node_type::Q && ch_en - ch_st > 0);
+
+				if (cur_type == node_type::F || cur_type == node_type::V) {
+					// There's nothing happening here
+				} else if (n_verts == 1) {
+					assert(cur_type == node_type::Q || cur_type == node_type::O);
+				} else if (cur_type == node_type::Q || cur_type == node_type::I) {
+					assert(n_verts >= 2);
+				} else if (cur_type == node_type::P) {
+				} else if (cur_type == node_type::S) {
+				} else if (cur_type == node_type::R) {
+				} else assert(false);
 
 				for (int i = 0; i < n_verts; i++) {
 					vert_pos_buf[node_verts.dat[i + nv_st].vert] = i;
@@ -627,18 +630,15 @@ struct spqr_tree {
 				}
 
 				// Fill in node_edges and node_darts
-				int ne_st = int(node_edges.dat.size());
+				int ne_st = node_edges.bounds[cur_idx];
+				int ne_en = ne_st;
 				if (is_node) {
 					auto insert_ne = [&](int item) -> void {
 						auto [v0, v1] = item_vs[item];
 						if (v1 == -1) v1 = v0;
-						node_edges.dat.push_back({
-							cur_idx,
-							// NB: Fill this in later
-							-1,
-							{nv_st + vert_pos_buf[v0], nv_st + vert_pos_buf[v1]},
-							{-1, -1},
-						});
+						node_edges.dat[ne_en].node = cur_idx;
+						node_edges.dat[ne_en].nvs = {nv_st + vert_pos_buf[v0], nv_st + vert_pos_buf[v1]};
+						ne_en++;
 					};
 					if (has_cap) {
 						insert_ne(cur_item);
@@ -650,16 +650,11 @@ struct spqr_tree {
 						insert_ne(n);
 					}
 				}
-				int ne_en = int(node_edges.dat.size());
-				node_edges.bounds.push_back(ne_en);
+				node_edges.bounds[cur_idx+1] = ne_en;
 
 				int n_edges = ne_en - ne_st;
 
 				// Fill in nd
-				assert(int(node_darts.bounds.size()) == 2 * nv_st + 1);
-				node_darts.bounds.resize(2 * nv_en + 1, 0);
-				assert(int(node_darts.dat.size()) == 2 * ne_st);
-				node_darts.dat.resize(2 * ne_en);
 				if (cur_type == node_type::P) {
 					// Special case: tiebreak the parallel edges so they're reversed
 					assert(nv_en - nv_st == 2);
@@ -751,10 +746,9 @@ struct spqr_tree {
 					for (int i = ch_st; i < ch_en; i++) {
 						// The index of the next node_edge if it exists
 						int nxt_item = ch.dat[i];
-						int nxt_idx = int(par.size());
+						int nxt_idx = nxt_unassigned_idx;
 						ch.dat[i] = nxt_idx;
-						int nxt_ne = int(node_edges.dat.size());
-						self(nxt_item, cur_idx);
+						int nxt_ne = node_edges.bounds[nxt_idx];
 						if (nxt_item < 1 + NV) {
 							vert_par_nv[nxt_idx] = cur_nv++;
 						} else if (is_node) {
@@ -762,15 +756,20 @@ struct spqr_tree {
 							node_edges.dat[nxt_ne].twin_ne = cur_ne;
 							cur_ne++;
 						}
+						self(nxt_item, cur_idx);
 					}
 					cur_nv += (item_vs[cur_item][1] != -1);
 					assert(cur_nv == nv_en);
 					assert(cur_ne == ne_en);
-					subtree_end[cur_idx] = int(subtree_end.size());
+					subtree_end[cur_idx] = nxt_unassigned_idx;
 				}
 			}(ROOT_ITEM, -1);
 
-			assert(int(par.size()) == tot_items);
+			assert(nxt_unassigned_idx == tot_items);
+			assert(ch.bounds.back() == int(ch.dat.size()));
+			assert(node_verts.bounds.back() == int(node_verts.dat.size()));
+			assert(node_edges.bounds.back() == int(node_edges.dat.size()));
+			assert(node_darts.bounds.back() == int(node_darts.dat.size()));
 
 			// Rewrite node_vertices to the correct index
 			for (auto& v : node_verts.dat) {
