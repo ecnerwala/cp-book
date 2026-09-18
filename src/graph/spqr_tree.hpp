@@ -700,6 +700,7 @@ struct spqr_tree {
 						node_edges.dat[ne_st].nvs = {nv_st, nv_en - 1};
 						int nd0 = 2 * ne_st;
 						int nd1 = 2 * ne_en - 1;
+						node_edges.dat[ne_st].nds = {nd0, nd1};
 						node_darts.dat[nd0] = {
 							cur_idx,
 							nv_st,
