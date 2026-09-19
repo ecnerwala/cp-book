@@ -234,10 +234,24 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						} else if (i_type == node_type::Q) {
 							REQUIRE(ch.empty());
 						} else if (i_type == node_type::S) {
-							// TODO
+							REQUIRE(nes.size() == nvs.size());
+							REQUIRE(nes.size() >= 3);
+							for (int z = 0; z < int(nes.size()); z++) {
+								REQUIRE(nes[z].nvs[0] == (z ? nv_off + z-1 : nv_off));
+								REQUIRE(nes[z].nvs[1] == (z ? nv_off + z-0 : nv_off + int(nvs.size()) - 1));
+							}
 						} else if (i_type == node_type::P) {
-							// TODO
-						}
+							REQUIRE(nvs.size() == 2);
+							REQUIRE(nes.size() >= 3);
+							for (auto ne : nes) {
+								REQUIRE(ne.nvs[0] == nv_off + 0);
+								REQUIRE(ne.nvs[1] == nv_off + 1);
+							}
+						} else if (i_type == node_type::R) {
+							REQUIRE(nvs.size() >= 4);
+							REQUIRE(nes.size() >= 6);
+							// TODO: What else should we check
+						} else REQUIRE(false);
 					} else REQUIRE(false);
 				}
 
@@ -263,13 +277,24 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						REQUIRE(spqr.node_edges.dat[ne].nvs[0] == dest);
 						REQUIRE(dest <= nv);
 					}
-					REQUIRE(std::ranges::is_sorted(spqr.node_adj[2 * nv + 0], std::ranges::greater{}, &spqr_tree::node_adj_t::dest_nv));
 					for (auto [ne, dest] : spqr.node_adj[2 * nv + 1]) {
 						REQUIRE(spqr.node_edges.dat[ne].nvs[0] == nv);
 						REQUIRE(spqr.node_edges.dat[ne].nvs[1] == dest);
 						REQUIRE(dest >= nv);
 					}
-					REQUIRE(std::ranges::is_sorted(spqr.node_adj[2 * nv + 1], std::ranges::greater{}, &spqr_tree::node_adj_t::dest_nv));
+					if (i_type == node_type::P) {
+						// Check that edge ids are strictly decreasing on the left, strictly increasing on the right
+						auto adj0 = spqr.node_adj[2 * nv + 0];
+						REQUIRE(std::ranges::adjacent_find(adj0, std::ranges::less_equal{}, &spqr_tree::node_adj_t::ne) == adj0.end());
+						auto adj1 = spqr.node_adj[2 * nv + 1];
+						REQUIRE(std::ranges::adjacent_find(adj1, std::ranges::greater_equal{}, &spqr_tree::node_adj_t::ne) == adj1.end());
+					} else {
+						for (int z = 0; z < 2; z++) {
+							// Check that destinations are strictly decreasing
+							auto adj = spqr.node_adj[2 * nv + z];
+							REQUIRE(std::ranges::adjacent_find(adj, std::ranges::less_equal{}, &spqr_tree::node_adj_t::dest_nv) == adj.end());
+						}
+					}
 				}
 			}
 		}
