@@ -81,7 +81,7 @@ struct spqr_tree {
 	//   (5->4) (5->3) (5->2) (5->1) *vertex 5* (5->9) (5->8) (5->7) (5->6)
 	// More specifically, node_adj contains two lists per vertex: 2*nv+0 is leftwards and 2*nv+1 is rightwards.
 	//
-	// All id's are item indices unless clearly nv/ne/nd id's.
+	// All id's are item indices unless clearly nv/ne id's.
 	//
 	// In general, there are 2 ways to use the SPQR tree: the rooted view and the unrooted view.
 	//  - The rooted view uses par / ch walks, and either treats the tree as 1 top-down big decomposition, or walks in paths up/down the tree with LCA-like queries.
@@ -100,25 +100,29 @@ struct spqr_tree {
 	std::vector<int> orig_id;
 
 	csr<int> ch;
-	struct nv_t {
+	struct node_vert_t {
 		int node;
 		int vert;
 	};
-	csr<nv_t> node_verts;
+	csr<node_vert_t> node_verts;
 	// The nv index of a vertex within its parent node
 	std::vector<int> vert_par_nv;
 	// TODO: Should we store a vert_nodes CSR?
 
-	struct ne_t {
+	struct node_edge_t {
 		int node;
 		int twin_ne;
 		// TODO: Should we store the twin node, the twin node type, and/or twin node type == Q?
 
 		std::array<int, 2> nvs;
 	};
-	csr<ne_t> node_edges;
+	csr<node_edge_t> node_edges;
 
-	csr<int> node_adj;
+	struct node_adj_t {
+		int ne;
+		int dest_nv;
+	};
+	csr<node_adj_t> node_adj;
 
 	static spqr_tree build(int NV, const std::vector<std::array<int, 2>>& edges) {
 		// TODO: Figure out the best way to specify roots; maybe accept a permutation of "root priority"?
@@ -513,17 +517,17 @@ struct spqr_tree {
 
 			// Each node is a child, and additionally most non-block node has 2 cap verts; blocks have 1, and O nodes have 1
 			int tot_node_verts = NV + (tot_items - 1 - NV) * 2 - tot_blocks - tot_self_loops;
-			csr<nv_t> node_verts;
+			csr<node_vert_t> node_verts;
 			node_verts.bounds.resize(tot_items + 1);
 			node_verts.dat.resize(tot_node_verts);
 			std::vector<int> vert_par_nv(tot_items, -1);
 
 			int tot_node_edges = (tot_items - 1 - NV - tot_blocks) * 2;
-			csr<ne_t> node_edges;
+			csr<node_edge_t> node_edges;
 			node_edges.bounds.resize(tot_items + 1);
 			node_edges.dat.resize(tot_node_edges);
 
-			csr<int> node_adj;
+			csr<node_adj_t> node_adj;
 			node_adj.bounds.resize(tot_node_verts * 2 + 1);
 			node_adj.dat.resize(tot_node_edges * 2);
 
@@ -598,8 +602,8 @@ struct spqr_tree {
 				auto set_ne = [&](int ne, std::array<int, 2> nvs, std::array<int, 2> nds) -> void {
 					node_edges.dat[ne].node = cur_idx;
 					node_edges.dat[ne].nvs = nvs;
-					node_adj.dat[nds[0]] = 2 * ne + 0;
-					node_adj.dat[nds[1]] = 2 * ne + 1;
+					node_adj.dat[nds[0]] = {ne, nvs[1]};
+					node_adj.dat[nds[1]] = {ne, nvs[0]};
 				};
 				if (cur_type == node_type::F) {
 					// Just set node_adj bounds and we're good
