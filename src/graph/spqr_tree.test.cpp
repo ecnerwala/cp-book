@@ -196,8 +196,6 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						}
 					} else if (i_type == node_type::Q || i_type == node_type::S || i_type == node_type::P || i_type == node_type::R || i_type == node_type::I || i_type == node_type::O) {
 						REQUIRE((p_type == node_type::Q || p_type == node_type::S || p_type == node_type::P || p_type == node_type::R));
-						REQUIRE(!(p_type == node_type::S && i_type == node_type::S));
-						REQUIRE(!(p_type == node_type::P && i_type == node_type::P));
 
 						REQUIRE(!nvs.empty());
 						REQUIRE(!nes.empty());
@@ -228,14 +226,15 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						REQUIRE(nxt_ne == int(nes.size()));
 
 						if (i_type == node_type::O) {
-							REQUIRE(p_type == node_type::V);
+							REQUIRE(p_type == node_type::Q);
 							REQUIRE(ch.empty());
 						} else if (i_type == node_type::I) {
-							REQUIRE(p_type == node_type::V);
+							REQUIRE(p_type == node_type::Q);
 							REQUIRE(ch.empty());
 						} else if (i_type == node_type::Q) {
 							REQUIRE(ch.empty());
 						} else if (i_type == node_type::S) {
+							REQUIRE(p_type != node_type::S);
 							REQUIRE(nes.size() == nvs.size());
 							REQUIRE(nes.size() >= 3);
 							for (int z = 0; z < int(nes.size()); z++) {
@@ -243,6 +242,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 								REQUIRE(nes[z].nvs[1] == (z ? nv_off + z-0 : nv_off + int(nvs.size()) - 1));
 							}
 						} else if (i_type == node_type::P) {
+							REQUIRE(p_type != node_type::P);
 							REQUIRE(nvs.size() == 2);
 							REQUIRE(nes.size() >= 3);
 							for (auto ne : nes) {
