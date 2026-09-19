@@ -15,6 +15,8 @@ template <typename T> struct csr {
 	std::vector<T> dat;
 	std::span<T> operator [](int i) { return std::span<T>(dat.begin() + bounds[i], dat.begin() + bounds[i + 1]); }
 	std::span<const T> operator [](int i) const { return std::span<const T>(dat.begin() + bounds[i], dat.begin() + bounds[i + 1]); }
+	std::ranges::iota_view<int, int> indices(int i) const { return std::views::iota(bounds[i], bounds[i+1]); }
+	int size() const { return int(bounds.size()) - 1; }
 };
 
 template <typename T> struct csr_builder {

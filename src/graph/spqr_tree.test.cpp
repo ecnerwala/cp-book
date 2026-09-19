@@ -32,281 +32,224 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 			// Use like this; it affects the next REQUIRE only
 			//UNSCOPED_INFO_graph();
 
-			auto tree = wala::spqr_tree::build(NV, edges);
-
-			/*
-			// ==== CHECK SIZES ====
-			REQUIRE(tree.NV == NV);
-			REQUIRE(tree.NE == NE);
-			REQUIRE(tree.NC == int(tree.components.size()));
-			REQUIRE(tree.NB == int(tree.blocks.size()));
-			REQUIRE(tree.NN == int(tree.nodes.size()));
-			REQUIRE(tree.NVE == int(tree.vedges.size()));
-
-			REQUIRE(int(tree.vertices.size()) == NV);
-			REQUIRE(int(tree.vertex_blocks.size()) <= NV + NE);
-			REQUIRE(int(tree.components.size()) <= NV);
-			REQUIRE(int(tree.component_vertices.size()) == NV);
-			REQUIRE(int(tree.blocks.size()) <= NE);
-			REQUIRE(int(tree.block_vertices.size()) <= NV + NE);
-			REQUIRE(int(tree.vertex_blocks.size()) == int(tree.block_vertices.size()));
-			REQUIRE(int(tree.nodes.size()) <= 2 * NE);
-			REQUIRE(int(tree.node_vertices.size()) <= NV + 5 * NE);
-			REQUIRE(int(tree.vedges.size()) <= 4 * NE);
-
-			// ==== CHECK VEDGES ====
-			for (int ve = 0; ve < tree.NVE; ve++) {
-				INFO("ve = " << ve);
-				int node = tree.vedges[ve].node;
-				int block = tree.vedges[ve].block;
-				int component = tree.nodes[node].component;
-				REQUIRE(node != -1);
-				REQUIRE(block != -1);
-				REQUIRE(component != -1);
-
-				REQUIRE(tree.nodes[node].block == block);
-				REQUIRE(tree.blocks[block].component == component);
-
-				REQUIRE(tree.nodes[node].vedges.contains(ve));
-				if (ve < tree.NE) {
-					REQUIRE(!tree.blocks[block].vedges.contains(ve));
-					REQUIRE(!tree.components[component].vedges.contains(ve));
-				} else {
-					REQUIRE(tree.blocks[block].vedges.contains(ve));
-					REQUIRE(tree.components[component].vedges.contains(ve));
-				}
-
-				int o_ve = tree.vedges[ve].o_ve;
-				REQUIRE(tree.vedges[ve].vs[0] == tree.vedges[o_ve].vs[1]);
-				REQUIRE(tree.vedges[ve].vs[1] == tree.vedges[o_ve].vs[0]);
-				REQUIRE(tree.vedges[ve].is_tree == !tree.vedges[o_ve].is_tree);
-				REQUIRE(tree.vedges[ve].block == tree.vedges[o_ve].block);
-				REQUIRE(tree.vedges[ve].node != tree.vedges[o_ve].node);
-
-				REQUIRE(tree.vedges[o_ve].o_ve == ve);
-				REQUIRE(tree.vedges[ve].o_node == tree.vedges[o_ve].node);
-				REQUIRE(tree.vedges[ve].o_type == tree.nodes[tree.vedges[o_ve].node].type);
-			}
-
+			using wala::spqr_tree;
 			using node_type = spqr_tree::node_type;
-			for (int e = 0; e < tree.NE; e++) {
-				REQUIRE(
-					std::min(edges[e][0], edges[e][1])
-					== std::min(tree.vedges[e].vs[0], tree.vedges[e].vs[1])
-				);
-				REQUIRE(
-					std::max(edges[e][0], edges[e][1])
-					== std::max(tree.vedges[e].vs[0], tree.vedges[e].vs[1])
-				);
+			auto spqr = spqr_tree::build(NV, edges);
 
-				REQUIRE(tree.vedges[e].node == e);
-				REQUIRE(tree.nodes[e].type == node_type::Q);
-			}
+			// Basic bounds checks
+			int num_items = int(spqr.par.size());
 
-			auto check_vertex_set = [&](auto vedges_range, auto verts_range) {
-				auto vedges = vedges_range.bind(tree);
-				std::vector<int> ve_verts; ve_verts.reserve(vedges.size()*2);
-				for (const auto& vedge : vedges) {
-					ve_verts.push_back(vedge.vs[0]);
-					ve_verts.push_back(vedge.vs[1]);
+			REQUIRE(int(spqr.vert_index.size()) == NV);
+			REQUIRE(int(spqr.edge_index.size()) == NE);
+			REQUIRE(int(spqr.par.size()) == num_items);
+			REQUIRE(int(spqr.subtree_end.size()) == num_items);
+			REQUIRE(int(spqr.types.size()) == num_items);
+			REQUIRE(int(spqr.orig_id.size()) == num_items);
+			REQUIRE(int(spqr.ch.size()) == num_items);
+			REQUIRE(int(spqr.node_verts.size()) == num_items);
+			REQUIRE(int(spqr.vert_par_nv.size()) == num_items);
+			REQUIRE(int(spqr.node_edges.size()) == num_items);
+			REQUIRE(int(spqr.node_adj.size()) == 2 * int(spqr.node_verts.dat.size()));
+
+			auto check_csr_bounds = [] <typename T> (wala::csr<T> c) -> void {
+				REQUIRE(!c.bounds.empty());
+				REQUIRE(c.bounds.front() == 0);
+				REQUIRE(c.bounds.back() == int(c.dat.size()));
+				for (int i = 0; i+1 < int(c.bounds.size()); i++) {
+					REQUIRE(c.bounds[i] <= c.bounds[i+1]);
 				}
-				std::sort(ve_verts.begin(), ve_verts.end());
-				ve_verts.resize(std::unique(ve_verts.begin(), ve_verts.end()) - ve_verts.begin());
-
-				auto verts = verts_range.bind(tree);
-				std::vector<int> sorted_verts(verts.begin(), verts.end());
-				std::sort(sorted_verts.begin(), sorted_verts.end());
-				REQUIRE(ve_verts == sorted_verts);
 			};
+			check_csr_bounds(spqr.ch);
+			check_csr_bounds(spqr.node_verts);
+			check_csr_bounds(spqr.node_edges);
+			check_csr_bounds(spqr.node_adj);
 
-			// ==== CHECK NODES ====
-			for (int node = 0; node < tree.NN; node++) {
-				INFO("node = " << node);
-				const auto& node_struct = tree.nodes[node];
-				node_type type = node_struct.type;
-				REQUIRE((type == node_type::Q) == (node < tree.NE));
-				REQUIRE(node_struct.vedges.size() >= 1);
-
-				REQUIRE(node_struct.block != -1);
-				REQUIRE(node_struct.component != -1);
-				REQUIRE(tree.blocks[node_struct.block].component == node_struct.component);
-				if (node < tree.NE) {
-					REQUIRE(!tree.blocks[node_struct.block].nodes.contains(node));
-					REQUIRE(!tree.components[node_struct.component].nodes.contains(node));
+			// Check tree shape / preorder consistency
+			REQUIRE(num_items >= 1);
+			for (int i = 0; i < num_items; i++) {
+				if (i > 0) {
+					REQUIRE(spqr.par[i] >= 0);
+					REQUIRE(spqr.par[i] < i);
 				} else {
-					REQUIRE(tree.blocks[node_struct.block].nodes.contains(node));
-					REQUIRE(tree.components[node_struct.component].nodes.contains(node));
+					REQUIRE(spqr.par[i] == -1);
 				}
-
-				// Vertices are unique and are the correct set
-				check_vertex_set(node_struct.vedges, node_struct.node_vertices);
-				if (type == node_type::Q) {
-					REQUIRE(node_struct.vedges.size() == 1);
-				} else if (type == node_type::I) {
-					REQUIRE(node_struct.vedges.size() == 1);
-					REQUIRE(node_struct.node_vertices.size() == 2);
-				} else if (type == node_type::O) {
-					REQUIRE(node_struct.vedges.size() == node_struct.node_vertices.size());
-					REQUIRE(node_struct.vedges.size() <= 2);
-					int num_non_tree = 0;
-					for (int z = 0; z < int(node_struct.vedges.size()); z++) {
-						int ve = node_struct.vedges.st + z;
-						auto vs = tree.vedges[ve].vs;
-						REQUIRE(vs[0] == tree.node_vertices[z ? node_struct.node_vertices.st + z - 1 : node_struct.node_vertices.en - 1]);
-						REQUIRE(vs[1] == tree.node_vertices[node_struct.node_vertices.st + z]);
-
-						num_non_tree += !tree.vedges[ve].is_tree;
-					}
-					REQUIRE(num_non_tree == 1);
-				} else if (type == node_type::S) {
-					REQUIRE(node_struct.vedges.size() == node_struct.node_vertices.size());
-					REQUIRE(node_struct.vedges.size() >= 3);
-					int num_non_tree = 0;
-					for (int z = 0; z < int(node_struct.vedges.size()); z++) {
-						int ve = node_struct.vedges.st + z;
-						auto vs = tree.vedges[ve].vs;
-						REQUIRE(vs[0] == tree.node_vertices[z ? node_struct.node_vertices.st + z - 1 : node_struct.node_vertices.en - 1]);
-						REQUIRE(vs[1] == tree.node_vertices[node_struct.node_vertices.st + z]);
-
-						num_non_tree += !tree.vedges[ve].is_tree;
-					}
-					REQUIRE(num_non_tree == 1);
-				} else if (type == node_type::P) {
-					REQUIRE(node_struct.node_vertices.size() == 2);
-					REQUIRE(node_struct.vedges.size() >= 3);
-					int num_tree = 0;
-					for (int z = 0; z < int(node_struct.vedges.size()); z++) {
-						int ve = node_struct.vedges.st + z;
-						auto vs = tree.vedges[ve].vs;
-						REQUIRE(vs[0] != vs[1]);
-
-						num_tree += tree.vedges[ve].is_tree;
-					}
-					REQUIRE(num_tree == 1);
-				} else if (type == node_type::R) {
-					REQUIRE(node_struct.node_vertices.size() >= 4);
-					// Check for a few sanity things
-					// No self-loop or duplicate edges (no trivial P)
-					{
-						std::vector<std::array<int, 2>> vedges(node_struct.vedges.size());
-						for (int z = 0; z < int(node_struct.vedges.size()); z++) {
-							int ve = node_struct.vedges.st + z;
-							auto vs = tree.vedges[ve].vs;
-							REQUIRE(vs[0] != vs[1]);
-							if (vs[0] > vs[1]) std::swap(vs[0], vs[1]);
-							vedges[z] = vs;
-						}
-						std::sort(vedges.begin(), vedges.end());
-						REQUIRE(std::unique(vedges.begin(), vedges.end()) == vedges.end());
-					}
-					// All vertices have degree at least 3 (no trivial S)
-					{
-						std::map<int, int> degs;
-						for (int z = 0; z < int(node_struct.vedges.size()); z++) {
-							int ve = node_struct.vedges.st + z;
-							auto vs = tree.vedges[ve].vs;
-							for (int v : vs) degs[v]++;
-						}
-						for (auto [v, d] : degs) {
-							REQUIRE(d > 2);
-						}
-					}
-				} else REQUIRE(false);
+				int cur_end = i+1;
+				for (int ch : spqr.ch[i]) {
+					REQUIRE(ch == cur_end);
+					REQUIRE(spqr.par[ch] == i);
+					REQUIRE(spqr.subtree_end[ch] > ch);
+					cur_end = spqr.subtree_end[ch];
+				}
+				REQUIRE(spqr.subtree_end[i] == cur_end);
 			}
+			REQUIRE(spqr.subtree_end[0] == num_items);
 
-			for (int ve = 0; ve < tree.NVE; ve++) {
-				int o_ve = tree.vedges[ve].o_ve;
-				node_type t0 = tree.nodes[tree.vedges[ve].node].type;
-				node_type t1 = tree.nodes[tree.vedges[o_ve].node].type;
-				// 2 Q/S/P nodes cannot be glued together
-				if (t0 == node_type::Q || t0 == node_type::S || t0 == node_type::P) {
-					REQUIRE(t0 != t1);
-				}
-				// I and O can only be glued to Q
-				if (t0 == node_type::I || t0 == node_type::O) {
-					REQUIRE(t1 == node_type::Q);
-				}
-				if (t1 == node_type::I || t1 == node_type::O) {
-					REQUIRE(t0 == node_type::Q);
-				}
+			// Check that all verts/edges are present exactly once
+			for (int v = 0; v < NV; v++) {
+				int i = spqr.vert_index[v];
+				REQUIRE(0 <= i);
+				REQUIRE(i < num_items);
+				REQUIRE(spqr.types[i] == node_type::V);
+				REQUIRE(spqr.orig_id[i] == v);
 			}
-
-			{
-				int cur = 0;
-				for (int node = 0; node < tree.NN; node++) {
-					REQUIRE(tree.nodes[node].node_vertices.st == cur);
-					int sz = tree.nodes[node].node_vertices.size();
-					REQUIRE(sz > 0);
-					cur += sz;
-					REQUIRE(tree.nodes[node].node_vertices.en == cur);
-					if (node < NE) {
-						REQUIRE(sz <= 2);
-						cur += (2 - sz);
-					}
-				}
-				REQUIRE(cur == int(tree.node_vertices.size()));
+			for (int e = 0; e < NE; e++) {
+				int i = spqr.edge_index[e];
+				REQUIRE(0 <= i);
+				REQUIRE(i < num_items);
+				REQUIRE(spqr.types[i] == node_type::Q);
+				REQUIRE(spqr.orig_id[i] == e);
 			}
-			{
-				int cur = 0;
-				for (int node = 0; node < tree.NN; node++) {
-					REQUIRE(tree.nodes[node].vedges.st == cur);
-					REQUIRE(tree.nodes[node].vedges.size() >= 1);
-					cur += tree.nodes[node].vedges.size();
-					REQUIRE(tree.nodes[node].vedges.en == cur);
-				}
-				REQUIRE(cur == int(tree.vedges.size()));
-			}
+			for (int i = 0; i < num_items; i++) {
+				node_type i_type = spqr.types[i];
 
-			// ==== CHECK BLOCKS ====
-			for (int block = 0; block < tree.NB; block++) {
-				const auto& block_struct = tree.blocks[block];
-				INFO("block = " << block);
-				REQUIRE(block_struct.nodes.size() >= 1);
-				REQUIRE(block_struct.component != -1);
-				REQUIRE(tree.components[block_struct.component].blocks.contains(block));
-
-				check_vertex_set(block_struct.vedges, block_struct.block_vertices);
-			}
-
-			// ==== CHECK COMPONENTS ====
-			for (int component = 0; component < tree.NC; component++) {
-				const auto& component_struct = tree.components[component];
-				INFO("component = " << component);
-				if (component_struct.blocks.size() > 0) {
-					check_vertex_set(component_struct.vedges, component_struct.component_vertices);
+				if (i_type == node_type::V) {
+					int v = spqr.orig_id[i];
+					REQUIRE(0 <= v);
+					REQUIRE(v < NV);
+					REQUIRE(spqr.vert_index[v] == i);
+				} else if (i_type == node_type::Q) {
+					int e = spqr.orig_id[i];
+					REQUIRE(0 <= e);
+					REQUIRE(e < NE);
+					REQUIRE(spqr.edge_index[e] == i);
 				} else {
-					REQUIRE(component_struct.component_vertices.size() == 1);
-				}
-
-				for (int v : component_struct.component_vertices.bind(tree)) {
-					REQUIRE(tree.vertices[v].component == component);
+					REQUIRE(spqr.orig_id[i] == -1);
 				}
 			}
 
-			// ==== CHECK VERTEX_BLOCKS ===
-			{
-				// block / vertex pair
-				std::vector<std::pair<int, int>> vb_pairs;
-				for (int v = 0; v < tree.NV; v++) {
-					for (int b : tree.vertices[v].vertex_blocks.bind(tree)) {
-						vb_pairs.emplace_back(b, v);
-					}
+			// Now, we're guaranteed that edges/vertices are 1-to-1 with Q/V nodes.
+			// Check the endpoints match the input
+			for (int e = 0; e < NE; e++) {
+				auto nvs = spqr.node_verts[spqr.edge_index[e]];
+				std::array<int, 2> given_ends{spqr.vert_index[edges[e][0]], spqr.vert_index[edges[e][1]]};
+				std::ranges::sort(given_ends);
+				if (given_ends[0] == given_ends[1]) {
+					REQUIRE(nvs.size() == 1);
+					REQUIRE(given_ends[0] == nvs[0].vert);
+				} else {
+					std::array<int, 2> spqr_ends{nvs[0].vert, nvs[1].vert};
+					REQUIRE(given_ends == spqr_ends);
 				}
-				REQUIRE(vb_pairs.size() == tree.vertex_blocks.size());
-				std::sort(vb_pairs.begin(), vb_pairs.end());
-
-				std::vector<std::pair<int, int>> bv_pairs;
-				for (int b = 0; b < tree.NB; b++) {
-					for (int v : tree.blocks[b].block_vertices.bind(tree)) {
-						bv_pairs.emplace_back(b, v);
-					}
-				}
-				REQUIRE(bv_pairs.size() == tree.block_vertices.size());
-				std::sort(bv_pairs.begin(), bv_pairs.end());
-
-				REQUIRE(vb_pairs == bv_pairs);
 			}
-			*/
+
+			// Check node shapes/consistency
+			for (int i = 0; i < num_items; i++) {
+				node_type i_type = spqr.types[i];
+				INFO("i = " << i);
+				INFO("i_type = " << char(i_type));
+				int p = spqr.par[i];
+				INFO("p = " << p);
+				node_type p_type = p == -1 ? node_type::F : spqr.types[p];
+				INFO("p_type = " << char(p_type));
+				auto ch = spqr.ch[i];
+				auto nvs = spqr.node_verts[i];
+				auto nes = spqr.node_edges[i];
+				int nv_off = spqr.node_verts.bounds[i];
+
+				for (const auto& nv : nvs) REQUIRE(nv.node == i);
+				for (const auto& ne : nes) REQUIRE(ne.node == i);
+
+				if (i == 0) {
+					REQUIRE(p == -1);
+					REQUIRE(i_type == node_type::F);
+					REQUIRE(spqr.node_edges[i].empty());
+					REQUIRE(int(ch.size()) == int(nvs.size()));
+					for (int z = 0; z < int(ch.size()); z++) {
+						REQUIRE(spqr.types[ch[z]] == node_type::V);
+						REQUIRE(nvs[z].vert == ch[z]);
+						REQUIRE(spqr.node_adj[2 * (nv_off + z) + 0].empty());
+						REQUIRE(spqr.node_adj[2 * (nv_off + z) + 1].empty());
+					}
+				} else {
+					REQUIRE(p != -1);
+					REQUIRE(i_type != node_type::F);
+
+					if (i_type == node_type::V) {
+						REQUIRE(nvs.empty());
+						REQUIRE(nes.empty());
+
+						for (int z = 0; z < int(ch.size()); z++) {
+							REQUIRE(spqr.types[ch[z]] == node_type::Q);
+						}
+					} else if (i_type == node_type::Q && p_type == node_type::V) {
+						REQUIRE(nes.size() == 1);
+						REQUIRE(nvs[0].vert == p);
+						REQUIRE(spqr.types[ch[0]] != node_type::V);
+						REQUIRE(nes[0].twin_ne == spqr.node_edges.bounds[ch[0]]);
+
+						if (edges[spqr.orig_id[i]][0] == edges[spqr.orig_id[i]][1]) {
+							// Self-loop Q node
+							REQUIRE(ch.size() == 1);
+							REQUIRE(nvs.size() == 1);
+							REQUIRE((nes[0].nvs == std::array<int, 2>{nv_off + 0, nv_off + 0}));
+							REQUIRE(spqr.types[ch[0]] == node_type::O);
+						} else {
+							REQUIRE(ch.size() == 2);
+							REQUIRE(nvs.size() == 2);
+							REQUIRE(spqr.types[ch[1]] == node_type::V);
+							REQUIRE(nvs[1].vert == ch[1]);
+							REQUIRE((nes[0].nvs == std::array<int, 2>{nv_off + 0, nv_off + 1}));
+						}
+					} else if (i_type == node_type::Q || i_type == node_type::S || i_type == node_type::P || i_type == node_type::R || i_type == node_type::I || i_type == node_type::O) {
+						REQUIRE((p_type == node_type::Q || p_type == node_type::S || p_type == node_type::P || p_type == node_type::R));
+						REQUIRE(!(p_type == node_type::S && i_type == node_type::S));
+						REQUIRE(!(p_type == node_type::P && i_type == node_type::P));
+
+						REQUIRE(!nvs.empty());
+						REQUIRE(!nes.empty());
+						REQUIRE(nes[0].nvs == std::array<int, 2>{nv_off, nv_off + int(nvs.size()) - 1});
+
+						int nxt_nv = 1, nxt_ne = 1;
+						int last_loc = 0;
+						for (auto j : ch) {
+							int loc;
+							if (spqr.types[j] == node_type::V) {
+								REQUIRE(nvs[nxt_nv].vert == j);
+								loc = 2 * (nv_off + nxt_nv);
+								nxt_nv++;
+							} else {
+								REQUIRE(nes[nxt_ne].twin_ne == spqr.node_edges.bounds[j]);
+								REQUIRE(spqr.node_verts.bounds[i] <= nes[nxt_ne].nvs[0]);
+								REQUIRE(nes[nxt_ne].nvs[0] < nes[nxt_ne].nvs[1]);
+								REQUIRE(nes[nxt_ne].nvs[1] < spqr.node_verts.bounds[i+1]);
+								loc = nes[nxt_ne].nvs[0] + nes[nxt_ne].nvs[1];
+								nxt_ne++;
+							}
+							REQUIRE(loc >= last_loc);
+							last_loc = loc;
+						}
+						if (i_type != node_type::O) nxt_nv++;
+						REQUIRE(nxt_nv == int(nvs.size()));
+						REQUIRE(nxt_ne == int(nes.size()));
+
+						if (i_type == node_type::O) {
+							REQUIRE(ch.empty());
+						} else if (i_type == node_type::I) {
+							REQUIRE(ch.empty());
+						} else if (i_type == node_type::Q) {
+							REQUIRE(ch.empty());
+						} else if (i_type == node_type::S) {
+							// TODO
+						} else if (i_type == node_type::P) {
+							// TODO
+						}
+					} else REQUIRE(false);
+				}
+
+				for (int ne : spqr.node_edges.indices(i)) {
+					// Check twins have matching vertices
+					int twin_ne = spqr.node_edges.dat[ne].twin_ne;
+					REQUIRE(spqr.node_edges.dat[twin_ne].twin_ne == ne);
+					for (int z = 0; z < 2; z++) {
+						REQUIRE(
+							spqr.node_verts.dat[spqr.node_edges.dat[ne].nvs[z]].vert ==
+							spqr.node_verts.dat[spqr.node_edges.dat[twin_ne].nvs[z]].vert
+						);
+					}
+				}
+
+				// TODO: Check node_adj
+			}
 		}
 	}
 }
