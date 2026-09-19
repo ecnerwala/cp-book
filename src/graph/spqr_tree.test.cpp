@@ -253,7 +253,24 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 					}
 				}
 
-				// TODO: Check node_adj
+				// Check node_adj
+				// Check the total counts are correct
+				REQUIRE(spqr.node_adj.bounds[2 * spqr.node_verts.bounds[i]] == 2 * spqr.node_edges.bounds[i]);
+				REQUIRE(spqr.node_adj.bounds[2 * spqr.node_verts.bounds[i+1]] == 2 * spqr.node_edges.bounds[i+1]);
+				for (int nv : spqr.node_verts.indices(i)) {
+					for (auto [ne, dest] : spqr.node_adj[2 * nv + 0]) {
+						REQUIRE(spqr.node_edges.dat[ne].nvs[1] == nv);
+						REQUIRE(spqr.node_edges.dat[ne].nvs[0] == dest);
+						REQUIRE(dest <= nv);
+					}
+					REQUIRE(std::ranges::is_sorted(spqr.node_adj[2 * nv + 0], std::ranges::greater{}, &spqr_tree::node_adj_t::dest_nv));
+					for (auto [ne, dest] : spqr.node_adj[2 * nv + 1]) {
+						REQUIRE(spqr.node_edges.dat[ne].nvs[0] == nv);
+						REQUIRE(spqr.node_edges.dat[ne].nvs[1] == dest);
+						REQUIRE(dest >= nv);
+					}
+					REQUIRE(std::ranges::is_sorted(spqr.node_adj[2 * nv + 1], std::ranges::greater{}, &spqr_tree::node_adj_t::dest_nv));
+				}
 			}
 		}
 	}
