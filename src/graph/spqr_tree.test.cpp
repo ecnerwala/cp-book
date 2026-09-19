@@ -228,8 +228,10 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						REQUIRE(nxt_ne == int(nes.size()));
 
 						if (i_type == node_type::O) {
+							REQUIRE(p_type == node_type::V);
 							REQUIRE(ch.empty());
 						} else if (i_type == node_type::I) {
+							REQUIRE(p_type == node_type::V);
 							REQUIRE(ch.empty());
 						} else if (i_type == node_type::Q) {
 							REQUIRE(ch.empty());
