@@ -79,6 +79,7 @@ struct spqr_tree {
 	// if a.nvs[0] <= b.nvs[0] and a.nvs[1] <= b.nvs[1], then a <= b. (In practice, we'll sort by midpoint.)
 	// Adjacency lists are sorted as "center-is-longest", which helps make laminar/bracket cases clean.
 	//   (5->4) (5->3) (5->2) (5->1) *vertex 5* (5->9) (5->8) (5->7) (5->6)
+	// More specifically, node_adj contains two lists per vertex: 2*nv+0 is leftwards and 2*nv+1 is rightwards.
 	//
 	// All id's are item indices unless clearly nv/ne/nd id's.
 	//
