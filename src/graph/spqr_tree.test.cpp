@@ -296,6 +296,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						}
 					}
 				}
+				// Because all adjacency lists are now guaranteed distinct by strict ordering, correct counts imply completeness.
 			}
 		}
 	}
