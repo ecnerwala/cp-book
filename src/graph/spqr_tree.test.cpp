@@ -149,6 +149,9 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				for (const auto& nv : nvs) REQUIRE(nv.node == i);
 				for (const auto& ne : nes) REQUIRE(ne.node == i);
 
+				if (i_type != node_type::V) REQUIRE(spqr.vert_par_nv[i] == -1);
+				else REQUIRE(spqr.vert_par_nv[i] >= 0);
+
 				if (i == 0) {
 					REQUIRE(p == -1);
 					REQUIRE(i_type == node_type::F);
@@ -157,6 +160,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 					for (int z = 0; z < int(ch.size()); z++) {
 						REQUIRE(spqr.types[ch[z]] == node_type::V);
 						REQUIRE(nvs[z].vert == ch[z]);
+						REQUIRE(spqr.vert_par_nv[ch[z]] == nv_off + z);
 						REQUIRE(spqr.node_adj[2 * (nv_off + z) + 0].empty());
 						REQUIRE(spqr.node_adj[2 * (nv_off + z) + 1].empty());
 					}
@@ -205,6 +209,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 							int loc;
 							if (spqr.types[j] == node_type::V) {
 								REQUIRE(nvs[nxt_nv].vert == j);
+								REQUIRE(spqr.vert_par_nv[j] == nv_off + nxt_nv);
 								loc = 2 * (nv_off + nxt_nv);
 								nxt_nv++;
 							} else {
