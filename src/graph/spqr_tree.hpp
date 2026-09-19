@@ -71,13 +71,13 @@ struct spqr_tree {
 	//  - items are in preorder
 	//  - node_verts (nv's) are each node's vertices, given in node order then s-t order.
 	//  - node_edges (ne's) are each node's vedges, given in node order then a s-t order.
-	//  - node_darts (nd's) are each node_vert's incident vedges, given as 2 lists per nv: left/rightwards darts each in reverse s-t order.
+	//  - node_adj is each node_vert's incident vedges, given as 2 lists per nv: left/rightwards edges each in reverse s-t order.
 	//  - original verts and original edges can be converted to items as vert_item / edge_item
 	//
 	// Children of a node will be sorted in s-t order.
 	// Specifically vertices are sorted, and edges are guaranteed to satisfy the strong "dominance" partial order:
 	// if a.nvs[0] <= b.nvs[0] and a.nvs[1] <= b.nvs[1], then a <= b. (In practice, we'll sort by midpoint.)
-	// Darts are sorted as "center-is-longest", which helps make laminar/bracket cases clean.
+	// Adjacency lists are sorted as "center-is-longest", which helps make laminar/bracket cases clean.
 	//   (5->4) (5->3) (5->2) (5->1) *vertex 5* (5->9) (5->8) (5->7) (5->6)
 	//
 	// All id's are item indices unless clearly nv/ne/nd id's.
@@ -112,19 +112,12 @@ struct spqr_tree {
 		int node;
 		int twin_ne;
 		// TODO: Should we store the twin node, the twin node type, and/or twin node type == Q?
+
 		std::array<int, 2> nvs;
-		std::array<int, 2> nds;
 	};
 	csr<ne_t> node_edges;
 
-	struct nd_t {
-		int node;
-		int src_nv;
-		int dest_nv;
-		int ne;
-		int twin_nd;
-	};
-	csr<nd_t> node_darts;
+	csr<int> node_adj;
 
 	static spqr_tree build(int NV, const std::vector<std::array<int, 2>>& edges) {
 		// TODO: Figure out the best way to specify roots; maybe accept a permutation of "root priority"?
@@ -529,9 +522,9 @@ struct spqr_tree {
 			node_edges.bounds.resize(tot_items + 1);
 			node_edges.dat.resize(tot_node_edges);
 
-			csr<nd_t> node_darts;
-			node_darts.bounds.resize(tot_node_verts * 2 + 1);
-			node_darts.dat.resize(tot_node_edges * 2);
+			csr<int> node_adj;
+			node_adj.bounds.resize(tot_node_verts * 2 + 1);
+			node_adj.dat.resize(tot_node_edges * 2);
 
 			std::vector<int> vert_pos_buf(NV, -1);
 			std::vector<int> cnts_buf(2 * NV, -1);
@@ -604,51 +597,38 @@ struct spqr_tree {
 				auto set_ne = [&](int ne, std::array<int, 2> nvs, std::array<int, 2> nds) -> void {
 					node_edges.dat[ne].node = cur_idx;
 					node_edges.dat[ne].nvs = nvs;
-					node_edges.dat[ne].nds = nds;
-					node_darts.dat[nds[0]] = {
-						cur_idx,
-						nvs[0],
-						nvs[1],
-						ne,
-						nds[1],
-					};
-					node_darts.dat[nds[1]] = {
-						cur_idx,
-						nvs[1],
-						nvs[0],
-						ne,
-						nds[0],
-					};
+					node_adj.dat[nds[0]] = 2 * ne + 0;
+					node_adj.dat[nds[1]] = 2 * ne + 1;
 				};
 				if (cur_type == node_type::F) {
-					// Just set node_darts bounds and we're good
+					// Just set node_adj bounds and we're good
 					for (int i = 2 * nv_st+1; i <= 2 * nv_en; i++) {
-						node_darts.bounds[i] = 2 * ne_st;
+						node_adj.bounds[i] = 2 * ne_st;
 					}
 				} else if (cur_type == node_type::V) {
 					// Nothing to do
 				} else if (n_verts == 1) {
 					assert(cur_type == node_type::Q || cur_type == node_type::O);
 					assert(n_edges == 1);
-					node_darts.bounds[2 * nv_st + 1] = 2 * ne_st + 1 * n_edges;
-					node_darts.bounds[2 * nv_st + 2] = 2 * ne_st + 2 * n_edges;
+					node_adj.bounds[2 * nv_st + 1] = 2 * ne_st + 1 * n_edges;
+					node_adj.bounds[2 * nv_st + 2] = 2 * ne_st + 2 * n_edges;
 					set_ne(ne_st, {nv_st, nv_st}, {2 * ne_st + 1, 2 * ne_st});
 				} else if (cur_type == node_type::Q || cur_type == node_type::I) {
 					assert(n_verts == 2);
 					assert(n_edges == 1);
-					node_darts.bounds[2 * nv_st + 1] = 2 * ne_st + 0 * n_edges;
-					node_darts.bounds[2 * nv_st + 2] = 2 * ne_st + 1 * n_edges;
-					node_darts.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
-					node_darts.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
+					node_adj.bounds[2 * nv_st + 1] = 2 * ne_st + 0 * n_edges;
+					node_adj.bounds[2 * nv_st + 2] = 2 * ne_st + 1 * n_edges;
+					node_adj.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
+					node_adj.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
 					set_ne(ne_st, {nv_st, nv_st + 1}, {2 * ne_st, 2 * ne_st + 1});
 				} else if (cur_type == node_type::P) {
 					// Special case: tiebreak the parallel edges so they're reversed
 					assert(n_verts == 2);
 					assert(n_edges >= 3);
-					node_darts.bounds[2 * nv_st + 1] = 2 * ne_st + 0 * n_edges;
-					node_darts.bounds[2 * nv_st + 2] = 2 * ne_st + 1 * n_edges;
-					node_darts.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
-					node_darts.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
+					node_adj.bounds[2 * nv_st + 1] = 2 * ne_st + 0 * n_edges;
+					node_adj.bounds[2 * nv_st + 2] = 2 * ne_st + 1 * n_edges;
+					node_adj.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
+					node_adj.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
 					for (int ne = ne_st; ne < ne_en; ne++) {
 						set_ne(ne, {nv_st, nv_st + 1}, {2 * ne_st + (ne - ne_st), 2 * ne_en - 1 - (ne - ne_st)});
 					}
@@ -656,11 +636,11 @@ struct spqr_tree {
 					assert(n_verts == n_edges);
 					assert(n_verts >= 3);
 					for (int i = 2 * nv_st + 1; i <= 2 * nv_en; i++) {
-						node_darts.bounds[i] = i + 2 * (ne_st - nv_st);
+						node_adj.bounds[i] = i + 2 * (ne_st - nv_st);
 					}
 					// Fix bounds for the cap
-					node_darts.bounds[2 * nv_st + 1]--;
-					node_darts.bounds[2 * nv_en - 1]++;
+					node_adj.bounds[2 * nv_st + 1]--;
+					node_adj.bounds[2 * nv_en - 1]++;
 					set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1});
 					for (int i = 1; i < n_edges; i++) {
 						set_ne(ne_st + i, {nv_st + i - 1, nv_st + i}, {2 * ne_st + 2 * i - 1, 2 * ne_st + 2 * i});
@@ -675,9 +655,9 @@ struct spqr_tree {
 
 					assert(has_cap);
 
-					// Cap node_darts bounds
-					node_darts.bounds[2 * nv_st + 2]++;
-					node_darts.bounds[2 * nv_en - 1]++;
+					// Cap node_adj bounds
+					node_adj.bounds[2 * nv_st + 2]++;
+					node_adj.bounds[2 * nv_en - 1]++;
 
 					for (int i = ch_st; i < ch_en; i++) {
 						int item = ch.dat[i];
@@ -688,8 +668,8 @@ struct spqr_tree {
 						} else {
 							nvs = {vert_pos_buf[item_vs[item][0]], vert_pos_buf[item_vs[item][1]]};
 							assert(nvs[0] < nvs[1]);
-							node_darts.bounds[2 * nvs[0] + 2]++;
-							node_darts.bounds[2 * nvs[1] + 1]++;
+							node_adj.bounds[2 * nvs[0] + 2]++;
+							node_adj.bounds[2 * nvs[1] + 1]++;
 						}
 						int loc = (nvs[0] - nv_st) + (nvs[1] - nv_st);
 						ch_buf.emplace_back(loc, item);
@@ -707,16 +687,16 @@ struct spqr_tree {
 					{
 						int off = 2 * ne_st;
 						for (int i = 2 * nv_st + 1; i <= 2 * nv_en; i++) {
-							off += std::exchange(node_darts.bounds[i], off);
+							off += std::exchange(node_adj.bounds[i], off);
 						}
 						assert(off == 2 * ne_en);
 					}
 
-					// Fill in node_edges and node_darts.
-					// Reverse order to get the darts in bracket ordering.
+					// Fill in node_edges and node_adj.
+					// Reverse order to get the adj in bracket ordering.
 					{
 						// Handle cap as special: it's first in the node_edges, which means it's in the wrong place for the left endpoint.
-						node_darts.bounds[2 * nv_st + 2]++;
+						node_adj.bounds[2 * nv_st + 2]++;
 
 						int nxt_ne = ne_en;
 						for (int i = ch_en - 1; i >= ch_st; i--) {
@@ -728,15 +708,15 @@ struct spqr_tree {
 							// TODO: Reuse this from the ch pass?
 							std::array<int, 2> nvs = {vert_pos_buf[v0], vert_pos_buf[v1]};
 							set_ne(nxt_ne, nvs, {
-								node_darts.bounds[2 * nvs[0] + 2]++,
-								node_darts.bounds[2 * nvs[1] + 1]++,
+								node_adj.bounds[2 * nvs[0] + 2]++,
+								node_adj.bounds[2 * nvs[1] + 1]++,
 							});
 						}
 						assert(nxt_ne == ne_st + 1);
 
 						// Insert the cap / bump its bound
 						set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1});
-						node_darts.bounds[2 * nv_en - 1]++;
+						node_adj.bounds[2 * nv_en - 1]++;
 					}
 				} else assert(false);
 
@@ -769,7 +749,7 @@ struct spqr_tree {
 			assert(ch.bounds.back() == int(ch.dat.size()));
 			assert(node_verts.bounds.back() == int(node_verts.dat.size()));
 			assert(node_edges.bounds.back() == int(node_edges.dat.size()));
-			assert(node_darts.bounds.back() == int(node_darts.dat.size()));
+			assert(node_adj.bounds.back() == int(node_adj.dat.size()));
 
 			// Rewrite node_vertices to the correct index
 			for (auto& v : node_verts.dat) {
@@ -787,7 +767,7 @@ struct spqr_tree {
 				std::move(node_verts),
 				std::move(vert_par_nv),
 				std::move(node_edges),
-				std::move(node_darts),
+				std::move(node_adj),
 			};
 		}
 	}
