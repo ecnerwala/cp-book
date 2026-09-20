@@ -3,7 +3,7 @@
 #include <utility>
 #include <array>
 #include <tuple>
-#include <iostream>
+#include <ostream>
 
 namespace wala {
 

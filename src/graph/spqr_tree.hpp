@@ -7,7 +7,7 @@
 #include <utility>
 #include <cassert>
 #include <ranges>
-#include <iostream>
+#include <ostream>
 
 namespace wala {
 

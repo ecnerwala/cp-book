@@ -1,6 +1,7 @@
 #pragma once
 
-#include <iostream>
+#include <istream>
+#include <ostream>
 #include <numeric>
 
 namespace wala {
