@@ -33,6 +33,7 @@ int main() {
 		} else if (spqr.types[i] == node_type::Q && spqr.subtree_end[i] > i+1) {
 			int p = spqr.par[i];
 			assert(spqr.types[p] == node_type::V);
+			// Input guarantees no self-loops
 			assert(spqr.types[i+1] != node_type::O);
 
 			comp_verts.push_back(spqr.orig_id[p]);
