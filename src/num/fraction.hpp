@@ -1,6 +1,5 @@
 #pragma once
 
-#include <istream>
 #include <ostream>
 #include <numeric>
 
@@ -21,9 +20,6 @@ template <typename T, typename MulT=T> struct fraction_t {
 
 	friend std::ostream& operator << (std::ostream& o, const fraction_t& f) {
 		return o << f.numer << '/' << f.denom;
-	}
-	friend std::istream& operator >> (std::istream& i, const fraction_t& f) {
-		return i >> f.numer >> f.denom;
 	}
 
 	friend MulT cross(const fraction_t& a, const fraction_t& b) {
