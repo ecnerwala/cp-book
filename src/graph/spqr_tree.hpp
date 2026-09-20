@@ -267,7 +267,7 @@ struct spqr_tree {
 
 			// Declare these here: most of our code will be in terms of v_start / top_depth, so we'll want to read these out
 			std::vector<int> stack_verts(NV);
-			std::vector<int> stack_dir(NV);
+			std::vector<int8_t> stack_dir(NV); // really bool, but I don't want vector<bool>
 
 			auto make_vs = [&](int v_start, int top_depth) -> std::array<int, 2> {
 				return set_sides(stack_dir[top_depth], stack_verts[top_depth], v_start);
@@ -336,12 +336,13 @@ struct spqr_tree {
 			struct dfs_stack_t {
 				bool has_return_edge;
 				int ch_idx;
+				int ch_end;
 				int orig_tstack;
 			};
 			std::vector<dfs_stack_t> stk; stk.reserve(NV);
 			for (auto rt : roots) {
 				auto push_vert = [&](int cur) -> void {
-					stk.push_back({false, outedges.bounds[cur], -1});
+					stk.push_back({false, outedges.bounds[cur], outedges.bounds[cur+1], -1});
 					int cur_depth = int(stk.size()) - 1;
 					stack_verts[cur_depth] = cur;
 				};
@@ -349,7 +350,7 @@ struct spqr_tree {
 					int cur_depth = int(stk.size()) - 1;
 					auto& s = stk.back();
 					int cur = stack_verts[cur_depth];
-					assert(s.ch_idx == outedges.bounds[cur+1]);
+					assert(s.ch_idx == s.ch_end);
 					if (!s.has_return_edge) {
 						// Either our parent is a bridge edge, or we're just a root.
 						// We'll just leave it on tstack for future cleanup, it'll just get popped of immediately.
@@ -359,20 +360,23 @@ struct spqr_tree {
 					}
 					stk.pop_back();
 				};
-				// return true means jump to start_edge, return false means jump to finish_edge
-				auto start_edge = [&]() -> bool {
-					int cur_depth = int(stk.size()) - 1;
-					auto& s = stk.back();
-					int cur = stack_verts[cur_depth];
-					if (s.ch_idx == outedges.bounds[cur+1]) {
-						pop_vert();
-						return false;
-					}
-					auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
+
+				struct key_t { int lowval; bool is_tree; bool is_type_1; };
+				auto decode_key = [&](int cur_depth, int key) -> key_t {
 					int lowval = key / 3 - 2; if (lowval < 0) lowval = cur_depth + ~lowval;
 					int kind = key % 3;
 					bool is_tree = kind != 1;
-					[[maybe_unused]] bool is_type_1 = kind <= 1;
+					bool is_type_1 = kind <= 1;
+					return {lowval, is_tree, is_type_1 };
+				};
+				// return true means jump to start_edge, return false means jump to finish_edge
+				auto start_edge = [&]() -> std::optional<int> {
+					int cur_depth = int(stk.size()) - 1;
+					auto& s = stk.back();
+					int cur = stack_verts[cur_depth];
+					assert(s.ch_idx < s.ch_end);
+					auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
+					auto [lowval, is_tree, is_type_1] = decode_key(cur_depth, key);
 
 					// edge_dir convention: false is forwards, true is backwards.
 					// That means that cur is on the edge_dir side and nxt is on the !edge_dir side.
@@ -381,25 +385,21 @@ struct spqr_tree {
 					s.orig_tstack = int(tstack.size());
 					if (is_tree) {
 						first_occurrence[cur_depth] = NE;
-						push_vert(nxt);
-						return true;
+						return nxt;
 					} else {
-						return false;
+						return std::nullopt;
 					}
 				};
 				auto finish_edge = [&]() -> void {
 					int cur_depth = int(stk.size()) - 1;
 					auto& s = stk.back();
 					int cur = stack_verts[cur_depth];
-					assert(s.ch_idx < outedges.bounds[cur+1]);
+					assert(s.ch_idx < s.ch_end);
 
 					auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
 					s.ch_idx++;
 
-					int lowval = key / 3 - 2; if (lowval < 0) lowval = cur_depth + ~lowval;
-					const int kind = key % 3;
-					const bool is_tree = kind != 1;
-					const bool is_type_1 = kind <= 1;
+					auto [lowval, is_tree, is_type_1] = decode_key(cur_depth, key);
 
 					const int orig_tstack = s.orig_tstack;
 					const bool has_return_edge = s.has_return_edge;
@@ -545,16 +545,17 @@ struct spqr_tree {
 				};
 
 				push_vert(rt);
-				bool is_start = true;
-				while (!stk.empty()) {
-					if (is_start) {
-						is_start = start_edge();
+				while (true) {
+					if (stk.back().ch_idx == stk.back().ch_end) {
+						pop_vert();
+						if (stk.empty()) break;
+						finish_edge();
+					} else if (std::optional<int> nxt = start_edge(); nxt) {
+						push_vert(*nxt);
 					} else {
 						finish_edge();
-						is_start = true;
 					}
 				}
-				assert(!is_start);
 				auto component_val = pop_tstack();
 				item_ch[ROOT_ITEM] = concat(item_ch[ROOT_ITEM], component_val.spans[1]);
 			}
