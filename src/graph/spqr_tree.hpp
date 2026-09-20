@@ -346,21 +346,6 @@ struct spqr_tree {
 					int cur_depth = int(stk.size()) - 1;
 					stack_verts[cur_depth] = cur;
 				};
-				auto pop_vert = [&]() -> void {
-					int cur_depth = int(stk.size()) - 1;
-					auto& s = stk.back();
-					int cur = stack_verts[cur_depth];
-					assert(s.ch_idx == s.ch_end);
-					if (!s.has_return_edge) {
-						// Either our parent is a bridge edge, or we're just a root.
-						// We'll just leave it on tstack for future cleanup, it'll just get popped of immediately.
-						// edge_dir == !stack_dir[lowval == cur_depth - 1] == true
-						stack_dir[cur_depth] = true;
-						tstack.push_back(make_tstack(cur, cur_depth, vert_item(cur)));
-					}
-					stk.pop_back();
-				};
-
 				struct key_t { int lowval; bool is_tree; bool is_type_1; };
 				auto decode_key = [&](int cur_depth, int key) -> key_t {
 					int lowval = key / 3 - 2; if (lowval < 0) lowval = cur_depth + ~lowval;
@@ -543,6 +528,20 @@ struct spqr_tree {
 						s.has_return_edge = true;
 					}
 				};
+				auto pop_vert = [&]() -> void {
+					int cur_depth = int(stk.size()) - 1;
+					auto& s = stk.back();
+					int cur = stack_verts[cur_depth];
+					assert(s.ch_idx == s.ch_end);
+					if (!s.has_return_edge) {
+						// Either our parent is a bridge edge, or we're just a root.
+						// We'll just leave it on tstack for future cleanup, it'll just get popped of immediately.
+						// edge_dir == !stack_dir[lowval == cur_depth - 1] == true
+						stack_dir[cur_depth] = true;
+						tstack.push_back(make_tstack(cur, cur_depth, vert_item(cur)));
+					}
+					stk.pop_back();
+				};
 
 				push_vert(rt);
 				while (true) {
@@ -601,9 +600,17 @@ struct spqr_tree {
 			std::vector<ch_buf_t> ch_buf(tot_items);
 
 			int nxt_unassigned_idx = 0;
-			[&](this auto&& self, int cur_item, int par_idx) -> void {
+
+			struct dfs_stack_t {
+				int cur_idx;
+				int ch_idx;
+				int ch_end;
+				int cur_nv;
+				int cur_ne;
+			};
+			std::vector<dfs_stack_t> stk; stk.reserve(tot_items);
+			auto push_item = [&](int cur_item) -> void {
 				int cur_idx = nxt_unassigned_idx++;
-				par[cur_idx] = par_idx;
 				node_type cur_type = types[cur_idx] = item_types[cur_item];
 				if (cur_type == node_type::F) {
 					assert(cur_item == 0);
@@ -786,30 +793,47 @@ struct spqr_tree {
 					}
 				} else assert(false);
 
-				{
-					int cur_nv = nv_st + (item_vs[cur_item][0] != -1);
-					int cur_ne = ne_st + has_cap;
-					for (int i = ch_st; i < ch_en; i++) {
-						// The index of the next node_edge if it exists
-						int nxt_item = ch.dat[i];
-						int nxt_idx = nxt_unassigned_idx;
-						ch.dat[i] = nxt_idx;
-						int nxt_ne = node_edges.bounds[nxt_idx];
-						if (nxt_item < 1 + NV) {
-							vert_par_nv[nxt_idx] = cur_nv++;
-						} else if (is_node) {
-							node_edges.dat[cur_ne].twin_ne = nxt_ne;
-							node_edges.dat[nxt_ne].twin_ne = cur_ne;
-							cur_ne++;
-						}
-						self(nxt_item, cur_idx);
-					}
-					cur_nv += (item_vs[cur_item][1] != -1);
-					assert(cur_nv == nv_en);
-					assert(cur_ne == ne_en);
-					subtree_end[cur_idx] = nxt_unassigned_idx;
+				int cur_nv = nv_st + (item_vs[cur_item][0] != -1);
+				int cur_ne = ne_st + has_cap;
+				stk.push_back({cur_idx, ch_st, ch_en, cur_nv, cur_ne});
+			};
+
+			auto start_child = [&]() -> int {
+				auto& [cur_idx, ch_idx, ch_en, cur_nv, cur_ne] = stk.back();
+				assert(ch_idx < ch_en);
+				int nxt_item = ch.dat[ch_idx];
+				int nxt_idx = nxt_unassigned_idx;
+				ch.dat[ch_idx] = nxt_idx;
+				par[nxt_idx] = cur_idx;
+				int nxt_ne = node_edges.bounds[nxt_idx];
+				if (nxt_item < 1 + NV) {
+					vert_par_nv[nxt_idx] = cur_nv++;
+				} else if (types[cur_idx] != node_type::F && types[cur_idx] != node_type::V) {
+					node_edges.dat[cur_ne].twin_ne = nxt_ne;
+					node_edges.dat[nxt_ne].twin_ne = cur_ne;
+					cur_ne++;
 				}
-			}(ROOT_ITEM, -1);
+
+				ch_idx++;
+				return nxt_item;
+			};
+
+			auto pop_item = [&]() -> void {
+				auto [cur_idx, ch_idx, ch_en, cur_nv, cur_ne] = stk.back(); stk.pop_back();
+				assert(ch_idx == ch_en);
+				subtree_end[cur_idx] = nxt_unassigned_idx;
+			};
+
+			par[nxt_unassigned_idx] = -1;
+			push_item(ROOT_ITEM);
+			while (true) {
+				if (stk.back().ch_idx == stk.back().ch_end) {
+					pop_item();
+					if (stk.empty()) break;
+				} else {
+					push_item(start_child());
+				}
+			}
 
 			assert(nxt_unassigned_idx == tot_items);
 			assert(ch.bounds.back() == int(ch.dat.size()));
