@@ -1,6 +1,6 @@
 #pragma once
 
-#include<bits/stdc++.h>
+#include <bits/stdc++.h>
 
 namespace wala {
 

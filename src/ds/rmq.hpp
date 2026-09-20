@@ -29,6 +29,7 @@ private:
 	int sparse_table_size() const {
 		return num_buckets() * num_levels();
 	}
+
 private:
 	const T& min(const T& a, const T& b) const {
 		return Compare::operator()(a, b) ? a : b;

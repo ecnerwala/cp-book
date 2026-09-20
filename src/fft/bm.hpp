@@ -1,5 +1,6 @@
 #pragma once
-#include<bits/stdc++.h>
+
+#include <bits/stdc++.h>
 
 namespace wala {
 
@@ -10,7 +11,7 @@ std::vector<num> BerlekampMassey(const std::vector<num>& s) {
 	C[0] = B[0] = 1;
 
 	num b = 1;
-	for(int i = 0; i < n; i++) { ++m;
+	for (int i = 0; i < n; i++) { ++m;
 		num d = s[i];
 		for (int j = 1; j <= L; j++) d += C[j] * s[i - j];
 		if (d == 0) continue;

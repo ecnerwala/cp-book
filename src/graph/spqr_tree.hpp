@@ -208,7 +208,6 @@ struct spqr_tree {
 			outedges = std::move(by_src_builder).finalize();
 		}
 
-
 		// Phase 2: do the big ear-decomposition-like walk
 
 		// We're going to build a tree of all SPQR *nodes* + all original *vertices* (collectively *items*).
@@ -225,7 +224,7 @@ struct spqr_tree {
 		auto set_sides = []<typename T>(bool dir, T a, T b) -> std::array<T, 2> {
 			return dir ? std::array<T, 2>{b, a} : std::array<T, 2>{a, b};
 		};
-		auto get_side = []<typename T>(std::array<T, 2> a, bool dir) -> T{
+		auto get_side = []<typename T>(std::array<T, 2> a, bool dir) -> T {
 			return dir ? a[1] : a[0];
 		};
 

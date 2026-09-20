@@ -24,7 +24,6 @@ private:
 	RangeMinQuery<int> depth_val_rmq;
 
 public:
-
 	static_forest_t() : N(0) {}
 	static_forest_t(const std::vector<std::vector<int>>& adj, const std::vector<int>& roots = {}) :
 		N(int(adj.size())),

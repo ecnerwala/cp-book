@@ -28,7 +28,6 @@ private:
 	CartesianTree(std::vector<Node>&& nodes_, int root_) : nodes(std::move(nodes_)), root(root_) {}
 
 public:
-
 	// min-cartesian-tree, with earlier cells tiebroken earlier
 	template <typename T, typename Comp = std::less<T>>
 	static CartesianTree build_min_tree(const std::vector<T>& v, Comp comp = Comp()) {

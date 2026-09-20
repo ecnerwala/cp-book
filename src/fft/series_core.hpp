@@ -150,7 +150,6 @@ struct vec : public std::vector<typename E::value_type> {
 	vec& operator *= (const vec& o) {
 		return *this = (*this) * o;
 	}
-
 };
 
 template <fft::engine E> using exact = vec<E, true>;

@@ -21,6 +21,5 @@ int main() {
 		std::cout << B[i] << " \n"[i+1==N];
 	}
 
-
 	return 0;
 }

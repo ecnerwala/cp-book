@@ -83,7 +83,6 @@ template <> struct getRoot<mod_goldilocks> {
 // Their length is allowed to be bigger than 2^k mostly to perform ops on sequences of size n+1 with only transforms of size n.
 // The upper bound of 2^{k+1} is arbitrary: we could tighten it to 2^k + 1 or loosen it to infinity, this is just a "defensive" choice.
 template <typename num> struct fft_core {
-
 	static inline vector<int> rev;
 	// rt[2^k + i] = 1^{i / 2^(k+1)}
 	// TODO: can we get rid of inv_rt; alternatively, should we store inv_rt in bit-reverse order?
