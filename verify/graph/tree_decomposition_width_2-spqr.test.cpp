@@ -26,10 +26,10 @@ int main() {
 			tree_width = std::max(tree_width, 0);
 		} else if (t == node_type::Q) {
 			// This depends if it's a self-loop or not
-			tree_width = std::max(tree_width, int(spqr.node_verts[i].size()));
-		} else if (t == node_type::I) {
+			tree_width = std::max(tree_width, int(spqr.node_verts[i].size()) - 1);
+		} else if (t == node_type::I || t == node_type::P) {
 			tree_width = std::max(tree_width, 1);
-		} else if (t == node_type::S || t == node_type::P) {
+		} else if (t == node_type::S) {
 			tree_width = std::max(tree_width, 2);
 		} else if (t == node_type::R) {
 			tree_width = std::max(tree_width, 3);
