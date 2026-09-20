@@ -33,11 +33,14 @@ template <typename T> void fill_rnd(std::vector<T>& v, std::mt19937& mt) {
 	for (T& x : v) x = rnd_val<T>(mt);
 }
 template <typename T> void check_eq(const std::vector<T>& got, const std::vector<T>& want) {
-	REQUIRE(got.size() == want.size());
-	for (int i = 0; i < int(got.size()); i++) {
-		INFO("i = " << i);
-		if constexpr (std::is_floating_point_v<T>) REQUIRE(llround(got[i]) == llround(want[i]));
-		else REQUIRE(got[i] == want[i]);
+	if constexpr (std::is_floating_point_v<T>) {
+		REQUIRE(got.size() == want.size());
+		for (int i = 0; i < int(got.size()); i++) {
+			CAPTURE(i);
+			REQUIRE(llround(got[i]) == llround(want[i]));
+		}
+	} else {
+		REQUIRE(got == want);
 	}
 }
 

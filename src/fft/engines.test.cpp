@@ -32,7 +32,7 @@ TEMPLATE_TEST_CASE("FFT multiply sizes", "[fft]", ALL_ENGINES) {
 			vector<num> a(la), b(lb);
 			fill_rnd(a, mt);
 			fill_rnd(b, mt);
-			INFO("la = " << la << ", lb = " << lb);
+			CAPTURE(la, a, lb, b);
 			check_eq(multiply<E>(a, b), multiply_slow(a, b));
 		}
 	}
@@ -179,9 +179,9 @@ TEMPLATE_TEST_CASE("FFT Square", "[fft]", ALL_ENGINES) {
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int la : {1, 3, 17, 100}) {
-		INFO("la = " << la);
 		vector<num> a(la);
 		fill_rnd(a, mt);
+		CAPTURE(la, a);
 		check_eq(square<E>(a), multiply_slow(a, a));
 	}
 }
@@ -287,6 +287,8 @@ TEMPLATE_TEST_CASE("FFT multiply_add2", "[fft]", ALL_ENGINES) {
 	for (auto [la1, lb1, la2, lb2] : cases) {
 		vector<num> a1(la1), b1(lb1), a2(la2), b2(lb2);
 		fill_rnd(a1, mt); fill_rnd(b1, mt); fill_rnd(a2, mt); fill_rnd(b2, mt);
+		CAPTURE(la1, lb1, la2, lb2);
+		CAPTURE(a1, b1, a2, b2);
 		vector<num> want = multiply_slow(a1, b1);
 		vector<num> p2 = multiply_slow(a2, b2);
 		for (int i = 0; i < sz(p2); i++) want[i] += p2[i];
@@ -294,7 +296,6 @@ TEMPLATE_TEST_CASE("FFT multiply_add2", "[fft]", ALL_ENGINES) {
 		vector<num> got(want.size());
 		multiply_add2<E>(span<const num>(a1), ca1, span<const num>(b1), cb1,
 				span<const num>(a2), ca2, span<const num>(b2), cb2, span<num>(got));
-		INFO("la1 = " << la1 << ", lb1 = " << lb1 << ", la2 = " << la2 << ", lb2 = " << lb2);
 		check_eq(got, want);
 	}
 }
@@ -311,7 +312,7 @@ TEMPLATE_TEST_CASE("FFT middle product", "[fft]", ALL_ENGINES) {
 			fill_rnd(b, mt);
 			auto full = multiply_slow(a, b);
 			vector<num> expected(full.begin() + (lb - 1), full.begin() + la);
-			INFO("la = " << la << ", lb = " << lb);
+			CAPTURE(la, a, lb, b);
 			check_eq(middle_product<E>(a, b), expected);
 			// out-span form accumulates through the op
 			vector<num> acc(expected.size(), num(1));

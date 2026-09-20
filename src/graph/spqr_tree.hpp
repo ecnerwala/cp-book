@@ -7,6 +7,7 @@
 #include <utility>
 #include <cassert>
 #include <ranges>
+#include <iostream>
 
 namespace wala {
 
@@ -92,6 +93,7 @@ struct spqr_tree {
 	enum class node_type : char {
 		F = 'F', V = 'V', Q = 'Q', I = 'I', O = 'O', S = 'S', P = 'P', R = 'R'
 	};
+	friend std::ostream& operator<<(std::ostream& o, node_type t) { return o << char(t); }
 
 	std::vector<int> vert_index;
 	std::vector<int> edge_index;

@@ -91,6 +91,7 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_rational_function", "[fft]", MOD_ENG
 		fill_rnd(p, mt);
 		fill_rnd(q, mt);
 		if (q[0] == 0) q[0] = 1;
+		CAPTURE(d, p, q);
 		// reference: power series division to many terms
 		int terms = 300;
 		vector<num> ser(terms);
@@ -102,7 +103,7 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_rational_function", "[fft]", MOD_ENG
 		}
 		series::exact<E> xp(p.begin(), p.end()), xq(q.begin(), q.end());
 		for (uint64_t k : {uint64_t(0), uint64_t(1), uint64_t(7), uint64_t(100), uint64_t(299)}) {
-			INFO("d = " << d << ", k = " << k);
+			CAPTURE(k);
 			REQUIRE(kth_term_of_rational_function(xp, xq, k) == ser[k]);
 		}
 	}
@@ -118,6 +119,8 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_linear_recurrence", "[fft]", MOD_ENG
 		fill_rnd(q, mt);
 		if (q[0] == 0) q[0] = 1;
 
+		CAPTURE(d, p, q);
+
 		int terms = 300;
 		vector<num> ser(terms);
 		num iq0 = inv(q[0]);
@@ -132,7 +135,7 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_linear_recurrence", "[fft]", MOD_ENG
 		}
 		series::trunc<E> xp(p.begin(), p.end()); series::exact<E> xq(q.begin(), q.end());
 		for (uint64_t k : {uint64_t(0), uint64_t(1), uint64_t(7), uint64_t(100), uint64_t(299)}) {
-			INFO("d = " << d << ", k = " << k);
+			CAPTURE(k);
 			REQUIRE(kth_term_of_linear_recurrence(xp, xq, k) == ser[k]);
 		}
 	}
@@ -253,10 +256,10 @@ TEST_CASE("series::vec log/exp/pow", "[fft]") {
 	using ps = series::trunc<engines::ntt<num>>;
 	mt19937 mt(Catch::getSeed());
 	for (int len : {1, 2, 3, 17, 100}) {
-		INFO("len = " << len);
 		ps a(len);
 		for (num& x : a) { x = num(mt()); }
 		a[0] = 1;
+		CAPTURE(len, a);
 		auto l = ps_log(a);
 		auto e = ps_exp(l);
 		REQUIRE(e == a);
@@ -299,12 +302,12 @@ TEST_CASE("series::vec compose", "[fft]") {
 	using ps = series::trunc<engines::ntt<num>>;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {1, 2, 3, 8, 20, 33}) {
-		INFO("n = " << n);
 		int m = n + 2;
 		ps f(m), g(n);
 		for (num& x : f) { x = num(mt()); }
 		for (num& x : g) { x = num(mt()); }
 		g[0] = 0;
+		CAPTURE(n, f, g);
 		// naive composition mod x^n
 		ps expected(n, num(0));
 		ps gp(n, num(0));

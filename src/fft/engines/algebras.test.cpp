@@ -40,7 +40,7 @@ void test_matrix_engine(mt19937& mt) {
 			vector<M> a(la), b(lb);
 			for (M& m : a) m = rnd_mat();
 			for (M& m : b) m = rnd_mat();
-			INFO("la = " << la << ", lb = " << lb);
+			CAPTURE(la, a, lb, b);
 			REQUIRE(multiply<E>(a, b) == multiply_slow(a, b));
 		}
 	}
@@ -90,7 +90,7 @@ void test_trunc_series_engine(mt19937& mt) {
 			vector<P> a(la), b(lb);
 			for (P& p : a) p = rnd_p();
 			for (P& p : b) p = rnd_p();
-			INFO("la = " << la << ", lb = " << lb);
+			CAPTURE(la, a, lb, b);
 			REQUIRE(multiply<E>(a, b) == multiply_slow(a, b));
 		}
 	}

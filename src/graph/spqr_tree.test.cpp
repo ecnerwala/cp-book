@@ -18,21 +18,11 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				}
 			}
 
-			INFO("NV = " << NV);
-			INFO("NE = " << NE);
-			INFO("seed_seq = {" << NE << "," << seed << "}");
-
-			auto UNSCOPED_INFO_graph = [&]() -> void {
-				UNSCOPED_INFO("Graph: " << NE << " edges");
-				for (int e = 0; e < NE; e++) {
-					UNSCOPED_INFO("Edge " << e << ": " << edges[e][0] << "-" << edges[e][1]);
-				}
-			};
-
-			// Use like this; it affects the next REQUIRE only
-			//UNSCOPED_INFO_graph();
+			CAPTURE(NV, NE, seed, edges);
 
 			for (bool ternarize : {false, true}) {
+				CAPTURE(ternarize);
+
 				using wala::spqr_tree;
 				using node_type = spqr_tree::node_type;
 				auto spqr = spqr_tree::build(NV, edges, ternarize);
@@ -136,12 +126,12 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				// Check node shapes/consistency
 				for (int i = 0; i < num_items; i++) {
 					node_type i_type = spqr.types[i];
-					INFO("i = " << i);
-					INFO("i_type = " << char(i_type));
+					CAPTURE(i);
+					CAPTURE(i_type);
 					int p = spqr.par[i];
-					INFO("p = " << p);
+					CAPTURE(p);
 					node_type p_type = p == -1 ? node_type::F : spqr.types[p];
-					INFO("p_type = " << char(p_type));
+					CAPTURE(p_type);
 					auto ch = spqr.ch[i];
 					auto nvs = spqr.node_verts[i];
 					auto nes = spqr.node_edges[i];

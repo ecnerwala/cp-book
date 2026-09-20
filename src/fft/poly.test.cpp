@@ -142,9 +142,9 @@ TEST_CASE("poly::taylor_shift and the D basis", "[fft]") {
 	using E = engines::ntt<num>;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {0, 1, 2, 3, 8, 37}) {
-		INFO("n = " << n);
 		vector<num> pa(n);
 		fill_rnd(pa, mt);
+		CAPTURE(n, pa);
 		poly::vec<E> a((span<const num>(pa)));
 		// to_D_basis scales [x^k] by k!; from_D_basis undoes it
 		poly::vec<E> d = poly::to_D_basis(a);
@@ -184,9 +184,9 @@ TEST_CASE("poly::multipoint and poly::interpolate", "[fft]") {
 	using num = modnum<998244353>;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {1, 2, 3, 8, 17, 40}) {
-		INFO("n = " << n);
 		vector<num> coeffs(n);
 		for (num& x : coeffs) { x = num(mt()); }
+		CAPTURE(n, coeffs);
 		poly::vec<engines::ntt<num>> p((span<const num>(coeffs)));
 		vector<num> pts(n);
 		for (int i = 0; i < n; i++) pts[i] = num(1000 + i);
