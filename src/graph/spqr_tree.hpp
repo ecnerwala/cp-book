@@ -126,7 +126,9 @@ struct spqr_tree {
 	};
 	csr<node_adj_t> node_adj;
 
-	static spqr_tree build(int NV, const std::vector<std::array<int, 2>>& edges) {
+	int size() const { return int(par.size()); }
+
+	static spqr_tree build(int NV, const std::vector<std::array<int, 2>>& edges, bool ternarize = false) {
 		// TODO: Figure out the best way to specify roots; maybe accept a permutation of "root priority"?
 
 		// std::min is by reference, which breaks some optimizations
@@ -296,6 +298,10 @@ struct spqr_tree {
 				if (type == node_type::R) return alloc_item(type);
 
 				assert(type == node_type::P || type == node_type::S);
+
+				// If we want to ternarize, never reuse.
+				if (ternarize) return alloc_item(type);
+
 				// TODO: This is the wrong dir for is-tree S-type checks, should we just dir in?
 				//bool dir = stack_dir[t.top_depth];
 
