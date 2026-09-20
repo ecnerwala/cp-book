@@ -6,7 +6,6 @@
 
 namespace wala {
 
-
 /**
  * Top tree!
  *
@@ -65,6 +64,7 @@ private:
 	const top_tree_node* derived_this() const {
 		return static_cast<const top_tree_node*>(this);
 	}
+
 public:
 	mutable top_tree_node* p = nullptr;
 	std::array<top_tree_node*, 3> c{nullptr, nullptr, nullptr};
@@ -121,7 +121,6 @@ public:
 	}
 
 private:
-
 	void rot() {
 		assert(!is_vert);
 		assert(!r());

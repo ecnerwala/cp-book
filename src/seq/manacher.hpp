@@ -5,7 +5,6 @@
 
 namespace wala {
 
-
 /**
  * manacher(S): return the maximum palindromic substring of S centered at each point
  *

@@ -9,7 +9,6 @@
 
 namespace wala {
 
-
 template <typename T> T mod_inv_in_range(T a, T m) {
 	// assert(0 <= a && a < m);
 	T x = a, y = m;
@@ -244,6 +243,7 @@ template <typename T> T power(T a, long long b) {
 
 template <typename tag> struct dynamic_modnum : mod_ops<dynamic_modnum<tag>, uint32_t> {
 	using Self = dynamic_modnum;
+
 private:
 	inline static uint32_t MOD_ = 0;
 	inline static uint64_t BARRETT_M = 0;

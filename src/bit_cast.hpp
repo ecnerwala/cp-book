@@ -5,7 +5,6 @@
 
 namespace wala {
 
-
 // Copied from https://en.cppreference.com/w/cpp/numeric/bit_cast
 
 template <class To, class From>

@@ -6,9 +6,7 @@
 
 #include "num/modnum.hpp"
 
-namespace wala::dirichlet_series {
-
-namespace test {
+namespace wala::dirichlet_series::test {
 
 div_vector_layout layout;
 template <typename T> using dv_values = values<layout, T>;
@@ -141,6 +139,4 @@ TEMPLATE_TEST_CASE("Dirichlet series euler transform", "[dirichlet]", modnum<int
 	}
 }
 
-}
-
-}
+} // namespace wala::dirichlet_series::test

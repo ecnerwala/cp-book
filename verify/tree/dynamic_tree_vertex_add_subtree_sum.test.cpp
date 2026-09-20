@@ -43,7 +43,7 @@ struct vertex_add_subtree_sum_top_tree_node : public wala::top_tree_node_base<ve
 	}
 };
 
-}
+} // namespace
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);

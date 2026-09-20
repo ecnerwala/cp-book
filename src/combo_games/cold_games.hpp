@@ -8,7 +8,6 @@
 
 namespace wala {
 
-
 // TODO: Make this generic over numerator type, e.g. bignum
 struct dyadic {
 	int n = 0, d = 0;

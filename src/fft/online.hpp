@@ -114,4 +114,4 @@ template <fft::engine E> struct online_squarer {
 	}
 };
 
-/* namespace wala */ }
+} // namespace wala

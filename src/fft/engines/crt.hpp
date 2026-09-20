@@ -133,4 +133,4 @@ struct crt {
 	}
 };
 
-/* namespace wala::fft::engines */ }
+} // namespace wala::fft::engines

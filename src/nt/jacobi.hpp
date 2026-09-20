@@ -5,7 +5,6 @@
 
 namespace wala {
 
-
 // Computes (n on m) == 1 using the binary-gcd method
 // m must be positive and odd, and n must be relatively prime
 template <typename T> bool is_qr_jacobi(T n, T m) {

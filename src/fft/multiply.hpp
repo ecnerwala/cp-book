@@ -97,8 +97,7 @@ void finish_linear(
 		if (sz(out) >= s) op(out[s-1], cn);
 	}
 }
-
-}
+} // namespace detail
 
 template <engine E, typename Op = assign_op>
 void multiply(std::span<const typename E::value_type> a, std::span<const typename E::value_type> b,
@@ -275,7 +274,7 @@ void emit_middle(std::span<T> buf, bool cut, int la, int lb, T c0, T ctop, std::
 	for (int t = 0; t < lim; t++) op(out[t], buf[lb - 1 + t]);
 	if (cut && sz(out) >= m) op(out[m-1], cn);
 }
-}
+} // namespace detail
 
 // Middle product (the transposed multiplication): takes only coefficients of a * b which include terms from all of b.
 // Must have len(a) >= len(b)
@@ -348,4 +347,4 @@ vector<typename E::value_type> middle_product(std::span<const typename E::value_
 	return r;
 }
 
-/* namespace wala::fft */ }
+} // namespace wala::fft

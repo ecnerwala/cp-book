@@ -176,4 +176,4 @@ struct ap_sampled_poly : public std::vector<typename E::value_type> {
 	}
 };
 
-/* namespace wala */ }
+} // namespace wala

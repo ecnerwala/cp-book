@@ -7,8 +7,7 @@
 #include "fft/test_util.test.hpp"
 #include "num/modnum.hpp"
 
-namespace wala {
-namespace fft {
+namespace wala::fft {
 
 using namespace std;
 
@@ -84,4 +83,4 @@ TEST_CASE("online squarer non-commutative fallback", "[fft]") {
 	}
 }
 
-}} // namespace wala::fft
+} // namespace wala::fft

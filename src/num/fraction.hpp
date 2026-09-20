@@ -5,7 +5,6 @@
 
 namespace wala {
 
-
 template <typename T, typename MulT=T> struct fraction_t {
 	T numer = 0, denom = 1;
 

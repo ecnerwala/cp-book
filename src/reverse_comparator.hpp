@@ -5,7 +5,6 @@
 
 namespace wala {
 
-
 template <typename F> struct reverse_comparator_t {
 	F f;
 	template <typename Arg1, typename Arg2> constexpr bool operator() (Arg1&& arg1, Arg2&& arg2) & {

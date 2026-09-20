@@ -1,11 +1,10 @@
 #pragma once
 
-#include<bits/stdc++.h>
+#include <bits/stdc++.h>
 // #include<bits/extc++.h>
 #include <ext/pb_ds/assoc_container.hpp>
 
 namespace wala {
-
 
 struct splitmix64_hash {
 	static uint64_t splitmix64(uint64_t x) {

@@ -12,8 +12,7 @@
 #include "fft/test_util.test.hpp"
 #include "num/modnum.hpp"
 
-namespace wala {
-namespace fft {
+namespace wala::fft {
 
 using namespace std;
 
@@ -109,4 +108,4 @@ TEMPLATE_TEST_CASE("trunc_series engine", "[fft]",
 	test_trunc_series_engine<engines::trunc_stable<IE, 3>, num, 3>(mt);
 }
 
-}} // namespace wala::fft
+} // namespace wala::fft

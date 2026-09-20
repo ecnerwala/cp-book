@@ -381,4 +381,4 @@ vec<E> interpolate(
 	return tree.combine_up(std::span<const T>(leaf_vals));
 }
 
-/* namespace wala::poly */ }
+} // namespace wala::poly

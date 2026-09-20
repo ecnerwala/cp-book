@@ -15,7 +15,6 @@
 
 namespace wala {
 
-
 // Layered suffix array: SuffixArrayBase computes just sa/rank, each further
 // layer statically opts into one more derived structure. Use the leaf classes
 // SuffixArray, SuffixArrayLCP, or SuffixArrayRMQ; the named constructors on
@@ -470,6 +469,7 @@ class SuffixArrayRMQ : public SuffixArrayRMQBase<SuffixArrayRMQ> {};
 class PrefixArrayRMQ : private SuffixArrayRMQ {
 	PrefixArrayRMQ(const SuffixArrayRMQ& sa_) : SuffixArrayRMQ(sa_) {}
 	PrefixArrayRMQ(SuffixArrayRMQ&& sa_) : SuffixArrayRMQ(std::move(sa_)) {}
+
 public:
 	PrefixArrayRMQ() {}
 	template <typename String> static PrefixArrayRMQ construct_raw(const String& S, int sigma) {

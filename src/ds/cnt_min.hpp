@@ -4,7 +4,6 @@
 
 namespace wala {
 
-
 template <typename T, typename C = int, typename Comp = std::less<T>> struct cnt_min {
 	T v;
 	C cnt;

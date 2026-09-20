@@ -11,8 +11,7 @@
 #include "fft/test_util.test.hpp"
 #include "num/modnum.hpp"
 
-namespace wala {
-namespace fft {
+namespace wala::fft {
 
 using namespace std;
 
@@ -347,4 +346,4 @@ TEMPLATE_TEST_CASE("negate_arg transforms", "[fft]", ALL_ENGINES) {
 	}
 }
 
-}} // namespace wala::fft
+} // namespace wala::fft

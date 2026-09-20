@@ -710,4 +710,4 @@ public:
 	}
 };
 
-}
+} // namespace wala::dirichlet_series

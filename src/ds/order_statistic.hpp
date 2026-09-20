@@ -4,7 +4,6 @@
 
 namespace wala {
 
-
 template <typename K, typename V, typename Comp = std::less<K>>
 using order_statistic_map = __gnu_pbds::tree<
 	K, V, Comp,

@@ -7,7 +7,6 @@
 
 namespace wala {
 
-
 template <typename T, class Compare = std::less<T>> class RangeMinQuery : private Compare {
 	static const int BUCKET_SIZE = 32;
 	static const int BUCKET_SIZE_LOG = 5;
@@ -30,6 +29,7 @@ private:
 	int sparse_table_size() const {
 		return num_buckets() * num_levels();
 	}
+
 private:
 	const T& min(const T& a, const T& b) const {
 		return Compare::operator()(a, b) ? a : b;

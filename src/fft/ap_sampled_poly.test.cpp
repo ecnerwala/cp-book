@@ -6,8 +6,7 @@
 #include "fft/engines/ntt.hpp"
 #include "num/modnum.hpp"
 
-namespace wala {
-namespace fft {
+namespace wala::fft {
 
 using namespace std;
 
@@ -44,4 +43,4 @@ TEST_CASE("ap_sampled_poly eval", "[fft,ap_sampled_poly]") {
 	}
 }
 
-}} // namespace wala::fft
+} // namespace wala::fft

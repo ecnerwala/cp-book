@@ -5,7 +5,6 @@
 
 namespace wala {
 
-
 // Usage:
 //   constexpr nim_prod_t nimProd;
 // C++20:

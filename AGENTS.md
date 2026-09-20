@@ -55,6 +55,19 @@ Match the existing code exactly. In particular:
   `main`. The library lives in `namespace wala`; qualify library names with
   `wala::` in tests and verify solutions (e.g. `wala::modnum`,
   `wala::SuffixArray`, `wala::seg_tree::point`).
+- **Namespace blocks**: open nested namespaces in one line
+  (`namespace wala::fft::engines {`, never stacked `namespace wala {
+  namespace fft {`), and close every namespace with `} // namespace <name>`
+  (`} // namespace` for anonymous ones). A file-scope namespace has exactly
+  one blank line after the `{` and one before the `}`; short nested blocks
+  (`namespace detail {`, anonymous namespaces) are tight, with no blank line
+  inside either end. Namespace contents are not indented.
+- **Blank lines**: never two in a row; one after `#pragma once`; none
+  directly after a `{` or before a `}`/`};`; one before `public:` /
+  `private:` unless it directly follows the class's `{`. Adjacent short
+  members may be packed with no blank line between them.
+- Space after control keywords and before `<`/`{`: `if (`, `for (`,
+  `template <`, `#include <`, `-> T {`.
 - **verify/ files** follow this template:
 
   ```cpp

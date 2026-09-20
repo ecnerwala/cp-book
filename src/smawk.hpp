@@ -19,7 +19,6 @@ template <typename T, typename Get, typename Select> concept totally_monotone_ma
 	&& std::invocable<Get, int, int> && std::convertible_to<std::invoke_result_t<Get, int, int>, T>
 	&& std::predicate<Select, int, const value_t<T>&, const value_t<T>&>;
 
-
 template <typename Get, typename Select, typename T = std::invoke_result_t<Get, int, int>>
 requires totally_monotone_matrix_oracle<T, Get, Select>
 class LARSCH {
