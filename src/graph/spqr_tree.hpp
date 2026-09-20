@@ -161,37 +161,78 @@ struct spqr_tree {
 
 			std::vector<outedge_t> all_outedges; all_outedges.reserve(NE);
 			// Return the 2 lowvals from this subtree
-			auto dfs = [&](this auto&& self, int cur, int d, int prv_e) -> std::array<int, 2> {
+			struct dfs_stack_t {
+				int cur;
+				int prv_e;
+				std::array<int, 2> lowvals;
+				int ch_idx;
+				int ch_end;
+			};
+			std::vector<dfs_stack_t> stk; stk.reserve(NV);
+			auto push_vert = [&](int cur, int prv_e) -> void {
+				int d = int(stk.size());
 				depth[cur] = d;
-				std::array<int, 2> lowvals{d, d};
-				for (auto [nxt, e] : adj[cur]) {
-					if (e == prv_e) continue;
-					if (depth[nxt] > d) continue;
+				stk.push_back({cur, prv_e, {d, d}, adj.bounds[cur], adj.bounds[cur+1]});
+			};
+			auto finish_edge = [&](bool is_tree, std::array<int, 2> n_lowvals) -> void {
+				int d = int(stk.size()) - 1;
+				auto& s = stk.back();
+				int cur = s.cur;
+				assert(s.ch_idx < s.ch_end);
+				auto [nxt, e] = adj.dat[s.ch_idx];
+				auto& lowvals = s.lowvals;
+				s.ch_idx++;
 
-					bool is_tree = depth[nxt] == -1;
-
-					auto n_lowvals = is_tree ? self(nxt, d+1, e) : std::array<int, 2>{depth[nxt], d};
-
-					{
-						// Extra bit is 0 for type-1 children, 1 for backedges, 2 for children with lowval2
-						// Bridges have lowval -2 (kind 0), and components loops have lowval -1 (components are kind 0, loops are kind 1)
-						// We don't really need to distinguish backedges vs type-1 children, but do it just for fun?
-						int lowval = n_lowvals[0];
-						if (lowval >= d) lowval = ~(lowval - d);
-						int kind = 2 * (n_lowvals[1] < d) + !is_tree;
-						all_outedges.push_back({cur, nxt, e, 3 * (lowval + 2) + kind});
-					}
-
-					// Keep the 2 distinct mins
-					if (n_lowvals[0] < lowvals[0]) lowvals = {n_lowvals[0], min(n_lowvals[1], lowvals[0])};
-					else lowvals[1] = min(lowvals[1], n_lowvals[0] == lowvals[0] ? n_lowvals[1] : n_lowvals[0]);
+				{
+					// Extra bit is 0 for type-1 children, 1 for backedges, 2 for children with lowval2
+					// Bridges have lowval -2 (kind 0), and components loops have lowval -1 (components are kind 0, loops are kind 1)
+					// We don't really need to distinguish backedges vs type-1 children, but do it just for fun?
+					int lowval = n_lowvals[0];
+					if (lowval >= d) lowval = ~(lowval - d);
+					int kind = 2 * (n_lowvals[1] < d) + !is_tree;
+					all_outedges.push_back({cur, nxt, e, 3 * (lowval + 2) + kind});
 				}
+
+				// Keep the 2 distinct mins
+				if (n_lowvals[0] < lowvals[0]) lowvals = {n_lowvals[0], min(n_lowvals[1], lowvals[0])};
+				else lowvals[1] = min(lowvals[1], n_lowvals[0] == lowvals[0] ? n_lowvals[1] : n_lowvals[0]);
+			};
+			auto start_edge = [&]() -> void {
+				int d = int(stk.size()) - 1;
+				auto& s = stk.back();
+				assert(s.ch_idx < s.ch_end);
+				auto [nxt, e] = adj.dat[s.ch_idx];
+
+				if (e == s.prv_e || depth[nxt] > d) {
+					// skip the edge
+					s.ch_idx++; return;
+				}
+
+				bool is_tree = depth[nxt] == -1;
+				if (is_tree) {
+					push_vert(nxt, e);
+				} else {
+					finish_edge(false, {depth[nxt], d});
+				}
+			};
+			auto pop_vert = [&]() -> std::array<int, 2> {
+				auto lowvals = stk.back().lowvals;
+				stk.pop_back();
 				return lowvals;
 			};
 			for (int rt = 0; rt < NV; rt++) {
 				if (depth[rt] == -1) {
 					roots.push_back(rt);
-					dfs(rt, 0, -1);
+					push_vert(rt, -1);
+					while (true) {
+						if (stk.back().ch_idx == stk.back().ch_end) {
+							auto lowvals = pop_vert();
+							if (stk.empty()) break;
+							finish_edge(true, lowvals);
+						} else {
+							start_edge();
+						}
+					}
 				}
 			}
 
@@ -358,7 +399,6 @@ struct spqr_tree {
 				auto start_edge = [&]() -> std::optional<int> {
 					int cur_depth = int(stk.size()) - 1;
 					auto& s = stk.back();
-					int cur = stack_verts[cur_depth];
 					assert(s.ch_idx < s.ch_end);
 					auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
 					auto [lowval, is_tree, is_type_1] = decode_key(cur_depth, key);
