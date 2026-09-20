@@ -1,7 +1,8 @@
 #pragma once
 
 #include <cassert>
-#include <iostream>
+#include <istream>
+#include <ostream>
 #include <cstdint>
 #include <concepts>
 #include <limits>
