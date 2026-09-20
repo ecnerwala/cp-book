@@ -92,4 +92,4 @@ template <typename num> struct ntt {
 	}
 };
 
-/* namespace wala::fft::engines */ }
+} // namespace wala::fft::engines

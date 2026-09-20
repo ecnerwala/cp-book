@@ -8,8 +8,7 @@
 #include "fft/test_util.test.hpp"
 #include "num/modnum.hpp"
 
-namespace wala {
-namespace fft {
+namespace wala::fft {
 
 using namespace std;
 
@@ -24,7 +23,7 @@ static_assert(!poly::like<series::trunc<CE>>);
 static_assert(!poly::like<series::cached_exact<CE>>);
 static_assert(!poly::like<series::cached_trunc<CE>>);
 static_assert(!poly::like<series::prefix_cached<CE>>);
-}
+} // namespace
 
 // Archetype exposing exactly the series::like contract, nothing more.
 // Instantiating the generic algorithms against it proves they only use
@@ -66,7 +65,7 @@ static_assert(!series::has_prefix_cache<archetype<false>>);
 	series::with_len(e, 4); series::with_len(t, 2);
 	series::maybe_cached<CE, true>{e};
 }
-}
+} // namespace
 
 TEMPLATE_TEST_CASE("FFT Inverse", "[fft]", MOD_ENGINES) {
 	using E = TestType;
@@ -318,4 +317,4 @@ TEST_CASE("series::vec compose", "[fft]") {
 	}
 }
 
-}} // namespace wala::fft
+} // namespace wala::fft

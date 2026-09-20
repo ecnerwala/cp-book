@@ -5,7 +5,6 @@
 
 namespace wala {
 
-
 // NOTE: This doesn't support negative-cost edges; you can adjust edge weights
 // (e.g. by precomputing a potential function) to make them positive.
 

@@ -5,7 +5,6 @@
 
 namespace wala {
 
-
 /** Binary-indexed tree
  *
  *  A binary indexed tree with N nodes of type T provides the

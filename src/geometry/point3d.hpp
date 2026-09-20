@@ -4,7 +4,6 @@
 
 namespace wala {
 
-
 const double PI = acos(-1.);
 const double TAU = 2 * PI;
 

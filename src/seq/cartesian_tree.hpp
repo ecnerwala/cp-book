@@ -7,7 +7,6 @@
 
 namespace wala {
 
-
 class CartesianTree {
 public:
 	struct Node {

@@ -7,7 +7,6 @@
 
 namespace wala {
 
-
 template <typename T, typename AreaT=T> struct Point {
 public:
 	T x, y;

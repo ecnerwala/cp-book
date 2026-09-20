@@ -43,7 +43,7 @@ struct mst_top_tree_node : public wala::top_tree_node_base<mst_top_tree_node> {
 	}
 };
 
-}
+} // namespace
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);

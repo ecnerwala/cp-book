@@ -181,4 +181,4 @@ template <typename mnum> struct split {
 	}
 };
 
-/* namespace wala::fft::engines */ }
+} // namespace wala::fft::engines

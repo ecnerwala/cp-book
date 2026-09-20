@@ -39,7 +39,9 @@ namespace wala {
 template<class T> int sz(T&& arg) { using std::size; return int(size(std::forward<T>(arg))); }
 inline int nextPow2(int s) { return 1 << (s > 1 ? 32 - __builtin_clz(s-1) : 0); }
 
-namespace fft {
+} // namespace wala
+
+namespace wala::fft {
 
 using std::swap;
 using std::vector;
@@ -74,6 +76,4 @@ template <typename T> struct buffer_pool {
 	static handle get(int n) { return handle(n); }
 };
 
-/* namespace fft */ }
-
-/* namespace wala */ }
+} // namespace wala::fft

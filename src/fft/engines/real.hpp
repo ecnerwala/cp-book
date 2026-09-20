@@ -176,4 +176,4 @@ template <typename dbl = double> struct real {
 	}
 };
 
-/* namespace wala::fft::engines */ }
+} // namespace wala::fft::engines

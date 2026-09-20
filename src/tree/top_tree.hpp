@@ -6,7 +6,6 @@
 
 namespace wala {
 
-
 /**
  * Top tree!
  *

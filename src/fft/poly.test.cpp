@@ -7,8 +7,7 @@
 #include "fft/test_util.test.hpp"
 #include "num/modnum.hpp"
 
-namespace wala {
-namespace fft {
+namespace wala::fft {
 
 using namespace std;
 
@@ -200,4 +199,4 @@ TEST_CASE("poly::multipoint and poly::interpolate", "[fft]") {
 	}
 }
 
-}} // namespace wala::fft
+} // namespace wala::fft

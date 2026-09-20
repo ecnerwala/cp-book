@@ -15,7 +15,6 @@
 
 namespace wala {
 
-
 // Layered suffix array: SuffixArrayBase computes just sa/rank, each further
 // layer statically opts into one more derived structure. Use the leaf classes
 // SuffixArray, SuffixArrayLCP, or SuffixArrayRMQ; the named constructors on

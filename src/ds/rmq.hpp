@@ -7,7 +7,6 @@
 
 namespace wala {
 
-
 template <typename T, class Compare = std::less<T>> class RangeMinQuery : private Compare {
 	static const int BUCKET_SIZE = 32;
 	static const int BUCKET_SIZE_LOG = 5;

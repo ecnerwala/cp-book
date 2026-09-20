@@ -779,4 +779,5 @@ struct spqr_tree {
 		}
 	}
 };
+
 } // namespace wala

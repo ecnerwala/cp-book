@@ -7,7 +7,6 @@
 
 namespace wala {
 
-
 // Direct a graph into a DAG so that given source and sink are the unique sources/sinks.
 // If there are any biconnected components not on the path from the source to
 // the sink, they will not be output, modify the code if necessary.

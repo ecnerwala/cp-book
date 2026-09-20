@@ -6,7 +6,6 @@
 
 namespace wala {
 
-
 // Finds an optimal alphabetic (binary) Huffman code, i.e. one that preserves the ordering of the original weights
 // Implements the Garsia-Wachs algorithm: https://en.wikipedia.org/wiki/Garsia%E2%80%93Wachs_algorithm
 // Returns the code specified as a sequence of depths for each input weight

@@ -7,7 +7,6 @@
 
 namespace wala {
 
-
 template<typename num = int>
 struct hurwitz_quaternion {
 	// we store the doubled quaternion

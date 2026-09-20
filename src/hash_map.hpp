@@ -6,7 +6,6 @@
 
 namespace wala {
 
-
 struct splitmix64_hash {
 	static uint64_t splitmix64(uint64_t x) {
 		// http://xorshift.di.unimi.it/splitmix64.c

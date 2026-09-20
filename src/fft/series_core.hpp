@@ -226,7 +226,7 @@ std::optional<std::reference_wrapper<fft::transformed<typename S::engine_t>>> ca
 	else if constexpr (has_cache_opt<S>) return s.cache_opt();
 	else return std::nullopt;
 }
-/* namespace detail */ }
+} // namespace detail
 
 // A borrowed series which may carry the transform serving it: the runtime
 // counterpart of cached_span in the borrow hierarchy
@@ -361,7 +361,7 @@ cached_span<typename S::engine_t, S::exact_v> as_cached_span(const S& s, fft::tr
 	auto co = cache_of(s);
 	return {s, co ? co->get() : tmp};
 }
-/* namespace detail */ }
+} // namespace detail
 
 // Newton inversion: 1/a mod x^a.len(). Generic over any engine; per doubling step
 // n -> m = 2n this is 5 transforms of size m, reusing b's transform for both circular
@@ -496,7 +496,7 @@ auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t
 		return cached_span<E, S::exact_v>{v.first(used), tmp};
 	}
 }
-/* namespace detail */ }
+} // namespace detail
 
 template <like A, like B> requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v && B::exact_v> operator + (const A& a, const B& b) {
@@ -624,4 +624,4 @@ private:
 	mutable std::vector<entry> caches;
 };
 
-/* namespace wala::series */ }
+} // namespace wala::series

@@ -5,7 +5,6 @@
 
 namespace wala {
 
-
 // number of integer solutions to Ax + By <= C and x,y >= 0
 inline long long lattice_cnt(long long A, long long B, long long C) {
 	using ll = long long;

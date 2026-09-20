@@ -5,7 +5,6 @@
 
 namespace wala {
 
-
 struct static_forest_t {
 	int N;
 

@@ -3,7 +3,6 @@
 
 namespace wala {
 
-
 template <typename num>
 std::vector<num> BerlekampMassey(const std::vector<num>& s) {
 	int n = int(s.size()), L = 0, m = 0;

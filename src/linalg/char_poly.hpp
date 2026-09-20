@@ -6,7 +6,6 @@
 
 namespace wala {
 
-
 // Compute the characteristic polynomial of a square matrix A over some field.
 // Not numerically stable at all.
 // Takes argument by value, use std::move if you can.

@@ -446,4 +446,4 @@ S::engine_t::value_type kth_term_of_linear_recurrence(
 	return kth_term_of_rational_function(p, q_cached, k);
 }
 
-/* namespace wala::series */ }
+} // namespace wala::series

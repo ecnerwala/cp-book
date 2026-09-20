@@ -213,4 +213,4 @@ template <typename num> struct fft_core {
 	}
 };
 
-/* namespace wala::fft */ }
+} // namespace wala::fft

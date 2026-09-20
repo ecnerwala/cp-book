@@ -324,4 +324,4 @@ struct trunc_stable
 	}
 };
 
-/* namespace wala::fft::engines */ }
+} // namespace wala::fft::engines
