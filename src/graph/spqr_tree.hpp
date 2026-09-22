@@ -328,7 +328,7 @@ struct spqr_tree {
 			int nxt_edge_idx = 0; // Counts backedges only
 			std::vector<int> first_occurrence(NV); // First backedge to this depth
 
-			std::vector<int> quarter_edge_depths(4 * NE, -1);
+			std::vector<int> virtual_edge_depths(4 * NE, -1);
 
 			struct tstack_planarity_side_t {
 				// For each side, store pointers to the "linked lists" of the edges inside.
@@ -389,7 +389,7 @@ struct spqr_tree {
 				assert(item >= 1 + NV);
 				int ve = 2 * (item - (1 + NV)) + 0;
 				bool top_dir = stack_dir[top_depth];
-				quarter_edge_depths[ve] = top_depth;
+				virtual_edge_depths[ve] = top_depth;
 				if (is_tree) {
 					return tstack_planarity_t{
 						{{
@@ -632,9 +632,10 @@ struct spqr_tree {
 										side.top_ends[1] = std::exchange(quarter_edge_matches[side.bot_ends[1]], -1);
 										if (side.top_ends[1] != -1) {
 											quarter_edge_matches[side.top_ends[1]] = -1;
-											side.top_depths[1] = quarter_edge_depths[side.top_ends[1] >> 2];
+											side.top_depths[1] = virtual_edge_depths[side.top_ends[1] >> 2];
 										} else {
-											side.top_depths[1] = -1;
+											side.top_depths = {-1, -1};
+											side.top_ends = {-1, -1};
 										}
 									}
 								}
