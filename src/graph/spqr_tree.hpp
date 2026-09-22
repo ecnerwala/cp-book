@@ -330,9 +330,12 @@ struct spqr_tree {
 			std::vector<int> quarter_edge_depths(16 * NE, -1);
 
 			struct tstack_planarity_side_t {
-				// For each side, store pointers to the linked lists of the
+				// For each side, store pointers to the "linked lists" of the edges inside.
 				// v[0] is the outer / longer edges and v[1] is the inner / shorter edges, matching the outside-in sort order.
+
+				// bot_ends are the outer/innermost exposed pieces of the walk down the ear in the tree (they're connected to the bottommost/topmost vertices of the tree path)
 				std::array<int, 2> bot_ends{-1, -1};
+				// top_ends are the outer/innermost exposed backedges
 				std::array<int, 2> top_ends{-1, -1};
 				// depths should be increasing going inwards
 				std::array<int, 2> top_depths{-1, -1};
@@ -384,29 +387,24 @@ struct spqr_tree {
 			auto make_edge_planarity = [&](int item, int top_depth, bool is_tree) -> tstack_planarity_t {
 				assert(item >= 1 + NV);
 				int ve = 2 * (item - (1 + NV)) + 1;
+				bool top_dir = stack_dir[top_depth];
 				if (is_tree) {
-					bool edge_dir = stack_dir[top_depth];
-					// cur side is edge_dir, nxt side is !edge_dir
-					// bot_ends should be nxt, cur
 					return tstack_planarity_t{
 						{{
 							tstack_planarity_side_t{
-								{4 * ve + 2 * edge_dir + 0, 4 * ve + 2 * !edge_dir + 1},
+								{4 * ve + 2 * !top_dir + 0, 4 * ve + 2 * top_dir + 1},
 								{-1, -1},
 								{-1, -1},
 
 							},
 							tstack_planarity_side_t{
-								{4 * ve + 2 * edge_dir + 1, 4 * ve + 2 * !edge_dir + 0},
+								{4 * ve + 2 * !top_dir + 1, 4 * ve + 2 * top_dir + 0},
 								{-1, -1},
 								{-1, -1},
 							}
 						}}
 					};
 				} else {
-					bool edge_dir = !stack_dir[top_depth];
-					// cur side is edge_dir, nxt side is !edge_dir
-					// bot_ends should be nxt, cur
 					return tstack_planarity_t{
 						{{
 							tstack_planarity_side_t{
@@ -416,8 +414,8 @@ struct spqr_tree {
 
 							},
 							tstack_planarity_side_t{
-								{4 * ve + 2 * edge_dir + 1, 4 * ve + 2 * edge_dir + 0},
-								{4 * ve + 2 * !edge_dir + 0, 4 * ve + 2 * !edge_dir + 1},
+								{4 * ve + 2 * !top_dir + 1, 4 * ve + 2 * !top_dir + 0},
+								{4 * ve + 2 * top_dir + 0, 4 * ve + 2 * top_dir + 1},
 								{top_depth, top_depth},
 							}
 						}}
