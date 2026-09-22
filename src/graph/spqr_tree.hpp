@@ -8,6 +8,7 @@
 #include <cassert>
 #include <ranges>
 #include <ostream>
+#include <expected>
 
 namespace wala {
 
@@ -279,7 +280,7 @@ struct spqr_tree {
 
 			[[nodiscard]] bool empty() const { return v[0] == -1; }
 		};
-		std::vector<std::pair<int, bool>> ch_nxt; ch_nxt.reserve(1 + NV + NE + NE); ch_nxt.assign(1 + NV + NE, -1);
+		std::vector<std::pair<int, bool>> ch_nxt; ch_nxt.reserve(1 + NV + NE + NE); ch_nxt.assign(1 + NV + NE, {-1, false});
 		auto concat = [&](item_list a, item_list b) -> item_list {
 			if (b.empty()) return a;
 			if (a.empty()) return b;
@@ -386,7 +387,7 @@ struct spqr_tree {
 			};
 			auto make_edge_planarity = [&](int item, int top_depth, bool is_tree) -> tstack_planarity_t {
 				assert(item >= 1 + NV);
-				int ve = 2 * (item - (1 + NV)) + 1;
+				int ve = 2 * (item - (1 + NV)) + 0;
 				bool top_dir = stack_dir[top_depth];
 				quarter_edge_depths[ve] = top_depth;
 				if (is_tree) {
@@ -620,9 +621,21 @@ struct spqr_tree {
 							if (cur_tstack.planarity) {
 								// Prune off finished cur-side things
 								for (auto& side : cur_tstack.planarity->sides) {
+									assert(side.bot_ends[1] != -1);
 									while (side.top_depths[1] == cur_depth) {
-										side.top_ends[1] = quarter_edge_matches[side.top_ends[1] ^ 1];
-										side.top_depths[1] = quarter_edge_depths[side.top_ends[1] >> 2];
+										{
+											// Link these to bot_ends[1]
+											quarter_edge_matches[side.bot_ends[1]] = side.top_ends[1];
+											quarter_edge_matches[side.top_ends[1]] = side.bot_ends[1];
+											side.bot_ends[1] = side.top_ends[1] ^ 1;
+										}
+										side.top_ends[1] = std::exchange(quarter_edge_matches[side.bot_ends[1]], -1);
+										if (side.top_ends[1] != -1) {
+											quarter_edge_matches[side.top_ends[1]] = -1;
+											side.top_depths[1] = quarter_edge_depths[side.top_ends[1] >> 2];
+										} else {
+											side.top_depths[1] = -1;
+										}
 									}
 								}
 							}
