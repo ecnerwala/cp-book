@@ -482,6 +482,8 @@ struct spqr_tree {
 				assert(get_side(t.spans, !dir).empty());
 
 				// TODO: Wrap planarity
+				if (t.planarity) {
+				}
 				item_vs[item] = make_vs(t.v_start, t.top_depth);
 				item_ch[item] = get_side(t.spans, dir);
 
@@ -613,10 +615,25 @@ struct spqr_tree {
 						}
 
 						if (cur_tstack.first_idx > first_occurrence[cur_depth]) {
-							is_single = false;
 							while (cur_tstack.first_idx > first_occurrence[cur_depth]) {
-								// TODO: Maybe flip planarity
-								cur_tstack = merge_tstack(pop_tstack(), cur_tstack);
+								auto nxt_tstack = pop_tstack();
+								if (nxt_tstack.first_idx > first_occurrence[cur_depth]) {
+									// We will put cur_depth on side 0 until the bottom
+									if (nxt_tstack.top_depth == cur_depth) {
+										flip_tstack_planarity(nxt_tstack);
+									}
+								} else if (!is_single) {
+									assert(cur_tstack.top_depth < cur_depth);
+									if (nxt_tstack.planarity) {
+										if (nxt_tstack.planarity->sides[1].top_depths[1] == cur_depth) {
+											flip_tstack_planarity(cur_tstack);
+										} else {
+											assert(nxt_tstack.planarity->sides[0].top_depths[1] == cur_depth);
+										}
+									}
+								}
+								cur_tstack = merge_tstack(nxt_tstack, cur_tstack);
+								is_single = false;
 							}
 							if (cur_tstack.planarity) {
 								// Prune off finished cur-side things
@@ -646,23 +663,40 @@ struct spqr_tree {
 							// NB: tstack[orig_size] is the vertex and tstack[orig_size+1] is the backedge; maybe we should reverse them?
 							assert(int(tstack.size()) >= orig_tstack + 2);
 
-							if (int(tstack.size()) > orig_tstack + 2) {
-								assert(!is_type_1);
-
-								while (int(tstack.size()) > orig_tstack + 2) {
-									// TODO: Maybe flip planarity
-									cur_tstack = merge_tstack(pop_tstack(), cur_tstack);
+							if (!is_type_1) {
+								// The lowval side should be side 0, everything else goes on side 1.
+								// The exception is tstack[orig_tstack + 2], which could be == lowval on one/both sides,
+								// but is guaranteed to have *something* > lowval by non-type-1-ness
+								auto maybe_flip_base = [&](tstack_t& t) -> void {
+									if (!t.planarity) return;
+									assert(t.planarity->sides[1].top_depths[0] == t.top_depth);
+									if (t.planarity->sides[1].top_depths[1] == lowval) {
+										flip_tstack_planarity(t);
+									}
+									assert(t.planarity->sides[1].top_depths[1] != -1);
+									assert(t.planarity->sides[1].top_depths[1] > lowval);
+								};
+								if (int(tstack.size()) == orig_tstack + 2) {
+									assert(!is_single);
+									maybe_flip_base(cur_tstack);
+								} else {
+									maybe_flip_base(tstack[orig_tstack + 2]);
+									assert(int(tstack.size()) > orig_tstack + 2);
+									while (int(tstack.size()) > orig_tstack + 2) {
+										if (cur_tstack.top_depth == lowval) {
+											// Tuck it on side 0
+											flip_tstack_planarity(cur_tstack);
+										}
+										cur_tstack = merge_tstack(pop_tstack(), cur_tstack);
+										is_single = false;
+									}
 								}
 							}
 
 							assert(int(tstack.size()) == orig_tstack + 2);
 							auto nxt_tstack = pop_tstack();
-							int item;
-							if (is_type_1) {
-								item = maybe_unwrap(nxt_tstack, is_single ? node_type::S : node_type::R);
-							} else {
-								item = -1;
-							}
+							// If !is_type_1, is_single == false
+							int item = maybe_unwrap(nxt_tstack, is_single ? node_type::S : node_type::R);
 							// Merge with the backedge
 							cur_tstack = merge_tstack(nxt_tstack, cur_tstack);
 							// Merge with the vertex
@@ -675,7 +709,30 @@ struct spqr_tree {
 							// The entire subtree should go to the !edge_dir side.
 							cur_tstack.spans = set_sides(!edge_dir, concat(cur_tstack.spans[0], cur_tstack.spans[1]), {});
 
-							// TODO: There's some planarity folding to do here
+							[&]() -> void {
+								if (cur_tstack.planarity) {
+									// precondition: side 0 should be the lowval only side
+									auto& sides = cur_tstack.planarity->sides;
+									auto& s0 = sides[0];
+									auto& s1 = sides[1];
+									quarter_edge_matches[s0.bot_ends[0]] = s1.bot_ends[0];
+									quarter_edge_matches[s1.bot_ends[0]] = s0.bot_ends[0];
+									s1.bot_ends[0] = s0.bot_ends[1];
+									if (s0.top_ends[0] != -1) {
+										if (s0.top_depths[1] != lowval) {
+											assert(!is_type_1);
+											cur_tstack.planarity = std::unexpected(tstack_nonplanarity_t{});
+											return;
+										}
+										assert(s0.top_depths[0] == lowval);
+										quarter_edge_matches[s0.top_ends[0]] = s1.top_ends[0];
+										quarter_edge_matches[s1.top_ends[0]] = s0.top_ends[0];
+										s1.top_ends[0] = s0.top_ends[1];
+										// Already true since the backedge was on side 1
+										assert(s1.top_depths[0] == lowval);
+									}
+								}
+							}();
 
 							if (is_type_1) {
 								finish_tstack(cur_tstack, item, false);
