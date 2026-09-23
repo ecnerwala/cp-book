@@ -134,7 +134,6 @@ struct spqr_tree {
 	// ne_rot_adj[4 * node_edge + 2 * side + dir]
 	std::vector<int> ne_rot_adj;
 
-
 	int size() const { return int(par.size()); }
 
 	static spqr_tree build(int NV, const std::vector<std::array<int, 2>>& edges, bool ternarize = false) {
