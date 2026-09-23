@@ -918,18 +918,22 @@ struct spqr_tree {
 					edge_index[orig_edge] = cur_idx;
 				} else {
 					assert(1 + NV + NE <= cur_item);
-					const auto& p = node_planarity[cur_item - (1 + NV + NE)];
-					if (p) {
-						// Make sure this runs before our planarity_flip checks
-						for (int s = 0; s < 4; s++) {
-							int a = 8 * NE + s, b = (*p)[s];
-							quarter_edge_matches[a] = b;
-							quarter_edge_matches[b] = a;
+					if (cur_type == node_type::O || cur_type == node_type::I) {
+						// No planarity data was set up
+					} else if (cur_type == node_type::S || cur_type == node_type::P || cur_type == node_type::R) {
+						const auto& p = node_planarity[cur_item - (1 + NV + NE)];
+						if (p) {
+							// Make sure this runs before our planarity_flip checks
+							for (int s = 0; s < 4; s++) {
+								int a = 8 * NE + s, b = (*p)[s];
+								quarter_edge_matches[a] = b;
+								quarter_edge_matches[b] = a;
+							}
+						} else {
+							// TODO: Any certificate stuff
+							planar = false;
 						}
-					} else {
-						// TODO: Any certificate stuff
-						planar = false;
-					}
+					} else assert(false);
 				}
 
 				// HACK: Fill ch and vert_items in with orig items / orig verts for now,
