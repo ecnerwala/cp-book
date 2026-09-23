@@ -1024,7 +1024,7 @@ struct spqr_tree {
 					for (int ne = ne_st; ne < ne_en; ne++) {
 						int ne_prv = (ne == ne_st ? ne_en : ne) - 1;
 						int ne_nxt = (ne+1 == ne_en ? ne_st : ne+1);
-						std::array<int, 4> rot_adjs{4 * ne_prv + 1, 4 * ne_prv + 0, 4 * ne_nxt + 3, 4 * ne_nxt + 2};
+						std::array<int, 4> rot_adjs{4 * ne_prv + 1, 4 * ne_nxt + 0, 4 * ne_nxt + 3, 4 * ne_prv + 2};
 						set_ne(ne, {nv_st, nv_st + 1}, {2 * ne_st + (ne - ne_st), 2 * ne_en - 1 - (ne - ne_st)}, rot_adjs);
 					}
 				} else if (cur_type == node_type::S) {
