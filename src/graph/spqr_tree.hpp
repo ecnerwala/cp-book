@@ -120,6 +120,8 @@ struct spqr_tree {
 		// TODO: Should we store the twin node, the twin node type, and/or twin node type == Q?
 
 		std::array<int, 2> nvs;
+
+		std::array<std::array<int, 2>, 2> planar_nxt;
 	};
 	csr<node_edge_t> node_edges;
 
@@ -924,19 +926,30 @@ struct spqr_tree {
 				if (item_vs[cur_item][0] != -1) {
 					node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][0]};
 				}
-				for (int nxt_item = item_ch[cur_item].v[0]; nxt_item != -1; nxt_item = ch_nxt[nxt_item].first) {
-					// TODO: Recover planarity
+				bool planarity_flip = item_ch[cur_item].planarity_flip[0];
+				for (int nxt_item = item_ch[cur_item].v[0]; nxt_item != -1; planarity_flip ^= ch_nxt[nxt_item].second, nxt_item = ch_nxt[nxt_item].first) {
 					ch.dat[ch_en++] = nxt_item;
 					assert(nxt_item >= 1);
 					if (nxt_item < 1 + NV) {
 						node_verts.dat[nv_en++] = {cur_idx, nxt_item - 1};
 					} else {
+						if (cur_type != node_type::R) {
+							assert(!planarity_flip);
+						} else {
+							// Fix the planarity direction right here: reverse quarter_edge_matches upfront;
+							// this breaks the involution property, but from here on we'll never read the low bits anyways.
+							int ve = nxt_item - (1 + NV);
+							std::swap(quarter_edge_matches[4 * ve + 0], quarter_edge_matches[4 * ve + 1]);
+							std::swap(quarter_edge_matches[4 * ve + 2], quarter_edge_matches[4 * ve + 3]);
+						}
 						n_edges++;
 					}
 					if (nxt_item == item_ch[cur_item].v[1]) {
 						assert(ch_nxt[nxt_item].first == -1);
 					}
 				}
+				planarity_flip ^= item_ch[cur_item].planarity_flip[1];
+				assert(!planarity_flip);
 				if (item_vs[cur_item][1] != -1) {
 					node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][1]};
 				}
@@ -955,6 +968,7 @@ struct spqr_tree {
 				int ne_en = node_edges.bounds[cur_idx+1] = ne_st + n_edges;
 
 				auto set_ne = [&](int ne, std::array<int, 2> nvs, std::array<int, 2> nds) -> void {
+					// TODO: How should we deal with planarity?
 					node_edges.dat[ne].node = cur_idx;
 					node_edges.dat[ne].nvs = nvs;
 					node_adj.dat[nds[0]] = {ne, nvs[1]};
