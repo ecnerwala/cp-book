@@ -5,6 +5,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#define REQUIRE_FAST(...) do { if (!(__VA_ARGS__)) REQUIRE(__VA_ARGS__); } while (0)
+
 TEST_CASE("SPQR Tree", "[spqr_tree]") {
 	int NV = 10;
 	for (int NE = 0; NE <= NV * NV; NE++) {
@@ -30,24 +32,24 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				// Basic bounds checks
 				int num_items = int(spqr.par.size());
 
-				REQUIRE(int(spqr.vert_index.size()) == NV);
-				REQUIRE(int(spqr.edge_index.size()) == NE);
-				REQUIRE(int(spqr.par.size()) == num_items);
-				REQUIRE(int(spqr.subtree_end.size()) == num_items);
-				REQUIRE(int(spqr.types.size()) == num_items);
-				REQUIRE(int(spqr.orig_id.size()) == num_items);
-				REQUIRE(int(spqr.ch.size()) == num_items);
-				REQUIRE(int(spqr.node_verts.size()) == num_items);
-				REQUIRE(int(spqr.vert_par_nv.size()) == num_items);
-				REQUIRE(int(spqr.node_edges.size()) == num_items);
-				REQUIRE(int(spqr.node_adj.size()) == 2 * int(spqr.node_verts.dat.size()));
+				REQUIRE_FAST(int(spqr.vert_index.size()) == NV);
+				REQUIRE_FAST(int(spqr.edge_index.size()) == NE);
+				REQUIRE_FAST(int(spqr.par.size()) == num_items);
+				REQUIRE_FAST(int(spqr.subtree_end.size()) == num_items);
+				REQUIRE_FAST(int(spqr.types.size()) == num_items);
+				REQUIRE_FAST(int(spqr.orig_id.size()) == num_items);
+				REQUIRE_FAST(int(spqr.ch.size()) == num_items);
+				REQUIRE_FAST(int(spqr.node_verts.size()) == num_items);
+				REQUIRE_FAST(int(spqr.vert_par_nv.size()) == num_items);
+				REQUIRE_FAST(int(spqr.node_edges.size()) == num_items);
+				REQUIRE_FAST(int(spqr.node_adj.size()) == 2 * int(spqr.node_verts.dat.size()));
 
 				auto check_csr_bounds = [] <typename T> (wala::csr<T> c) -> void {
-					REQUIRE(!c.bounds.empty());
-					REQUIRE(c.bounds.front() == 0);
-					REQUIRE(c.bounds.back() == int(c.dat.size()));
+					REQUIRE_FAST(!c.bounds.empty());
+					REQUIRE_FAST(c.bounds.front() == 0);
+					REQUIRE_FAST(c.bounds.back() == int(c.dat.size()));
 					for (int i = 0; i+1 < int(c.bounds.size()); i++) {
-						REQUIRE(c.bounds[i] <= c.bounds[i+1]);
+						REQUIRE_FAST(c.bounds[i] <= c.bounds[i+1]);
 					}
 				};
 				check_csr_bounds(spqr.ch);
@@ -56,55 +58,55 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				check_csr_bounds(spqr.node_adj);
 
 				// Check tree shape / preorder consistency
-				REQUIRE(num_items >= 1);
+				REQUIRE_FAST(num_items >= 1);
 				for (int i = 0; i < num_items; i++) {
 					if (i > 0) {
-						REQUIRE(spqr.par[i] >= 0);
-						REQUIRE(spqr.par[i] < i);
+						REQUIRE_FAST(spqr.par[i] >= 0);
+						REQUIRE_FAST(spqr.par[i] < i);
 					} else {
-						REQUIRE(spqr.par[i] == -1);
+						REQUIRE_FAST(spqr.par[i] == -1);
 					}
 					int cur_end = i+1;
 					for (int ch : spqr.ch[i]) {
-						REQUIRE(ch == cur_end);
-						REQUIRE(spqr.par[ch] == i);
-						REQUIRE(spqr.subtree_end[ch] > ch);
+						REQUIRE_FAST(ch == cur_end);
+						REQUIRE_FAST(spqr.par[ch] == i);
+						REQUIRE_FAST(spqr.subtree_end[ch] > ch);
 						cur_end = spqr.subtree_end[ch];
 					}
-					REQUIRE(spqr.subtree_end[i] == cur_end);
+					REQUIRE_FAST(spqr.subtree_end[i] == cur_end);
 				}
-				REQUIRE(spqr.subtree_end[0] == num_items);
+				REQUIRE_FAST(spqr.subtree_end[0] == num_items);
 
 				// Check that all verts/edges are present exactly once
 				for (int v = 0; v < NV; v++) {
 					int i = spqr.vert_index[v];
-					REQUIRE(0 <= i);
-					REQUIRE(i < num_items);
-					REQUIRE(spqr.types[i] == node_type::V);
-					REQUIRE(spqr.orig_id[i] == v);
+					REQUIRE_FAST(0 <= i);
+					REQUIRE_FAST(i < num_items);
+					REQUIRE_FAST(spqr.types[i] == node_type::V);
+					REQUIRE_FAST(spqr.orig_id[i] == v);
 				}
 				for (int e = 0; e < NE; e++) {
 					int i = spqr.edge_index[e];
-					REQUIRE(0 <= i);
-					REQUIRE(i < num_items);
-					REQUIRE(spqr.types[i] == node_type::Q);
-					REQUIRE(spqr.orig_id[i] == e);
+					REQUIRE_FAST(0 <= i);
+					REQUIRE_FAST(i < num_items);
+					REQUIRE_FAST(spqr.types[i] == node_type::Q);
+					REQUIRE_FAST(spqr.orig_id[i] == e);
 				}
 				for (int i = 0; i < num_items; i++) {
 					node_type i_type = spqr.types[i];
 
 					if (i_type == node_type::V) {
 						int v = spqr.orig_id[i];
-						REQUIRE(0 <= v);
-						REQUIRE(v < NV);
-						REQUIRE(spqr.vert_index[v] == i);
+						REQUIRE_FAST(0 <= v);
+						REQUIRE_FAST(v < NV);
+						REQUIRE_FAST(spqr.vert_index[v] == i);
 					} else if (i_type == node_type::Q) {
 						int e = spqr.orig_id[i];
-						REQUIRE(0 <= e);
-						REQUIRE(e < NE);
-						REQUIRE(spqr.edge_index[e] == i);
+						REQUIRE_FAST(0 <= e);
+						REQUIRE_FAST(e < NE);
+						REQUIRE_FAST(spqr.edge_index[e] == i);
 					} else {
-						REQUIRE(spqr.orig_id[i] == -1);
+						REQUIRE_FAST(spqr.orig_id[i] == -1);
 					}
 				}
 
@@ -115,11 +117,11 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 					std::array<int, 2> given_ends{spqr.vert_index[edges[e][0]], spqr.vert_index[edges[e][1]]};
 					std::ranges::sort(given_ends);
 					if (given_ends[0] == given_ends[1]) {
-						REQUIRE(nvs.size() == 1);
-						REQUIRE(given_ends[0] == nvs[0].vert);
+						REQUIRE_FAST(nvs.size() == 1);
+						REQUIRE_FAST(given_ends[0] == nvs[0].vert);
 					} else {
 						std::array<int, 2> spqr_ends{nvs[0].vert, nvs[1].vert};
-						REQUIRE(given_ends == spqr_ends);
+						REQUIRE_FAST(given_ends == spqr_ends);
 					}
 				}
 
@@ -137,131 +139,131 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 					auto nes = spqr.node_edges[i];
 					int nv_off = spqr.node_verts.bounds[i];
 
-					for (const auto& nv : nvs) REQUIRE(nv.node == i);
-					for (const auto& ne : nes) REQUIRE(ne.node == i);
+					for (const auto& nv : nvs) REQUIRE_FAST(nv.node == i);
+					for (const auto& ne : nes) REQUIRE_FAST(ne.node == i);
 
-					if (i_type != node_type::V) REQUIRE(spqr.vert_par_nv[i] == -1);
-					else REQUIRE(spqr.vert_par_nv[i] >= 0);
+					if (i_type != node_type::V) REQUIRE_FAST(spqr.vert_par_nv[i] == -1);
+					else REQUIRE_FAST(spqr.vert_par_nv[i] >= 0);
 
 					if (i == 0) {
-						REQUIRE(p == -1);
-						REQUIRE(i_type == node_type::F);
-						REQUIRE(spqr.node_edges[i].empty());
-						REQUIRE(int(ch.size()) == int(nvs.size()));
+						REQUIRE_FAST(p == -1);
+						REQUIRE_FAST(i_type == node_type::F);
+						REQUIRE_FAST(spqr.node_edges[i].empty());
+						REQUIRE_FAST(int(ch.size()) == int(nvs.size()));
 						for (int z = 0; z < int(ch.size()); z++) {
-							REQUIRE(spqr.types[ch[z]] == node_type::V);
-							REQUIRE(nvs[z].vert == ch[z]);
-							REQUIRE(spqr.vert_par_nv[ch[z]] == nv_off + z);
-							REQUIRE(spqr.node_adj[2 * (nv_off + z) + 0].empty());
-							REQUIRE(spqr.node_adj[2 * (nv_off + z) + 1].empty());
+							REQUIRE_FAST(spqr.types[ch[z]] == node_type::V);
+							REQUIRE_FAST(nvs[z].vert == ch[z]);
+							REQUIRE_FAST(spqr.vert_par_nv[ch[z]] == nv_off + z);
+							REQUIRE_FAST(spqr.node_adj[2 * (nv_off + z) + 0].empty());
+							REQUIRE_FAST(spqr.node_adj[2 * (nv_off + z) + 1].empty());
 						}
 					} else {
-						REQUIRE(p != -1);
-						REQUIRE(i_type != node_type::F);
+						REQUIRE_FAST(p != -1);
+						REQUIRE_FAST(i_type != node_type::F);
 
 						if (i_type == node_type::V) {
-							REQUIRE(nvs.empty());
-							REQUIRE(nes.empty());
+							REQUIRE_FAST(nvs.empty());
+							REQUIRE_FAST(nes.empty());
 
 							for (int z = 0; z < int(ch.size()); z++) {
-								REQUIRE(spqr.types[ch[z]] == node_type::Q);
+								REQUIRE_FAST(spqr.types[ch[z]] == node_type::Q);
 							}
 						} else if (i_type == node_type::Q && p_type == node_type::V) {
-							REQUIRE(nes.size() == 1);
-							REQUIRE(nvs[0].vert == p);
-							REQUIRE(spqr.types[ch[0]] != node_type::V);
-							REQUIRE(nes[0].twin_ne == spqr.node_edges.bounds[ch[0]]);
+							REQUIRE_FAST(nes.size() == 1);
+							REQUIRE_FAST(nvs[0].vert == p);
+							REQUIRE_FAST(spqr.types[ch[0]] != node_type::V);
+							REQUIRE_FAST(nes[0].twin_ne == spqr.node_edges.bounds[ch[0]]);
 
 							if (edges[spqr.orig_id[i]][0] == edges[spqr.orig_id[i]][1]) {
 								// Self-loop Q node
-								REQUIRE(ch.size() == 1);
-								REQUIRE(nvs.size() == 1);
-								REQUIRE((nes[0].nvs == std::array<int, 2>{nv_off + 0, nv_off + 0}));
-								REQUIRE(spqr.types[ch[0]] == node_type::O);
+								REQUIRE_FAST(ch.size() == 1);
+								REQUIRE_FAST(nvs.size() == 1);
+								REQUIRE_FAST((nes[0].nvs == std::array<int, 2>{nv_off + 0, nv_off + 0}));
+								REQUIRE_FAST(spqr.types[ch[0]] == node_type::O);
 							} else {
-								REQUIRE(ch.size() == 2);
-								REQUIRE(nvs.size() == 2);
-								REQUIRE(spqr.types[ch[1]] == node_type::V);
-								REQUIRE(nvs[1].vert == ch[1]);
-								REQUIRE((nes[0].nvs == std::array<int, 2>{nv_off + 0, nv_off + 1}));
+								REQUIRE_FAST(ch.size() == 2);
+								REQUIRE_FAST(nvs.size() == 2);
+								REQUIRE_FAST(spqr.types[ch[1]] == node_type::V);
+								REQUIRE_FAST(nvs[1].vert == ch[1]);
+								REQUIRE_FAST((nes[0].nvs == std::array<int, 2>{nv_off + 0, nv_off + 1}));
 							}
 						} else if (i_type == node_type::Q || i_type == node_type::S || i_type == node_type::P || i_type == node_type::R || i_type == node_type::I || i_type == node_type::O) {
-							REQUIRE((p_type == node_type::Q || p_type == node_type::S || p_type == node_type::P || p_type == node_type::R));
+							REQUIRE_FAST((p_type == node_type::Q || p_type == node_type::S || p_type == node_type::P || p_type == node_type::R));
 
-							REQUIRE(!nvs.empty());
-							REQUIRE(!nes.empty());
-							REQUIRE(nes[0].nvs == std::array<int, 2>{nv_off, nv_off + int(nvs.size()) - 1});
+							REQUIRE_FAST(!nvs.empty());
+							REQUIRE_FAST(!nes.empty());
+							REQUIRE_FAST(nes[0].nvs == std::array<int, 2>{nv_off, nv_off + int(nvs.size()) - 1});
 
 							int nxt_nv = 1, nxt_ne = 1;
 							int last_loc = 0;
 							for (auto j : ch) {
 								int loc;
 								if (spqr.types[j] == node_type::V) {
-									REQUIRE(nvs[nxt_nv].vert == j);
-									REQUIRE(spqr.vert_par_nv[j] == nv_off + nxt_nv);
+									REQUIRE_FAST(nvs[nxt_nv].vert == j);
+									REQUIRE_FAST(spqr.vert_par_nv[j] == nv_off + nxt_nv);
 									loc = 2 * (nv_off + nxt_nv);
 									nxt_nv++;
 								} else {
-									REQUIRE(nes[nxt_ne].twin_ne == spqr.node_edges.bounds[j]);
-									REQUIRE(spqr.node_verts.bounds[i] <= nes[nxt_ne].nvs[0]);
-									REQUIRE(nes[nxt_ne].nvs[0] < nes[nxt_ne].nvs[1]);
-									REQUIRE(nes[nxt_ne].nvs[1] < spqr.node_verts.bounds[i+1]);
+									REQUIRE_FAST(nes[nxt_ne].twin_ne == spqr.node_edges.bounds[j]);
+									REQUIRE_FAST(spqr.node_verts.bounds[i] <= nes[nxt_ne].nvs[0]);
+									REQUIRE_FAST(nes[nxt_ne].nvs[0] < nes[nxt_ne].nvs[1]);
+									REQUIRE_FAST(nes[nxt_ne].nvs[1] < spqr.node_verts.bounds[i+1]);
 									loc = nes[nxt_ne].nvs[0] + nes[nxt_ne].nvs[1];
 									nxt_ne++;
 								}
-								REQUIRE(loc >= last_loc);
+								REQUIRE_FAST(loc >= last_loc);
 								last_loc = loc;
 							}
 							if (i_type != node_type::O) nxt_nv++;
-							REQUIRE(nxt_nv == int(nvs.size()));
-							REQUIRE(nxt_ne == int(nes.size()));
+							REQUIRE_FAST(nxt_nv == int(nvs.size()));
+							REQUIRE_FAST(nxt_ne == int(nes.size()));
 
 							if (i_type == node_type::O) {
-								REQUIRE(p_type == node_type::Q);
-								REQUIRE(ch.empty());
+								REQUIRE_FAST(p_type == node_type::Q);
+								REQUIRE_FAST(ch.empty());
 							} else if (i_type == node_type::I) {
-								REQUIRE(p_type == node_type::Q);
-								REQUIRE(ch.empty());
+								REQUIRE_FAST(p_type == node_type::Q);
+								REQUIRE_FAST(ch.empty());
 							} else if (i_type == node_type::Q) {
-								REQUIRE(ch.empty());
+								REQUIRE_FAST(ch.empty());
 							} else if (i_type == node_type::S) {
 								if (ternarize) {
-									REQUIRE(nes.size() == 3);
+									REQUIRE_FAST(nes.size() == 3);
 								} else {
-									REQUIRE(p_type != node_type::S);
+									REQUIRE_FAST(p_type != node_type::S);
 								}
-								REQUIRE(nes.size() == nvs.size());
-								REQUIRE(nes.size() >= 3);
+								REQUIRE_FAST(nes.size() == nvs.size());
+								REQUIRE_FAST(nes.size() >= 3);
 								for (int z = 0; z < int(nes.size()); z++) {
-									REQUIRE(nes[z].nvs[0] == (z ? nv_off + z-1 : nv_off));
-									REQUIRE(nes[z].nvs[1] == (z ? nv_off + z-0 : nv_off + int(nvs.size()) - 1));
+									REQUIRE_FAST(nes[z].nvs[0] == (z ? nv_off + z-1 : nv_off));
+									REQUIRE_FAST(nes[z].nvs[1] == (z ? nv_off + z-0 : nv_off + int(nvs.size()) - 1));
 								}
 							} else if (i_type == node_type::P) {
 								if (ternarize) {
-									REQUIRE(nes.size() == 3);
+									REQUIRE_FAST(nes.size() == 3);
 								} else {
-									REQUIRE(p_type != node_type::P);
+									REQUIRE_FAST(p_type != node_type::P);
 								}
-								REQUIRE(nvs.size() == 2);
-								REQUIRE(nes.size() >= 3);
+								REQUIRE_FAST(nvs.size() == 2);
+								REQUIRE_FAST(nes.size() >= 3);
 								for (auto ne : nes) {
-									REQUIRE(ne.nvs[0] == nv_off + 0);
-									REQUIRE(ne.nvs[1] == nv_off + 1);
+									REQUIRE_FAST(ne.nvs[0] == nv_off + 0);
+									REQUIRE_FAST(ne.nvs[1] == nv_off + 1);
 								}
 							} else if (i_type == node_type::R) {
-								REQUIRE(nvs.size() >= 4);
-								REQUIRE(nes.size() >= 6);
+								REQUIRE_FAST(nvs.size() >= 4);
+								REQUIRE_FAST(nes.size() >= 6);
 								// TODO: What else should we check
-							} else REQUIRE(false);
-						} else REQUIRE(false);
+							} else REQUIRE_FAST(false);
+						} else REQUIRE_FAST(false);
 					}
 
 					for (int ne : spqr.node_edges.indices(i)) {
 						// Check twins have matching vertices
 						int twin_ne = spqr.node_edges.dat[ne].twin_ne;
-						REQUIRE(spqr.node_edges.dat[twin_ne].twin_ne == ne);
+						REQUIRE_FAST(spqr.node_edges.dat[twin_ne].twin_ne == ne);
 						for (int z = 0; z < 2; z++) {
-							REQUIRE(
+							REQUIRE_FAST(
 								spqr.node_verts.dat[spqr.node_edges.dat[ne].nvs[z]].vert ==
 								spqr.node_verts.dat[spqr.node_edges.dat[twin_ne].nvs[z]].vert
 							);
@@ -270,30 +272,30 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 
 					// Check node_adj
 					// Check the total counts are correct
-					REQUIRE(spqr.node_adj.bounds[2 * spqr.node_verts.bounds[i]] == 2 * spqr.node_edges.bounds[i]);
-					REQUIRE(spqr.node_adj.bounds[2 * spqr.node_verts.bounds[i+1]] == 2 * spqr.node_edges.bounds[i+1]);
+					REQUIRE_FAST(spqr.node_adj.bounds[2 * spqr.node_verts.bounds[i]] == 2 * spqr.node_edges.bounds[i]);
+					REQUIRE_FAST(spqr.node_adj.bounds[2 * spqr.node_verts.bounds[i+1]] == 2 * spqr.node_edges.bounds[i+1]);
 					for (int nv : spqr.node_verts.indices(i)) {
 						for (auto [ne, dest] : spqr.node_adj[2 * nv + 0]) {
-							REQUIRE(spqr.node_edges.dat[ne].nvs[1] == nv);
-							REQUIRE(spqr.node_edges.dat[ne].nvs[0] == dest);
-							REQUIRE(dest <= nv);
+							REQUIRE_FAST(spqr.node_edges.dat[ne].nvs[1] == nv);
+							REQUIRE_FAST(spqr.node_edges.dat[ne].nvs[0] == dest);
+							REQUIRE_FAST(dest <= nv);
 						}
 						for (auto [ne, dest] : spqr.node_adj[2 * nv + 1]) {
-							REQUIRE(spqr.node_edges.dat[ne].nvs[0] == nv);
-							REQUIRE(spqr.node_edges.dat[ne].nvs[1] == dest);
-							REQUIRE(dest >= nv);
+							REQUIRE_FAST(spqr.node_edges.dat[ne].nvs[0] == nv);
+							REQUIRE_FAST(spqr.node_edges.dat[ne].nvs[1] == dest);
+							REQUIRE_FAST(dest >= nv);
 						}
 						if (i_type == node_type::P) {
 							// Check that edge ids are strictly decreasing on the left, strictly increasing on the right
 							auto adj0 = spqr.node_adj[2 * nv + 0];
-							REQUIRE(std::ranges::adjacent_find(adj0, std::ranges::less_equal{}, &spqr_tree::node_adj_t::ne) == adj0.end());
+							REQUIRE_FAST(std::ranges::adjacent_find(adj0, std::ranges::less_equal{}, &spqr_tree::node_adj_t::ne) == adj0.end());
 							auto adj1 = spqr.node_adj[2 * nv + 1];
-							REQUIRE(std::ranges::adjacent_find(adj1, std::ranges::greater_equal{}, &spqr_tree::node_adj_t::ne) == adj1.end());
+							REQUIRE_FAST(std::ranges::adjacent_find(adj1, std::ranges::greater_equal{}, &spqr_tree::node_adj_t::ne) == adj1.end());
 						} else {
 							for (int z = 0; z < 2; z++) {
 								// Check that destinations are strictly decreasing
 								auto adj = spqr.node_adj[2 * nv + z];
-								REQUIRE(std::ranges::adjacent_find(adj, std::ranges::less_equal{}, &spqr_tree::node_adj_t::dest_nv) == adj.end());
+								REQUIRE_FAST(std::ranges::adjacent_find(adj, std::ranges::less_equal{}, &spqr_tree::node_adj_t::dest_nv) == adj.end());
 							}
 						}
 					}
@@ -309,13 +311,13 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 					if (spqr.node_planar[i]) {
 						for (int a = rot_st; a < rot_en; a++) {
 							int b = spqr.ne_rot_adj[a];
-							REQUIRE(b >= rot_st);
-							REQUIRE(b < rot_en);
+							REQUIRE_FAST(b >= rot_st);
+							REQUIRE_FAST(b < rot_en);
 							// Make sure it's actually an involution/doubly-linked
-							REQUIRE(spqr.ne_rot_adj[b] == a);
-							REQUIRE((b & 1) != (a & 1));
+							REQUIRE_FAST(spqr.ne_rot_adj[b] == a);
+							REQUIRE_FAST((b & 1) != (a & 1));
 							// Make sure the 2 endpoints have the same vertex
-							REQUIRE(spqr.node_edges.dat[a >> 2].nvs[(a & 2) >> 1] == spqr.node_edges.dat[b >> 2].nvs[(b & 2) >> 1]);
+							REQUIRE_FAST(spqr.node_edges.dat[a >> 2].nvs[(a & 2) >> 1] == spqr.node_edges.dat[b >> 2].nvs[(b & 2) >> 1]);
 						}
 
 						if (spqr.types[i] == node_type::F || spqr.types[i] == node_type::V) {
@@ -338,7 +340,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 								cur = spqr.ne_rot_adj[cur];
 							} while (cur != a);
 						}
-						REQUIRE(num_vert_cycles == num_verts);
+						REQUIRE_FAST(num_vert_cycles == num_verts);
 
 						// Verify the euler characteristic
 						int num_face_cycles = 0;
@@ -353,11 +355,11 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 								cur = spqr.ne_rot_adj[cur];
 							} while (cur != a);
 						}
-						REQUIRE(num_face_cycles == num_edges - num_verts + 2);
+						REQUIRE_FAST(num_face_cycles == num_edges - num_verts + 2);
 					} else {
 						// Make sure everything's 0-ed out
 						for (int b = rot_st; b < rot_en; b++) {
-							REQUIRE(spqr.ne_rot_adj[b] == -1);
+							REQUIRE_FAST(spqr.ne_rot_adj[b] == -1);
 						}
 					}
 				}
