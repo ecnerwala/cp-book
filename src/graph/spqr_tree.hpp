@@ -939,8 +939,10 @@ struct spqr_tree {
 							// Fix the planarity direction right here: reverse quarter_edge_matches upfront;
 							// this breaks the involution property, but from here on we'll never read the low bits anyways.
 							int ve = nxt_item - (1 + NV);
-							std::swap(quarter_edge_matches[4 * ve + 0], quarter_edge_matches[4 * ve + 1]);
-							std::swap(quarter_edge_matches[4 * ve + 2], quarter_edge_matches[4 * ve + 3]);
+							if (planarity_flip) {
+								std::swap(quarter_edge_matches[4 * ve + 0], quarter_edge_matches[4 * ve + 1]);
+								std::swap(quarter_edge_matches[4 * ve + 2], quarter_edge_matches[4 * ve + 3]);
+							}
 						}
 						n_edges++;
 					}
