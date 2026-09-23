@@ -447,21 +447,25 @@ struct spqr_tree {
 				assert(item == get_side(t.spans, top_dir).v[1]);
 				if (item_types[item] == type) {
 					t.spans = set_sides(top_dir, item_ch[item], {});
-					assert(node_planarity[item - (1 + NV)]);
-					const auto& matches = *node_planarity[item - (1 + NV)];
-					// TODO: Unwrap planarity (or don't because it's S/P type and trivial anyways? need to do something to unclobber quarter_edge_merges at least)
-					assert(t.planarity);
-					auto& p = *t.planarity;
-					if (is_tree) {
-						p.sides[0].bot_ends[0] = matches[2 * !top_dir + 1];
-						p.sides[0].bot_ends[1] = matches[2 * top_dir + 0];
-						p.sides[1].bot_ends[0] = matches[2 * !top_dir + 0];
-						p.sides[1].bot_ends[1] = matches[2 * top_dir + 1];
-					} else {
-						p.sides[1].bot_ends[0] = matches[2 * !top_dir + 0];
-						p.sides[1].bot_ends[1] = matches[2 * !top_dir + 1];
-						p.sides[1].top_ends[0] = matches[2 * top_dir + 1];
-						p.sides[1].top_ends[1] = matches[2 * top_dir + 0];
+					{
+						// Unwrap the planarity data
+						// We don't really need to maintain this at all because S/P nodes are known to be trivially planar
+						// The current state is just make_edge_planarity(wrapped), which means that it has the right shape, just needs to be relabelled.
+						assert(node_planarity[item - (1 + NV + NE)]);
+						const auto& matches = *node_planarity[item - (1 + NV + NE)];
+						assert(t.planarity);
+						auto& p = *t.planarity;
+						if (is_tree) {
+							p.sides[0].bot_ends[0] = matches[2 * !top_dir + 1];
+							p.sides[0].bot_ends[1] = matches[2 * top_dir + 0];
+							p.sides[1].bot_ends[0] = matches[2 * !top_dir + 0];
+							p.sides[1].bot_ends[1] = matches[2 * top_dir + 1];
+						} else {
+							p.sides[1].bot_ends[0] = matches[2 * !top_dir + 0];
+							p.sides[1].bot_ends[1] = matches[2 * !top_dir + 1];
+							p.sides[1].top_ends[0] = matches[2 * top_dir + 1];
+							p.sides[1].top_ends[1] = matches[2 * top_dir + 0];
+						}
 					}
 					return item;
 				} else {
@@ -487,10 +491,10 @@ struct spqr_tree {
 						matches[2 * top_dir + 1] = p.sides[1].top_ends[0];
 						matches[2 * top_dir + 0] = p.sides[1].top_ends[1];
 					}
-					node_planarity[item - (1 + NV)] = matches;
+					node_planarity[item - (1 + NV + NE)] = matches;
 				} else {
 					assert(item_types[item] == node_type::R);
-					node_planarity[item - (1 + NV)] = std::unexpected(nonplanarity_certficate_t{});
+					node_planarity[item - (1 + NV + NE)] = std::unexpected(nonplanarity_certficate_t{});
 				}
 				item_vs[item] = make_vs(t.v_start, t.top_depth);
 				item_ch[item] = get_side(t.spans, top_dir);
