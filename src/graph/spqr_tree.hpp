@@ -120,10 +120,11 @@ struct spqr_tree {
 		// TODO: Should we store the twin node, the twin node type, and/or twin node type == Q?
 
 		std::array<int, 2> nvs;
-
-		std::array<std::array<int, 2>, 2> planar_nxt;
 	};
 	csr<node_edge_t> node_edges;
+	// Planarity adjacencies: ne_rot_adj is an involution of facing quarter-edges, indexed according to:
+	// ne_rot_adj[4 * node_edge + 2 * side + dir]
+	std::vector<int> ne_rot_adj;
 
 	struct node_adj_t {
 		int ne;
@@ -303,7 +304,7 @@ struct spqr_tree {
 		// Quarter edges for planar embedding building.
 		// Each vedge has 4 entries by 4 * vedge_id + 2 * source_vert + is_cw (is_cw is arbitrary)
 		// vedges are identified with what item they cap, numbered by (item - 1 - NV)
-		std::vector<int> quarter_edge_matches(8 * NE, -1);
+		std::vector<int> quarter_edge_matches(8 * NE + 4, -1);
 		struct nonplanarity_certficate_t {};
 		std::vector<std::expected<std::array<int, 4>, nonplanarity_certficate_t>> node_planarity; node_planarity.reserve(NE);
 
@@ -874,6 +875,7 @@ struct spqr_tree {
 			csr<node_edge_t> node_edges;
 			node_edges.bounds.resize(tot_items + 1);
 			node_edges.dat.resize(tot_node_edges);
+			std::vector<int> ne_rot_adj(4 * tot_node_edges, -1);
 
 			csr<node_adj_t> node_adj;
 			node_adj.bounds.resize(tot_node_verts * 2 + 1);
@@ -886,6 +888,7 @@ struct spqr_tree {
 				int item_id;
 			};
 			std::vector<ch_buf_t> ch_buf(tot_items);
+			std::vector<int> rot_edge_ne(2 * NE + 1);
 
 			int nxt_unassigned_idx = 0;
 
@@ -900,6 +903,7 @@ struct spqr_tree {
 			auto push_item = [&](int cur_item) -> void {
 				int cur_idx = nxt_unassigned_idx++;
 				node_type cur_type = types[cur_idx] = item_types[cur_item];
+				bool planar = true;
 				if (cur_type == node_type::F) {
 					assert(cur_item == 0);
 				} else if (cur_type == node_type::V) {
@@ -914,6 +918,18 @@ struct spqr_tree {
 					edge_index[orig_edge] = cur_idx;
 				} else {
 					assert(1 + NV + NE <= cur_item);
+					const auto& p = node_planarity[cur_item - (1 + NV + NE)];
+					if (p) {
+						// Make sure this runs before our planarity_flip checks
+						for (int s = 0; s < 4; s++) {
+							int a = 8 * NE + s, b = (*p)[s];
+							quarter_edge_matches[a] = b;
+							quarter_edge_matches[b] = a;
+						}
+					} else {
+						// TODO: Any certificate stuff
+						planar = false;
+					}
 				}
 
 				// HACK: Fill ch and vert_items in with orig items / orig verts for now,
@@ -969,12 +985,12 @@ struct spqr_tree {
 				int ne_st = node_edges.bounds[cur_idx];
 				int ne_en = node_edges.bounds[cur_idx+1] = ne_st + n_edges;
 
-				auto set_ne = [&](int ne, std::array<int, 2> nvs, std::array<int, 2> nds) -> void {
-					// TODO: How should we deal with planarity?
+				auto set_ne = [&](int ne, std::array<int, 2> nvs, std::array<int, 2> nds, std::array<int, 4> rot_adjs) -> void {
 					node_edges.dat[ne].node = cur_idx;
 					node_edges.dat[ne].nvs = nvs;
 					node_adj.dat[nds[0]] = {ne, nvs[1]};
 					node_adj.dat[nds[1]] = {ne, nvs[0]};
+					for (int z = 0; z < 4; z++) ne_rot_adj[4 * ne + z] = rot_adjs[z];
 				};
 				if (cur_type == node_type::F) {
 					// Just set node_adj bounds and we're good
@@ -988,7 +1004,7 @@ struct spqr_tree {
 					assert(n_edges == 1);
 					node_adj.bounds[2 * nv_st + 1] = 2 * ne_st + 1 * n_edges;
 					node_adj.bounds[2 * nv_st + 2] = 2 * ne_st + 2 * n_edges;
-					set_ne(ne_st, {nv_st, nv_st}, {2 * ne_st + 1, 2 * ne_st});
+					set_ne(ne_st, {nv_st, nv_st}, {2 * ne_st + 1, 2 * ne_st}, {4 * ne_st + 3, 4 * ne_st + 2, 4 * ne_st + 1, 4 * ne_st + 0});
 				} else if (cur_type == node_type::Q || cur_type == node_type::I) {
 					assert(n_verts == 2);
 					assert(n_edges == 1);
@@ -996,7 +1012,7 @@ struct spqr_tree {
 					node_adj.bounds[2 * nv_st + 2] = 2 * ne_st + 1 * n_edges;
 					node_adj.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
 					node_adj.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
-					set_ne(ne_st, {nv_st, nv_st + 1}, {2 * ne_st, 2 * ne_st + 1});
+					set_ne(ne_st, {nv_st, nv_st + 1}, {2 * ne_st, 2 * ne_st + 1}, {4 * ne_st + 1, 4 * ne_st + 0, 4 * ne_st + 3, 4 * ne_st + 2});
 				} else if (cur_type == node_type::P) {
 					// Special case: tiebreak the parallel edges so they're reversed
 					assert(n_verts == 2);
@@ -1006,7 +1022,10 @@ struct spqr_tree {
 					node_adj.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
 					node_adj.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
 					for (int ne = ne_st; ne < ne_en; ne++) {
-						set_ne(ne, {nv_st, nv_st + 1}, {2 * ne_st + (ne - ne_st), 2 * ne_en - 1 - (ne - ne_st)});
+						int ne_prv = (ne == ne_st ? ne_en : ne) - 1;
+						int ne_nxt = (ne+1 == ne_en ? ne_st : ne+1);
+						std::array<int, 4> rot_adjs{4 * ne_prv + 1, 4 * ne_prv + 0, 4 * ne_nxt + 3, 4 * ne_nxt + 2};
+						set_ne(ne, {nv_st, nv_st + 1}, {2 * ne_st + (ne - ne_st), 2 * ne_en - 1 - (ne - ne_st)}, rot_adjs);
 					}
 				} else if (cur_type == node_type::S) {
 					assert(n_verts == n_edges);
@@ -1017,9 +1036,13 @@ struct spqr_tree {
 					// Fix bounds for the cap
 					node_adj.bounds[2 * nv_st + 1]--;
 					node_adj.bounds[2 * nv_en - 1]++;
-					set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1});
+					set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1}, {4 * (ne_st+1) + 1, 4 * (ne_st+1) + 0, 4 * (ne_en-1) + 3, 4 * (ne_en-1) + 2});
 					for (int i = 1; i < n_edges; i++) {
-						set_ne(ne_st + i, {nv_st + i - 1, nv_st + i}, {2 * ne_st + 2 * i - 1, 2 * ne_st + 2 * i});
+						int ne = ne_st + i;
+						std::array<int, 4> rot_adjs{4 * (ne-1) + 3, 4 * (ne-1) + 2, 4 * (ne+1) + 1, 4 * (ne+1) + 0};
+						if (ne-1 == ne_st) { rot_adjs[0] = 4 * ne_st + 1, rot_adjs[1] = 4 * ne_st + 0; }
+						if (ne+1 == ne_en) { rot_adjs[2] = 4 * ne_st + 3, rot_adjs[3] = 4 * ne_st + 2; }
+						set_ne(ne, {nv_st + i - 1, nv_st + i}, {2 * ne - 1, 2 * ne}, rot_adjs);
 					}
 				} else if (cur_type == node_type::R) {
 					// Bucketsort the children by the midpoint
@@ -1061,6 +1084,30 @@ struct spqr_tree {
 					}
 
 					{
+						// Set up the reverse mapping for ourselves
+						int nxt_ne = ne_en;
+						for (int i = ch_en - 1; i >= ch_st; i--) {
+							int item = ch.dat[i];
+							assert(item >= 1);
+							if (item < 1 + NV) continue;
+							nxt_ne--;
+							rot_edge_ne[item - (1 + NV)] = nxt_ne;
+						}
+						assert(nxt_ne == ne_st + 1);
+						rot_edge_ne[2 * NE] = ne_st;
+					}
+					auto map_rot_edge = [&](int ve) -> std::array<int, 4> {
+						if (!planar) return {-1, -1, -1, -1};
+						std::array<int, 4> res{};
+						for (int z = 0; z < 4; z++) {
+							int o = quarter_edge_matches[4 * ve + z];
+							assert(o != -1);
+							res[z] = (rot_edge_ne[o >> 2] << 2) + (o & 2) + !(z & 1);
+						}
+						return res;
+					};
+
+					{
 						int off = 2 * ne_st;
 						for (int i = 2 * nv_st + 1; i <= 2 * nv_en; i++) {
 							off += std::exchange(node_adj.bounds[i], off);
@@ -1086,12 +1133,12 @@ struct spqr_tree {
 							set_ne(nxt_ne, nvs, {
 								node_adj.bounds[2 * nvs[0] + 2]++,
 								node_adj.bounds[2 * nvs[1] + 1]++,
-							});
+							}, map_rot_edge(item - (1 + NV)));
 						}
 						assert(nxt_ne == ne_st + 1);
 
 						// Insert the cap / bump its bound
-						set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1});
+						set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1}, map_rot_edge(2 * NE));
 						node_adj.bounds[2 * nv_en - 1]++;
 					}
 				} else assert(false);
@@ -1160,6 +1207,7 @@ struct spqr_tree {
 				std::move(node_verts),
 				std::move(vert_par_nv),
 				std::move(node_edges),
+				std::move(ne_rot_adj),
 				std::move(node_adj),
 			};
 		}
