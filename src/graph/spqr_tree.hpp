@@ -347,7 +347,7 @@ struct spqr_tree {
 				std::array<int, 2> top_depths{-1, -1};
 			};
 			struct tstack_planarity_t {
-				// The convention is that sides[1].top_depths[0] == top_depth, i.e. at least one minimal return lives on side 1
+				// The convention is that sides[0].top_depths[0] == top_depth, i.e. at least one minimal return lives on side 0
 				std::array<tstack_planarity_side_t, 2> sides;
 			};
 			struct tstack_nonplanarity_t {
@@ -401,9 +401,9 @@ struct spqr_tree {
 					p.sides[0].bot_ends = {4 * ve + 2 * !top_dir + 0, 4 * ve + 2 * top_dir + 1};
 					p.sides[1].bot_ends = {4 * ve + 2 * !top_dir + 1, 4 * ve + 2 * top_dir + 0};
 				} else {
-					p.sides[1].bot_ends = {4 * ve + 2 * !top_dir + 1, 4 * ve + 2 * !top_dir + 0};
-					p.sides[1].top_ends = {4 * ve + 2 * top_dir + 0, 4 * ve + 2 * top_dir + 1};
-					p.sides[1].top_depths = {top_depth, top_depth};
+					p.sides[0].bot_ends = {4 * ve + 2 * !top_dir + 0, 4 * ve + 2 * !top_dir + 1};
+					p.sides[0].top_ends = {4 * ve + 2 * top_dir + 1, 4 * ve + 2 * top_dir + 0};
+					p.sides[0].top_depths = {top_depth, top_depth};
 				}
 				return p;
 			};
@@ -464,10 +464,10 @@ struct spqr_tree {
 							p.sides[1].bot_ends[0] = matches[2 * !top_dir + 0];
 							p.sides[1].bot_ends[1] = matches[2 * top_dir + 1];
 						} else {
-							p.sides[1].bot_ends[0] = matches[2 * !top_dir + 0];
-							p.sides[1].bot_ends[1] = matches[2 * !top_dir + 1];
-							p.sides[1].top_ends[0] = matches[2 * top_dir + 1];
-							p.sides[1].top_ends[1] = matches[2 * top_dir + 0];
+							p.sides[0].bot_ends[0] = matches[2 * !top_dir + 1];
+							p.sides[0].bot_ends[1] = matches[2 * !top_dir + 0];
+							p.sides[0].top_ends[0] = matches[2 * top_dir + 0];
+							p.sides[0].top_ends[1] = matches[2 * top_dir + 1];
 						}
 					}
 					return item;
@@ -489,10 +489,10 @@ struct spqr_tree {
 						matches[2 * !top_dir + 0] = p.sides[1].bot_ends[0];
 						matches[2 * top_dir + 1] = p.sides[1].bot_ends[1];
 					} else {
-						matches[2 * !top_dir + 0] = p.sides[1].bot_ends[0];
-						matches[2 * !top_dir + 1] = p.sides[1].bot_ends[1];
-						matches[2 * top_dir + 1] = p.sides[1].top_ends[0];
-						matches[2 * top_dir + 0] = p.sides[1].top_ends[1];
+						matches[2 * !top_dir + 1] = p.sides[0].bot_ends[0];
+						matches[2 * !top_dir + 0] = p.sides[0].bot_ends[1];
+						matches[2 * top_dir + 0] = p.sides[0].top_ends[0];
+						matches[2 * top_dir + 1] = p.sides[0].top_ends[1];
 					}
 					node_planarity[item - (1 + NV + NE)] = matches;
 				} else {
@@ -650,19 +650,19 @@ struct spqr_tree {
 							while (cur_tstack.first_idx > first_occurrence[cur_depth]) {
 								auto nxt_tstack = pop_tstack();
 								if (nxt_tstack.first_idx > first_occurrence[cur_depth]) {
-									// We will put cur_depth on side 0 until the bottom
+									// We will put cur_depth on side 1 until the bottom
 									if (nxt_tstack.top_depth == cur_depth) {
 										flip_tstack_planarity(nxt_tstack);
 									}
 								} else if (!is_single) {
 									assert(cur_tstack.top_depth < cur_depth);
 									if (nxt_tstack.planarity) {
-										if (nxt_tstack.planarity->sides[1].top_depths[1] == cur_depth) {
+										if (nxt_tstack.planarity->sides[0].top_depths[1] == cur_depth) {
 											// We need to flip cur_tstack and nxt_tstack relative to each other.
 											// Flip the one with worse top_depth.
 											flip_tstack_planarity(cur_tstack.top_depth < nxt_tstack.top_depth ? nxt_tstack : cur_tstack);
 										} else {
-											assert(nxt_tstack.planarity->sides[0].top_depths[1] == cur_depth);
+											assert(nxt_tstack.planarity->sides[1].top_depths[1] == cur_depth);
 										}
 									}
 								}
@@ -705,12 +705,12 @@ struct spqr_tree {
 								{
 									auto& t = tstack[orig_tstack + 2];
 									if (t.planarity) {
-										assert(t.planarity->sides[1].top_depths[0] == t.top_depth);
-										if (t.planarity->sides[1].top_depths[1] == lowval) {
+										assert(t.planarity->sides[0].top_depths[0] == t.top_depth);
+										if (t.planarity->sides[0].top_depths[1] == lowval) {
 											flip_tstack_planarity(t);
 										}
-										assert(t.planarity->sides[1].top_depths[1] != -1);
-										assert(t.planarity->sides[1].top_depths[1] > lowval);
+										assert(t.planarity->sides[0].top_depths[1] != -1);
+										assert(t.planarity->sides[0].top_depths[1] > lowval);
 									}
 								}
 								for (int i = orig_tstack + 3; i < int(tstack.size()); i++) {
@@ -749,27 +749,27 @@ struct spqr_tree {
 
 							[&]() -> void {
 								if (cur_tstack.planarity) {
-									// precondition: side 0 should be the lowval only side
+									// precondition: side 1 should be the lowval only side
 									auto& sides = cur_tstack.planarity->sides;
 									auto& s0 = sides[0];
 									auto& s1 = sides[1];
 									quarter_edge_matches[s0.bot_ends[0]] = s1.bot_ends[0];
 									quarter_edge_matches[s1.bot_ends[0]] = s0.bot_ends[0];
-									s1.bot_ends[0] = s0.bot_ends[1];
-									if (s0.top_ends[0] != -1) {
-										if (s0.top_depths[1] != lowval) {
+									s0.bot_ends[0] = s1.bot_ends[1];
+									if (s1.top_ends[0] != -1) {
+										if (s1.top_depths[1] != lowval) {
 											assert(!is_type_1);
 											cur_tstack.planarity = std::unexpected(tstack_nonplanarity_t{});
 											return;
 										}
-										assert(s0.top_depths[0] == lowval);
+										assert(s1.top_depths[0] == lowval);
 										quarter_edge_matches[s0.top_ends[0]] = s1.top_ends[0];
 										quarter_edge_matches[s1.top_ends[0]] = s0.top_ends[0];
-										s1.top_ends[0] = s0.top_ends[1];
-										// Already true since the backedge was on side 1
-										assert(s1.top_depths[0] == lowval);
+										s0.top_ends[0] = s1.top_ends[1];
+										// Already true since the backedge was on side 0
+										assert(s0.top_depths[0] == lowval);
 									}
-									s0 = tstack_planarity_side_t{};
+									s1 = tstack_planarity_side_t{};
 								}
 							}();
 
