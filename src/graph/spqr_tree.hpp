@@ -281,21 +281,32 @@ struct spqr_tree {
 			return dir ? a[1] : a[0];
 		};
 
+		// Planarity flip bits ride along the child linked lists; without planarity they collapse to empty structs.
+		struct no_planarity_flip_t {};
 		struct item_list {
 			std::array<int, 2> v{-1, -1};
-			std::array<bool, 2> planarity_flip{false, false};
+			[[no_unique_address]] std::conditional_t<with_planarity, std::array<bool, 2>, no_planarity_flip_t> planarity_flip{};
 
 			[[nodiscard]] bool empty() const { return v[0] == -1; }
 		};
-		std::vector<std::pair<int, bool>> ch_nxt; ch_nxt.reserve(1 + NV + NE + NE); ch_nxt.assign(1 + NV + NE, {-1, false});
+		struct ch_nxt_t {
+			int nxt = -1;
+			[[no_unique_address]] std::conditional_t<with_planarity, bool, no_planarity_flip_t> planarity_flip{};
+		};
+		std::vector<ch_nxt_t> ch_nxt; ch_nxt.reserve(1 + NV + NE + NE); ch_nxt.assign(1 + NV + NE, {});
 		auto concat = [&](item_list a, item_list b) -> item_list {
 			if (b.empty()) return a;
 			if (a.empty()) return b;
-			ch_nxt[a.v[1]] = {b.v[0], a.planarity_flip[1] ^ b.planarity_flip[0]};
-			return {{a.v[0], b.v[1]}, {a.planarity_flip[0], b.planarity_flip[1]}};
+			if constexpr (with_planarity) {
+				ch_nxt[a.v[1]] = {b.v[0], a.planarity_flip[1] != b.planarity_flip[0]};
+				return {{a.v[0], b.v[1]}, {a.planarity_flip[0], b.planarity_flip[1]}};
+			} else {
+				ch_nxt[a.v[1]] = {b.v[0]};
+				return {{a.v[0], b.v[1]}};
+			}
 		};
 		auto unit_list = [&](int item) -> item_list {
-			return {{item, item}, {false, false}};
+			return {{item, item}};
 		};
 
 		std::vector<std::array<int, 2>> item_vs; item_vs.reserve(1 + NV + 2 * NE); item_vs.resize(1 + NV + NE, {-1, -1});
@@ -322,7 +333,7 @@ struct spqr_tree {
 				item_vs.push_back({});
 				item_ch.push_back({});
 				item_types.push_back(type);
-				ch_nxt.push_back({-1, false});
+				ch_nxt.push_back({});
 				if constexpr (with_planarity) node_planarity.emplace_back();
 				return item;
 			};
@@ -435,11 +446,11 @@ struct spqr_tree {
 				tstack[tstack_size++] = { v_start, top_depth, nxt_edge_idx, set_sides(stack_dir[top_depth], unit_list(item), {}), planarity };
 			};
 			auto flip_tstack_planarity = [&](tstack_t& a) -> void {
-				a.spans[0].planarity_flip[0] ^= 1;
-				a.spans[0].planarity_flip[1] ^= 1;
-				a.spans[1].planarity_flip[0] ^= 1;
-				a.spans[1].planarity_flip[1] ^= 1;
 				if constexpr (with_planarity) {
+					a.spans[0].planarity_flip[0] ^= 1;
+					a.spans[0].planarity_flip[1] ^= 1;
+					a.spans[1].planarity_flip[0] ^= 1;
+					a.spans[1].planarity_flip[1] ^= 1;
 					if (a.planarity) {
 						std::swap(a.planarity->sides[0], a.planarity->sides[1]);
 					}
@@ -958,8 +969,9 @@ struct spqr_tree {
 				if (item_vs[cur_item][0] != -1) {
 					node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][0]};
 				}
-				bool planarity_flip = item_ch[cur_item].planarity_flip[0];
-				for (int nxt_item = item_ch[cur_item].v[0]; nxt_item != -1; planarity_flip ^= ch_nxt[nxt_item].second, nxt_item = ch_nxt[nxt_item].first) {
+				bool planarity_flip = false;
+				if constexpr (with_planarity) planarity_flip = item_ch[cur_item].planarity_flip[0];
+				for (int nxt_item = item_ch[cur_item].v[0]; nxt_item != -1; nxt_item = ch_nxt[nxt_item].nxt) {
 					ch.dat[ch_en++] = nxt_item;
 					assert(nxt_item >= 1);
 					if (nxt_item < 1 + NV) {
@@ -980,11 +992,14 @@ struct spqr_tree {
 						n_edges++;
 					}
 					if (nxt_item == item_ch[cur_item].v[1]) {
-						assert(ch_nxt[nxt_item].first == -1);
+						assert(ch_nxt[nxt_item].nxt == -1);
 					}
+					if constexpr (with_planarity) planarity_flip ^= ch_nxt[nxt_item].planarity_flip;
 				}
-				planarity_flip ^= item_ch[cur_item].planarity_flip[1];
-				assert(!planarity_flip);
+				if constexpr (with_planarity) {
+					planarity_flip ^= item_ch[cur_item].planarity_flip[1];
+					assert(!planarity_flip);
+				}
 				if (item_vs[cur_item][1] != -1) {
 					node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][1]};
 				}
