@@ -299,6 +299,68 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 					}
 					// Because all adjacency lists are now guaranteed distinct by strict ordering, correct counts imply completeness.
 				}
+
+				// Now, check planarity guarantees.
+				std::vector<bool> face_vis(spqr.ne_rot_adj.size());
+				std::vector<bool> vert_vis(spqr.ne_rot_adj.size());
+				for (int i = 0; i < num_items; i++) {
+					int rot_st = 4 * spqr.node_edges.bounds[i];
+					int rot_en = 4 * spqr.node_edges.bounds[i+1];
+					if (spqr.node_planar[i]) {
+						for (int a = rot_st; a < rot_en; a++) {
+							int b = spqr.ne_rot_adj[a];
+							REQUIRE(b >= rot_st);
+							REQUIRE(b < rot_en);
+							// Make sure it's actually an involution/doubly-linked
+							REQUIRE(spqr.ne_rot_adj[b] == a);
+							REQUIRE((b & 1) != (a & 1));
+							// Make sure the 2 endpoints have the same vertex
+							REQUIRE(spqr.node_edges.dat[a >> 2].nvs[(a & 2) >> 1] == spqr.node_edges.dat[b >> 2].nvs[(b & 2) >> 1]);
+						}
+
+						if (spqr.types[i] == node_type::F || spqr.types[i] == node_type::V) {
+							continue;
+						}
+
+						int num_verts = int(spqr.node_verts[i].size());
+						int num_edges = int(spqr.node_edges[i].size());
+
+						// Verify all edges around a vertex form a single cycle
+						int num_vert_cycles = 0;
+						for (int a = rot_st; a < rot_en; a++) {
+							if (vert_vis[a]) continue;
+							num_vert_cycles++;
+							int cur = a;
+							do {
+								vert_vis[cur] = true;
+								cur ^= 1;
+								vert_vis[cur] = true;
+								cur = spqr.ne_rot_adj[cur];
+							} while (cur != a);
+						}
+						REQUIRE(num_vert_cycles == num_verts);
+
+						// Verify the euler characteristic
+						int num_face_cycles = 0;
+						for (int a = rot_st; a < rot_en; a++) {
+							if (face_vis[a]) continue;
+							num_face_cycles++;
+							int cur = a;
+							do {
+								face_vis[cur] = true;
+								cur ^= 3;
+								face_vis[cur] = true;
+								cur = spqr.ne_rot_adj[cur];
+							} while (cur != a);
+						}
+						REQUIRE(num_face_cycles == num_edges - num_verts + 2);
+					} else {
+						// Make sure everything's 0-ed out
+						for (int b = rot_st; b < rot_en; b++) {
+							REQUIRE(spqr.ne_rot_adj[b] == -1);
+						}
+					}
+				}
 			}
 		}
 	}

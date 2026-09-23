@@ -122,15 +122,18 @@ struct spqr_tree {
 		std::array<int, 2> nvs;
 	};
 	csr<node_edge_t> node_edges;
-	// Planarity adjacencies: ne_rot_adj is an involution of facing quarter-edges, indexed according to:
-	// ne_rot_adj[4 * node_edge + 2 * side + dir]
-	std::vector<int> ne_rot_adj;
 
 	struct node_adj_t {
 		int ne;
 		int dest_nv;
 	};
 	csr<node_adj_t> node_adj;
+
+	std::vector<bool> node_planar;
+	// Planarity adjacencies: ne_rot_adj is an involution of facing quarter-edges, indexed according to:
+	// ne_rot_adj[4 * node_edge + 2 * side + dir]
+	std::vector<int> ne_rot_adj;
+
 
 	int size() const { return int(par.size()); }
 
@@ -875,11 +878,13 @@ struct spqr_tree {
 			csr<node_edge_t> node_edges;
 			node_edges.bounds.resize(tot_items + 1);
 			node_edges.dat.resize(tot_node_edges);
-			std::vector<int> ne_rot_adj(4 * tot_node_edges, -1);
 
 			csr<node_adj_t> node_adj;
 			node_adj.bounds.resize(tot_node_verts * 2 + 1);
 			node_adj.dat.resize(tot_node_edges * 2);
+
+			std::vector<bool> node_planar(tot_items);
+			std::vector<int> ne_rot_adj(4 * tot_node_edges, -1);
 
 			std::vector<int> vert_pos_buf(NV, -1);
 			std::vector<int> cnts_buf(2 * NV, -1);
@@ -935,6 +940,7 @@ struct spqr_tree {
 						}
 					} else assert(false);
 				}
+				node_planar[cur_idx] = planar;
 
 				// HACK: Fill ch and vert_items in with orig items / orig verts for now,
 				// because we don't have the final item id's yet.
@@ -1211,8 +1217,9 @@ struct spqr_tree {
 				std::move(node_verts),
 				std::move(vert_par_nv),
 				std::move(node_edges),
-				std::move(ne_rot_adj),
 				std::move(node_adj),
+				std::move(node_planar),
+				std::move(ne_rot_adj),
 			};
 		}
 	}
