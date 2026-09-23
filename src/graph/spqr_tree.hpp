@@ -698,7 +698,7 @@ struct spqr_tree {
 							assert(int(tstack.size()) >= orig_tstack + 2);
 
 							if (!is_type_1) {
-								// The lowval side should be side 0, everything else goes on side 1.
+								// The lowval side should be side 1, everything else goes on side 0.
 								// The exception is tstack[orig_tstack + 2], which could be == lowval on one/both sides,
 								// but is guaranteed to have *something* > lowval by non-type-1-ness
 								tstack.push_back(cur_tstack);
