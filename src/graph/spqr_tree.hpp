@@ -359,7 +359,6 @@ struct spqr_tree {
 			auto merge_planarity = [&](tstack_maybe_planarity_t& a, const tstack_maybe_planarity_t& b) -> void {
 				if (!a) return;
 				if (!b) { a = b; return; }
-				tstack_planarity_t res;
 				for (int z = 0; z < 2; z++) {
 					auto& as = a->sides[z];
 					const auto& bs = b->sides[z];
@@ -421,6 +420,14 @@ struct spqr_tree {
 
 			auto push_tstack = [&](int v_start, int top_depth, int item, tstack_planarity_t planarity) -> void {
 				tstack[tstack_size++] = { v_start, top_depth, nxt_edge_idx, set_sides(stack_dir[top_depth], unit_list(item), {}), planarity };
+			};
+			auto push_vert_tstack = [&](int v, int top_depth) -> void {
+				int item = vert_item(v);
+				push_tstack(v, top_depth, item, {});
+			};
+			auto push_edge_tstack = [&](int v_start, int top_depth, int e, bool is_tree) -> void {
+				int item = edge_item(e);
+				push_tstack(v_start, top_depth, item, make_edge_planarity(item, top_depth, is_tree));
 			};
 			auto flip_tstack_planarity = [&](tstack_t& a) -> void {
 				a.spans[0].planarity_flip[0] ^= 1;
@@ -515,7 +522,7 @@ struct spqr_tree {
 			};
 
 			struct dfs_stack_t {
-				bool pushed_vert;
+				bool has_vert_tstack;
 				int ch_idx;
 				int ch_end;
 				int orig_tstack;
@@ -548,10 +555,10 @@ struct spqr_tree {
 					// That means that cur is on the edge_dir side and nxt is on the !edge_dir side.
 					stack_dir[cur_depth] = (lowval >= cur_depth ? false : !stack_dir[lowval]);
 
-					if (!s.pushed_vert && lowval < cur_depth && is_type_1) {
+					if (!s.has_vert_tstack && lowval < cur_depth && is_type_1) {
 						// Do this with the correct stack_dir set
-						push_tstack(cur, cur_depth, vert_item(cur), {});
-						s.pushed_vert = true;
+						push_vert_tstack(cur, cur_depth);
+						s.has_vert_tstack = true;
 					}
 
 					s.orig_tstack = tstack_size;
@@ -613,7 +620,7 @@ struct spqr_tree {
 					bool is_single = true;
 					if (is_tree) {
 						// The span lives on side edge_dir
-						push_tstack(nxt, cur_depth, edge_item(e), make_edge_planarity(edge_item(e), cur_depth, true));
+						push_edge_tstack(nxt, cur_depth, edge_item(e), true);
 						while (tstack_size >= 2 && nxt_tstack().top_depth >= cur_depth) {
 							node_type type;
 							if (nxt_tstack().top_depth > cur_depth) {
@@ -695,8 +702,8 @@ struct spqr_tree {
 							}
 						}
 
-						if (is_type_1) assert(s.pushed_vert);
-						if (s.pushed_vert) {
+						if (is_type_1) assert(s.has_vert_tstack);
+						if (s.has_vert_tstack) {
 							// NB: tstack[orig_size] is the vertex and tstack[orig_size+1] is the backedge; maybe we should reverse them?
 							assert(tstack_size >= orig_tstack + 3);
 
@@ -781,7 +788,7 @@ struct spqr_tree {
 					} else {
 						assert(is_type_1);
 						// The span lives on side !edge_dir
-						push_tstack(cur, lowval, edge_item(e), make_edge_planarity(edge_item(e), lowval, false));
+						push_edge_tstack(cur, lowval, edge_item(e), false);
 						setmin(first_occurrence[lowval], nxt_edge_idx++);
 					}
 
@@ -793,10 +800,10 @@ struct spqr_tree {
 						finish_tstack_top(item, false);
 					}
 
-					if (!s.pushed_vert) {
+					if (!s.has_vert_tstack) {
 						// Throw cur_vert_node onto the tstack so it'll get interleaved correctly
-						push_tstack(cur, cur_depth, vert_item(cur), {});
-						s.pushed_vert = true;
+						push_vert_tstack(cur, cur_depth);
+						s.has_vert_tstack = true;
 						assert(!is_type_1);
 						if (!is_single) {
 							// Just eagerly merge the vertex into the R to avoid a later spurious finish_tstack
@@ -809,13 +816,13 @@ struct spqr_tree {
 					auto& s = stk.back();
 					int cur = stack_verts[cur_depth];
 					assert(s.ch_idx == s.ch_end);
-					if (!s.pushed_vert) {
+					if (!s.has_vert_tstack) {
 						// Either our parent is a bridge edge, or we're just a root.
 						// We'll just leave it on tstack for future cleanup, it'll just get popped of immediately.
 						// edge_dir == !stack_dir[lowval == cur_depth - 1] == true
 						stack_dir[cur_depth] = true;
-						push_tstack(cur, cur_depth, vert_item(cur), {});
-						s.pushed_vert = true;
+						push_vert_tstack(cur, cur_depth);
+						s.has_vert_tstack = true;
 					}
 					stk.pop_back();
 				};
