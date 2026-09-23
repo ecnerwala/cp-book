@@ -8,6 +8,7 @@
 #include <cassert>
 #include <ranges>
 #include <ostream>
+#include <expected>
 
 namespace wala {
 
@@ -127,6 +128,11 @@ struct spqr_tree {
 		int dest_nv;
 	};
 	csr<node_adj_t> node_adj;
+
+	std::vector<bool> node_planar;
+	// Planarity adjacencies: ne_rot_adj is an involution of facing quarter-edges, indexed according to:
+	// ne_rot_adj[4 * node_edge + 2 * side + dir]
+	std::vector<int> ne_rot_adj;
 
 	int size() const { return int(par.size()); }
 
@@ -275,17 +281,19 @@ struct spqr_tree {
 
 		struct item_list {
 			std::array<int, 2> v{-1, -1};
+			std::array<bool, 2> planarity_flip{false, false};
+
 			[[nodiscard]] bool empty() const { return v[0] == -1; }
 		};
-		std::vector<int> ch_nxt; ch_nxt.reserve(1 + NV + NE + NE); ch_nxt.assign(1 + NV + NE, -1);
+		std::vector<std::pair<int, bool>> ch_nxt; ch_nxt.reserve(1 + NV + NE + NE); ch_nxt.assign(1 + NV + NE, {-1, false});
 		auto concat = [&](item_list a, item_list b) -> item_list {
 			if (b.empty()) return a;
 			if (a.empty()) return b;
-			ch_nxt[a.v[1]] = b.v[0];
-			return {{a.v[0], b.v[1]}};
+			ch_nxt[a.v[1]] = {b.v[0], a.planarity_flip[1] ^ b.planarity_flip[0]};
+			return {{a.v[0], b.v[1]}, {a.planarity_flip[0], b.planarity_flip[1]}};
 		};
 		auto unit_list = [&](int item) -> item_list {
-			return {{item, item}};
+			return {{item, item}, {false, false}};
 		};
 
 		std::vector<std::array<int, 2>> item_vs; item_vs.reserve(1 + NV + 2 * NE); item_vs.resize(1 + NV + NE, {-1, -1});
@@ -294,6 +302,13 @@ struct spqr_tree {
 		item_types.resize(1, node_type::F);
 		item_types.resize(1 + NV, node_type::V);
 		item_types.resize(1 + NV + NE, node_type::Q);
+
+		// Quarter edges for planar embedding building.
+		// Each vedge has 4 entries by 4 * vedge_id + 2 * source_vert + is_cw (is_cw is arbitrary)
+		// vedges are identified with what item they cap, numbered by (item - 1 - NV)
+		std::vector<int> quarter_edge_matches(8 * NE + 4, -1);
+		struct nonplanarity_certficate_t {};
+		std::vector<std::expected<std::array<int, 4>, nonplanarity_certficate_t>> node_planarity; node_planarity.reserve(NE);
 
 		int tot_blocks = 0;
 		int tot_self_loops = 0;
@@ -304,7 +319,8 @@ struct spqr_tree {
 				item_vs.push_back({});
 				item_ch.push_back({});
 				item_types.push_back(type);
-				ch_nxt.push_back(-1);
+				ch_nxt.push_back({-1, false});
+				node_planarity.emplace_back();
 				return item;
 			};
 
@@ -319,25 +335,110 @@ struct spqr_tree {
 			int nxt_edge_idx = 0; // Counts backedges only
 			std::vector<int> first_occurrence(NV); // First backedge to this depth
 
+			std::vector<int> edge_top_depths(2 * NE, -1);
+
+			struct tstack_planarity_side_t {
+				// For each side, store pointers to the "linked lists" of the edges inside.
+				// v[0] is the outer / longer edges and v[1] is the inner / shorter edges, matching the outside-in sort order.
+
+				// bot_ends are the outer/innermost exposed pieces of the walk down the ear in the tree (they're connected to the bottommost/topmost vertices of the tree path)
+				std::array<int, 2> bot_ends{-1, -1};
+				// top_ends are the outer/innermost exposed backedges
+				std::array<int, 2> top_ends{-1, -1};
+				// depths should be increasing going inwards
+				std::array<int, 2> top_depths{-1, -1};
+			};
+			struct tstack_planarity_t {
+				// The convention is that sides[0].top_depths[0] == top_depth, i.e. at least one minimal return lives on side 0
+				std::array<tstack_planarity_side_t, 2> sides;
+			};
+			struct tstack_nonplanarity_t {
+				// TODO: What's the nonplanarity certificate look like?
+			};
+			using tstack_maybe_planarity_t = std::expected<tstack_planarity_t, tstack_nonplanarity_t>;
+			auto merge_planarity = [&](const tstack_maybe_planarity_t& a, const tstack_maybe_planarity_t& b) -> tstack_maybe_planarity_t {
+				if (!a) return a;
+				if (!b) return b;
+				tstack_planarity_t res;
+				for (int z = 0; z < 2; z++) {
+					const auto& as = a->sides[z];
+					const auto& bs = b->sides[z];
+					auto& rs = res.sides[z];
+					// If there's no bottom edges, then we must be an isolated vertex, so we can end early.
+					if (as.bot_ends[0] == -1) {
+						rs = bs;
+					} else if (bs.bot_ends[0] == -1) {
+						rs = as;
+					} else {
+						quarter_edge_matches[as.bot_ends[1]] = bs.bot_ends[0];
+						quarter_edge_matches[bs.bot_ends[0]] = as.bot_ends[1];
+						rs.bot_ends = {as.bot_ends[0], bs.bot_ends[1]};
+
+						if (as.top_ends[0] == -1) {
+							rs.top_ends = bs.top_ends;
+							rs.top_depths = bs.top_depths;
+						} else if (bs.top_ends[0] == -1) {
+							rs.top_ends = as.top_ends;
+							rs.top_depths = as.top_depths;
+						} else if (as.top_depths[1] > bs.top_depths[0]) {
+							// TODO: Certificate
+							return std::unexpected(tstack_nonplanarity_t{});
+						} else {
+							quarter_edge_matches[as.top_ends[1]] = bs.top_ends[0];
+							quarter_edge_matches[bs.top_ends[0]] = as.top_ends[1];
+							rs.top_ends = {as.top_ends[0], bs.top_ends[1]};
+							rs.top_depths = {as.top_depths[0], bs.top_depths[1]};
+						}
+					}
+				}
+				return res;
+			};
+			auto make_edge_planarity = [&](int item, int top_depth, bool is_tree) -> tstack_planarity_t {
+				assert(item >= 1 + NV);
+				int ve = item - (1 + NV);
+				bool top_dir = stack_dir[top_depth];
+				edge_top_depths[ve] = top_depth;
+				tstack_planarity_t p;
+				if (is_tree) {
+					p.sides[0].bot_ends = {4 * ve + 2 * !top_dir + 0, 4 * ve + 2 * top_dir + 1};
+					p.sides[1].bot_ends = {4 * ve + 2 * !top_dir + 1, 4 * ve + 2 * top_dir + 0};
+				} else {
+					p.sides[0].bot_ends = {4 * ve + 2 * !top_dir + 0, 4 * ve + 2 * !top_dir + 1};
+					p.sides[0].top_ends = {4 * ve + 2 * top_dir + 1, 4 * ve + 2 * top_dir + 0};
+					p.sides[0].top_depths = {top_depth, top_depth};
+				}
+				return p;
+			};
 			struct tstack_t {
-				int v_start;
-				int top_depth;
-				int first_idx;
+				int v_start = -1;
+				int top_depth = -1;
+				int first_idx = -1;
 				std::array<item_list, 2> spans;
+				tstack_maybe_planarity_t planarity;
 			};
-			auto make_tstack = [&](int v_start, int top_depth, int item) -> tstack_t {
-				return { v_start, top_depth, nxt_edge_idx, set_sides(stack_dir[top_depth], unit_list(item), {}) };
+			auto make_tstack = [&](int v_start, int top_depth, int item, tstack_planarity_t planarity) -> tstack_t {
+				return { v_start, top_depth, nxt_edge_idx, set_sides(stack_dir[top_depth], unit_list(item), {}), planarity };
 			};
-			auto merge_tstack = [&](tstack_t a, tstack_t b) -> tstack_t {
+			auto flip_tstack_planarity = [&](tstack_t& a) -> void {
+				a.spans[0].planarity_flip[0] ^= 1;
+				a.spans[0].planarity_flip[1] ^= 1;
+				a.spans[1].planarity_flip[0] ^= 1;
+				a.spans[1].planarity_flip[1] ^= 1;
+				if (a.planarity) {
+					std::swap(a.planarity->sides[0], a.planarity->sides[1]);
+				}
+			};
+			auto merge_tstack = [&](const tstack_t& a, const tstack_t& b) -> tstack_t {
 				return {
 					a.v_start,
 					min(a.top_depth, b.top_depth),
 					a.first_idx,
-					{concat(b.spans[0], a.spans[0]), concat(a.spans[1], b.spans[1])}
+					{concat(b.spans[0], a.spans[0]), concat(a.spans[1], b.spans[1])},
+					merge_planarity(a.planarity, b.planarity),
 				};
 			};
 
-			auto maybe_unwrap = [&](tstack_t& t, node_type type) -> int {
+			auto maybe_unwrap = [&](tstack_t& t, node_type type, bool is_tree) -> int {
 				if (type == node_type::R) return alloc_item(type);
 
 				assert(type == node_type::P || type == node_type::S);
@@ -345,28 +446,66 @@ struct spqr_tree {
 				// If we want to ternarize, never reuse.
 				if (ternarize) return alloc_item(type);
 
-				// TODO: This is the wrong dir for is-tree S-type checks, should we just dir in?
-				//bool dir = stack_dir[t.top_depth];
-
-				bool dir = t.spans[0].empty();
-				assert(get_side(t.spans, !dir).empty());
-				int item = get_side(t.spans, dir).v[0];
-				assert(item == get_side(t.spans, dir).v[1]);
+				bool top_dir = stack_dir[t.top_depth];
+				assert(get_side(t.spans, !top_dir).empty());
+				int item = get_side(t.spans, top_dir).v[0];
+				assert(item == get_side(t.spans, top_dir).v[1]);
 				if (item_types[item] == type) {
-					t.spans = set_sides(dir, item_ch[item], {});
+					t.spans = set_sides(top_dir, item_ch[item], {});
+					{
+						// Unwrap the planarity data
+						// We don't really need to maintain this at all because S/P nodes are known to be trivially planar
+						// The current state is just make_edge_planarity(wrapped), which means that it has the right shape, just needs to be relabelled.
+						assert(node_planarity[item - (1 + NV + NE)]);
+						const auto& matches = *node_planarity[item - (1 + NV + NE)];
+						assert(t.planarity);
+						auto& p = *t.planarity;
+						if (is_tree) {
+							p.sides[0].bot_ends[0] = matches[2 * !top_dir + 1];
+							p.sides[0].bot_ends[1] = matches[2 * top_dir + 0];
+							p.sides[1].bot_ends[0] = matches[2 * !top_dir + 0];
+							p.sides[1].bot_ends[1] = matches[2 * top_dir + 1];
+						} else {
+							p.sides[0].bot_ends[0] = matches[2 * !top_dir + 1];
+							p.sides[0].bot_ends[1] = matches[2 * !top_dir + 0];
+							p.sides[0].top_ends[0] = matches[2 * top_dir + 0];
+							p.sides[0].top_ends[1] = matches[2 * top_dir + 1];
+						}
+					}
 					return item;
 				} else {
 					return alloc_item(type);
 				}
 			};
 
-			auto finish_tstack = [&](tstack_t& t, int item) {
-				bool dir = stack_dir[t.top_depth];
-				assert(get_side(t.spans, !dir).empty());
+			auto finish_tstack = [&](tstack_t& t, int item, bool is_tree) {
+				bool top_dir = stack_dir[t.top_depth];
+				assert(get_side(t.spans, !top_dir).empty());
 
+				if (t.planarity) {
+					const auto& p = *t.planarity;
+					std::array<int, 4> matches{};
+					if (is_tree) {
+						matches[2 * !top_dir + 1] = p.sides[0].bot_ends[0];
+						matches[2 * top_dir + 0] = p.sides[0].bot_ends[1];
+						matches[2 * !top_dir + 0] = p.sides[1].bot_ends[0];
+						matches[2 * top_dir + 1] = p.sides[1].bot_ends[1];
+					} else {
+						matches[2 * !top_dir + 1] = p.sides[0].bot_ends[0];
+						matches[2 * !top_dir + 0] = p.sides[0].bot_ends[1];
+						matches[2 * top_dir + 0] = p.sides[0].top_ends[0];
+						matches[2 * top_dir + 1] = p.sides[0].top_ends[1];
+					}
+					node_planarity[item - (1 + NV + NE)] = matches;
+				} else {
+					assert(item_types[item] == node_type::R);
+					node_planarity[item - (1 + NV + NE)] = std::unexpected(nonplanarity_certficate_t{});
+				}
 				item_vs[item] = make_vs(t.v_start, t.top_depth);
-				item_ch[item] = get_side(t.spans, dir);
-				t.spans = set_sides(dir, unit_list(item), {});
+				item_ch[item] = get_side(t.spans, top_dir);
+
+				t.spans = set_sides(top_dir, unit_list(item), {});
+				t.planarity = make_edge_planarity(item, t.top_depth, is_tree);
 			};
 
 			std::vector<tstack_t> tstack; tstack.reserve(NV + NE);
@@ -433,6 +572,7 @@ struct spqr_tree {
 					const bool edge_dir = stack_dir[cur_depth];
 
 					if (lowval >= cur_depth) {
+						// There's no planarity handling for this because it's just a Q node. I/O nodes also don't need any tracking.
 						item_vs[edge_item(e)] = {cur, -1};
 						tot_blocks++;
 						if (is_tree) {
@@ -471,10 +611,13 @@ struct spqr_tree {
 					tstack_t cur_tstack;
 					if (is_tree) {
 						// The span lives on side edge_dir
-						cur_tstack = make_tstack(nxt, cur_depth, edge_item(e));
+						cur_tstack = make_tstack(nxt, cur_depth, edge_item(e), make_edge_planarity(edge_item(e), cur_depth, true));
 						while (!tstack.empty() && tstack.back().top_depth >= cur_depth) {
 							node_type type;
 							if (tstack.back().top_depth > cur_depth) {
+								// Just backfill this for maybe_unwrap
+								stack_dir[tstack.back().top_depth] = edge_dir;
+
 								// This will be an S node: merge the vertex in first
 								cur_tstack = merge_tstack(pop_tstack(), cur_tstack);
 
@@ -486,36 +629,118 @@ struct spqr_tree {
 								type = node_type::R;
 							}
 							auto nxt_tstack = pop_tstack();
-							int item = maybe_unwrap(nxt_tstack, type);
+							int item = maybe_unwrap(nxt_tstack, type, type == node_type::S);
 							cur_tstack = merge_tstack(nxt_tstack, cur_tstack);
-							finish_tstack(cur_tstack, item);
+							if (cur_tstack.planarity) {
+								// Merge all backedges into the component
+								for (auto& side : cur_tstack.planarity->sides) {
+									assert(side.bot_ends[1] != -1);
+									if (side.top_ends[1] == -1) continue;
+									assert(side.top_depths[0] == cur_depth);
+									assert(side.top_depths[1] == cur_depth);
+									quarter_edge_matches[side.bot_ends[1]] = side.top_ends[1];
+									quarter_edge_matches[side.top_ends[1]] = side.bot_ends[1];
+									side.bot_ends[1] = side.top_ends[0];
+									side.top_depths = {-1, -1};
+									side.top_ends = {-1, -1};
+								}
+							}
+							finish_tstack(cur_tstack, item, true);
 						}
-						while (cur_tstack.first_idx > first_occurrence[cur_depth]) {
-							is_single = false;
-							cur_tstack = merge_tstack(pop_tstack(), cur_tstack);
+
+						if (cur_tstack.first_idx > first_occurrence[cur_depth]) {
+							while (cur_tstack.first_idx > first_occurrence[cur_depth]) {
+								auto nxt_tstack = pop_tstack();
+								if (nxt_tstack.first_idx > first_occurrence[cur_depth]) {
+									// We will put cur_depth on side 1 until the bottom
+									if (nxt_tstack.top_depth == cur_depth) {
+										flip_tstack_planarity(nxt_tstack);
+									}
+								} else if (!is_single) {
+									assert(cur_tstack.top_depth < cur_depth);
+									if (nxt_tstack.planarity) {
+										if (nxt_tstack.planarity->sides[0].top_depths[1] == cur_depth) {
+											// We need to flip cur_tstack and nxt_tstack relative to each other.
+											// Flip the one with worse top_depth.
+											flip_tstack_planarity(cur_tstack.top_depth < nxt_tstack.top_depth ? nxt_tstack : cur_tstack);
+										} else {
+											assert(nxt_tstack.planarity->sides[1].top_depths[1] == cur_depth);
+										}
+									}
+								}
+								cur_tstack = merge_tstack(nxt_tstack, cur_tstack);
+								is_single = false;
+							}
+							if (cur_tstack.planarity) {
+								// Prune off finished cur-side things
+								for (auto& side : cur_tstack.planarity->sides) {
+									assert(side.bot_ends[1] != -1);
+									while (side.top_depths[1] == cur_depth) {
+										{
+											// Link these to bot_ends[1]
+											quarter_edge_matches[side.bot_ends[1]] = side.top_ends[1];
+											quarter_edge_matches[side.top_ends[1]] = side.bot_ends[1];
+											side.bot_ends[1] = side.top_ends[1] ^ 1;
+										}
+										side.top_ends[1] = std::exchange(quarter_edge_matches[side.bot_ends[1]], -1);
+										if (side.top_ends[1] != -1) {
+											quarter_edge_matches[side.top_ends[1]] = -1;
+											side.top_depths[1] = edge_top_depths[side.top_ends[1] >> 2];
+										} else {
+											side.top_depths = {-1, -1};
+											side.top_ends = {-1, -1};
+										}
+									}
+								}
+							}
 						}
 
 						if (has_return_edge || is_type_1) {
 							// NB: tstack[orig_size] is the vertex and tstack[orig_size+1] is the backedge; maybe we should reverse them?
 							assert(int(tstack.size()) >= orig_tstack + 2);
 
+							if (!is_type_1) {
+								// The lowval side should be side 1, everything else goes on side 0.
+								// The exception is tstack[orig_tstack + 2], which could be == lowval on one/both sides,
+								// but is guaranteed to have *something* > lowval by non-type-1-ness
+								tstack.push_back(cur_tstack);
+								{
+									auto& t = tstack[orig_tstack + 2];
+									if (t.planarity) {
+										assert(t.planarity->sides[0].top_depths[0] == t.top_depth);
+										if (t.planarity->sides[0].top_depths[1] == lowval) {
+											flip_tstack_planarity(t);
+										}
+										assert(t.planarity->sides[0].top_depths[1] != -1);
+										assert(t.planarity->sides[0].top_depths[1] > lowval);
+									}
+								}
+								for (int i = orig_tstack + 3; i < int(tstack.size()); i++) {
+									if (tstack[i].top_depth == lowval) {
+										flip_tstack_planarity(tstack[i]);
+									}
+								}
+								cur_tstack = pop_tstack();
+								while (int(tstack.size()) > orig_tstack + 2) {
+									cur_tstack = merge_tstack(pop_tstack(), cur_tstack);
+									is_single = false;
+								}
+								assert(!is_single);
+							}
+
+							assert(int(tstack.size()) == orig_tstack + 2);
+							auto nxt_tstack = pop_tstack();
 							int item;
 							if (is_type_1) {
-								assert(int(tstack.size()) == orig_tstack + 2);
-
-								auto nxt_tstack = pop_tstack();
-								item = maybe_unwrap(nxt_tstack, is_single ? node_type::S : node_type::R);
-								cur_tstack = merge_tstack(nxt_tstack, cur_tstack);
-
-								cur_tstack = merge_tstack(pop_tstack(), cur_tstack);
+								item = maybe_unwrap(nxt_tstack, is_single ? node_type::S : node_type::R, false);
 							} else {
-								// Just to silence a warning
+								// Just for the type checker
 								item = -1;
-
-								while (int(tstack.size()) > orig_tstack) {
-									cur_tstack = merge_tstack(pop_tstack(), cur_tstack);
-								}
 							}
+							// Merge with the backedge
+							cur_tstack = merge_tstack(nxt_tstack, cur_tstack);
+							// Merge with the vertex
+							cur_tstack = merge_tstack(pop_tstack(), cur_tstack);
 
 							cur_tstack.v_start = cur;
 							assert(cur_tstack.top_depth == lowval);
@@ -524,17 +749,41 @@ struct spqr_tree {
 							// The entire subtree should go to the !edge_dir side.
 							cur_tstack.spans = set_sides(!edge_dir, concat(cur_tstack.spans[0], cur_tstack.spans[1]), {});
 
-							// TODO: There's some planarity folding to do here
+							[&]() -> void {
+								if (cur_tstack.planarity) {
+									// precondition: side 1 should be the lowval only side
+									auto& sides = cur_tstack.planarity->sides;
+									auto& s0 = sides[0];
+									auto& s1 = sides[1];
+									quarter_edge_matches[s0.bot_ends[0]] = s1.bot_ends[0];
+									quarter_edge_matches[s1.bot_ends[0]] = s0.bot_ends[0];
+									s0.bot_ends[0] = s1.bot_ends[1];
+									if (s1.top_ends[0] != -1) {
+										if (s1.top_depths[1] != lowval) {
+											assert(!is_type_1);
+											cur_tstack.planarity = std::unexpected(tstack_nonplanarity_t{});
+											return;
+										}
+										assert(s1.top_depths[0] == lowval);
+										quarter_edge_matches[s0.top_ends[0]] = s1.top_ends[0];
+										quarter_edge_matches[s1.top_ends[0]] = s0.top_ends[0];
+										s0.top_ends[0] = s1.top_ends[1];
+										// Already true since the backedge was on side 0
+										assert(s0.top_depths[0] == lowval);
+									}
+									s1 = tstack_planarity_side_t{};
+								}
+							}();
 
 							if (is_type_1) {
-								finish_tstack(cur_tstack, item);
+								finish_tstack(cur_tstack, item, false);
 								is_single = true;
 							}
 						}
 					} else {
 						assert(is_type_1);
 						// The span lives on side !edge_dir
-						cur_tstack = make_tstack(cur, lowval, edge_item(e));
+						cur_tstack = make_tstack(cur, lowval, edge_item(e), make_edge_planarity(edge_item(e), lowval, false));
 						nxt_edge_idx++;
 						setmin(first_occurrence[lowval], cur_tstack.first_idx);
 					}
@@ -543,16 +792,16 @@ struct spqr_tree {
 					if (is_type_1 && has_return_edge && tstack.back().v_start == cur && tstack.back().top_depth == lowval) {
 						// This will be a P node
 						auto nxt_tstack = pop_tstack();
-						int item = maybe_unwrap(nxt_tstack, node_type::P);
+						int item = maybe_unwrap(nxt_tstack, node_type::P, false);
 						cur_tstack = merge_tstack(nxt_tstack, cur_tstack);
-						finish_tstack(cur_tstack, item);
+						finish_tstack(cur_tstack, item, false);
 					}
 
 					tstack.push_back(cur_tstack);
 
 					if (!has_return_edge) {
 						// Throw cur_vert_node onto the tstack so it'll get interleaved correctly
-						tstack_t cur_vert_node = make_tstack(cur, cur_depth, vert_item(cur));
+						tstack_t cur_vert_node = make_tstack(cur, cur_depth, vert_item(cur), {});
 
 						assert(!tstack.empty());
 						if (is_type_1) {
@@ -580,7 +829,7 @@ struct spqr_tree {
 						// We'll just leave it on tstack for future cleanup, it'll just get popped of immediately.
 						// edge_dir == !stack_dir[lowval == cur_depth - 1] == true
 						stack_dir[cur_depth] = true;
-						tstack.push_back(make_tstack(cur, cur_depth, vert_item(cur)));
+						tstack.push_back(make_tstack(cur, cur_depth, vert_item(cur), {}));
 					}
 					stk.pop_back();
 				};
@@ -633,6 +882,9 @@ struct spqr_tree {
 			node_adj.bounds.resize(tot_node_verts * 2 + 1);
 			node_adj.dat.resize(tot_node_edges * 2);
 
+			std::vector<bool> node_planar(tot_items);
+			std::vector<int> ne_rot_adj(4 * tot_node_edges, -1);
+
 			std::vector<int> vert_pos_buf(NV, -1);
 			std::vector<int> cnts_buf(2 * NV, -1);
 			struct ch_buf_t {
@@ -640,6 +892,7 @@ struct spqr_tree {
 				int item_id;
 			};
 			std::vector<ch_buf_t> ch_buf(tot_items);
+			std::vector<int> rot_edge_ne(2 * NE + 1);
 
 			int nxt_unassigned_idx = 0;
 
@@ -654,6 +907,7 @@ struct spqr_tree {
 			auto push_item = [&](int cur_item) -> void {
 				int cur_idx = nxt_unassigned_idx++;
 				node_type cur_type = types[cur_idx] = item_types[cur_item];
+				bool planar = true;
 				if (cur_type == node_type::F) {
 					assert(cur_item == 0);
 				} else if (cur_type == node_type::V) {
@@ -668,7 +922,24 @@ struct spqr_tree {
 					edge_index[orig_edge] = cur_idx;
 				} else {
 					assert(1 + NV + NE <= cur_item);
+					if (cur_type == node_type::O || cur_type == node_type::I) {
+						// No planarity data was set up
+					} else if (cur_type == node_type::S || cur_type == node_type::P || cur_type == node_type::R) {
+						const auto& p = node_planarity[cur_item - (1 + NV + NE)];
+						if (p) {
+							// Make sure this runs before our planarity_flip checks
+							for (int s = 0; s < 4; s++) {
+								int a = 8 * NE + s, b = (*p)[s];
+								quarter_edge_matches[a] = b;
+								quarter_edge_matches[b] = a;
+							}
+						} else {
+							// TODO: Any certificate stuff
+							planar = false;
+						}
+					} else assert(false);
 				}
+				node_planar[cur_idx] = planar;
 
 				// HACK: Fill ch and vert_items in with orig items / orig verts for now,
 				// because we don't have the final item id's yet.
@@ -680,18 +951,32 @@ struct spqr_tree {
 				if (item_vs[cur_item][0] != -1) {
 					node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][0]};
 				}
-				for (int nxt_item = item_ch[cur_item].v[0]; nxt_item != -1; nxt_item = ch_nxt[nxt_item]) {
+				bool planarity_flip = item_ch[cur_item].planarity_flip[0];
+				for (int nxt_item = item_ch[cur_item].v[0]; nxt_item != -1; planarity_flip ^= ch_nxt[nxt_item].second, nxt_item = ch_nxt[nxt_item].first) {
 					ch.dat[ch_en++] = nxt_item;
 					assert(nxt_item >= 1);
 					if (nxt_item < 1 + NV) {
 						node_verts.dat[nv_en++] = {cur_idx, nxt_item - 1};
 					} else {
+						if (cur_type != node_type::R) {
+							assert(!planarity_flip);
+						} else {
+							// Fix the planarity direction right here: reverse quarter_edge_matches upfront;
+							// this breaks the involution property, but from here on we'll never read the low bits anyways.
+							int ve = nxt_item - (1 + NV);
+							if (planarity_flip) {
+								std::swap(quarter_edge_matches[4 * ve + 0], quarter_edge_matches[4 * ve + 1]);
+								std::swap(quarter_edge_matches[4 * ve + 2], quarter_edge_matches[4 * ve + 3]);
+							}
+						}
 						n_edges++;
 					}
 					if (nxt_item == item_ch[cur_item].v[1]) {
-						assert(ch_nxt[nxt_item] == -1);
+						assert(ch_nxt[nxt_item].first == -1);
 					}
 				}
+				planarity_flip ^= item_ch[cur_item].planarity_flip[1];
+				assert(!planarity_flip);
 				if (item_vs[cur_item][1] != -1) {
 					node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][1]};
 				}
@@ -709,11 +994,12 @@ struct spqr_tree {
 				int ne_st = node_edges.bounds[cur_idx];
 				int ne_en = node_edges.bounds[cur_idx+1] = ne_st + n_edges;
 
-				auto set_ne = [&](int ne, std::array<int, 2> nvs, std::array<int, 2> nds) -> void {
+				auto set_ne = [&](int ne, std::array<int, 2> nvs, std::array<int, 2> nds, std::array<int, 4> rot_adjs) -> void {
 					node_edges.dat[ne].node = cur_idx;
 					node_edges.dat[ne].nvs = nvs;
 					node_adj.dat[nds[0]] = {ne, nvs[1]};
 					node_adj.dat[nds[1]] = {ne, nvs[0]};
+					for (int z = 0; z < 4; z++) ne_rot_adj[4 * ne + z] = rot_adjs[z];
 				};
 				if (cur_type == node_type::F) {
 					// Just set node_adj bounds and we're good
@@ -727,7 +1013,7 @@ struct spqr_tree {
 					assert(n_edges == 1);
 					node_adj.bounds[2 * nv_st + 1] = 2 * ne_st + 1 * n_edges;
 					node_adj.bounds[2 * nv_st + 2] = 2 * ne_st + 2 * n_edges;
-					set_ne(ne_st, {nv_st, nv_st}, {2 * ne_st + 1, 2 * ne_st});
+					set_ne(ne_st, {nv_st, nv_st}, {2 * ne_st + 1, 2 * ne_st}, {4 * ne_st + 3, 4 * ne_st + 2, 4 * ne_st + 1, 4 * ne_st + 0});
 				} else if (cur_type == node_type::Q || cur_type == node_type::I) {
 					assert(n_verts == 2);
 					assert(n_edges == 1);
@@ -735,7 +1021,7 @@ struct spqr_tree {
 					node_adj.bounds[2 * nv_st + 2] = 2 * ne_st + 1 * n_edges;
 					node_adj.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
 					node_adj.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
-					set_ne(ne_st, {nv_st, nv_st + 1}, {2 * ne_st, 2 * ne_st + 1});
+					set_ne(ne_st, {nv_st, nv_st + 1}, {2 * ne_st, 2 * ne_st + 1}, {4 * ne_st + 1, 4 * ne_st + 0, 4 * ne_st + 3, 4 * ne_st + 2});
 				} else if (cur_type == node_type::P) {
 					// Special case: tiebreak the parallel edges so they're reversed
 					assert(n_verts == 2);
@@ -745,7 +1031,10 @@ struct spqr_tree {
 					node_adj.bounds[2 * nv_st + 3] = 2 * ne_st + 2 * n_edges;
 					node_adj.bounds[2 * nv_st + 4] = 2 * ne_st + 2 * n_edges;
 					for (int ne = ne_st; ne < ne_en; ne++) {
-						set_ne(ne, {nv_st, nv_st + 1}, {2 * ne_st + (ne - ne_st), 2 * ne_en - 1 - (ne - ne_st)});
+						int ne_prv = (ne == ne_st ? ne_en : ne) - 1;
+						int ne_nxt = (ne+1 == ne_en ? ne_st : ne+1);
+						std::array<int, 4> rot_adjs{4 * ne_prv + 1, 4 * ne_nxt + 0, 4 * ne_nxt + 3, 4 * ne_prv + 2};
+						set_ne(ne, {nv_st, nv_st + 1}, {2 * ne_st + (ne - ne_st), 2 * ne_en - 1 - (ne - ne_st)}, rot_adjs);
 					}
 				} else if (cur_type == node_type::S) {
 					assert(n_verts == n_edges);
@@ -756,9 +1045,13 @@ struct spqr_tree {
 					// Fix bounds for the cap
 					node_adj.bounds[2 * nv_st + 1]--;
 					node_adj.bounds[2 * nv_en - 1]++;
-					set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1});
+					set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1}, {4 * (ne_st+1) + 1, 4 * (ne_st+1) + 0, 4 * (ne_en-1) + 3, 4 * (ne_en-1) + 2});
 					for (int i = 1; i < n_edges; i++) {
-						set_ne(ne_st + i, {nv_st + i - 1, nv_st + i}, {2 * ne_st + 2 * i - 1, 2 * ne_st + 2 * i});
+						int ne = ne_st + i;
+						std::array<int, 4> rot_adjs{4 * (ne-1) + 3, 4 * (ne-1) + 2, 4 * (ne+1) + 1, 4 * (ne+1) + 0};
+						if (ne-1 == ne_st) { rot_adjs[0] = 4 * ne_st + 1, rot_adjs[1] = 4 * ne_st + 0; }
+						if (ne+1 == ne_en) { rot_adjs[2] = 4 * ne_st + 3, rot_adjs[3] = 4 * ne_st + 2; }
+						set_ne(ne, {nv_st + i - 1, nv_st + i}, {2 * ne - 1, 2 * ne}, rot_adjs);
 					}
 				} else if (cur_type == node_type::R) {
 					// Bucketsort the children by the midpoint
@@ -800,6 +1093,30 @@ struct spqr_tree {
 					}
 
 					{
+						// Set up the reverse mapping for ourselves
+						int nxt_ne = ne_en;
+						for (int i = ch_en - 1; i >= ch_st; i--) {
+							int item = ch.dat[i];
+							assert(item >= 1);
+							if (item < 1 + NV) continue;
+							nxt_ne--;
+							rot_edge_ne[item - (1 + NV)] = nxt_ne;
+						}
+						assert(nxt_ne == ne_st + 1);
+						rot_edge_ne[2 * NE] = ne_st;
+					}
+					auto map_rot_edge = [&](int ve) -> std::array<int, 4> {
+						if (!planar) return {-1, -1, -1, -1};
+						std::array<int, 4> res{};
+						for (int z = 0; z < 4; z++) {
+							int o = quarter_edge_matches[4 * ve + z];
+							assert(o != -1);
+							res[z] = (rot_edge_ne[o >> 2] << 2) + (o & 2) + !(z & 1);
+						}
+						return res;
+					};
+
+					{
 						int off = 2 * ne_st;
 						for (int i = 2 * nv_st + 1; i <= 2 * nv_en; i++) {
 							off += std::exchange(node_adj.bounds[i], off);
@@ -825,12 +1142,12 @@ struct spqr_tree {
 							set_ne(nxt_ne, nvs, {
 								node_adj.bounds[2 * nvs[0] + 2]++,
 								node_adj.bounds[2 * nvs[1] + 1]++,
-							});
+							}, map_rot_edge(item - (1 + NV)));
 						}
 						assert(nxt_ne == ne_st + 1);
 
 						// Insert the cap / bump its bound
-						set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1});
+						set_ne(ne_st, {nv_st, nv_en - 1}, {2 * ne_st, 2 * ne_en - 1}, map_rot_edge(2 * NE));
 						node_adj.bounds[2 * nv_en - 1]++;
 					}
 				} else assert(false);
@@ -900,6 +1217,8 @@ struct spqr_tree {
 				std::move(vert_par_nv),
 				std::move(node_edges),
 				std::move(node_adj),
+				std::move(node_planar),
+				std::move(ne_rot_adj),
 			};
 		}
 	}
