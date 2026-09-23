@@ -605,14 +605,12 @@ struct spqr_tree {
 						item_ch[vert_item(cur)] = concat(item_ch[vert_item(cur)], unit_list(edge_item(e)));
 						return;
 					}
+					assert(lowval < cur_depth);
 
 					item_vs[edge_item(e)] = make_vs(nxt, cur_depth);
 
-					assert(lowval < cur_depth);
-
+					// Whether cur_tstack() is a single edge
 					bool is_single = true;
-
-					// make_q_node
 					if (is_tree) {
 						// The span lives on side edge_dir
 						push_tstack(nxt, cur_depth, edge_item(e), make_edge_planarity(edge_item(e), cur_depth, true));
@@ -697,6 +695,7 @@ struct spqr_tree {
 							}
 						}
 
+						if (is_type_1) assert(s.pushed_vert);
 						if (s.pushed_vert) {
 							// NB: tstack[orig_size] is the vertex and tstack[orig_size+1] is the backedge; maybe we should reverse them?
 							assert(tstack_size >= orig_tstack + 3);
