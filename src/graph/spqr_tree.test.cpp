@@ -2,6 +2,7 @@
 
 #include <random>
 #include <algorithm>
+#include <numeric>
 #include <tuple>
 
 #include <catch2/catch_test_macros.hpp>
@@ -21,7 +22,35 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				}
 			}
 
-			CAPTURE(NV, NE, seed, edges);
+			// order_mode 0: default order, 1: random full permutations, 2: random prefixes of permutations
+			int order_mode = seed % 3;
+			std::vector<int> vert_order(NV), edge_order(NE);
+			std::ranges::iota(vert_order, 0);
+			std::ranges::iota(edge_order, 0);
+			if (order_mode == 0) {
+				vert_order.clear();
+				edge_order.clear();
+			} else {
+				std::ranges::shuffle(vert_order, mt);
+				std::ranges::shuffle(edge_order, mt);
+				if (order_mode == 2) {
+					vert_order.resize(std::uniform_int_distribution<int>(0, NV)(mt));
+					edge_order.resize(std::uniform_int_distribution<int>(0, NE)(mt));
+				}
+			}
+			// The effective orders: listed ids first, then the rest in id order
+			auto complete_order = [](std::vector<int> order, int n) -> std::vector<int> {
+				std::vector<bool> listed(n);
+				for (int i : order) listed[i] = true;
+				for (int i = 0; i < n; i++) {
+					if (!listed[i]) order.push_back(i);
+				}
+				return order;
+			};
+			std::vector<int> full_vert_order = complete_order(vert_order, NV);
+			std::vector<int> full_edge_order = complete_order(edge_order, NE);
+
+			CAPTURE(NV, NE, seed, edges, vert_order, edge_order);
 
 			for (bool ternarize : {false, true}) {
 				CAPTURE(ternarize);
@@ -29,11 +58,11 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				using wala::spqr_tree;
 				using wala::planar_spqr_tree;
 				using node_type = spqr_tree::node_type;
-				auto spqr = planar_spqr_tree::build(NV, edges, ternarize);
+				auto spqr = planar_spqr_tree::build(NV, edges, ternarize, vert_order, edge_order);
 
 				{
 					// Building without planarity should give the same tree
-					auto spqr_np = spqr_tree::build(NV, edges, ternarize);
+					auto spqr_np = spqr_tree::build(NV, edges, ternarize, vert_order, edge_order);
 					REQUIRE_FAST(spqr_np.vert_index == spqr.vert_index);
 					REQUIRE_FAST(spqr_np.edge_index == spqr.edge_index);
 					REQUIRE_FAST(spqr_np.par == spqr.par);
@@ -179,6 +208,26 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 							REQUIRE_FAST(spqr.vert_par_nv[ch[z]] == nv_off + z);
 							REQUIRE_FAST(spqr.node_adj[2 * (nv_off + z) + 0].empty());
 							REQUIRE_FAST(spqr.node_adj[2 * (nv_off + z) + 1].empty());
+						}
+						// Roots follow vert_order, and each root's first incident edge in edge_order roots its block
+						{
+							std::vector<bool> seen(NV);
+							int z = 0;
+							for (int r : full_vert_order) {
+								if (seen[r]) continue;
+								int rt = spqr.vert_index[r];
+								REQUIRE_FAST(z < int(ch.size()));
+								REQUIRE_FAST(ch[z] == rt);
+								z++;
+								for (int j = rt; j < spqr.subtree_end[rt]; j++) {
+									if (spqr.types[j] == node_type::V) seen[spqr.orig_id[j]] = true;
+								}
+								auto it = std::ranges::find_if(full_edge_order, [&](int e) { return edges[e][0] == r || edges[e][1] == r; });
+								if (it != full_edge_order.end()) {
+									REQUIRE_FAST(spqr.par[spqr.edge_index[*it]] == rt);
+								}
+							}
+							REQUIRE_FAST(z == int(ch.size()));
 						}
 					} else {
 						REQUIRE_FAST(p != -1);
