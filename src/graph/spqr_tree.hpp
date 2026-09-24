@@ -459,7 +459,9 @@ protected:
 				setmin(a.top_depth, b.top_depth);
 				a.spans[0] = concat(b.spans[0], a.spans[0]);
 				a.spans[1] = concat(a.spans[1], b.spans[1]);
-				merge_planarity(a.planarity, b.planarity);
+				if constexpr (with_planarity) {
+					merge_planarity(a.planarity, b.planarity);
+				}
 				tstack.pop_back();
 			};
 
