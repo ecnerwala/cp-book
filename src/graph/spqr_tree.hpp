@@ -620,7 +620,7 @@ struct spqr_tree {
 					bool is_single = true;
 					if (is_tree) {
 						// The span lives on side edge_dir
-						push_edge_tstack(nxt, cur_depth, edge_item(e), true);
+						push_edge_tstack(nxt, cur_depth, e, true);
 						while (tstack_size >= 2 && nxt_tstack().top_depth >= cur_depth) {
 							node_type type;
 							if (nxt_tstack().top_depth > cur_depth) {
@@ -788,7 +788,7 @@ struct spqr_tree {
 					} else {
 						assert(is_type_1);
 						// The span lives on side !edge_dir
-						push_edge_tstack(cur, lowval, edge_item(e), false);
+						push_edge_tstack(cur, lowval, e, false);
 						setmin(first_occurrence[lowval], nxt_edge_idx++);
 					}
 
