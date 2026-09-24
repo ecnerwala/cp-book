@@ -135,14 +135,29 @@ struct spqr_tree {
 
 	int size() const { return int(par.size()); }
 
+	// vert_order and edge_order are (prefixes of) permutations of vertex / edge ids;
+	// listed ids are visited first in the given order, then the rest in id order.
+	// Roots are the first unvisited vertices, and DFS children are explored in edge order.
 	// Use planar_spqr_tree::build to also compute the planar embeddings.
-	static spqr_tree build(int NV, const std::vector<std::array<int, 2>>& edges, bool ternarize = false) {
-		return build_impl<false>(NV, edges, ternarize);
+	static spqr_tree build(
+		int NV,
+		const std::vector<std::array<int, 2>>& edges,
+		bool ternarize = false,
+		std::span<const int> vert_order = {},
+		std::span<const int> edge_order = {}
+	) {
+		return build_impl<false>(NV, edges, ternarize, vert_order, edge_order);
 	}
 
 protected:
 	template <bool with_planarity>
-	static std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> build_impl(int NV, const std::vector<std::array<int, 2>>& edges, bool ternarize);
+	static std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> build_impl(
+		int NV,
+		const std::vector<std::array<int, 2>>& edges,
+		bool ternarize,
+		std::span<const int> vert_order,
+		std::span<const int> edge_order
+	);
 };
 
 struct planar_spqr_tree : spqr_tree {
@@ -152,20 +167,51 @@ struct planar_spqr_tree : spqr_tree {
 	// Nonplanar nodes have all entries -1.
 	std::vector<int> ne_rot_adj;
 
-	static planar_spqr_tree build(int NV, const std::vector<std::array<int, 2>>& edges, bool ternarize = false) {
-		return build_impl<true>(NV, edges, ternarize);
+	static planar_spqr_tree build(
+		int NV,
+		const std::vector<std::array<int, 2>>& edges,
+		bool ternarize = false,
+		std::span<const int> vert_order = {},
+		std::span<const int> edge_order = {}
+	) {
+		return build_impl<true>(NV, edges, ternarize, vert_order, edge_order);
 	}
 };
 
 template <bool with_planarity>
-std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build_impl(int NV, const std::vector<std::array<int, 2>>& edges, bool ternarize) {
-	// TODO: Figure out the best way to specify roots; maybe accept a permutation of "root priority"?
-
+std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build_impl(
+	int NV,
+	const std::vector<std::array<int, 2>>& edges,
+	bool ternarize,
+	std::span<const int> vert_order,
+	std::span<const int> edge_order
+) {
 	// std::min is by reference, which breaks some optimizations
 	auto min = [](auto a, auto b) { return a < b ? a : b; };
 	auto setmin = [](auto& a, auto b) { if (b < a) a = b; };
 
 	int NE = int(edges.size());
+	assert(int(vert_order.size()) <= NV);
+	assert(int(edge_order.size()) <= NE);
+
+	// Calls f(i) for i in order, then for the remaining i in [0, n) in increasing order.
+	auto for_each_in_order = [](int n, std::span<const int> order, auto f) -> void {
+		for (int i : order) f(i);
+		if (int(order.size()) == n) return;
+		if (order.empty()) {
+			for (int i = 0; i < n; i++) f(i);
+		} else if (order.size() == 1) {
+			for (int i = 0; i < n; i++) {
+				if (i != order[0]) f(i);
+			}
+		} else {
+			std::vector<bool> listed(n);
+			for (int i : order) listed[i] = true;
+			for (int i = 0; i < n; i++) {
+				if (!listed[i]) f(i);
+			}
+		}
+	};
 
 	std::vector<int> roots; roots.reserve(NV);
 	struct outedge_t { int src, dest; int e; int key; };
@@ -182,11 +228,11 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			if (u != v) adj_builder.count(v);
 		}
 		adj_builder.allocate();
-		for (int e = 0; e < NE; e++) {
+		for_each_in_order(NE, edge_order, [&](int e) -> void {
 			auto [u, v] = edges[e];
 			adj_builder.push(u) = {v, e};
 			if (u != v) adj_builder.push(v) = {u, e};
-		}
+		});
 		auto adj = std::move(adj_builder).finalize();
 
 		std::vector<outedge_t> all_outedges; all_outedges.reserve(NE);
@@ -250,7 +296,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			stk.pop_back();
 			return lowvals;
 		};
-		for (int rt = 0; rt < NV; rt++) {
+		for_each_in_order(NV, vert_order, [&](int rt) -> void {
 			if (depth[rt] == -1) {
 				roots.push_back(rt);
 				push_vert(rt, -1);
@@ -264,7 +310,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 					}
 				}
 			}
-		}
+		});
 
 		csr_builder<outedge_t> by_key_builder(3*NV+6);
 		for (auto edge : all_outedges) by_key_builder.count(edge.key);
