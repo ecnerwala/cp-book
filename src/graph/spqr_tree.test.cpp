@@ -2,6 +2,7 @@
 
 #include <random>
 #include <algorithm>
+#include <tuple>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -26,8 +27,30 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				CAPTURE(ternarize);
 
 				using wala::spqr_tree;
+				using wala::planar_spqr_tree;
 				using node_type = spqr_tree::node_type;
-				auto spqr = spqr_tree::build(NV, edges, ternarize);
+				auto spqr = planar_spqr_tree::build(NV, edges, ternarize);
+
+				{
+					// Building without planarity should give the same tree
+					auto spqr_np = spqr_tree::build(NV, edges, ternarize);
+					REQUIRE_FAST(spqr_np.vert_index == spqr.vert_index);
+					REQUIRE_FAST(spqr_np.edge_index == spqr.edge_index);
+					REQUIRE_FAST(spqr_np.par == spqr.par);
+					REQUIRE_FAST(spqr_np.subtree_end == spqr.subtree_end);
+					REQUIRE_FAST(spqr_np.types == spqr.types);
+					REQUIRE_FAST(spqr_np.orig_id == spqr.orig_id);
+					REQUIRE_FAST(spqr_np.ch.bounds == spqr.ch.bounds);
+					REQUIRE_FAST(spqr_np.ch.dat == spqr.ch.dat);
+					auto check_csr_equal = [] <typename T> (const wala::csr<T>& a, const wala::csr<T>& b, auto proj) -> void {
+						REQUIRE_FAST(a.bounds == b.bounds);
+						REQUIRE_FAST(std::ranges::equal(a.dat, b.dat, {}, proj, proj));
+					};
+					check_csr_equal(spqr_np.node_verts, spqr.node_verts, [](const spqr_tree::node_vert_t& x) { return std::tuple(x.node, x.vert); });
+					REQUIRE_FAST(spqr_np.vert_par_nv == spqr.vert_par_nv);
+					check_csr_equal(spqr_np.node_edges, spqr.node_edges, [](const spqr_tree::node_edge_t& x) { return std::tuple(x.node, x.twin_ne, x.nvs); });
+					check_csr_equal(spqr_np.node_adj, spqr.node_adj, [](const spqr_tree::node_adj_t& x) { return std::tuple(x.ne, x.dest_nv); });
+				}
 
 				// Basic bounds checks
 				int num_items = int(spqr.par.size());
