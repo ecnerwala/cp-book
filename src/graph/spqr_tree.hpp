@@ -200,6 +200,10 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		if (int(order.size()) == n) return;
 		if (order.empty()) {
 			for (int i = 0; i < n; i++) f(i);
+		} else if (order.size() == 1) {
+			for (int i = 0; i < n; i++) {
+				if (i != order[0]) f(i);
+			}
 		} else {
 			std::vector<bool> listed(n);
 			for (int i : order) listed[i] = true;
