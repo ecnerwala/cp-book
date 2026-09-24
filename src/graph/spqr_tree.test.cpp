@@ -27,12 +27,13 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				CAPTURE(ternarize);
 
 				using wala::spqr_tree;
+				using wala::planar_spqr_tree;
 				using node_type = spqr_tree::node_type;
-				auto spqr = spqr_tree::build(NV, edges, ternarize);
+				auto spqr = planar_spqr_tree::build(NV, edges, ternarize);
 
 				{
-					// Building without planarity should give the same tree with empty planarity data
-					auto spqr_np = spqr_tree::build<false>(NV, edges, ternarize);
+					// Building without planarity should give the same tree
+					auto spqr_np = spqr_tree::build(NV, edges, ternarize);
 					REQUIRE_FAST(spqr_np.vert_index == spqr.vert_index);
 					REQUIRE_FAST(spqr_np.edge_index == spqr.edge_index);
 					REQUIRE_FAST(spqr_np.par == spqr.par);
@@ -49,8 +50,6 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 					REQUIRE_FAST(spqr_np.vert_par_nv == spqr.vert_par_nv);
 					check_csr_equal(spqr_np.node_edges, spqr.node_edges, [](const spqr_tree::node_edge_t& x) { return std::tuple(x.node, x.twin_ne, x.nvs); });
 					check_csr_equal(spqr_np.node_adj, spqr.node_adj, [](const spqr_tree::node_adj_t& x) { return std::tuple(x.ne, x.dest_nv); });
-					REQUIRE_FAST(spqr_np.node_planar.empty());
-					REQUIRE_FAST(spqr_np.ne_rot_adj.empty());
 				}
 
 				// Basic bounds checks

@@ -40,6 +40,8 @@ template <typename T> struct csr_builder {
 	[[nodiscard]] csr<T> finalize() && { return { std::move(bounds), std::move(dat) }; }
 };
 
+struct planar_spqr_tree;
+
 struct spqr_tree {
 	// The SPQR tree of a graph is a canonical/"maximal" decomposition of the graph by 2-vertex cuts.
 	// The tree consists of nodes which are graphs of virtual edges (vedges), corresponding to nontrivial 2-vertex cuts.
@@ -130,16 +132,17 @@ struct spqr_tree {
 	};
 	csr<node_adj_t> node_adj;
 
-	// Planarity data; both are empty when built with with_planarity = false.
-	std::vector<bool> node_planar;
-	// Planarity adjacencies: ne_rot_adj is an involution of facing quarter-edges, indexed according to:
-	// ne_rot_adj[4 * node_edge + 2 * side + dir]
-	std::vector<int> ne_rot_adj;
-
 	int size() const { return int(par.size()); }
 
-	template <bool with_planarity = true>
+	// Use planar_spqr_tree::build to also compute the planar embeddings.
 	static spqr_tree build(int NV, const std::vector<std::array<int, 2>>& edges, bool ternarize = false) {
+		return build_impl<false>(NV, edges, ternarize);
+	}
+
+protected:
+	template <bool with_planarity>
+	static std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> build_impl(int NV, const std::vector<std::array<int, 2>>& edges, bool ternarize) {
+		using result_t = std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree>;
 		// TODO: Figure out the best way to specify roots; maybe accept a permutation of "root priority"?
 
 		// std::min is by reference, which breaks some optimizations
@@ -1225,7 +1228,7 @@ struct spqr_tree {
 				v.vert = vert_index[v.vert];
 			}
 
-			return spqr_tree{
+			spqr_tree res{
 				std::move(vert_index),
 				std::move(edge_index),
 				std::move(par),
@@ -1237,10 +1240,25 @@ struct spqr_tree {
 				std::move(vert_par_nv),
 				std::move(node_edges),
 				std::move(node_adj),
-				std::move(node_planar),
-				std::move(ne_rot_adj),
 			};
+			if constexpr (with_planarity) {
+				return result_t{std::move(res), std::move(node_planar), std::move(ne_rot_adj)};
+			} else {
+				return res;
+			}
 		}
+	}
+};
+
+struct planar_spqr_tree : spqr_tree {
+	std::vector<bool> node_planar;
+	// Planarity adjacencies: ne_rot_adj is an involution of facing quarter-edges, indexed according to:
+	// ne_rot_adj[4 * node_edge + 2 * side + dir]
+	// Nonplanar nodes have all entries -1.
+	std::vector<int> ne_rot_adj;
+
+	static planar_spqr_tree build(int NV, const std::vector<std::array<int, 2>>& edges, bool ternarize = false) {
+		return build_impl<true>(NV, edges, ternarize);
 	}
 };
 
