@@ -280,20 +280,20 @@ struct spqr_tree {
 		};
 
 		struct item_list {
+			// Items are actually 2 * item + planarity_flip
 			std::array<int, 2> v{-1, -1};
-			std::array<bool, 2> planarity_flip{false, false};
 
-			[[nodiscard]] bool empty() const { return v[0] == -1; }
+			[[nodiscard]] bool empty() const { return v[0] < 0; }
 		};
-		std::vector<std::pair<int, bool>> ch_nxt; ch_nxt.reserve(1 + NV + NE + NE); ch_nxt.assign(1 + NV + NE, {-1, false});
+		std::vector<int> ch_nxt; ch_nxt.reserve(1 + NV + NE + NE); ch_nxt.assign(1 + NV + NE, -1);
 		auto concat = [&](item_list a, item_list b) -> item_list {
 			if (b.empty()) return a;
 			if (a.empty()) return b;
-			ch_nxt[a.v[1]] = {b.v[0], a.planarity_flip[1] ^ b.planarity_flip[0]};
-			return {{a.v[0], b.v[1]}, {a.planarity_flip[0], b.planarity_flip[1]}};
+			ch_nxt[a.v[1] >> 1] = b.v[0] ^ (a.v[1] & 1);
+			return {{a.v[0], b.v[1]}};
 		};
 		auto unit_list = [&](int item) -> item_list {
-			return {{item, item}, {false, false}};
+			return {{item << 1, item << 1}};
 		};
 
 		std::vector<std::array<int, 2>> item_vs; item_vs.reserve(1 + NV + 2 * NE); item_vs.resize(1 + NV + NE, {-1, -1});
@@ -319,7 +319,7 @@ struct spqr_tree {
 				item_vs.push_back({});
 				item_ch.push_back({});
 				item_types.push_back(type);
-				ch_nxt.push_back({-1, false});
+				ch_nxt.push_back(-1);
 				node_planarity.emplace_back();
 				return item;
 			};
@@ -430,10 +430,10 @@ struct spqr_tree {
 				push_tstack(v_start, top_depth, item, make_edge_planarity(item, top_depth, is_tree));
 			};
 			auto flip_tstack_planarity = [&](tstack_t& a) -> void {
-				a.spans[0].planarity_flip[0] ^= 1;
-				a.spans[0].planarity_flip[1] ^= 1;
-				a.spans[1].planarity_flip[0] ^= 1;
-				a.spans[1].planarity_flip[1] ^= 1;
+				a.spans[0].v[0] ^= 1;
+				a.spans[0].v[1] ^= 1;
+				a.spans[1].v[0] ^= 1;
+				a.spans[1].v[1] ^= 1;
 				if (a.planarity) {
 					std::swap(a.planarity->sides[0], a.planarity->sides[1]);
 				}
@@ -460,8 +460,8 @@ struct spqr_tree {
 
 				bool top_dir = stack_dir[t.top_depth];
 				assert(get_side(t.spans, !top_dir).empty());
-				int item = get_side(t.spans, top_dir).v[0];
-				assert(item == get_side(t.spans, top_dir).v[1]);
+				int item = get_side(t.spans, top_dir).v[0] >> 1;
+				assert(item == (get_side(t.spans, top_dir).v[1] >> 1));
 				if (item_types[item] == type) {
 					t.spans = set_sides(top_dir, item_ch[item], {});
 					{
@@ -943,32 +943,35 @@ struct spqr_tree {
 				if (item_vs[cur_item][0] != -1) {
 					node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][0]};
 				}
-				bool planarity_flip = item_ch[cur_item].planarity_flip[0];
-				for (int nxt_item = item_ch[cur_item].v[0]; nxt_item != -1; planarity_flip ^= ch_nxt[nxt_item].second, nxt_item = ch_nxt[nxt_item].first) {
-					ch.dat[ch_en++] = nxt_item;
-					assert(nxt_item >= 1);
-					if (nxt_item < 1 + NV) {
-						node_verts.dat[nv_en++] = {cur_idx, nxt_item - 1};
-					} else {
-						if (cur_type != node_type::R) {
-							assert(!planarity_flip);
+				if (!item_ch[cur_item].empty()) {
+					bool planarity_flip = item_ch[cur_item].v[0] & 1;
+					for (int ch_item = item_ch[cur_item].v[0] >> 1; true; planarity_flip ^= (ch_nxt[ch_item] & 1), ch_item = ch_nxt[ch_item] >> 1) {
+						ch.dat[ch_en++] = ch_item;
+						assert(ch_item >= 1);
+						if (ch_item < 1 + NV) {
+							node_verts.dat[nv_en++] = {cur_idx, ch_item - 1};
 						} else {
-							// Fix the planarity direction right here: reverse quarter_edge_matches upfront;
-							// this breaks the involution property, but from here on we'll never read the low bits anyways.
-							int ve = nxt_item - (1 + NV);
-							if (planarity_flip) {
-								std::swap(quarter_edge_matches[4 * ve + 0], quarter_edge_matches[4 * ve + 1]);
-								std::swap(quarter_edge_matches[4 * ve + 2], quarter_edge_matches[4 * ve + 3]);
+							if (cur_type != node_type::R) {
+								assert(!planarity_flip);
+							} else {
+								// Fix the planarity direction right here: reverse quarter_edge_matches upfront;
+								// this breaks the involution property, but from here on we'll never read the low bits anyways.
+								int ve = ch_item - (1 + NV);
+								if (planarity_flip) {
+									std::swap(quarter_edge_matches[4 * ve + 0], quarter_edge_matches[4 * ve + 1]);
+									std::swap(quarter_edge_matches[4 * ve + 2], quarter_edge_matches[4 * ve + 3]);
+								}
 							}
+							n_edges++;
 						}
-						n_edges++;
+						if (ch_item == (item_ch[cur_item].v[1] >> 1)) {
+							assert(ch_nxt[ch_item] == -1);
+							break;
+						}
 					}
-					if (nxt_item == item_ch[cur_item].v[1]) {
-						assert(ch_nxt[nxt_item].first == -1);
-					}
+					planarity_flip ^= item_ch[cur_item].v[1] & 1;
+					assert(!planarity_flip);
 				}
-				planarity_flip ^= item_ch[cur_item].planarity_flip[1];
-				assert(!planarity_flip);
 				if (item_vs[cur_item][1] != -1) {
 					node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][1]};
 				}
