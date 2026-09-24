@@ -399,7 +399,7 @@ protected:
 								as.top_depths[1] = bs.top_depths[1];
 							}
 						}
-				}
+					}
 				}
 			};
 			auto make_edge_planarity = [&](int item, int top_depth, bool is_tree) -> tstack_edge_planarity_t {
@@ -418,8 +418,8 @@ protected:
 						p.sides[0].bot_ends = {4 * ve + 2 * !top_dir + 0, 4 * ve + 2 * !top_dir + 1};
 						p.sides[0].top_ends = {4 * ve + 2 * top_dir + 1, 4 * ve + 2 * top_dir + 0};
 						p.sides[0].top_depths = {top_depth, top_depth};
-				}
-				return p;
+					}
+					return p;
 				}
 			};
 			struct tstack_t {
@@ -452,7 +452,7 @@ protected:
 					a.spans[1].v[1] ^= 1;
 					if (a.planarity) {
 						std::swap(a.planarity->sides[0], a.planarity->sides[1]);
-				}
+					}
 				}
 			};
 			auto merge_tstack_tops = [&]() -> void {
