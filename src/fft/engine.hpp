@@ -60,6 +60,8 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //      downsample      compute the half-sized transform/product of just the even (odd = false) or odd terms of the input
 //      upsample        size n (n >= 2) transform/product of the input spread as evens (odd = false) or odds (odd = true); inverse of downsample
 //      negate_arg      size n transform of A(-x)
+//      graeffe         size n/2 product of the even part of A(x) * A(-x) (one Graeffe/root-squaring step);
+//                      equals downsample(mul(t, negate_arg(t, n), n), n/2, false) but engines can fuse the passes
 template <typename E>
 concept engine = requires(
 	std::span<const typename E::value_type> in,
@@ -79,6 +81,7 @@ concept engine = requires(
 	{ E::upsample(ct, n, false) } -> std::same_as<typename E::transformed>;
 	{ E::upsample(cp, n, false) } -> std::same_as<typename E::product>;
 	{ E::negate_arg(ct, n) } -> std::same_as<typename E::transformed>;
+	{ E::graeffe(ct, n) } -> std::same_as<typename E::product>;
 	{ E::mul(ct, ct, n) } -> std::same_as<typename E::product>;
 	{ E::sq(ct, n) } -> std::same_as<typename E::product>;
 	{ E::mul2(ct, ct, ct, ct, n) } -> std::same_as<typename E::template product_t<2 * E::unit_scale>>;

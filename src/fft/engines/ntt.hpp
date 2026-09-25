@@ -61,6 +61,15 @@ template <typename num> struct ntt {
 		for (int j = 0; j < n; j++) r.v[j] = t.v[j ^ 1];
 		return r;
 	}
+	// One Graeffe step: the size-n/2 even half of A(x) * A(-x).
+	// Entries 2u, 2u+1 hold A at a pair +-w, where the product takes the same value
+	// A(w) A(-w), so the even half is just that value.
+	static product graeffe(const transformed& t, int n) {
+		assert(n >= 2 && t.size() >= n);
+		product p; p.v.resize(n/2);
+		for (int u = 0; u < n/2; u++) p.v[u] = t.v[2*u] * t.v[2*u+1];
+		return p;
+	}
 	static product mul(const transformed& a, const transformed& b, int n) {
 		assert(a.size() >= n && b.size() >= n);
 		product p; p.v.resize(n);
