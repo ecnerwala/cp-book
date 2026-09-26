@@ -101,6 +101,11 @@ struct componentwise {
 		for (int c = 0; c < L; c++) r.t[c] = E::negate_arg(t.t[c], n);
 		return r;
 	}
+	template <int A> static transformed_t<A> of_reverse(const transformed_t<A>& t, int n) {
+		transformed_t<A> r;
+		for (int c = 0; c < L; c++) r.t[c] = E::of_reverse(t.t[c], n);
+		return r;
+	}
 	template <int A, int B> static transformed_t<A + B> add(transformed_t<A>&& a, const transformed_t<B>& b) {
 		transformed_t<A + B> r;
 		for (int c = 0; c < L; c++) r.t[c] = E::add(std::move(a.t[c]), b.t[c]);

@@ -347,4 +347,43 @@ TEMPLATE_TEST_CASE("negate_arg transforms", "[fft]", ALL_ENGINES) {
 	}
 }
 
+TEMPLATE_TEST_CASE("of_reverse transforms", "[fft]", ALL_ENGINES) {
+	using E = TestType;
+	using num = typename E::value_type;
+	mt19937 mt(Catch::getSeed());
+	vector<num> delta(1, num(1));
+	for (int n : {1, 2, 4, 16, 64}) {
+		// inputs longer than n wrap, and the reversal is of the wrapped sequence
+		for (int la : {n, n + 1, 2 * n}) {
+			vector<num> a(la);
+			fill_rnd(a, mt);
+			CAPTURE(n, la);
+			auto ta = E::transform(span<const num>(a), n);
+			auto td = E::transform(span<const num>(delta), n);
+			vector<num> got(n), want(n);
+			E::finish(E::mul(E::of_reverse(ta, n), td, n), span<num>(got));
+			for (int i = 0; i < la; i++) want[(n - i % n) % n] += a[i];
+			check_eq(got, want);
+		}
+	}
+}
+
+TEMPLATE_TEST_CASE("dot of product and transform", "[fft]", engines::ntt<modnum<998244353>>, engines::ntt<mod_goldilocks>, engines::real<double>) {
+	using E = TestType;
+	using num = typename E::value_type;
+	mt19937 mt(Catch::getSeed());
+	for (int n : {1, 2, 4, 16, 64}) {
+		vector<num> a(n), b(n), w(n + 1);
+		fill_rnd(a, mt); fill_rnd(b, mt); fill_rnd(w, mt);
+		auto p = E::mul(E::transform(span<const num>(a), n), E::transform(span<const num>(b), n), n);
+		auto tw = E::transform(span<const num>(w), n);
+		num got = E::dot(p, tw, n);
+		vector<num> c(n);
+		E::finish(std::move(p), span<num>(c));
+		num want = 0;
+		for (int k = 0; k < n; k++) want += c[k] * (w[k] + (k == 0 ? w[n] : num(0)));
+		check_eq(vector<num>{got}, vector<num>{want});
+	}
+}
+
 } // namespace wala::fft
