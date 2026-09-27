@@ -88,6 +88,23 @@ template <typename dbl = double> struct real {
 		for (int j = 0; j < m; j++) r.v[j] = conj(t.v[core::conj_index(j)]);
 		return r;
 	}
+	// b[k] = a[-k mod n] packs to b'[t] = Re a'[-t] + i Im a'[-t-1], so the packed spectrum
+	// at w = w_m^k is X(w^-1) + i w^-1 Y(w^-1) in terms of the real/imaginary-part spectra.
+	static transformed of_reverse(const transformed& t, int n) {
+		int m = packed_size(n);
+		assert(sz(t.v) >= m);
+		transformed r; r.v.resize(m);
+		if (m == 1) { r.v[0] = t.v[0]; return r; }
+		core::init(m);
+		for (int j = 0; j < m; j++) {
+			int k = core::brev(j, m);
+			cnum iw = k < m / 2 ? core::inv_rt[m / 2 + k] : -core::inv_rt[k];
+			int cj = core::conj_index(j);
+			cnum x = part(t, cj, false), y = part(t, cj, true) * iw;
+			r.v[j] = x + cnum(-y.y, y.x);
+		}
+		return r;
+	}
 	static transformed half(const transformed& f, int n, bool odd) {
 		assert(n >= 2 && f.size() >= 2 * n);
 		int mo = n / 2;
@@ -166,6 +183,14 @@ template <typename dbl = double> struct real {
 		assert(a.size() == b.size());
 		for (int i = 0; i < sz(a.v); i++) a.v[i] = a.v[i] + b.v[i];
 		return std::move(a);
+	}
+	// sum_k finish(p)[k] * b[k] = Re sum_t p'[t] conj(b'[t]) = Re (1/m) sum_j P[j] conj(B[j])
+	static dbl dot(const product& p, const transformed& t, int n) {
+		int m = packed_size(n);
+		assert(sz(p.v) >= m && sz(t.v) >= m);
+		dbl r = 0;
+		for (int j = 0; j < m; j++) r += p.v[j].x * t.v[j].x + p.v[j].y * t.v[j].y;
+		return r / dbl(m);
 	}
 	template <typename Op = assign_op> static void finish(product&& p, std::span<dbl> out, Op op = {}) {
 		int m = sz(p.v);

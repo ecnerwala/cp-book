@@ -60,6 +60,14 @@ struct add_twice_op { template <typename T> void operator()(T& d, T v) const { d
 //      downsample      compute the half-sized transform/product of just the even (odd = false) or odd terms of the input
 //      upsample        size n (n >= 2) transform/product of the input spread as evens (odd = false) or odds (odd = true); inverse of downsample
 //      negate_arg      size n transform of A(-x)
+//      of_reverse      size n transform of A(1/x) mod x^n - 1, i.e. of the cyclically reversed coefficients a[-k mod n]
+//
+//   Optional (exact-ish engines only, currently ntt and real): read a product out without an inverse transform.
+//      dot(product_t<K>, transformed_t<A>, int n) -> value_type
+//                      sum_k finish(p)[k] * b[k] over k < n, where b is the coefficient sequence (mod x^n - 1) of the
+//                      transform; Parseval, so it costs O(n) instead of an inverse transform.
+//                      <P, B> with B = of_reverse(T) is the constant term of P * T.
+//                      Not offered by split/crt: their pointwise data isn't exact enough to sum before reduction.
 template <typename E>
 concept engine = requires(
 	std::span<const typename E::value_type> in,
@@ -79,6 +87,7 @@ concept engine = requires(
 	{ E::upsample(ct, n, false) } -> std::same_as<typename E::transformed>;
 	{ E::upsample(cp, n, false) } -> std::same_as<typename E::product>;
 	{ E::negate_arg(ct, n) } -> std::same_as<typename E::transformed>;
+	{ E::of_reverse(ct, n) } -> std::same_as<typename E::transformed>;
 	{ E::mul(ct, ct, n) } -> std::same_as<typename E::product>;
 	{ E::sq(ct, n) } -> std::same_as<typename E::product>;
 	{ E::mul2(ct, ct, ct, ct, n) } -> std::same_as<typename E::template product_t<2 * E::unit_scale>>;

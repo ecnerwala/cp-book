@@ -78,6 +78,9 @@ struct crt {
 	template <int A> static transformed_t<A> negate_arg(const transformed_t<A>& t, int n) {
 		return transformed_t<A>{E1::negate_arg(t.t1, n), E2::negate_arg(t.t2, n)};
 	}
+	template <int A> static transformed_t<A> of_reverse(const transformed_t<A>& t, int n) {
+		return transformed_t<A>{E1::of_reverse(t.t1, n), E2::of_reverse(t.t2, n)};
+	}
 	// Exact per prime; the scale tracks the true (integer) coefficient growth.
 	template <int A, int B> static transformed_t<A + B> add(transformed_t<A>&& a, const transformed_t<B>& b) {
 		return transformed_t<A + B>{E1::add(std::move(a.t1), b.t1), E2::add(std::move(a.t2), b.t2)};

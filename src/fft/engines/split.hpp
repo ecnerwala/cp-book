@@ -104,6 +104,12 @@ template <typename mnum> struct split {
 		for (int j = 0; j < n; j++) r.v[j] = t.v[j ^ 1];
 		return r;
 	}
+	template <int A> static transformed_t<A> of_reverse(const transformed_t<A>& t, int n) {
+		assert(t.size() >= n);
+		transformed_t<A> r; r.v.resize(n);
+		for (int j = 0; j < n; j++) r.v[j] = t.v[core::conj_index(j)];
+		return r;
+	}
 	template <int A, int B> static transformed_t<A + B> add(transformed_t<A>&& a, const transformed_t<B>& b) {
 		transformed_t<A + B> r{std::move(a.v)};
 		add_into(r.v, b.v);

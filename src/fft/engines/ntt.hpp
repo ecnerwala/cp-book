@@ -61,6 +61,13 @@ template <typename num> struct ntt {
 		for (int j = 0; j < n; j++) r.v[j] = t.v[j ^ 1];
 		return r;
 	}
+	// a[-k]: evaluation at w^{-brev(j)}, which is the conjugate index
+	static transformed of_reverse(const transformed& t, int n) {
+		assert(t.size() >= n);
+		transformed r; r.v.resize(n);
+		for (int j = 0; j < n; j++) r.v[j] = t.v[core::conj_index(j)];
+		return r;
+	}
 	static product mul(const transformed& a, const transformed& b, int n) {
 		assert(a.size() >= n && b.size() >= n);
 		product p; p.v.resize(n);
@@ -82,6 +89,13 @@ template <typename num> struct ntt {
 		assert(a.size() == b.size());
 		for (int i = 0; i < a.size(); i++) a.v[i] += b.v[i];
 		return std::move(a);
+	}
+	// sum_k finish(p)[k] * b[k] by Parseval: (1/n) sum_j P[j] B[-j]
+	static num dot(const product& p, const transformed& t, int n) {
+		assert(p.size() >= n && t.size() >= n);
+		num r = 0;
+		for (int j = 0; j < n; j++) r += p.v[j] * t.v[core::conj_index(j)];
+		return r * inv(num(n));
 	}
 	template <typename Op = assign_op> static void finish(product&& p, std::span<num> out, Op op = {}) {
 		int n = p.size();
