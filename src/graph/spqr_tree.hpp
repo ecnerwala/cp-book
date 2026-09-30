@@ -1445,4 +1445,8 @@ inline std::optional<planar_embedding> planar_embed(const planar_spqr_tree& tree
 	return planar_embedding{std::move(rot_adj)};
 }
 
+inline std::optional<planar_embedding> planar_embed(int NV, const std::vector<std::array<int, 2>>& edges) {
+	return planar_embed(planar_spqr_tree::build(NV, edges));
+}
+
 } // namespace wala
