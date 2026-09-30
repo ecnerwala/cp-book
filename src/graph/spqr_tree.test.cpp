@@ -167,12 +167,15 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				for (int e = 0; e < NE; e++) {
 					auto nvs = spqr.node_verts[spqr.edge_index[e]];
 					std::array<int, 2> given_ends{spqr.vert_index[edges[e][0]], spqr.vert_index[edges[e][1]]};
-					std::ranges::sort(given_ends);
 					if (given_ends[0] == given_ends[1]) {
 						REQUIRE_FAST(nvs.size() == 1);
 						REQUIRE_FAST(given_ends[0] == nvs[0].vert);
+						REQUIRE_FAST(!spqr.edge_flipped[e]);
 					} else {
 						std::array<int, 2> spqr_ends{nvs[0].vert, nvs[1].vert};
+						if (spqr.edge_flipped[e]) {
+							std::swap(spqr_ends[0], spqr_ends[1]);
+						}
 						REQUIRE_FAST(given_ends == spqr_ends);
 					}
 				}

@@ -102,6 +102,7 @@ struct spqr_tree {
 
 	std::vector<int> vert_index;
 	std::vector<int> edge_index;
+	std::vector<bool> edge_flipped;
 
 	std::vector<int> par;
 	std::vector<int> subtree_end;
@@ -935,6 +936,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 	{
 		std::vector<int> vert_index(NV, -1);
 		std::vector<int> edge_index(NE, -1);
+		std::vector<bool> edge_flipped(NE);
 
 		std::vector<int> par(tot_items, -1);
 		std::vector<int> subtree_end(tot_items, -1);
@@ -999,6 +1001,8 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				int orig_edge = cur_item - 1 - NV;
 				orig_id[cur_idx] = orig_edge;
 				edge_index[orig_edge] = cur_idx;
+				assert(item_vs[cur_item][0] != -1);
+				edge_flipped[orig_edge] = item_vs[cur_item][0] != edges[orig_edge][0];
 			} else {
 				assert(1 + NV + NE <= cur_item);
 				if constexpr (with_planarity) {
@@ -1297,6 +1301,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		spqr_tree res{
 			std::move(vert_index),
 			std::move(edge_index),
+			std::move(edge_flipped),
 			std::move(par),
 			std::move(subtree_end),
 			std::move(types),
