@@ -14,32 +14,52 @@
 
 namespace wala {
 
-template <typename T> struct csr {
+struct csr_index {
 	std::vector<int> bounds;
+	std::ranges::iota_view<int, int> indices(int i) const { return std::views::iota(bounds[i], bounds[i+1]); }
+	int num_rows() const { return bounds.empty() ? 0 : int(bounds.size()) - 1; }
+	int num_entries() const { return bounds.empty() ? 0 : bounds.back(); }
+};
+
+template <typename T> struct csr : csr_index {
 	std::vector<T> dat;
 	std::span<T> operator [](int i) { return std::span<T>(dat.begin() + bounds[i], dat.begin() + bounds[i + 1]); }
 	std::span<const T> operator [](int i) const { return std::span<const T>(dat.begin() + bounds[i], dat.begin() + bounds[i + 1]); }
-	std::ranges::iota_view<int, int> indices(int i) const { return std::views::iota(bounds[i], bounds[i+1]); }
-	int num_rows() const { return int(bounds.size()) - 1; }
-	int num_entries() const { return int(dat.size()); }
+};
+
+struct csr_index_builder {
+	std::vector<int> bounds;
+	csr_index_builder() = default;
+	explicit csr_index_builder(int N) : bounds(N+1) {}
+	void count(int k) { bounds[k+1]++; }
+	csr_index finalize() && {
+		for (int i = 0; i < int(bounds.size()); i++) {
+			bounds[i] += bounds[i-1];
+		}
+		return {std::move(bounds)};
+	}
 };
 
 template <typename T> struct csr_builder {
-	std::vector<int> bounds;
+	csr_index idx;
 	std::vector<T> dat;
 	csr_builder() = default;
-	explicit csr_builder(int N) : bounds(N+1) {}
-
-	void count(int k) { bounds[k+1]++; }
-	void allocate() {
+	explicit csr_builder(csr_index idx_, std::vector<T>&& dat_buf = {}) : idx(std::move(idx_)), dat(std::move(dat_buf)) {
+		dat.resize(idx.num_entries());
+		if (!idx.bounds.empty()) {
+			idx.bounds.pop_back();
+			idx.bounds.insert(idx.bounds.begin(), 0);
+		}
+	}
+	explicit csr_builder(csr_index_builder&& idx_builder, std::vector<T>&& dat_buf = {}) : idx{std::move(idx_builder.bounds)}, dat(std::move(dat_buf)) {
 		int l = 0;
-		for (int i = 1; i < int(bounds.size()); i++) {
-			bounds[i] = std::exchange(l, l + bounds[i]);
+		for (int i = 1; i < int(idx.bounds.size()); i++) {
+			idx.bounds[i] = std::exchange(l, l + idx.bounds[i]);
 		}
 		dat.resize(l);
 	}
-	[[nodiscard]] T& push(int k) { return dat[bounds[k+1]++]; }
-	[[nodiscard]] csr<T> finalize() && { return { std::move(bounds), std::move(dat) }; }
+	[[nodiscard]] T& push(int k) { return dat[idx.bounds[k+1]++]; }
+	[[nodiscard]] csr<T> finalize() && { return { std::move(idx), std::move(dat) }; }
 };
 
 struct planar_spqr_tree;
@@ -242,12 +262,12 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		std::vector<int> depth(NV, -1);
 		// 1a: build a normal adjacency list for the initial lowval dfs
 		struct edge_t { int dest; int e; };
-		csr_builder<edge_t> adj_builder(NV);
+		csr_index_builder adj_idx_builder(NV);
 		for (auto [u, v] : edges) {
-			adj_builder.count(u);
-			if (u != v) adj_builder.count(v);
+			adj_idx_builder.count(u);
+			if (u != v) adj_idx_builder.count(v);
 		}
-		adj_builder.allocate();
+		csr_builder<edge_t> adj_builder(std::move(adj_idx_builder));
 		for_each_in_order(NE, edge_order, [&](int e) -> void {
 			auto [u, v] = edges[e];
 			adj_builder.push(u) = {v, e};
@@ -332,17 +352,15 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			}
 		});
 
-		csr_builder<outedge_t> by_key_builder(3*NV+6);
-		for (auto edge : all_outedges) by_key_builder.count(edge.key);
-		by_key_builder.allocate();
+		csr_index_builder by_key_idx_builder(3*NV+6);
+		for (auto edge : all_outedges) by_key_idx_builder.count(edge.key);
+		csr_builder<outedge_t> by_key_builder(std::move(by_key_idx_builder));
 		for (auto edge : all_outedges) by_key_builder.push(edge.key) = edge;
 		csr<outedge_t> by_key = std::move(by_key_builder).finalize();
 
-		csr_builder<outedge_t> by_src_builder(NV);
-		// Hack to reuse memory
-		by_src_builder.dat = std::move(all_outedges);
-		for (auto edge : by_key.dat) by_src_builder.count(edge.src);
-		by_src_builder.allocate();
+		csr_index_builder by_src_idx_builder(NV);
+		for (auto edge : by_key.dat) by_src_idx_builder.count(edge.src);
+		csr_builder<outedge_t> by_src_builder(std::move(by_src_idx_builder), std::move(all_outedges));
 		for (auto edge : by_key.dat) by_src_builder.push(edge.src) = edge;
 		outedges = std::move(by_src_builder).finalize();
 	}
