@@ -506,43 +506,45 @@ jobs:
           competitive-verifier merge-result .shards/CoverageShard-*/result.json \
             > '${{ runner.temp }}/coverage-result.json'
 
-      # Opt-in counter selection: stage only the .gcno/.gcda of solutions in
-      # the merged result, so stale counters (from removed or renamed files)
-      # can't leak into the report. Fresh shard counters win; solutions
-      # skipped via prev-result keep their restored staged counters. Staged
-      # files not in the current result are pruned.
+      # Opt-in counter selection keyed off the merged result: a solution that
+      # ran this run (newest: true) gets exactly the counters its shard
+      # produced, and a solution skipped via prev-result gets the counters
+      # restored from the previous run's cache. Nothing else is staged, so
+      # counters from removed/renamed files or from a solution that ran but
+      # failed to compile (built against an older revision of its includes,
+      # which gcovr refuses to merge) can't leak into the report.
       - name: Stage coverage counters
         run: |
           python3 - <<'EOF'
           import json, pathlib, shutil
           manifest = json.load(open("verify_files-coverage.json"))["files"]
           result_files = json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
-          stage = pathlib.Path("coverage-counters")
-          stage.mkdir(exist_ok=True)
-          fresh_names: set[str] = set()
-          for p in sorted(pathlib.Path(".shards").glob("CoverageShard-*/counters/*")):
-              shutil.copy2(p, stage / p.name)
-              fresh_names.add(p.name)
-          kept = 0
-          expected: set[str] = set()
-          for f in result_files:
+          cached = pathlib.Path("coverage-counters")
+          cached.mkdir(exist_ok=True)
+          fresh = pathlib.Path(".shards")
+          stage = pathlib.Path("coverage-counters.new")
+          stage.mkdir()
+          counts = {"fresh": 0, "cached": 0}
+          for f, r in result_files.items():
               stem = pathlib.PurePosixPath(f).name.removesuffix(".cpp")
-              for v in manifest.get(f, {}).get("verification", []):
-                  if "command" not in v:
-                      continue  # const verification (e.g. IGNOREd file), no binary
-                  for ext in (".gcno", ".gcda"):
-                      name = f"a-{stem}{ext}"
-                      expected.add(name)
-                      if name in fresh_names:
-                          continue
-                      if (stage / name).exists():
-                          kept += 1
-                      else:
-                          print(f"::warning::missing counter file {name}")
-          for p in stage.iterdir():
-              if p.name not in expected:
-                  p.unlink()
-          print(f"staged {len(fresh_names)} fresh + {kept} kept counter files")
+              if not any("command" in v for v in manifest.get(f, {}).get("verification", [])):
+                  continue  # const verification (e.g. IGNOREd file), no binary
+              for ext in (".gcno", ".gcda"):
+                  name = f"a-{stem}{ext}"
+                  if r.get("newest"):
+                      src = next(fresh.glob(f"CoverageShard-*/counters/{name}"), None)
+                      kind = "fresh"
+                  else:
+                      src = cached / name
+                      kind = "cached"
+                  if src is None or not src.exists():
+                      print(f"::warning::missing {kind} counter file {name}")
+                      continue
+                  shutil.copy2(src, stage / name)
+                  counts[kind] += 1
+          shutil.rmtree(cached)
+          stage.rename(cached)
+          print(f"staged {counts['fresh']} fresh + {counts['cached']} cached counter files")
           EOF
 
       - name: Save results for future runs
