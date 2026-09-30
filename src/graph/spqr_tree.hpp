@@ -161,12 +161,30 @@ protected:
 	);
 };
 
+struct planar_embedding {
+	// We'll split our edges up into "quarter-edges", indexed according to
+	//   4 * edge + 2 * side + dir, where side is v0 vs v1, and dir is cw vs ccw
+	//
+	//       1     2
+	//    v0 ---e--- v1
+	//       0     3
+	//
+	// We can think of a planar embedding as a collection of 3 involutions on quarter-edges:
+	// * qe <-> qe ^ 1 maps quarter edges to their opposite side around the endpoint vertex.
+	// * qe <-> qe ^ 3 maps quarter edges to their opposite side along the edge (around the face).
+	// * qe <-> rot_adj[qe] maps quarter edges to their facing pair.
+	// Walking around a vertex is alternating qe ^ 1 and rot_adj[qe], and walking around a face is qe ^ 3 and rot_adj[qe].
+	std::vector<int> rot_adj;
+
+	// TODO: Should we support partial embeddings with -1 representing non-embedded components/edges?
+};
+
 struct planar_spqr_tree : spqr_tree {
 	std::vector<bool> node_planar;
 	// Planarity adjacencies: ne_rot_adj is an involution of facing quarter-edges, indexed according to:
 	// ne_rot_adj[4 * node_edge + 2 * side + dir]
 	// Nonplanar nodes have all entries -1.
-	std::vector<int> ne_rot_adj;
+	planar_embedding ne_embedding;
 
 	static planar_spqr_tree build(
 		int NV,
@@ -1313,30 +1331,12 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			std::move(node_adj),
 		};
 		if constexpr (with_planarity) {
-			return planar_spqr_tree{std::move(res), std::move(node_planar), std::move(ne_rot_adj)};
+			return planar_spqr_tree{std::move(res), std::move(node_planar), {std::move(ne_rot_adj)}};
 		} else {
 			return res;
 		}
 	}
 }
-
-struct planar_embedding {
-	// We'll split our edges up into "quarter-edges", indexed according to
-	//   4 * edge + 2 * side + dir, where side is v0 vs v1, and dir is cw vs ccw
-	//
-	//       1     2
-	//    v0 ---e--- v1
-	//       0     3
-	//
-	// We can think of a planar embedding as a collection of 3 involutions on quarter-edges:
-	// * qe <-> qe ^ 1 maps quarter edges to their opposite side around the endpoint vertex.
-	// * qe <-> qe ^ 3 maps quarter edges to their opposite side along the edge (around the face).
-	// * qe <-> rot_adj[qe] maps quarter edges to their facing pair.
-	// Walking around a vertex is alternating qe ^ 1 and rot_adj[qe], and walking around a face is qe ^ 3 and rot_adj[qe].
-	std::vector<int> rot_adj;
-
-	// TODO: Should we support partial embeddings with -1 representing non-embedded components/edges?
-};
 
 inline std::optional<planar_embedding> planar_embed(const planar_spqr_tree& tree) {
 	using node_type = planar_spqr_tree::node_type;
@@ -1412,9 +1412,9 @@ inline std::optional<planar_embedding> planar_embed(const planar_spqr_tree& tree
 		} else if (type == node_type::O || type == node_type::I) {
 			// Do nothing, the Q node handles it
 		} else if (type == node_type::P || type == node_type::S || type == node_type::R) {
-			// Just merge things according to the ne_rot_adj
+			// Just merge things according to the ne_embedding
 			for (int ta = 4 * tree.node_edges.bounds[i]; ta < 4 * tree.node_edges.bounds[i+1]; ta++) {
-				int tb = tree.ne_rot_adj[ta];
+				int tb = tree.ne_embedding.rot_adj[ta];
 				if (tb < ta) continue;
 
 				auto tree_qe_to_qe = [&](int t) -> int {

@@ -378,63 +378,137 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				}
 
 				// Now, check planarity guarantees.
-				std::vector<bool> face_vis(spqr.ne_rot_adj.size());
-				std::vector<bool> vert_vis(spqr.ne_rot_adj.size());
-				for (int i = 0; i < num_items; i++) {
-					int rot_st = 4 * spqr.node_edges.bounds[i];
-					int rot_en = 4 * spqr.node_edges.bounds[i+1];
-					if (spqr.node_planar[i]) {
-						for (int a = rot_st; a < rot_en; a++) {
-							int b = spqr.ne_rot_adj[a];
-							REQUIRE_FAST(b >= rot_st);
-							REQUIRE_FAST(b < rot_en);
+				{
+					auto check_planar_embedding = [](const wala::planar_embedding& pe, int V, const std::vector<std::array<int, 2>>& ends, const std::vector<bool>& is_embedded) {
+						int E = int(ends.size());
+						assert(int(is_embedded.size()) == E);
+						REQUIRE_FAST(int(pe.rot_adj.size()) == 4 * E);
+
+						// Check the involution basics
+						for (int a = 0; a < 4 * E; a++) {
+							if (!is_embedded[a >> 2]) {
+								REQUIRE(pe.rot_adj[a] == -1);
+								continue;
+							}
+							int b = pe.rot_adj[a];
+							REQUIRE_FAST(b >= 0);
+							REQUIRE_FAST(b < 4 * E);
 							// Make sure it's actually an involution/doubly-linked
-							REQUIRE_FAST(spqr.ne_rot_adj[b] == a);
+							REQUIRE_FAST(pe.rot_adj[b] == a);
 							REQUIRE_FAST((b & 1) != (a & 1));
 							// Make sure the 2 endpoints have the same vertex
-							REQUIRE_FAST(spqr.node_edges.dat[a >> 2].nvs[(a & 2) >> 1] == spqr.node_edges.dat[b >> 2].nvs[(b & 2) >> 1]);
+							REQUIRE_FAST(ends[a >> 2][(a & 2) >> 1] == ends[b >> 2][(b & 2) >> 1]);
 						}
 
-						if (spqr.types[i] == node_type::F || spqr.types[i] == node_type::V) {
-							continue;
-						}
+						int expected_vert_cycles = 0;
+						int expected_face_cycles = 0;
+						{
+							// Union find to identify components
+							std::vector<bool> has_edge(V, false);
+							std::vector<int> par(V, -1);
+							auto get_par = [&](int a) -> int {
+								while (par[a] >= 0) {
+									if (par[par[a]] >= 0) par[a] = par[par[a]];
+									a = par[a];
+								}
+								return a;
+							};
+							auto merge = [&](int a, int b) -> bool {
+								a = get_par(a), b = get_par(b);
+								if (a == b) return false;
+								if (par[a] > par[b]) std::swap(a, b);
+								par[a] += par[b];
+								par[b] = a;
+								return true;
+							};
 
-						int num_verts = int(spqr.node_verts[i].size());
-						int num_edges = int(spqr.node_edges[i].size());
+							for (int e = 0; e < E; e++) {
+								if (!is_embedded[e]) continue;
+								for (auto u : ends[e]) {
+									assert(0 <= u && u < V);
+									if (!has_edge[u]) {
+										has_edge[u] = true;
+										expected_vert_cycles++;
+										expected_face_cycles++;
+									}
+								}
+								// F = 2C + E - V
+								expected_face_cycles += 1 - 2 * merge(ends[e][0], ends[e][1]);
+							}
+						}
 
 						// Verify all edges around a vertex form a single cycle
 						int num_vert_cycles = 0;
-						for (int a = rot_st; a < rot_en; a++) {
-							if (vert_vis[a]) continue;
-							num_vert_cycles++;
-							int cur = a;
-							do {
-								vert_vis[cur] = true;
-								cur ^= 1;
-								vert_vis[cur] = true;
-								cur = spqr.ne_rot_adj[cur];
-							} while (cur != a);
+						{
+							std::vector<bool> vert_vis(pe.rot_adj.size());
+							for (int a = 0; a < 4 * E; a++) {
+								if (!is_embedded[a >> 2]) continue;
+								if (vert_vis[a]) continue;
+								num_vert_cycles++;
+								int cur = a;
+								do {
+									vert_vis[cur] = true;
+									cur ^= 1;
+									vert_vis[cur] = true;
+									cur = pe.rot_adj[cur];
+								} while (cur != a);
+							}
 						}
-						REQUIRE_FAST(num_vert_cycles == num_verts);
+						// This must be true since all paired quarter-edges share a vertex, so no cycle jumps vertices.
+						assert(num_vert_cycles >= expected_vert_cycles);
+						REQUIRE_FAST(num_vert_cycles == expected_vert_cycles);
 
 						// Verify the euler characteristic
 						int num_face_cycles = 0;
-						for (int a = rot_st; a < rot_en; a++) {
-							if (face_vis[a]) continue;
-							num_face_cycles++;
-							int cur = a;
-							do {
-								face_vis[cur] = true;
-								cur ^= 3;
-								face_vis[cur] = true;
-								cur = spqr.ne_rot_adj[cur];
-							} while (cur != a);
+						{
+							std::vector<bool> face_vis(pe.rot_adj.size());
+							for (int a = 0; a < 4 * E; a++) {
+								if (!is_embedded[a >> 2]) continue;
+								if (face_vis[a]) continue;
+								num_face_cycles++;
+								int cur = a;
+								do {
+									face_vis[cur] = true;
+									cur ^= 3;
+									face_vis[cur] = true;
+									cur = pe.rot_adj[cur];
+								} while (cur != a);
+							}
 						}
-						REQUIRE_FAST(num_face_cycles == num_edges - num_verts + 2);
-					} else {
-						// Make sure everything's 0-ed out
-						for (int b = rot_st; b < rot_en; b++) {
-							REQUIRE_FAST(spqr.ne_rot_adj[b] == -1);
+						// Worse embeddings can only have larger Euler characteristic
+						assert(num_face_cycles >= expected_face_cycles);
+						REQUIRE_FAST(num_face_cycles == expected_face_cycles);
+					};
+					{
+						INFO("Checking partial embeddings");
+
+						std::vector<std::array<int, 2>> ends(spqr.node_edges.dat.size());
+						std::vector<bool> is_embedded(spqr.node_edges.dat.size());
+						for (int i = 0; i < num_items; i++) {
+							int ne_st = spqr.node_edges.bounds[i];
+							int ne_en = spqr.node_edges.bounds[i+1];
+							if (spqr.node_planar[i]) {
+								for (int a = ne_st; a < ne_en; a++) {
+									ends[a] = spqr.node_edges.dat[a].nvs;
+									is_embedded[a] = true;
+								}
+							} else {
+								for (int a = ne_st; a < ne_en; a++) {
+									ends[a] = {-1, -1};
+									is_embedded[a] = false;
+								}
+							}
+						}
+
+						check_planar_embedding(spqr.ne_embedding, int(spqr.node_verts.dat.size()), ends, is_embedded);
+					}
+					{
+						INFO("Checking full embedding");
+						auto full_embedding = planar_embed(spqr);
+						REQUIRE_FAST(bool(full_embedding) == std::ranges::all_of(spqr.node_planar, std::identity{}));
+						if (full_embedding) {
+							std::vector<bool> is_embedded(edges.size(), true);
+							check_planar_embedding(*full_embedding, NV, edges, is_embedded);
 						}
 					}
 				}
