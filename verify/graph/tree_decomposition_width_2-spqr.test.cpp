@@ -26,7 +26,7 @@ int main() {
 			tree_width = std::max(tree_width, 0);
 		} else if (t == node_type::Q) {
 			// This depends if it's a self-loop or not
-			tree_width = std::max(tree_width, int(spqr.node_verts[i].size()) - 1);
+			tree_width = std::max(tree_width, int(spqr.node_nvs.indices(i).size()) - 1);
 		} else if (t == node_type::I || t == node_type::P) {
 			tree_width = std::max(tree_width, 1);
 		} else if (t == node_type::S) {
@@ -51,7 +51,7 @@ int main() {
 			} else if (t == node_type::V) {
 				print_vert(i);
 			} else {
-				for (auto nv : spqr.node_verts[i]) {
+				for (auto nv : spqr.node_nvs.slice(i, spqr.node_verts)) {
 					print_vert(nv.vert);
 				}
 			}
