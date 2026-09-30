@@ -200,9 +200,10 @@ struct planar_embedding {
 	// * qe <-> qe ^ 3 maps quarter edges to their opposite side along the edge (around the face).
 	// * qe <-> rot_adj[qe] maps quarter edges to their facing pair.
 	// Walking around a vertex is alternating qe ^ 1 and rot_adj[qe], and walking around a face is qe ^ 3 and rot_adj[qe].
+	//
+	// Partial embeddings are represented with -1's in the rot_adj array.
+	// NB: Helpers do not support -1's. It is up to the user to not access these entries!
 	std::vector<int> rot_adj;
-
-	// TODO: Should we support partial embeddings with -1 representing non-embedded components/edges?
 };
 
 struct planar_spqr_tree : spqr_tree {
