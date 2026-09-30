@@ -509,7 +509,11 @@ jobs:
       # Opt-in counter selection: stage only the .gcno/.gcda of solutions in
       # the merged result, so stale counters (from removed or renamed files)
       # can't leak into the report. Fresh shard counters win; solutions
-      # skipped via prev-result keep their restored staged counters. Staged
+      # skipped via prev-result keep their restored staged counters. A
+      # solution that ran (newest: true on some shard) but produced no
+      # counters failed to compile, so its restored counters describe a
+      # different revision of its includes and are dropped rather than kept
+      # (gcovr refuses to merge counters whose line tables disagree). Staged
       # files not in the current result are pruned.
       - name: Stage coverage counters
         run: |
@@ -517,6 +521,11 @@ jobs:
           import json, pathlib, shutil
           manifest = json.load(open("verify_files-coverage.json"))["files"]
           result_files = json.load(open("${{ runner.temp }}/coverage-result.json"))["files"]
+          ran: set[str] = set()
+          for p in pathlib.Path(".shards").glob("CoverageShard-*/result.json"):
+              for f, r in json.load(open(p))["files"].items():
+                  if r.get("newest"):
+                      ran.add(f)
           stage = pathlib.Path("coverage-counters")
           stage.mkdir(exist_ok=True)
           fresh_names: set[str] = set()
@@ -524,6 +533,7 @@ jobs:
               shutil.copy2(p, stage / p.name)
               fresh_names.add(p.name)
           kept = 0
+          dropped = 0
           expected: set[str] = set()
           for f in result_files:
               stem = pathlib.PurePosixPath(f).name.removesuffix(".cpp")
@@ -532,17 +542,20 @@ jobs:
                       continue  # const verification (e.g. IGNOREd file), no binary
                   for ext in (".gcno", ".gcda"):
                       name = f"a-{stem}{ext}"
-                      expected.add(name)
                       if name in fresh_names:
-                          continue
-                      if (stage / name).exists():
+                          expected.add(name)
+                      elif f in ran:
+                          dropped += (stage / name).exists()
+                          print(f"::warning::{f} ran without producing {name}; dropping stale counters")
+                      elif (stage / name).exists():
+                          expected.add(name)
                           kept += 1
                       else:
                           print(f"::warning::missing counter file {name}")
           for p in stage.iterdir():
               if p.name not in expected:
                   p.unlink()
-          print(f"staged {len(fresh_names)} fresh + {kept} kept counter files")
+          print(f"staged {len(fresh_names)} fresh + {kept} kept counter files, dropped {dropped} stale")
           EOF
 
       - name: Save results for future runs
