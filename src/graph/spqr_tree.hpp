@@ -36,7 +36,7 @@ struct csr_index_builder {
 	explicit csr_index_builder(int N) : bounds(N+1) {}
 	void count(int k) { bounds[k+1]++; }
 	csr_index finalize() && {
-		for (int i = 0; i < int(bounds.size()); i++) {
+		for (int i = 1; i < int(bounds.size()); i++) {
 			bounds[i] += bounds[i-1];
 		}
 		return {std::move(bounds)};
