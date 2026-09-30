@@ -1320,4 +1320,129 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 	}
 }
 
+struct planar_embedding {
+	// We'll split our edges up into "quarter-edges", indexed according to
+	//   4 * edge + 2 * side + dir, where side is v0 vs v1, and dir is cw vs ccw
+	//
+	//       1     2
+	//    v0 ---e--- v1
+	//       0     3
+	//
+	// We can think of a planar embedding as a collection of 3 involutions on quarter-edges:
+	// * qe <-> qe ^ 1 maps quarter edges to their opposite side around the endpoint vertex.
+	// * qe <-> qe ^ 3 maps quarter edges to their opposite side along the edge (around the face).
+	// * qe <-> rot_adj[qe] maps quarter edges to their facing pair.
+	// Walking around a vertex is alternating qe ^ 1 and rot_adj[qe], and walking around a face is qe ^ 3 and rot_adj[qe].
+	std::vector<int> rot_adj;
+
+	// TODO: Should we support partial embeddings with -1 representing non-embedded components/edges?
+};
+
+inline std::optional<planar_embedding> planar_embed(const planar_spqr_tree& tree) {
+	using node_type = planar_spqr_tree::node_type;
+
+	if (!std::ranges::all_of(tree.node_planar, std::identity{})) {
+		return std::nullopt;
+	}
+
+	int NE = int(tree.edge_index.size());
+	std::vector<int> rot_adj(4 * NE, -1);
+	auto link = [&](int a, int b) -> void {
+		assert(a != -1 && b != -1);
+		assert(rot_adj[a] == -1 && rot_adj[b] == -1);
+		assert((a & 1) != (b & 1));
+		rot_adj[a] = b;
+		rot_adj[b] = a;
+	};
+
+	std::vector<std::array<std::array<int, 2>, 2>> outer_e(tree.size(), {{{-1, -1}, {-1, -1}}});
+	for (int i = tree.size() - 1; i >= 0; i--) {
+		auto type = tree.types[i];
+		if (type == node_type::F) {
+			for (int j : tree.ch[i]) {
+				assert(tree.types[j] == node_type::V);
+				auto [a, b] = outer_e[j][0];
+				if (a != -1) {
+					link(a, b);
+				}
+			}
+		} else if (type == node_type::V) {
+			std::array<int, 2> qes{-1, -1};
+			for (int j : tree.ch[i]) {
+				assert(tree.types[j] == node_type::Q);
+				if (qes[0] == -1) {
+					qes = outer_e[j][0];
+				} else {
+					link(qes[1], outer_e[j][0][0]);
+					qes[1] = outer_e[j][0][1];
+				}
+			}
+			outer_e[i][0] = qes;
+		} else if (type == node_type::Q) {
+			int e = tree.orig_id[i];
+			bool flip = tree.edge_flipped[e];
+			std::array<std::array<int, 2>, 2> qes = {{{4 * e + 2 * flip + 0, 4 * e + 2 * flip + 1}, {4 * e + 2 * !flip + 0, 4 * e + 2 * !flip + 1}}};
+			if (tree.ch[i].empty()) {
+				// Just return ourselves
+				outer_e[i] = qes;
+			} else {
+				int j = tree.ch[i][0];
+				if (tree.types[j] == node_type::O) {
+					link(qes[0][1], qes[1][0]);
+					outer_e[i][0] = {qes[0][0], qes[1][1]};
+				} else {
+					if (tree.types[j] != node_type::I) {
+						link(qes[0][1], outer_e[j][0][0]);
+						qes[0][1] = outer_e[j][0][1];
+						link(qes[1][0], outer_e[j][1][1]);
+						qes[1][0] = outer_e[j][1][0];
+					}
+					{
+						int k = tree.ch[i][1];
+						if (outer_e[k][0][0] != -1) {
+							link(qes[1][1], outer_e[k][0][0]);
+							link(qes[1][0], outer_e[k][0][1]);
+						} else {
+							link(qes[1][1], qes[1][0]);
+						}
+					}
+					outer_e[i][0] = qes[0];
+				}
+			}
+		} else if (type == node_type::O || type == node_type::I) {
+			// Do nothing, the Q node handles it
+		} else if (type == node_type::P || type == node_type::S || type == node_type::R) {
+			// Just merge things according to the ne_rot_adj
+			for (int ta = 4 * tree.node_edges.bounds[i]; ta < 4 * tree.node_edges.bounds[i+1]; ta++) {
+				int tb = tree.ne_rot_adj[ta];
+				if (tb < ta) continue;
+
+				auto tree_qe_to_qe = [&](int t) -> int {
+					return outer_e[tree.node_edges.dat[tree.node_edges.dat[t>>2].twin_ne].node][(t >> 1) & 1][t & 1];
+				};
+				int qb = tree_qe_to_qe(tb);
+				if (ta < 4 * (tree.node_edges.bounds[i] + 1)) {
+					outer_e[i][(ta >> 1) & 1][!(ta & 1)] = qb;
+				} else {
+					int qa = tree_qe_to_qe(ta);
+					if ((ta & 3) == 2 && (tb & 3) == 1) {
+						// We're the transition between left and right of a vertex, splice it in here.
+						int v = tree.node_verts.dat[tree.node_edges.dat[ta >> 2].nvs[1]].vert;
+						if (outer_e[v][0][0] != -1) {
+							link(qa, outer_e[v][0][1]);
+							link(qb, outer_e[v][0][0]);
+						} else {
+							link(qa, qb);
+						}
+					} else {
+						link(qa, qb);
+					}
+				}
+			}
+		} else assert(false);
+	}
+
+	return planar_embedding{std::move(rot_adj)};
+}
+
 } // namespace wala
