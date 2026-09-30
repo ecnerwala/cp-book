@@ -90,11 +90,11 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				REQUIRE_FAST(int(spqr.subtree_end.size()) == num_items);
 				REQUIRE_FAST(int(spqr.types.size()) == num_items);
 				REQUIRE_FAST(int(spqr.orig_id.size()) == num_items);
-				REQUIRE_FAST(int(spqr.ch.size()) == num_items);
-				REQUIRE_FAST(int(spqr.node_verts.size()) == num_items);
+				REQUIRE_FAST(spqr.ch.num_rows() == num_items);
+				REQUIRE_FAST(spqr.node_verts.num_rows() == num_items);
 				REQUIRE_FAST(int(spqr.vert_par_nv.size()) == num_items);
-				REQUIRE_FAST(int(spqr.node_edges.size()) == num_items);
-				REQUIRE_FAST(int(spqr.node_adj.size()) == 2 * int(spqr.node_verts.dat.size()));
+				REQUIRE_FAST(spqr.node_edges.num_rows() == num_items);
+				REQUIRE_FAST(spqr.node_adj.num_rows() == 2 * spqr.node_verts.num_entries());
 
 				auto check_csr_bounds = [] <typename T> (wala::csr<T> c) -> void {
 					REQUIRE_FAST(!c.bounds.empty());
@@ -482,8 +482,8 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 					{
 						INFO("Checking partial embeddings");
 
-						std::vector<std::array<int, 2>> ends(spqr.node_edges.dat.size());
-						std::vector<bool> is_embedded(spqr.node_edges.dat.size());
+						std::vector<std::array<int, 2>> ends(spqr.node_edges.num_entries());
+						std::vector<bool> is_embedded(spqr.node_edges.num_entries());
 						for (int i = 0; i < num_items; i++) {
 							int ne_st = spqr.node_edges.bounds[i];
 							int ne_en = spqr.node_edges.bounds[i+1];
@@ -500,7 +500,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 							}
 						}
 
-						check_planar_embedding(spqr.ne_embedding, int(spqr.node_verts.dat.size()), ends, is_embedded);
+						check_planar_embedding(spqr.ne_embedding, spqr.node_verts.num_entries(), ends, is_embedded);
 					}
 					{
 						INFO("Checking full embedding");
