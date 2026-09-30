@@ -17,14 +17,17 @@ namespace wala {
 struct csr_index {
 	std::vector<int> bounds;
 	std::ranges::iota_view<int, int> indices(int i) const { return std::views::iota(bounds[i], bounds[i+1]); }
+	template <std::ranges::contiguous_range R> auto slice(int i, R&& base) const {
+		return std::span(base).subspan(bounds[i], bounds[i+1] - bounds[i]);
+	}
 	int num_rows() const { return bounds.empty() ? 0 : int(bounds.size()) - 1; }
 	int num_entries() const { return bounds.empty() ? 0 : bounds.back(); }
 };
 
 template <typename T> struct csr : csr_index {
 	std::vector<T> dat;
-	std::span<T> operator [](int i) { return std::span<T>(dat.begin() + bounds[i], dat.begin() + bounds[i + 1]); }
-	std::span<const T> operator [](int i) const { return std::span<const T>(dat.begin() + bounds[i], dat.begin() + bounds[i + 1]); }
+	std::span<T> operator [](int i) { return slice(i, dat); }
+	std::span<const T> operator [](int i) const { return slice(i, dat); }
 };
 
 struct csr_index_builder {
@@ -135,7 +138,8 @@ struct spqr_tree {
 		int node;
 		int vert;
 	};
-	csr<node_vert_t> node_verts;
+	std::vector<node_vert_t> node_verts;
+	csr_index node_nvs;
 	// The nv index of a vertex within its parent node
 	std::vector<int> vert_par_nv;
 	// TODO: Should we store a vert_nodes CSR?
@@ -147,7 +151,8 @@ struct spqr_tree {
 
 		std::array<int, 2> nvs;
 	};
-	csr<node_edge_t> node_edges;
+	std::vector<node_edge_t> node_edges;
+	csr_index node_nes;
 
 	struct node_adj_t {
 		int ne;
@@ -986,15 +991,13 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 		// Each node is a child, and additionally most non-block node has 2 cap verts; blocks have 1, and O nodes have 1
 		int tot_node_verts = NV + (tot_items - 1 - NV) * 2 - tot_blocks - tot_self_loops;
-		csr<node_vert_t> node_verts;
-		node_verts.bounds.resize(tot_items + 1);
-		node_verts.dat.resize(tot_node_verts);
+		std::vector<node_vert_t> node_verts(tot_node_verts);
+		csr_index node_nvs; node_nvs.bounds.resize(tot_items + 1);
 		std::vector<int> vert_par_nv(tot_items, -1);
 
 		int tot_node_edges = (tot_items - 1 - NV - tot_blocks) * 2;
-		csr<node_edge_t> node_edges;
-		node_edges.bounds.resize(tot_items + 1);
-		node_edges.dat.resize(tot_node_edges);
+		std::vector<node_edge_t> node_edges(tot_node_edges);
+		csr_index node_nes; node_nes.bounds.resize(tot_items + 1);
 
 		csr<node_adj_t> node_adj;
 		node_adj.bounds.resize(tot_node_verts * 2 + 1);
@@ -1067,11 +1070,11 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			// because we don't have the final item id's yet.
 			int ch_st = ch.bounds[cur_idx];
 			int ch_en = ch_st;
-			int nv_st = node_verts.bounds[cur_idx];
+			int nv_st = node_nvs.bounds[cur_idx];
 			int nv_en = nv_st;
 			int n_edges = 0;
 			if (item_vs[cur_item][0] != -1) {
-				node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][0]};
+				node_verts[nv_en++] = {cur_idx, item_vs[cur_item][0]};
 			}
 			if (!item_ch[cur_item].empty()) {
 				bool planarity_flip = item_ch[cur_item].v[0] & 1;
@@ -1079,7 +1082,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 					ch.dat[ch_en++] = ch_item;
 					assert(ch_item >= 1);
 					if (ch_item < 1 + NV) {
-						node_verts.dat[nv_en++] = {cur_idx, ch_item - 1};
+						node_verts[nv_en++] = {cur_idx, ch_item - 1};
 					} else {
 						if constexpr (with_planarity) {
 							if (cur_type != node_type::R) {
@@ -1105,10 +1108,10 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				assert(!planarity_flip);
 			}
 			if (item_vs[cur_item][1] != -1) {
-				node_verts.dat[nv_en++] = {cur_idx, item_vs[cur_item][1]};
+				node_verts[nv_en++] = {cur_idx, item_vs[cur_item][1]};
 			}
 			ch.bounds[cur_idx+1] = ch_en;
-			node_verts.bounds[cur_idx+1] = nv_en;
+			node_nvs.bounds[cur_idx+1] = nv_en;
 
 			int n_verts = nv_en - nv_st;
 
@@ -1118,12 +1121,12 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			if (!is_node) n_edges = 0;
 			if (has_cap) n_edges++;
 
-			int ne_st = node_edges.bounds[cur_idx];
-			int ne_en = node_edges.bounds[cur_idx+1] = ne_st + n_edges;
+			int ne_st = node_nes.bounds[cur_idx];
+			int ne_en = node_nes.bounds[cur_idx+1] = ne_st + n_edges;
 
 			auto set_ne = [&](int ne, std::array<int, 2> nvs, std::array<int, 2> nds, std::array<int, 4> rot_adjs) -> void {
-				node_edges.dat[ne].node = cur_idx;
-				node_edges.dat[ne].nvs = nvs;
+				node_edges[ne].node = cur_idx;
+				node_edges[ne].nvs = nvs;
 				node_adj.dat[nds[0]] = {ne, nvs[1]};
 				node_adj.dat[nds[1]] = {ne, nvs[0]};
 				if constexpr (with_planarity) {
@@ -1185,7 +1188,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			} else if (cur_type == node_type::R) {
 				// Bucketsort the children by the midpoint
 				for (int nv = nv_st; nv < nv_en; nv++) {
-					vert_pos_buf[node_verts.dat[nv].vert] = nv;
+					vert_pos_buf[node_verts[nv].vert] = nv;
 				}
 				cnts_buf.assign(n_verts * 2 - 1, 0);
 				ch_buf.clear();
@@ -1294,12 +1297,12 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			int nxt_idx = nxt_unassigned_idx;
 			ch.dat[ch_idx] = nxt_idx;
 			par[nxt_idx] = cur_idx;
-			int nxt_ne = node_edges.bounds[nxt_idx];
+			int nxt_ne = node_nes.bounds[nxt_idx];
 			if (nxt_item < 1 + NV) {
 				vert_par_nv[nxt_idx] = cur_nv++;
 			} else if (types[cur_idx] != node_type::F && types[cur_idx] != node_type::V) {
-				node_edges.dat[cur_ne].twin_ne = nxt_ne;
-				node_edges.dat[nxt_ne].twin_ne = cur_ne;
+				node_edges[cur_ne].twin_ne = nxt_ne;
+				node_edges[nxt_ne].twin_ne = cur_ne;
 				cur_ne++;
 			}
 
@@ -1326,12 +1329,12 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 		assert(nxt_unassigned_idx == tot_items);
 		assert(ch.bounds.back() == int(ch.dat.size()));
-		assert(node_verts.bounds.back() == int(node_verts.dat.size()));
-		assert(node_edges.bounds.back() == int(node_edges.dat.size()));
+		assert(node_nvs.bounds.back() == int(node_verts.size()));
+		assert(node_nes.bounds.back() == int(node_edges.size()));
 		assert(node_adj.bounds.back() == int(node_adj.dat.size()));
 
 		// Rewrite node_vertices to the correct index
-		for (auto& v : node_verts.dat) {
+		for (auto& v : node_verts) {
 			v.vert = vert_index[v.vert];
 		}
 
@@ -1345,8 +1348,10 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			std::move(orig_id),
 			std::move(ch),
 			std::move(node_verts),
+			std::move(node_nvs),
 			std::move(vert_par_nv),
 			std::move(node_edges),
+			std::move(node_nes),
 			std::move(node_adj),
 		};
 		if constexpr (with_planarity) {
@@ -1432,21 +1437,21 @@ inline std::optional<planar_embedding> planar_embed(const planar_spqr_tree& tree
 			// Do nothing, the Q node handles it
 		} else if (type == node_type::P || type == node_type::S || type == node_type::R) {
 			// Just merge things according to the ne_embedding
-			for (int ta = 4 * tree.node_edges.bounds[i]; ta < 4 * tree.node_edges.bounds[i+1]; ta++) {
+			for (int ta = 4 * tree.node_nes.bounds[i]; ta < 4 * tree.node_nes.bounds[i+1]; ta++) {
 				int tb = tree.ne_embedding.rot_adj[ta];
 				if (tb < ta) continue;
 
 				auto tree_qe_to_qe = [&](int t) -> int {
-					return outer_e[tree.node_edges.dat[tree.node_edges.dat[t>>2].twin_ne].node][(t >> 1) & 1][t & 1];
+					return outer_e[tree.node_edges[tree.node_edges[t>>2].twin_ne].node][(t >> 1) & 1][t & 1];
 				};
 				int qb = tree_qe_to_qe(tb);
-				if (ta < 4 * (tree.node_edges.bounds[i] + 1)) {
+				if (ta < 4 * (tree.node_nes.bounds[i] + 1)) {
 					outer_e[i][(ta >> 1) & 1][!(ta & 1)] = qb;
 				} else {
 					int qa = tree_qe_to_qe(ta);
 					if ((ta & 3) == 2 && (tb & 3) == 1) {
 						// We're the transition between left and right of a vertex, splice it in here.
-						int v = tree.node_verts.dat[tree.node_edges.dat[ta >> 2].nvs[1]].vert;
+						int v = tree.node_verts[tree.node_edges[ta >> 2].nvs[1]].vert;
 						if (outer_e[v][0][0] != -1) {
 							link(qa, outer_e[v][0][1]);
 							link(qb, outer_e[v][0][0]);
