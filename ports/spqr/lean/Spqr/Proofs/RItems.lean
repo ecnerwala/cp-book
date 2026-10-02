@@ -30,6 +30,56 @@ theorem Pieces.ofItems_piece_none (g : Graph) (items : Items) (L : List ItemId) 
   simp [Pieces.ofItems, he]
 
 open Classical in
+theorem Pieces.ofItems_addParent_edges {g : Graph} {items : Items} {L : List ItemId}
+    {U : Nat → Prop} (s t : Nat)
+    (hcover : ∀ e, e < g.ne → U e → ∃ i ∈ L, items.EdgeBelow g i e) :
+    (((Pieces.ofItems g items L).addParent g U s t).contract g).edges.toList =
+      (L.map fun i => ((items.vs i).1.getD 0, (items.vs i).2.getD 0)) ++ [(s, t)] := by
+  let P := (Pieces.ofItems g items L).addParent g U s t
+  have hnone : ∀ e, e < g.ne → P.piece e ≠ none := by
+    intro e he
+    dsimp [P, Pieces.addParent]
+    by_cases hu : U e
+    · simp only [hu, ↓reduceIte, Pieces.ofItems, he]
+      intro hn
+      obtain ⟨i, hi, hie⟩ := hcover e he hu
+      have := List.findIdx?_eq_none_iff.1 hn i hi
+      simp [hie] at this
+    · simp [hu, he]
+  have hempty : ((List.range g.ne).filter fun e => (P.piece e).isNone) = [] := by
+    apply List.filter_eq_nil_iff.2
+    intro e he
+    simpa using hnone e (List.mem_range.1 he)
+  change ((P.origins g).map (P.originEnds g)).toArray.toList = _
+  rw [List.toList_toArray, Pieces.origins, hempty]
+  simp only [List.map_nil, List.nil_append, List.map_map]
+  change (List.range (L.length + 1)).map (fun i => (P.x i, P.y i)) = _
+  rw [List.range_succ, List.map_append, List.map_singleton]
+  congr 1
+  · apply List.ext_getElem
+    · simp
+    · intro i hi hi'
+      have hil : i < L.length := by simpa using hi'
+      simp [P, Pieces.addParent, Pieces.ofItems, List.getElem?_eq_getElem hil, Nat.ne_of_lt hil]
+  · simp [P, Pieces.addParent, Pieces.ofItems]
+
+open Classical in
+theorem Items.rSkeleton_perm_contract {g : Graph} {items : Items} {i : ItemId} {s t : Nat}
+    (hvs : items.vs i = (some s, some t))
+    (hcover : ∀ e, e < g.ne → items.EdgeBelow g i e →
+      ∃ c ∈ items.ch i, items.type c ≠ .V ∧ items.EdgeBelow g c e) :
+    ((((Pieces.ofItems g items ((items.ch i).filter fun c => decide (items.type c ≠ .V))).addParent g
+      (items.EdgeBelow g i) s t).contract g).edges.toList.map
+        (fun p => ((items.nvList g i).idxOf p.1, (items.nvList g i).idxOf p.2))).Perm
+      (items.rSkeleton g i) := by
+  rw [Pieces.ofItems_addParent_edges s t (fun e he hE => by
+    obtain ⟨c, hc, ht, hce⟩ := hcover e he hE
+    exact ⟨c, List.mem_filter.2 ⟨hc, by simpa using ht⟩, hce⟩)]
+  unfold Items.rSkeleton
+  rw [hvs]
+  exact (List.perm_append_singleton (s, t) (items.virtualEdges i)).map _
+
+open Classical in
 theorem Pieces.ofItems_congr {g : Graph} {items items' : Items} {L : List ItemId}
     (hE : ∀ i ∈ L, ∀ e, items'.EdgeBelow g i e ↔ items.EdgeBelow g i e)
     (hvs : ∀ i : Nat, Items.vs items' L[i]! = Items.vs items L[i]!) :
