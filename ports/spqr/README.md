@@ -254,6 +254,9 @@ flattened state machine:
                          cycle / bond layouts are IsPlanarEmbeddings
     Spqr/PlanarInv.lean  Invariant P (Piece, SideWalk, InvariantP, StackInv), the gluing statements
                          twoSum_planar / oneSum_planar / disjointUnion_planar, layout renumbering
+    Spqr/PlanarEmbedSteps.lean
+                         gluing invariant GluedUpTo of planarEmbed; the reverse-preorder fold is proved,
+                         the per-item steps embedItem_step_* are admitted
     Spqr/PlanarSpec.lean nodePlanar_sound (S/P proved modulo neRotAdj_segment + Shape, R admitted) /
                          nodePlanar_complete / planarEmbed_sound / planarEmbed_isSome_iff / spqrTree_planar
     DumpLean.lean        dump harness (SPQR_EAR=1 switches to walkEarTree)
@@ -298,7 +301,8 @@ local layouts are planar embeddings), and the S/P cases of `nodePlanar_sound` mo
 bookkeeping `neRotAdj_segment` and `Shape`. Invariant P is stated as a Lean structure
 (`InvariantP`, `PlanarInv.lean`). Admitted with proof plans: `neRotAdj_segment`,
 `nodePlanar_sound_R`, `planarWalkOut_stackInv`, `nodePlanar_complete`, `twoSum_planar`,
-`oneSum_planar`, `disjointUnion_planar`, `planarEmbed_sound`, `spqrTree_planar`. The planar
+`oneSum_planar`, `disjointUnion_planar`, `embedItem_step_*` + `glued_root` (so `planarEmbed_sound`),
+`spqrTree_planar`. The planar
 executable is as slow as the ordinary one (same `List`-based walk).
 Runtime: the proof-carrying implementation uses `List ++` for span merges and
 `List.mergeSort`, so it is not linear-time; a cost-instrumented linear-time refinement (cat-lists,

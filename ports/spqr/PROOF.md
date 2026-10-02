@@ -842,12 +842,17 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 | `nodePlanar_sound` = S ∨ P ∨ R cases | `PlanarSpec.lean` | proved from the three |
 | `nodePlanar_complete` (Kuratowski-style certificate from the §8.3 crossing) | `PlanarSpec.lean` | sorry, hard |
 | `twoSum_planar`, `oneSum_planar`, `disjointUnion_planar` (gluing on `Planar`) | `PlanarInv.lean` | sorry (explicit splice with `f₁ + f₂ − 2` faces: `PlanarGlue`) |
-| `planarEmbed_sound` (bottom-up over `embedItem`, using the three gluing lemmas) | `PlanarSpec.lean` | sorry |
+| gluing invariant `GluedUpTo` (per maximal processed item: restricted rotation agrees with a planar embedding of the piece below it, exposed ends = unset ends, on one face), `gluedUpTo_init`, fold `forM_reverse_range_inv`, `gluedUpTo_planarEmbed` | `PlanarEmbedSteps.lean` | def / **proved** modulo the steps |
+| `embedItem_step_F` / `_V` / `_Q` / `_leaf` / `_node` (one `embedItem` preserves `GluedUpTo`) | `PlanarEmbedSteps.lean` | sorry (F: `disjointUnion_planar`; V, Q: `oneSum_planar`; node: `twoSum_planar` + `nodePlanar_sound`) |
+| `glued_root` (`GluedUpTo 0` at the root `F` item is `IsPlanarEmbedding` of `g`) | `PlanarSpec.lean` | sorry |
+| `planarEmbed_sound` | `PlanarSpec.lean` | proved from `gluedUpTo_planarEmbed` + `glued_root` |
 | `spqrTree_planar` (`→` from `planarEmbed_sound`; `←` needs completeness + skeletons are minors of `g`) | `PlanarSpec.lean` | sorry |
 
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): `neRotAdj_segment`;
 `nodePlanar_sound_R`; `planarWalkOut_stackInv`; `nodePlanar_complete`; `twoSum_planar`,
-`oneSum_planar`, `disjointUnion_planar`; `planarEmbed_sound`; `spqrTree_planar`. The S and P
+`oneSum_planar`, `disjointUnion_planar`; `embedItem_step_F`, `embedItem_step_V`,
+`embedItem_step_Q`, `embedItem_step_leaf`, `embedItem_step_node`, `glued_root` (hence
+`planarEmbed_sound`); `spqrTree_planar`. The S and P
 cases of `nodePlanar_sound` are proved except for `neRotAdj_segment` and the `Shape` of the
 skeleton (`spqrTree_wf`, which inherits `relabelTree_wf`'s `sorry`); the local counting itself
 (`cycleRot_isPlanarEmbedding`, `bondRot_isPlanarEmbedding`) is fully proved.
@@ -862,5 +867,7 @@ Work packages:
 * **Local embeddings**: S and P done; R (`nodePlanar_sound_R`) from Invariant P at the finish of
   the R item via `planarRelabel`'s `mapRot`.
 * **Gluing**: `twoSum_planar` (explicit splice, `PlanarGlue`), `oneSum_planar`,
-  `disjointUnion_planar`, then the bottom-up induction over `embedItem` for `planarEmbed_sound`.
+  `disjointUnion_planar`; the bottom-up induction over `embedItem` is done
+  (`forM_reverse_range_inv`), what remains are the per-item steps `embedItem_step_*` (each one
+  `link` = one splice of two pieces' exposed ends) and `glued_root`.
 * **Completeness**: the crossing of §8.3 as a `K₅`/`K₃,₃` subdivision — the hard, optional one.
