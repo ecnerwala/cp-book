@@ -653,6 +653,37 @@ clause: a block-root Q (a Q with children) records only its upper endpoint, `vs.
 walk sets this for every block boundary, not only self-loops, and the statement `vs.2 = none ↔ loop`
 was false for a bridge block (`[I, vertItem v]` under a Q with `vs = (some u, none)`).
 
+`RelabelRep.lean` transports `Represents` along the same interface **[proved modulo
+`relabel_node_spec`]**: `relabelOK_of_wf` packages `relabel_node_spec`'s witness as `RelabelOK`
+(`ridx`, `node`, the `Items.WF` fields), and the fields are
+* `nv`/`ne` (`RelabelIdx.Sizes`), `interior`, `canonical` (`Items.Endpoints.interior`,
+  `Items.Shapes.canonical` along `idx`/`vertIndex`), `nv_orig_inj` (`Endpoints.nv_nodup` through
+  `node_verts`, `nvList` injective on original ids) — from `Items.WF` alone;
+* `q_endpoints`, `separation`, `twin_glue`, and the output-level `r_three_connected` from
+  `Items.WF` plus `Items.RepOK`, three item facts the walk guarantees that `Items.WF` does not
+  state: `q_root` (a block-root Q with children `[c]` is a self-loop and with `[c, vertItem w]`
+  has edge `{u, w}` — needed to read the Q's node-verts as its edge), `o_parent` (an `O` item hangs
+  alone under a self-loop Q — its cap is a loop `(x, x)`, used by `twin_glue`/`separation` and the
+  R virtual-edge endpoints), and `s_order` (the positional form of `s_shape`: the S children in
+  `ch` order are the path `u → xs → v`, so that `skeleton` of an S node is a path and its virtual
+  edges are the consecutive pairs; `s_shape` only gives a permutation). `twin_glue` is
+  `RelabelLayout.twin` + `edge_nvs` on both sides plus `Endpoints.child_endpoints`
+  (`virt_glue`/`cap_orig`); `r_three_connected` is a pure transport
+  `Items.RThreeConnected g items → (relabelTree g items).r_three_connected`, where
+  `Items.RThreeConnected` (R items' `rSkeleton` — cap plus child virtual edges, read through the
+  node-vert positions — is `ThreeConnected`) is the item-level statement of §4.5
+  (`items_r_three_connected`, admitted there), not proved here.
+`relabelTree_represents' : Items.WF → Items.RepOK → Items.RThreeConnected → Represents` and
+`relabelTree_represents_of_r` (same with the output-level R clause, i.e. the hypothesis of
+`Correctness.relabelTree_represents`). `Correctness.relabelTree_represents` itself stays admitted:
+its statement has no `Items.RepOK` hypothesis, and `Items.WF` does not imply `RepOK` (a `Q` with
+`vs = (some u, none)`, `ch = [c]` and a non-loop edge satisfies every `Items.WF` clause). Either
+`RepOK` becomes part of `Items.WF` (then the walk must discharge it) or `relabelTree_represents`
+takes it as a hypothesis.
+
+`RelabelSt.lean` proves `relabel_st : Items.StNumbered → Items.WF g → (relabelTree g items).StOrder`
+**[proved modulo `relabel_node_spec`]** from the same package, see §7.3.
+
 ## 6. Lean plan (what is proved where)
 
 | statement | file | status |
@@ -684,13 +715,14 @@ was false for a bridge block (`[I, vertItem v]` under a Q with `vs = (some u, no
 | 4.1–4.3 ear content at a `finishEdge` (`WalkState.EarFinish`/`EarAt`: `sub ++ base` split, pairwise edge-disjointness, span ownership `subEdges` of the child's entries, loop-1 range `topDepth > d ⇒ vStart = child` and `origTstack`-indexed side `stackDir[d]`, terminal touching, V/Q item freshness, block-boundary separation) | `EarInv.lean` | **stated** (consumers mapped field by field in the file header: `MergeTopOk`/`RetargetOk.disj`, `loop1_rBranch`, `ear_lower'`, `walk_sides`' `CloseOK`, `BoundaryOk.gone/gone₂`); not yet carried by the walk (`EarShape.finishEdge`/`walkEarTree_guards` admitted) and the `ear_*` derivations not done; missing: the three-entry shape at a type-1 vertex close (`CloseVertOk.merge₁/merge₂/retarget.old`) and loop 2's `firstIdx` order |
 | 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape'`/`RStep.threeConnected'` (`Proofs/RClose.lean`) give it for Loop 1's R step from `Inv' D` + `stackVerts[d+1..D] = cur.vStart` + `RStep` + `RContent` (`Inv d` is contradictory there) |
 | 4.5 walk side: `EntryR`/`RTop`/`RBranch`/`RInvAt`; `RBranch.rStep`, `RBranch.rContent` (all five content fields), `RBranch.threeConnected` (from `Inv' (d+1)`); `EntryR.congr`/`RInvAt.congr` + bookkeeping frames; `Items.RSkel3`, `RBranch.rSkel3` | `RInv.lean`, `Proofs/RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RItems.lean` | proved; admitted: `finishEdge_rInvAt`, `walkTree_rInvAt`, `loop1_rBranch` (history preservation), `items_r_three_connected` (all R items of the walk on a block); `spqrTree_r_three_connected` (relabel transport): hard |
-| 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
+| 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` (`Correctness.lean`) | sorry; the `Represents` half is `relabelTree_represents'`/`relabelTree_represents_of_r` below — `Correctness.relabelTree_represents` lacks the `Items.RepOK` hypothesis and is not implied by `Items.WF` (see §5) |
+| 5 relabel, `Represents` transport: `relabelTree_represents' : Items.WF → Items.RepOK → Items.RThreeConnected → Represents`, `relabelTree_represents_of_r` (output-level R clause); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved modulo `relabel_node_spec` (every `RelabelOK.*` field is standard-axioms only); `Items.RepOK` = `q_root`, `o_parent`, `s_order` (item facts beyond `Items.WF`, §5); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
 | 5 relabel, structural part: `relabelTree_own : Items.WF → Items.ROriented → Bijections ∧ Ownership ∧ Twins` (also `relabelTree_bijections`, `relabelTree_twins` from `WF` alone); `layoutNode_edges` | `RelabelOwn.lean` | proved modulo `relabel_node_spec` (`RelabelSpec.lean`, sorry); the item-level facts it needs are clauses of `Items.WF` (`nv_nodup`, `q_leaf_of_node`, `q_children`'s `v < nv`, `r_shape`'s child endpoints) |
 | 5 relabel, CSR bounds: `relabelTree_adj : Items.WF → Items.ROriented → (∀ n, adjBounds[2 nvSt n] = 2 neSt n) ∧ adjBounds[2 |nodeVerts|] = |adjDat|` (the statement of `relabel_adj_spec`); `layout_local` (`Layout.Local` for every item's `nodeLayout`) | `RelabelAdj.lean` | proved modulo `relabel_node_spec`; `relabel_adj_spec` itself stays admitted in `RelabelSpec.lean` only because that file cannot import its proof |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
 | 7 relabel-side: `vchildren_nv_increasing`, `orderedChildren_sorted`, `edgeChildren_dominance`, `layoutNode_r_bracket` | `StSpec.lean`, `StLayout.lean` | proved |
-| 7 relabel-side: `relabel_st` | `StSpec.lean` | sorry |
+| 7 relabel-side: `relabel_st : Items.StNumbered → Items.WF → StOrder` (`RelabelOK.stOrder`: `st_S/st_P/st_R`, `dom_node`, `adj_node` via `adjRow_eq_layout` + `LayoutShape` rows + `layoutNode_R_bracket`) | `RelabelSt.lean` | proved modulo `relabel_node_spec` (through `relabelOK_of_wf` and `relabelTree_adj`); no `RepOK` needed |
 | 7 walk-side: `WalkState.StInv`, data lemmas `pushTstack_onSide`, `merge_onSide`, `fold_onSide` | `StWalk.lean` | def / proved |
 | 7 walk-side: `finishTstackTop_stItem`; ear lowvals `first_ret_lowval`, `chain_stackDir_step` | `StWalk.lean`, `StEar.lean` | proved |
 | 7 walk-side: `StInv.onSide` field, `chain_stackDir_const` (corrected statement, see 7.4) | `StWalk.lean` | def / proved |
@@ -780,14 +812,27 @@ The split is `walk_st : Items.StNumbered (walk …).items` (§7.4) and
   The cap is written last, at node-edge position `neSt` (position 0, `capNe`), with incidences at
   the first slot of row `2 s + 1` and the last slot of row `2 (e-1)`; it is the only edge outside
   the dominance order.
-* What blocks `relabel_st` **[sorry]** itself is not a layout fact but the glue: a per-node
-  characterization of the recursive `relabel` fold — for every node `i` of `relabelTree g items`,
-  `nvRange i`, `neRange i`, `nodeEdgesOf i` and the rows `adjRow (2 nv)`, `adjRow (2 nv + 1)` are
-  those of `layoutNode it.type … edgeChildren` for the item `it` numbered `i`, with `edgeChildren`
-  the `vertPos` images of the non-V children of `orderedChildren it nvSt`.
-  No such lemma exists yet (`relabelTree_wf` is admitted for the same reason), so it is the exact
-  statement to add, as `relabel_node_layout`; with it `relabel_st` is `layoutNode_r_bracket` plus
-  the S/P row shapes read off `layoutNode` and `Items.StNumbered` transported along `vertPos`.
+* `relabel_st` **[proved modulo `relabel_node_spec`]** (`RelabelSt.lean`): the glue is the per-node
+  interface `RelabelSpec.lean` (`RelabelNode.nv_range/ne_range/node_verts`, `RelabelLayout`'s
+  `edge_nvs/adj_bounds/adj_dat/pos_ok`), taken through `RelabelOK` (`RelabelRep.lean`).
+  - `StOrder.st`: `skeleton_S` (path `(nvSt, nvEn-1) :: (nvSt+k, nvSt+k+1)`), `skeleton_P`
+    (`nEdges` copies of `(nvSt, nvSt+1)`), `skeleton_R` (cap plus `edgeChildren`, every child edge
+    `nvSt ≤ a < c < nvEn` by `pos_ok` and `Items.StItem`'s orientation — `r_facts`); then every
+    interior node-vert has an edge in and an edge out: S/P by construction, R because
+    `Items.StList` gives it on `vertList` and `pos_eq` (`pos x = nvSt + idxOf x`, from `pos_ok` on
+    a `Nodup` list) moves it to positions.
+  - `StOrder.dom`: F/V/Q/I/O have at most one own edge (`dom_small`, `nEdges_Q = 1` from
+    `q_children`); S and P by the explicit skeletons; R by `pairwise_dominance_of_sorted_sum` on
+    the `loc`-sorted `edgeChildren` (`Items.ordered_pairwise_loc`).
+  - `StOrder.adj`: `nodeOfNv_range` locates `nv` in a node's `nvRange` (`nvBounds_cover`, the
+    `RelabelIdx` CSR facts); `adjRow_eq_layout` rewrites `adjRow r` as `LayoutR.row` of the node's
+    `layoutNode` given `adjBounds[2 nvSt] = 2 neSt` (`relabelTree_adj`), using `adj_bounds`,
+    `adj_dat` and `Layout.Local`'s bound monotonicity (`rowBound_ge/le` keep the row inside the
+    node's `adjDat` segment); the per-type rows are `LayoutShape.runQI_row/runP_row/runS_row` (F/V:
+    no node-verts with `1 < nVerts`), and R is `layoutNode_R_bracket` with `edgeChildren`'s
+    dominance, `Nodup` (`r_skeleton_nodup`) and `neEn = neSt + |E| + 1`.
+  `Items.StNumbered` is needed only for `Items.ROriented` (`rOriented`) and the R skeleton facts;
+  everything else is `Items.WF`.
 
 ### 7.4 Walk: the hole invariant (`StWalk.lean`)
 
@@ -1013,7 +1058,7 @@ the walk's items rather than for arbitrary `WF` items with `ch` in reference ord
 | `pairwise_dominance_of_sorted_sum`, `edgeChildren_dominance` | `StSpec.lean` | proved |
 | `LayoutR.run`, `layoutNode_R_eq`, `run_spec`, `layoutNode_R_bracket` | `StLayout.lean` | proved |
 | `layoutNode_r_bracket` | `StSpec.lean` | proved |
-| `relabel_st` | `StSpec.lean` | sorry (7.3: needs the relabel-fold glue `relabel_node_layout`) |
+| `relabel_st` | `RelabelSt.lean` | proved modulo `relabel_node_spec` (7.3) |
 | `TEntry.wrap`, `OneSided`, `OnSide`, `nest` | `StWalk.lean` | def |
 | `pushTstack_onSide`, `merge_onSide`, `fold_onSide`, `getSide_setSides` | `StWalk.lean` | proved |
 | `WalkState.StSides`, `StEntry`, `StInv`, `TopClosable`, `entryVertList`, `entryEdges` | `StWalk.lean` | def |
