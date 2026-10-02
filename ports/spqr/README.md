@@ -231,7 +231,7 @@ flattened state machine:
                          RCloseShape (walk-side facts of an R close, as a walk-free Prop) ⇒ no
                          skeleton pair separates the block, R skeleton ThreeConnected (proved);
                          the walk ⇒ RCloseShape half: RClose.lean, RInv.lean, Proofs/{RClose,RInv,RInvFrame,RItems}.lean —
-                         RBranch.rStep/rContent/threeConnected from Inv (d+1) ∧ RTop ∧ RBranch (proved),
+                         RBranch.rStep/rContent/threeConnected from EarInv.Inv' (d+1) ∧ RTop ∧ RBranch (proved),
                          Items.RSkel3 + RBranch.rSkel3 (proved); admitted: finishEdge_rInvAt, walkTree_rInvAt,
                          loop1_rBranch, items_r_three_connected
     Spqr/GraphLemmas.lean  ConnEdges/TwoAttached closure lemmas (no sorry)
