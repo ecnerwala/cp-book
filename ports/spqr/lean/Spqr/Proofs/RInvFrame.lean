@@ -22,6 +22,61 @@ open WalkM
 
 namespace WalkState
 
+def FrontierOwns (origTstack : Nat) (base : List TEntry) (E : Nat → Prop) (s : WalkState) : Prop :=
+  origTstack ≤ s.tstack.length ∧
+    s.tstack.drop (s.tstack.length - origTstack) = base ∧
+    ∀ e, e < s.g.ne → ((∃ t ∈ s.tstack.take (s.tstack.length - origTstack),
+      t.edges s.g s.items e) ↔ E e)
+
+/-- The schedule boundary of a returning out-edge. The bottom `origTstack` entries are outside
+the frontier; before the loops the tree edge is still pending. -/
+structure Frontier {o : DfsOut} (d origTstack : Nat) (s : WalkState) : Prop where
+  size : origTstack ≤ s.tstack.length
+  owns : ∀ e, e < s.g.ne → ((e = o.e ∨
+    ∃ t ∈ s.tstack.take (s.tstack.length - origTstack), t.edges s.g s.items e) ↔ subEdges o e)
+  base_disj : ∀ t ∈ s.tstack.drop (s.tstack.length - origTstack), ∀ e, e < s.g.ne →
+    t.edges s.g s.items e → ¬subEdges o e
+  loop1 : o.cls.isTree = true → o.cls.lowval d < d → ∀ k,
+    (∀ j, j < k → result (loop1Cond d)
+      (iter (loop1Body d s.stackDir[d]!) j (ceS₁ o.dest d o.e (feS₀ d o s))) = true) →
+    let sk := iter (loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s))
+    FrontierOwns origTstack (s.tstack.drop (s.tstack.length - origTstack)) (subEdges o) sk ∧
+      (result (loop1Cond d) sk = true → origTstack +
+        (if d < (nxtE sk).topDepth then 3 else 2) ≤ sk.tstack.length)
+  loop2 : o.cls.isTree = true → o.cls.lowval d < d → ∀ k,
+    (∀ j, j < k → result (loop2Cond (feS₁ d o s).firstOccurrence[d]!)
+      (iter mergeTstackTops j (feS₁ d o s)) = true) →
+    let sk := iter mergeTstackTops k (feS₁ d o s)
+    FrontierOwns origTstack (s.tstack.drop (s.tstack.length - origTstack)) (subEdges o) sk ∧
+      (result (loop2Cond (feS₁ d o s).firstOccurrence[d]!) sk = true →
+        origTstack + 2 ≤ sk.tstack.length)
+  loop3 : o.cls.isTree = true → o.cls.lowval d < d → o.cls.isType1 = false → ∀ k,
+    (∀ j, j < k → result (loop3Cond origTstack) (iter mergeTstackTops j (feS₂ d o s)) = true) →
+    let sk := iter mergeTstackTops k (feS₂ d o s)
+    FrontierOwns origTstack (s.tstack.drop (s.tstack.length - origTstack)) (subEdges o) sk ∧
+      (result (loop3Cond origTstack) sk = true → origTstack + 2 ≤ sk.tstack.length)
+
+mutual
+def FrontiersTree (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
+  match t with
+  | .node v outs => FrontiersOuts v d outs false { s with stackVerts := s.stackVerts.set! d v }
+
+def FrontiersOuts (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
+  match outs with
+  | [] => True
+  | o :: rest => FrontiersOut v d o hasVert s ∧
+      wp (walkOut v d o hasVert) (fun hasVert' s' => FrontiersOuts v d rest hasVert' s') s
+
+def FrontiersOut (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
+  wp (walkOutPre v d o hasVert) (fun _ s₁ =>
+    match o with
+    | .tree _ _ child =>
+      wp (modify fun s => { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }) (fun _ s₂ =>
+        FrontiersTree child (d + 1) s₂ ∧
+        wp (walkTree child (d + 1)) (fun _ s₃ => Frontier (o := o) d s₁.tstack.length s₃) s₂) s₁
+    | .back .. => Frontier (o := o) d s₁.tstack.length s₁) s
+end
+
 variable {s s' : WalkState} {dfs : DfsData} {t : TEntry}
 
 theorem mem_spans_of_entryPieceItems {i : ItemId} (hi : i ∈ s.entryPieceItems t) :
@@ -239,6 +294,7 @@ theorem finishEdge_rInvAt {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsO
     (hasVert : Bool) (ho : o.cls = .ret lv kind) (hlow : lv < d) (hv : curV < s.g.nv)
     (hi : s.Inv' D) (hs : Shape s) (hok : FinishOk D curV d lv o origTstack hasVert s)
     (hg : FinishGuards d o origTstack hasVert s)
+    (hfront : Frontier (o := o) d origTstack s)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hd : dfs.depth curV = d) (hcur : s.stackVerts[d]! = curV)
     (hanc : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! curV ∧ dfs.depth s.stackVerts[k]! = k)
@@ -252,6 +308,7 @@ state settled at `c` (no entry has bottom `c` yet) leaves a state settled at its
 `(c, l)` entry, which is then `maximal`. -/
 theorem walkTree_rInvAt {D : Nat} (d : Nat) (c : Nat) (outs : List DfsOut) (hi : s.Inv' D) (hs : Shape s)
     (hg : GuardsTree (.node c outs) (d + 1) s)
+    (hfront : FrontiersTree (.node c outs) (d + 1) s)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hc : dfs.IsParent s.stackVerts[d]! c) (hR : s.RInvAt dfs c) :
     (after (walkTree (.node c outs) (d + 1)) s).RInvAt dfs s.stackVerts[d]! := by
@@ -263,10 +320,10 @@ answers `.R` has the shape `RBranch`, and its two top entries are `EntryR` and e
 (`RTop`). `cur`'s bottom is the child, finished, so `cur`'s `(nxtV, d)` classes are P-merged and
 `cur` is settled; `nxt`'s bottom is a finished vertex strictly below the child. The hypotheses
 below do not determine which edges the entries hold, so `interior`, `proper`, `nxt_ne`, `cur_c`
-need the Loop-1 ear content (entries with `topDepth > d` have `vStart = nxtV`; the entries with
-`topDepth ≥ d` hold exactly the tree edge and the child's subtree edges) as a further hypothesis
-or from `EarShape`; only `tstack`, `cur_top`, `nxt_top`, `ne` follow from `run_loop1Cond`,
-`loop1Type_run` and the head-`topDepth` induction. -/
+need postorder interval ownership at `ceS₁` and its preservation through the loop.
+`RTop` additionally needs saturation and its consequences for previously closed pieces.
+Only `tstack`, `cur_top`, `nxt_top`, `ne` follow from `run_loop1Cond`, `loop1Type_run` and
+the head-`topDepth` induction; the interval/saturation restatement is still open. -/
 theorem loop1_rBranch {D nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : Shape s)
     (hok : CloseEarsOk D nxtV d e edgeDir s)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)

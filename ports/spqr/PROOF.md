@@ -681,6 +681,22 @@ classes through `{2,3}`, through `{4,5}`, and the singleton shared edge.
 This is a counterexample to that abstract sufficiency claim, not a reachable walk state.
 No new ear-content assumption is used to fill the gap; the interface restatement remains open.
 
+The schedule-specific input is `WalkState.Frontier (o := o) d origTstack s`
+(`Proofs/RInvFrame.lean`), separate from interval ownership and saturation. Since the stack is
+top-first and `origTstack` counts the preserved bottom entries, the split is at
+`s.tstack.length - origTstack`, using `take` for the frontier and `drop` for the base.
+Before `finishEdge`, frontier edges together with the pending `o.e` are exactly `subEdges o`;
+the base owns none of these edges. At every reached iterate of loops 1–3, `FrontierOwns`
+requires that same base suffix and exact subtree-plus-tree-edge ownership above it.
+The loop fields also require enough entries above the boundary for every enabled merge
+(three entries for Loop 1's S case, two otherwise). The saturation boundary is this
+`origTstack` boundary, never a `topDepth ≤ d` cut.
+`finishEdge_rInvAt` now takes this single hypothesis; `walkTree_rInvAt` takes `FrontiersTree`,
+which threads it through the actual nested walk calls, like `GuardsTree`. Both proofs remain
+admitted. Exporting the schedule fact from `EarFinish.bottom`/`sub_cover` belongs to the ear
+layer; it has not been re-derived from stack shape here. `RInvAt`, `RTop`, and `loop1_rBranch`
+still await the interval/saturation interface rather than hiding their content in `Frontier`.
+
 The graph-theoretic HT-to-cut implication is proved in `Proofs/ThreeConnected.lean`.
 `Graph.ThreeConnected.relabel` takes `TwoConnected`, HT `ThreeConnected`, and a nodup list
 of at least four active vertices containing every edge endpoint, and proves the cut-based
@@ -689,8 +705,15 @@ outside that list and does not require simplicity. `TwoConnected.two_incident_of
 gives two distinct incident edges at every active vertex; disconnected surviving vertices
 would therefore supply two separation classes of size at least two. All five supporting
 theorems and the relabelling theorem have only standard axioms.
-The item-specific bridge still needs the contracted skeleton's active vertex list and edge
-correspondence with `Items.rSkeleton`, and well-formedness of the contracted pieces.
+`Pieces.ofItems_addParent_edges` identifies the contracted edge list with the item endpoint
+pairs followed by the parent pair, provided every edge of `U` belongs to an item in `L`.
+`Items.rSkeleton_perm_contract` then identifies its relabelling with `Items.rSkeleton` up to
+permutation. Its coverage hypothesis is precisely:
+`∀ e, e < g.ne → items.EdgeBelow g i e → ∃ c ∈ items.ch i, items.type c ≠ .V ∧ items.EdgeBelow g c e`.
+These two theorems also have only standard axioms. The remaining item-specific bridge must
+derive coverage, the contracted skeleton's active vertex list, and well-formedness of the
+contracted pieces. The permutation lemma uses the same orientation for the item cap and
+the parent piece; `RSkel3` permits either orientation, so reversed caps also need transport.
 
 ## 5. Phase 3: relabel
 
@@ -914,7 +937,9 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape'`/`RStep.threeConnected'` (`Proofs/RClose.lean`) give it for Loop 1's R step from `Inv' D` + `stackVerts[d+1..D] = cur.vStart` + `RStep` + `RContent` (`Inv d` is contradictory there) |
 | 4.5 walk side: `EntryR`/`RTop`/`RBranch`/`RInvAt`; `RBranch.rStep`, `RBranch.rContent` (all five content fields), `RBranch.threeConnected` (from `Inv' (d+1)`); `EntryR.congr`/`RInvAt.congr` + bookkeeping frames; `Items.RSkel3`, `RBranch.rSkel3` | `RInv.lean`, `Proofs/RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RItems.lean` | proved; admitted: `finishEdge_rInvAt`, `walkTree_rInvAt`, `loop1_rBranch` (history preservation), `items_r_three_connected` (all R items of the walk on a block); `spqrTree_r_three_connected` (relabel transport): hard |
 | 4.5 R skeleton persistence: `Pieces.contract_congr`, `Items.RSkel3.congr`, `.modify_of_not_below`, `.push_nil` | `Proofs/RItems.lean` | proved (standard axioms); walk-level ownership of later writes remains open |
-| 4.5 HT-to-cut transport: `Graph.ThreeConnected.relabel` | `Proofs/ThreeConnected.lean` | proved (standard axioms), assuming a block and its active vertex list; item skeleton correspondence remains open |
+| 4.5 HT-to-cut transport: `Graph.ThreeConnected.relabel` | `Proofs/ThreeConnected.lean` | proved (standard axioms), assuming a block and its active vertex list; item-level hypotheses remain open |
+| 4.5 Item/contract edge correspondence: `Pieces.ofItems_addParent_edges`, `Items.rSkeleton_perm_contract` | `Proofs/RItems.lean` | proved (standard axioms), under non-V-child edge coverage; deriving coverage for completed R items remains open |
+| 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
