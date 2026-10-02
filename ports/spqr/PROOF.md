@@ -831,23 +831,36 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 | `planarWalk_base`, `planarWalk_proj` (planar walk = ordinary walk + aux) | `PlanarWalkProj.lean` | **proved** (`propext`, `Quot.sound`) |
 | `planarRelabelTree_base`, `planarRelabel_proj` | `PlanarRelabelProj.lean` | **proved** (`propext`, `Quot.sound`) |
 | `planarEmbed_isSome_iff` | `PlanarSpec.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
-| Invariant P (§8.2) as a Lean predicate on `PlanarWalkState` | — | to state |
-| `nodePlanar_sound` (S, P cases: direct from `layoutRot`; R case: Invariant P at finish) | `PlanarSpec.lean` | sorry |
+| orbit counting: `numOrbits` = orbit minima, `numOrbits_involution`; `numComponents` by label relaxation | `Planar.lean`, `Proofs/Planar.lean` | def / **proved** |
+| closed forms of `layoutRot .S` / `.P`; `cycleRot_isPlanarEmbedding`, `bondRot_isPlanarEmbedding` | `PlanarLayout.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
+| `layoutRot_S_shift`, `layoutRot_P_shift` (renumbering a node's edges from 0) | `PlanarInv.lean` | **proved** |
+| Invariant P (§8.2) as a Lean structure: `Piece`, `SideWalk`, `InvariantP`, `StackInv` | `PlanarInv.lean` | def (the deliverable is the statement) |
+| `planarWalkOut_stackInv` (the walk preserves Invariant P) | `PlanarInv.lean` | sorry |
+| `neRotAdj_segment` (relabel bookkeeping: node `i`'s `neRotAdj` segment is its `layoutRot`) | `PlanarSpec.lean` | sorry |
+| `nodePlanar_sound_S`, `nodePlanar_sound_P` | `PlanarSpec.lean` | proved modulo `neRotAdj_segment` and `Shape` (via `spqrTree_wf`, itself admitted in `relabelTree_wf`) |
+| `nodePlanar_sound_R` (Invariant P at finish, mapped by `mapRot`) | `PlanarSpec.lean` | sorry |
+| `nodePlanar_sound` = S ∨ P ∨ R cases | `PlanarSpec.lean` | proved from the three |
 | `nodePlanar_complete` (Kuratowski-style certificate from the §8.3 crossing) | `PlanarSpec.lean` | sorry, hard |
-| `planarEmbed_sound` (2-sum along twins, per component) | `PlanarSpec.lean` | sorry |
+| `twoSum_planar`, `oneSum_planar`, `disjointUnion_planar` (gluing on `Planar`) | `PlanarInv.lean` | sorry (explicit splice with `f₁ + f₂ − 2` faces: `PlanarGlue`) |
+| `planarEmbed_sound` (bottom-up over `embedItem`, using the three gluing lemmas) | `PlanarSpec.lean` | sorry |
 | `spqrTree_planar` (`→` from `planarEmbed_sound`; `←` needs completeness + skeletons are minors of `g`) | `PlanarSpec.lean` | sorry |
 
-Admitted cases, precisely: `nodePlanar_sound` is admitted for all three node types (the S and P
-cases are routine counting over `layoutRot`; the R case needs Invariant P); `nodePlanar_complete`
-entirely; `planarEmbed_sound` entirely (its content is the 2-sum lemma plus the `V`/`Q`/`F` item
-splicing); `spqrTree_planar` entirely. Everything else in this section is proved.
+Admitted, precisely (`#print axioms` reports `sorryAx` for each): `neRotAdj_segment`;
+`nodePlanar_sound_R`; `planarWalkOut_stackInv`; `nodePlanar_complete`; `twoSum_planar`,
+`oneSum_planar`, `disjointUnion_planar`; `planarEmbed_sound`; `spqrTree_planar`. The S and P
+cases of `nodePlanar_sound` are proved except for `neRotAdj_segment` and the `Shape` of the
+skeleton (`spqrTree_wf`, which inherits `relabelTree_wf`'s `sorry`); the local counting itself
+(`cycleRot_isPlanarEmbedding`, `bondRot_isPlanarEmbedding`) is fully proved.
 
 Work packages:
-* **Invariant P**: state §8.2 on `PlanarWalkState` (per `plStack` entry, over `qem`), prove it
-  for `makeEdgePlanarity`, `mergeSide`, `closeSide`/`pruneSide`, `foldPlanarity`,
-  `finishMatches`/`unwrapPlanarity`; the merge-side crossing argument gives the `none` case.
-* **Local embeddings**: `nodePlanar_sound` S and P by computation on `layoutRot`; R from
-  Invariant P via `planarRelabel`'s `mapRot`.
-* **Gluing**: a 2-sum lemma on `IsPlanarEmbedding` (face/vertex orbit counting under `link`
-  of two exposed corners) and the bottom-up induction over `embedItem`.
+* **Invariant P**: `InvariantP` / `StackInv` (`PlanarInv.lean`) are stated; prove
+  `planarWalkOut_stackInv` step by step for `makeEdgePlanarity`, `mergeSide`,
+  `closeSide`/`pruneSide`, `foldPlanarity`, `finishMatches`/`unwrapPlanarity`; the merge-side
+  crossing argument gives the `none` case.
+* **Relabel transport**: `neRotAdj_segment` (induction over `planarRelabel`: `neRotAdj` grows by
+  exactly the node's `layoutRot` when `neBounds` is pushed).
+* **Local embeddings**: S and P done; R (`nodePlanar_sound_R`) from Invariant P at the finish of
+  the R item via `planarRelabel`'s `mapRot`.
+* **Gluing**: `twoSum_planar` (explicit splice, `PlanarGlue`), `oneSum_planar`,
+  `disjointUnion_planar`, then the bottom-up induction over `embedItem` for `planarEmbed_sound`.
 * **Completeness**: the crossing of §8.3 as a `K₅`/`K₃,₃` subdivision — the hard, optional one.

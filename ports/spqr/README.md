@@ -249,8 +249,13 @@ flattened state machine:
     Spqr/PlanarWalkProj.lean, PlanarRelabelProj.lean
                          planarWalk_proj / planarRelabel_proj: the planar variant projects onto the
                          ordinary one (proved)
-    Spqr/PlanarSpec.lean nodePlanar_sound / nodePlanar_complete / planarEmbed_sound /
-                         planarEmbed_isSome_iff / spqrTree_planar
+    Spqr/Proofs/Planar.lean, PlanarLayout.lean
+                         orbit counting lemmas; closed forms of layoutRot S/P and the proofs that the
+                         cycle / bond layouts are IsPlanarEmbeddings
+    Spqr/PlanarInv.lean  Invariant P (Piece, SideWalk, InvariantP, StackInv), the gluing statements
+                         twoSum_planar / oneSum_planar / disjointUnion_planar, layout renumbering
+    Spqr/PlanarSpec.lean nodePlanar_sound (S/P proved modulo neRotAdj_segment + Shape, R admitted) /
+                         nodePlanar_complete / planarEmbed_sound / planarEmbed_isSome_iff / spqrTree_planar
     DumpLean.lean        dump harness (SPQR_EAR=1 switches to walkEarTree)
     DumpPlanarLean.lean  planar dump harness, prints what cpp/dump.cpp prints (SPQR_EMBED=1 appends
                          the glued embedding, as cpp/dump_embed.cpp does)
@@ -288,9 +293,13 @@ is an `IsPlanarEmbedding` of its skeleton, nonplanar nodes are R nodes with all 
 the glued embedding (when present) is an `IsPlanarEmbedding` of the input (passes on 0..300).
 Proved: `planarWalk_proj`, `planarRelabel_proj` (the planar variant is a conservative extension
 of the ordinary walk / relabel, so the decomposition proofs are unaffected by planarity) and
-`planarEmbed_isSome_iff`. Admitted with proof plans: `nodePlanar_sound`, `nodePlanar_complete`,
-`planarEmbed_sound`, `spqrTree_planar`. The planar executable is as slow as the ordinary one
-(same `List`-based walk).
+`planarEmbed_isSome_iff`, `cycleRot_isPlanarEmbedding` / `bondRot_isPlanarEmbedding` (the S/P
+local layouts are planar embeddings), and the S/P cases of `nodePlanar_sound` modulo the relabel
+bookkeeping `neRotAdj_segment` and `Shape`. Invariant P is stated as a Lean structure
+(`InvariantP`, `PlanarInv.lean`). Admitted with proof plans: `neRotAdj_segment`,
+`nodePlanar_sound_R`, `planarWalkOut_stackInv`, `nodePlanar_complete`, `twoSum_planar`,
+`oneSum_planar`, `disjointUnion_planar`, `planarEmbed_sound`, `spqrTree_planar`. The planar
+executable is as slow as the ordinary one (same `List`-based walk).
 Runtime: the proof-carrying implementation uses `List ++` for span merges and
 `List.mergeSort`, so it is not linear-time; a cost-instrumented linear-time refinement (cat-lists,
 verified bucket sort) with a `fast = slow` theorem is separate, in-progress work.
