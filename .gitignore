@@ -42,3 +42,6 @@
 /verify_files.json
 __pycache__/
 /coverage/
+
+# uv
+.venv/

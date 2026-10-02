@@ -1,8 +1,4 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12"
-# dependencies = ["competitive-verifier @ git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration"]
-# ///
+#!/usr/bin/env -S uv run
 """Inline cp-book headers to produce a single submittable file.
 
 Usage:
@@ -14,9 +10,12 @@ Usage:
 Any `#include "foo.hpp"` resolved from src/ (or relative to the including
 file) is expanded in place, like `oj-bundle -I src`. Header names relative
 to src/ (e.g. `fft/series.hpp`) are looked up in src/. Multiple inputs are bundled into
-one output with shared includes deduplicated.
+one output with shared includes deduplicated and system includes hoisted
+into one block at the top.
 
---minify additionally strips comments (compiler-directed, via
+--minify additionally collapses the standard includes into
+`#include <bits/stdc++.h>` plus `#include <cassert>` (not part of
+`<bits/stdc++.h>` in recent g++), strips comments (compiler-directed, via
 `g++ -fpreprocessed -dD -E`), collapses whitespace, and packs lines,
 keeping `#line` markers at file boundaries.
 
@@ -40,8 +39,8 @@ from typing import Literal
 
 from competitive_verifier.oj.languages.cplusplus_bundle import Bundler
 from competitive_verifier.oj.languages.cplusplus_minify import (
+    MinifyCheckError,
     minify,
-    raw_token_stream,
 )
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -66,19 +65,27 @@ def resolve_input(path: pathlib.Path) -> pathlib.Path:
     raise SystemExit(f"error: no such file: {path}")
 
 
+MINIFY_PRELUDE = ["bits/stdc++.h", "cassert"]
+
+
 def bundle(
     paths: list[pathlib.Path],
     *,
     level: Literal["light", "medium", "full"] | None,
     line_markers: bool = False,
+    check: bool = False,
 ) -> bytes:
-    bundler = Bundler(iquotes=[SRC])
+    bundler = Bundler(
+        iquotes=[SRC],
+        prelude_includes=MINIFY_PRELUDE if level else [],
+        hoist_system_includes=True,
+    )
     for path in paths:
         bundler.update(resolve_input(path))
     code = bundler.get()
     if level is None:
         return code
-    return minify(code, level=level, line_markers=line_markers)
+    return minify(code, level=level, line_markers=line_markers, check=check)
 
 
 def bundle_all(outdir: pathlib.Path, *, check: bool) -> None:
@@ -88,17 +95,16 @@ def bundle_all(outdir: pathlib.Path, *, check: bool) -> None:
     failures = []
     for header in headers:
         rel = header.relative_to(SRC)
-        outputs = {}
         for name, level in (("bundled", None), ("minified", "medium")):
             dest = outdir / name / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            outputs[name] = bundle([header], level=level)
+            try:
+                code = bundle([header], level=level, check=check)
+            except MinifyCheckError:
+                failures.append(rel)
+                continue
             args = (["-m"] if level else []) + [str(rel)]
-            dest.write_bytes(wrap_fold(outputs[name], args))
-        if check and raw_token_stream(outputs["bundled"]) != raw_token_stream(
-            outputs["minified"]
-        ):
-            failures.append(rel)
+            dest.write_bytes(wrap_fold(code, args))
         print(rel, file=sys.stderr)
     if failures:
         raise SystemExit(
@@ -148,7 +154,7 @@ def main() -> None:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="with --all: verify (via clang's raw lexer) that minification "
+        help="with --minify: verify (via clang's raw lexer) that minification "
         "preserves every token",
     )
     args = parser.parse_args()
@@ -162,7 +168,12 @@ def main() -> None:
         parser.error("no input files")
     level = args.minify_level or ("medium" if args.minify else None)
     code = wrap_fold(
-        bundle(args.paths, level=level, line_markers=args.line_markers)
+        bundle(
+            args.paths,
+            level=level,
+            line_markers=args.line_markers,
+            check=args.check,
+        )
     )
     if args.output:
         args.output.write_bytes(code)

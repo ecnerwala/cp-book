@@ -2,6 +2,7 @@
 # counters land next to the compiled binaries and are aggregated with gcovr.
 [languages.cpp]
 read_macros = false
+bundle_hoist_system_includes = true
 
 [[languages.cpp.environments]]
 CXX = "g++"
