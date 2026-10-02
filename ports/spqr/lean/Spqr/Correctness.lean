@@ -49,11 +49,17 @@ theorem spqrTree_r_three_connected (g : Graph) (tern : Bool) (vo eo : List Nat) 
         ((t.skeleton i).map fun p => (p.1 - (t.nvRange i).1, p.2 - (t.nvRange i).1)) := by
   sorry
 
-theorem spqrTree_wf (g : Graph) (tern : Bool) (vo eo : List Nat) : (g.spqrTree tern vo eo).WF :=
-  relabelTree_wf g _ (walk_items_wf g tern vo eo)
+theorem spqrTree_eq (g : Graph) (tern : Bool) (vo eo : List Nat) :
+    g.spqrTree tern vo eo = relabelTree g (g.walk tern (g.dfsForest vo eo)).items := by
+  simp [Graph.spqrTree, Graph.dfsForestFast_eq]
+
+theorem spqrTree_wf (g : Graph) (tern : Bool) (vo eo : List Nat) : (g.spqrTree tern vo eo).WF := by
+  rw [spqrTree_eq]; exact relabelTree_wf g _ (walk_items_wf g tern vo eo)
 
 theorem spqrTree_represents (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    (g.spqrTree tern vo eo).Represents g :=
-  relabelTree_represents g _ (walk_items_wf g tern vo eo) (spqrTree_r_three_connected g tern vo eo)
+    (g.spqrTree tern vo eo).Represents g := by
+  have h := spqrTree_r_three_connected g tern vo eo
+  rw [spqrTree_eq] at h ⊢
+  exact relabelTree_represents g _ (walk_items_wf g tern vo eo) h
 
 end Spqr
