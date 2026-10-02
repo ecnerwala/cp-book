@@ -1,5 +1,6 @@
 import Spqr.PlanarEmbed
 import Spqr.PlanarRelabelProj
+import Spqr.PlanarRotSpec
 import Spqr.Build
 import Spqr.Correctness
 import Spqr.PlanarInv
@@ -47,8 +48,9 @@ end PlanarSpqrTree
 abbrev Graph.planarTree (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) : PlanarSpqrTree :=
   g.planarSpqrTree ternarize vertOrder edgeOrder
 
-/-- Relabel bookkeeping (admitted): the segment of `neRotAdj` belonging to node `i` is the
-`layoutRot` of its type, computed by `planarRelabel` when the node was laid out. -/
+/-- Relabel bookkeeping: the segment of `neRotAdj` belonging to node `i` is the `layoutRot` of its
+type, computed by `planarRelabel` when the node was laid out (`PlanarRotSpec.lean`, from the
+admitted fold characterization `planarRelabel_rot_spec`). -/
 theorem neRotAdj_segment (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (i : Nat)
     (hi : i < (g.planarTree ternarize vertOrder edgeOrder).size) :
     ∃ (edgeVes : List Nat) (mapRot : Nat → Array (Option Nat)) (capVe : Nat),
@@ -58,8 +60,8 @@ theorem neRotAdj_segment (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : L
         layoutRot ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.type i)
           ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i)
           ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.neRange i).1
-          ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.neRange i).2 edgeVes mapRot capVe := by
-  sorry
+          ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.neRange i).2 edgeVes mapRot capVe :=
+  PlanarRot.neRotAdj_segment' g ternarize vertOrder edgeOrder i hi
 
 theorem planarTree_shape (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (i : Nat)
     (hi : i < (g.planarTree ternarize vertOrder edgeOrder).size) :
