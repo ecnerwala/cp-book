@@ -663,6 +663,35 @@ and non-V terminals/edge sets, and the item's own terminals/edge set.
 All four have only `propext`, `Classical.choice`, `Quot.sound` as axioms.
 The walk-level ownership argument that all later writes satisfy these frames remains open.
 
+R completeness must come from postorder interval ownership and saturation, not `EarFinish`
+or Loop-1 ear content. The pending `RangesInv` interface must connect entries to the actual
+processed prefix, DFS path, and completed vertices. At the `ceS₁` boundary it must account
+for `cur_c`, interior ownership of the returned child, disjointness, nonemptiness, and a
+block-local complement. An additional saturation argument must derive `EntryR`'s `single`,
+`maximal`, `bond`, `type1`, and `type2` fields; these are consumed by `RBranch.rContent`,
+not consequences of edge-disjointness alone. Closed-piece maximality must survive later writes.
+
+The necessary adjacent-merge witness lemma needs the path/vertex ownership information.
+Edge intervals and pairwise adjacent saturation alone are insufficient: take the union of
+the cliques on `{0,1,2,3}` and `{0,1,4,5}`, sharing edge `{0,1}`. Give each edge a singleton
+interval. Every singleton is 2-attached, but every pair of distinct edges has at least three
+boundary vertices (all vertex degrees are at least three), so every ordering is saturated
+under a two-entry/2-attachment check. Nevertheless `{0,1}` separates the graph into the
+classes through `{2,3}`, through `{4,5}`, and the singleton shared edge.
+This is a counterexample to that abstract sufficiency claim, not a reachable walk state.
+No new ear-content assumption is used to fill the gap; the interface restatement remains open.
+
+The graph-theoretic HT-to-cut implication is proved in `Proofs/ThreeConnected.lean`.
+`Graph.ThreeConnected.relabel` takes `TwoConnected`, HT `ThreeConnected`, and a nodup list
+of at least four active vertices containing every edge endpoint, and proves the cut-based
+`SpqrTree.ThreeConnected` after `idxOf` relabelling. It permits isolated original vertex IDs
+outside that list and does not require simplicity. `TwoConnected.two_incident_of_vertices`
+gives two distinct incident edges at every active vertex; disconnected surviving vertices
+would therefore supply two separation classes of size at least two. All five supporting
+theorems and the relabelling theorem have only standard axioms.
+The item-specific bridge still needs the contracted skeleton's active vertex list and edge
+correspondence with `Items.rSkeleton`, and well-formedness of the contracted pieces.
+
 ## 5. Phase 3: relabel
 
 `relabelTree` **[def]** takes the item array and produces `SpqrTree`. It is a plain preorder walk:
@@ -885,6 +914,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape'`/`RStep.threeConnected'` (`Proofs/RClose.lean`) give it for Loop 1's R step from `Inv' D` + `stackVerts[d+1..D] = cur.vStart` + `RStep` + `RContent` (`Inv d` is contradictory there) |
 | 4.5 walk side: `EntryR`/`RTop`/`RBranch`/`RInvAt`; `RBranch.rStep`, `RBranch.rContent` (all five content fields), `RBranch.threeConnected` (from `Inv' (d+1)`); `EntryR.congr`/`RInvAt.congr` + bookkeeping frames; `Items.RSkel3`, `RBranch.rSkel3` | `RInv.lean`, `Proofs/RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RItems.lean` | proved; admitted: `finishEdge_rInvAt`, `walkTree_rInvAt`, `loop1_rBranch` (history preservation), `items_r_three_connected` (all R items of the walk on a block); `spqrTree_r_three_connected` (relabel transport): hard |
 | 4.5 R skeleton persistence: `Pieces.contract_congr`, `Items.RSkel3.congr`, `.modify_of_not_below`, `.push_nil` | `Proofs/RItems.lean` | proved (standard axioms); walk-level ownership of later writes remains open |
+| 4.5 HT-to-cut transport: `Graph.ThreeConnected.relabel` | `Proofs/ThreeConnected.lean` | proved (standard axioms), assuming a block and its active vertex list; item skeleton correspondence remains open |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |

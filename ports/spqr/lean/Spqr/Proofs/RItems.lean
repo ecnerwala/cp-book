@@ -1,4 +1,5 @@
 import Spqr.Proofs.RInvFrame
+import Spqr.Proofs.ThreeConnected
 import Spqr.Correctness
 
 /-!
