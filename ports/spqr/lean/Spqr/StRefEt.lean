@@ -1171,8 +1171,58 @@ theorem refBlocks_st {g : Graph} (hg : g.WF) {vo eo : List Nat} (hvo : OrderOK g
     rw [stNest_single]
     exact root_block_st g (hB v (List.mem_flatMap.mpr ⟨_, ht, by simp [DfsTree.verts]⟩))
 
+/-! ### Every block completed inside a subtree has a boundary edge -/
+
+mutual
+theorem refTree_roots {g : Graph} : ∀ (t : DfsTree) (d : Nat) (dirs : List Bool),
+    ∀ b ∈ (refTree g t d dirs).2, b.root ≠ none
+  | .node v outs, d, dirs => by
+    rw [refTree_node]; exact refOuts_roots outs v d dirs false
+theorem refOuts_roots {g : Graph} : ∀ (outs : List DfsOut) (v d : Nat) (dirs : List Bool) (hv : Bool),
+    ∀ b ∈ (refOuts g v d dirs outs hv).2.1, b.root ≠ none
+  | [], v, d, dirs, hv => by simp [refOuts_nil]
+  | o :: rest, v, d, dirs, hv => by
+    rw [refOuts_cons]
+    intro b hb
+    rcases List.mem_append.mp hb with hb | hb
+    · exact refOut_roots o v d dirs hv b hb
+    · exact refOuts_roots rest v d dirs _ b hb
+theorem refOut_roots {g : Graph} : ∀ (o : DfsOut) (v d : Nat) (dirs : List Bool) (hv : Bool),
+    ∀ b ∈ (refOut g v d dirs o hv).2.1, b.root ≠ none
+  | .back e dest cls, v, d, dirs, hv => by
+    intro b hb
+    by_cases h : d ≤ cls.lowval d
+    · rw [refOut_boundary_back h] at hb; simp at hb
+    · simp [refOut, DfsOut.cls, h] at hb
+  | .tree e cls child, v, d, dirs, hv => by
+    intro b hb
+    by_cases h : d ≤ cls.lowval d
+    · rw [refOut_boundary_tree h] at hb
+      rcases List.mem_append.mp hb with hb | hb
+      · exact refTree_roots child _ _ b hb
+      · simp at hb; subst hb; simp
+    · have hb' : b ∈ (refTree g child (d + 1) (dirs ++ [!dirs.getD (cls.lowval d) false])).2 := by
+        simpa only [refOut, DfsOut.cls, h, ite_false] using hb
+      exact refTree_roots child _ _ b hb'
+end
+
+/-- A reference block without a boundary edge is the one-vertex block of a DFS root. -/
+theorem refBlocks_root_none (g : Graph) (forest : List DfsTree) :
+    ∀ b ∈ refBlocks g forest, b.root = none → ∃ r, b.items = [vertItem r] := by
+  intro b hb hroot
+  unfold refBlocks at hb
+  obtain ⟨t, ht, hb⟩ := List.mem_flatMap.mp hb
+  rcases List.mem_append.mp hb with hb | hb
+  · exact absurd hroot (refTree_roots t 0 [] b hb)
+  · simp at hb; subst hb
+    obtain ⟨v, outs⟩ := t
+    rw [refTree_node, (refOuts_zero outs false).1, (refOuts_zero outs false).2]
+    simp only [Bool.false_eq_true, ite_false, List.nil_append]
+    rw [stNest_single]
+    exact ⟨v, rfl⟩
+
 end Spqr.StRefEt
 
 namespace Spqr
-export StRefEt (refBlocks_st)
+export StRefEt (refBlocks_st refBlocks_root_none)
 end Spqr

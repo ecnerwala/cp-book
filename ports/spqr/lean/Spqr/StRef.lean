@@ -253,13 +253,17 @@ def restrictCh (items : Items) (fuel : Nat) (order : List ItemId) (i : ItemId) :
     (Items.ch items i).find? fun c => x ∈ Items.leaves items fuel c)
 
 /-- The orientation facts the walk provides for every S / P / R item `i`: `i` lies in one block
-`b` of `blocks` (all its leaves are items of `b`), and the `vs` of `i` and of its non-V children
-are oriented along `b.seq` (`makeVs` orients by the same `stackDir` bit as the splice side).
-Differentially tested by `check_stref`. -/
+`b` of `blocks` (all its leaves are items of `b`, and an edge of `b` — an edge item of `b` or an
+edge on `b.root`'s endpoints — that is below `i` is a leaf of `i`, i.e. not in a block hanging
+off a V child of `i`), and the `vs` of `i` and of its non-V children are oriented along `b.seq`
+(`makeVs` orients by the same `stackDir` bit as the splice side). Differentially tested by
+`check_stref`. -/
 def VsOriented (g : Graph) (items : Items) (blocks : List StBlock) : Prop :=
   ∀ i, i < items.size →
     Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R →
     ∃ b ∈ blocks, (∀ x ∈ Items.leaves items items.size i, x ∈ b.items) ∧
+      (∀ e, e < g.ne → (edgeItem g e ∈ b.items ∨ ∃ r ∈ b.root, Items.PairEq g.edges[e]! r) →
+        Items.Below items i (edgeItem g e) → edgeItem g e ∈ Items.leaves items items.size i) ∧
       Oriented (b.seq g) (Items.vs items i) ∧
       ∀ c ∈ Items.ch items i, Items.type items c ≠ .V → Oriented (b.seq g) (Items.vs items c)
 
@@ -297,7 +301,8 @@ theorem stItem_of_refOrder (g : Graph) (tern : Bool) (vo eo : List Nat) (i : Ite
         (g.walk tern (g.dfsForest vo eo)).items.size
         (refOrder g (g.dfsForest vo eo)) i)
     (hvs : VsOriented g (g.walk tern (g.dfsForest vo eo)).items (refBlocks g (g.dfsForest vo eo)))
-    (hbl : ∀ b ∈ refBlocks g (g.dfsForest vo eo), b.St g) :
+    (hg : ∀ p ∈ g.edges, p.1 < g.nv ∧ p.2 < g.nv) (hbl : ∀ b ∈ refBlocks g (g.dfsForest vo eo), b.St g)
+    (hrt : ∀ b ∈ refBlocks g (g.dfsForest vo eo), b.root = none → ∃ r, b.items = [vertItem r]) :
     Items.StItem (g.walk tern (g.dfsForest vo eo)).items i := by
   sorry
 

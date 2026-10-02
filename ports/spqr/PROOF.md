@@ -1200,7 +1200,11 @@ hypotheses like `dfsForest_spanning`; so do `walk_items_rOriented'` (`StOriented
 (`Correctness.lean`). The hypothesis-free `spqrTree_wf` that the planar layer consumes
 (`planarTree_shape`, `planarRelabel_rot_spec`, `neRotAdj_segment'`) is kept as a named admission: it is
 `spqrTree_wf'` under `g.WF`/`OrderOK`, and whether its `ROriented` part holds for malformed graphs is
-open. `#print axioms refBlocks_st`: propext, Classical.choice,
+open. `VsOriented` also records that a block edge (an edge item of `b`, or an edge on `b.root`'s
+endpoints) below `i` is a leaf of `i` — i.e. not in a block hanging off a V child of `i` — which the
+restriction argument needs to know that a block neighbour of a V child of `i` comes from one of
+`i`'s own children (checked by `check_stref`, seeds 0..1000). `refBlocks_root_none` (the `root = none`
+block is a DFS root's `[vertItem r]`) excludes the block head from the open-vertex arguments. `#print axioms refBlocks_st`: propext, Classical.choice,
 Quot.sound.
 
 ### 7.5 Work packages
@@ -1229,7 +1233,8 @@ Quot.sound.
 | `refTree`/`refOrder`, `restrictCh`, `check_stref` differential test (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..300 (0 mismatches) |
 | `walk_st'` (`ch i = restrictCh … (refOrder …) i` for S/P/R items) | `StRef.lean` | sorry (the simulation) |
 | `StBlock`, `StBlock.seq`/`edges`/`St`, `Precedes`, `Oriented`, `VsOriented`; `check_stref` checks `VsOriented` and `StBlock.St` too (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..1000 (0 mismatches) |
-| `walk_vsOriented` (`VsOriented` for the walk's items and `refBlocks`) | `StRef.lean` | sorry (the simulation, with `walk_st'`) |
+| `walk_vsOriented` (`VsOriented` for the walk's items and `refBlocks`: block membership of the leaves, block edges below `i` are leaves of `i`, `vs` orientation of `i` and its non-V children) | `StRef.lean` | sorry (the simulation, with `walk_st'`) |
+| `refBlocks_root_none` (a block without boundary edge is a DFS root's one-vertex block) | `StRefEt.lean` | proved (`refTree_roots`; axioms propext, Quot.sound) |
 | `refBlocks_st` (every reference block is `StBlock.St`; corrected statement: under `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo`) | `StRefEt.lean` | proved (`refTree_inv`/`refOuts_inv`; axioms propext, Classical.choice, Quot.sound) |
 | `Before`, `Side`, `Nb`, `NbV`, `VInv` (`nil`, `single`, `extend`, `step`, `step_back`, `step_tree`), `block_st`, `root_block_st`, `refOut_boundary_back/tree`, `refOut_ret_back/tree`, `refOuts_nil/cons/zero`, `refTree_node` | `StRefEt.lean` | def / proved |
 | `stItem_of_refOrder` (an item with `ch` in reference order and oriented `vs` is in s-t order; takes `refBlocks_st`'s conclusion as `hbl`) | `StRef.lean` | sorry (restriction of the block's st-order to the item) |

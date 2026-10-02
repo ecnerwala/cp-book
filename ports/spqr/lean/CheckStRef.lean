@@ -8,6 +8,13 @@ lists equal `restrictCh` of `refOrder`, every S / P / R item lies in one referen
 `vs` and its non-V children's `vs` oriented along the block's sequence, and every reference block
 is st-numbered. -/
 
+instance (p q : Nat × Nat) : Decidable (Items.PairEq p q) := by unfold Items.PairEq; infer_instance
+
+/-- The descendants-or-self of `i` (`Items.Below i`), by fuel. -/
+def descOf (items : Items) : Nat → ItemId → List ItemId
+  | 0, i => [i]
+  | fuel + 1, i => i :: (Items.ch items i).flatMap (descOf items fuel)
+
 def main : IO Unit := do
   let input ← (← IO.getStdin).readToEnd
   let toks := (input.splitOn " ").flatMap (·.splitOn "\n") |>.filter (· ≠ "") |>.map String.toNat!
@@ -45,7 +52,12 @@ def main : IO Unit := do
         bad := bad + 1
         IO.println s!"MISMATCH item {i}: walk {Items.ch items i} ref {r}"
       let lv := Items.leaves items items.size i
-      let ok := blocks.any fun b => lv.all (· ∈ b.items) && decide (Oriented (b.seq g) (Items.vs items i)) &&
+      let ds := descOf items items.size i
+      let ok := blocks.any fun b => lv.all (· ∈ b.items) &&
+        ((List.range g.ne).all fun e =>
+          let x := edgeItem g e
+          !(x ∈ b.items || b.root.any fun r => decide (Items.PairEq g.edges[e]! r)) || !(x ∈ ds) || x ∈ lv) &&
+        decide (Oriented (b.seq g) (Items.vs items i)) &&
         (Items.ch items i).all fun c => Items.type items c = .V || decide (Oriented (b.seq g) (Items.vs items c))
       if !ok then
         bad := bad + 1
