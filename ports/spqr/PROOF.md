@@ -449,7 +449,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | 7 relabel-side: `relabel_st` | `StSpec.lean` | sorry |
 | 7 walk-side: `WalkState.StInv`, data lemmas `pushTstack_onSide`, `merge_onSide`, `fold_onSide` | `StWalk.lean` | def / proved |
 | 7 walk-side: `finishTstackTop_stItem`; ear lowvals `first_ret_lowval`, `chain_stackDir_step` | `StWalk.lean`, `StEar.lean` | proved |
-| 7 walk-side: `walkTree_stackDir_below`, `chain_stackDir_const`, `finishEdge_topClosable`, `finishEdge_stInv`, `walk_st` | `StEar.lean`, `StWalk.lean`, `StSpec.lean` | sorry |
+| 7 walk-side: `chain_stackDir_const`, `finishEdge_topClosable`, `finishEdge_stInv`, `walk_st` | `StWalk.lean`, `StSpec.lean` | sorry (`walkTree_stackDir_below` in `StFrame.lean` proved) |
 
 Work packages for child sessions, in dependency order:
 * **DFS**: 1.1, 1.2, no cross edges, `lowpt` characterization of `OutClass`.
@@ -575,9 +575,16 @@ return depths, from `DfsOut.WF` = `dfsVisit_spec`'s per-edge classification), `f
 ear — returns to exactly `l`, using `classify_eq_ret_iff_tree` for `l = lmin` and the
 `OutClass.rank` sortedness of `DfsTree.WF` to put the minimal edge first), and `chain_stackDir_step`
 (`walkOut` at depth `d + 1` sets `stackDir[d+1] = !stackDir[l] = stackDir[d]`).
-Threading these along the chain needs the frame fact `walkTree_stackDir_below` **[sorry]**
-(walking a subtree at depth `d` leaves `stackDir` below `d` unchanged), which is a statement about
-the whole recursion, not about one `finishEdge` branch.
+Threading these along the chain needs the frame fact `walkTree_stackDir_below` **[proved]**
+(`StFrame.lean`: walking a subtree at depth `d` leaves `stackDir` below `d` unchanged), by the
+mutual induction over `walkTree`/`walkOuts`/`walkOut` with the block decomposition `finishEdge_eq`:
+the only `stackDir` write inside `finishEdge` is `loop1Type`'s, at the depth of a stack entry
+strictly above `d`.
+What remains of `chain_stackDir_const` is not a frame fact: its conclusion `t.OnSide dir` is a
+history property of how the entry `t` was built (every `pushTstack`/`mergeTstackTops` along the
+chain used the same `edgeDir`), which is not determined by the current state plus `hchain`; it has
+to become a field of the walk invariant (`OnSide` for every entry whose pieces were attached inside
+the current ear), maintained by `pushTstack_onSide`/`merge_onSide`/`fold_onSide`.
 Consequently the spans of an entry are one-sided inside an ear; genuinely two-sided entries arise
 only at ear boundaries, when a finished inner ear (`spans.1`, `spans.2` both non-empty after the
 wrap) is enclosed by pieces from both sides.
@@ -656,8 +663,8 @@ left to the preservation proof.
 | `pushTstack_onSide`, `merge_onSide`, `fold_onSide`, `getSide_setSides` | `StWalk.lean` | proved |
 | `WalkState.StSides`, `StEntry`, `StInv`, `TopClosable`, `entryVertList`, `entryEdges` | `StWalk.lean` | def |
 | `DfsOut.lowval_eq_lmin`, `first_ret_lowval`, `chain_stackDir_step` | `StEar.lean` | proved |
-| `walkTree_stackDir_below` (frame: `stackDir` below `d` unchanged by `walkTree _ d`) | `StEar.lean` | sorry |
-| `chain_stackDir_const` (`ear_uniform_side`, semantic half) | `StWalk.lean` | sorry |
+| `walkTree_stackDir_below` (frame: `stackDir` below `d` unchanged by `walkTree _ d`) | `StFrame.lean` | proved |
+| `chain_stackDir_const` (`ear_uniform_side`, semantic half) | `StWalk.lean` | sorry (history fact; needs an `OnSide` field in `StInv`) |
 | `finishTstackTop_items`, `finishTstackTop_stItem` | `StWalk.lean` | proved |
 | `finishEdge_topClosable`, `finishEdge_stInv` | `StWalk.lean` | sorry (hard; needs closability in `StInv`, see 7.4) |
 | `walk_st` | `StSpec.lean` | sorry (from `finishEdge_stInv`) |

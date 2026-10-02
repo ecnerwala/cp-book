@@ -267,9 +267,10 @@ derived from `walk_st` and `relabel_st`, both `sorry`; proved there are `vchildr
 `orderedChildren_sorted`, `orderedChildren_eq_of_ne_R`, `edgeChildren_dominance`,
 `layoutNode_r_bracket` (via `StLayout.lean`), the side-bookkeeping lemmas `pushTstack_onSide`,
 `merge_onSide`, `fold_onSide`, `finishTstackTop_stItem`, and the ear lowval lemmas
-`first_ret_lowval`, `chain_stackDir_step` (`StEar.lean`); admitted are `relabel_st`,
-`walkTree_stackDir_below`, `chain_stackDir_const`, `finishEdge_topClosable`, `finishEdge_stInv`,
-`walk_st` (so `#print axioms Spqr.spqrTree_st` reports `sorryAx`).
+`first_ret_lowval`, `chain_stackDir_step` (`StEar.lean`) and the frame fact
+`walkTree_stackDir_below` (`StFrame.lean`); admitted are `relabel_st`, `chain_stackDir_const`,
+`finishEdge_topClosable`, `finishEdge_stInv`, `walk_st` (so `#print axioms Spqr.spqrTree_st`
+reports `sorryAx`).
 
 reports `sorryAx`).
 
