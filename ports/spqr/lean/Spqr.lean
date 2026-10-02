@@ -14,6 +14,7 @@ import Spqr.WalkSpec
 import Spqr.Correctness
 import Spqr.EarSpec
 import Spqr.SepPair
+import Spqr.Proofs.Postorder
 import Spqr.Proofs.SepPair
 import Spqr.Blocks
 import Spqr.Proofs.Blocks

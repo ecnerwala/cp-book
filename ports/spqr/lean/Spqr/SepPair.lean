@@ -178,6 +178,46 @@ def DfsOut.depthAtList (v d₀ : Nat) : List DfsOut → Option Nat
   | .tree _ _ child :: rest => (child.depthAt v d₀).orElse fun _ => DfsOut.depthAtList v d₀ rest
 end
 
+/-! ### The walk's edge order -/
+
+mutual
+/-- The edges below a tree in the order `finishEdge` reaches them: a vertex's out-edges in sorted
+order, each tree edge right after its subtree's edges (PROOF.md §3, Fact D). -/
+def DfsTree.edgePostorder : DfsTree → List Nat
+  | .node _ outs => DfsOut.edgePostorderList outs
+def DfsOut.edgePostorderList : List DfsOut → List Nat
+  | [] => []
+  | .back e _ _ :: rest => e :: DfsOut.edgePostorderList rest
+  | .tree e _ child :: rest => child.edgePostorder ++ e :: DfsOut.edgePostorderList rest
+end
+
+/-- The edges of an out-edge's block: its subtree's postorder followed by the edge itself. -/
+def DfsOut.block : DfsOut → List Nat
+  | .back e _ _ => [e]
+  | .tree e _ child => child.edgePostorder ++ [e]
+
+mutual
+/-- The blocks of all tree out-edges below a tree. -/
+def DfsTree.blocks : DfsTree → List (List Nat)
+  | .node _ outs => DfsOut.blocksList outs
+def DfsOut.blocksList : List DfsOut → List (List Nat)
+  | [] => []
+  | .back .. :: rest => DfsOut.blocksList rest
+  | .tree e _ child :: rest =>
+    (child.edgePostorder ++ [e]) :: (child.blocks ++ DfsOut.blocksList rest)
+end
+
+/-- The edge order of the whole forest (`nxtEdgeIdx` counts the back edges in it). -/
+def edgePostorderForest (forest : List DfsTree) : List Nat := forest.flatMap DfsTree.edgePostorder
+
+/-- `s` is a subtree of `t`. -/
+inductive DfsTree.Sub : DfsTree → DfsTree → Prop
+  | refl (t) : Sub t t
+  | step {s v outs e cls child} : Sub s child → DfsOut.tree e cls child ∈ outs → Sub s (.node v outs)
+
+/-- Two edge intervals are nested or disjoint. -/
+def Laminar (B₁ B₂ : List Nat) : Prop := B₁ ⊆ B₂ ∨ B₂ ⊆ B₁ ∨ ∀ x, x ∈ B₁ → x ∈ B₂ → False
+
 /-- The abstract view of a phase-1 forest; `root` is the first tree's root. -/
 def DfsData.ofForest (forest : List DfsTree) : DfsData where
   root := (forest.head?.map DfsTree.v).getD 0
