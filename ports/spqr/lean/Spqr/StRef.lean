@@ -230,6 +230,33 @@ theorem readStack_finishTstackTop (s : WalkState) (item : ItemId) (t : TEntry) (
   cases hd : sd[t.topDepth]! <;> simp [hd, getSide] at hside ⊢ <;>
     simp [readStack, readL, readR, expandItem, stNestL, stNestR, hside]
 
+/-- `maybeUnwrapNxt`'s reopen: the entry under the top holding the single item `i` (a closed S / P
+node) is reopened to `i`'s children; expanding `i` to `ch` recovers the reading (`i` occurs nowhere
+else on the stack). -/
+theorem readStack_reopen (a b : TEntry) (rest : List TEntry) (dir : Bool) (i : ItemId)
+    (ch : List ItemId) (hb : b.spans = setSides dir [i] []) (ha : i ∉ a.spans.1 ++ a.spans.2)
+    (hrest : i ∉ readStack rest) :
+    readStack (a :: { b with spans := setSides dir ch [] } :: rest) =
+      expandItem i ch (readStack (a :: b :: rest)) := by
+  have h1 : i ∉ a.spans.1 := fun h => ha (List.mem_append_left _ h)
+  have h2 : i ∉ a.spans.2 := fun h => ha (List.mem_append_right _ h)
+  have h3 : i ∉ readL rest := fun h => hrest (List.mem_append_left _ h)
+  have h4 : i ∉ readR rest := fun h => hrest (List.mem_append_right _ h)
+  have h7 : ∀ l, expandItem i ch (i :: l) = ch ++ expandItem i ch l := by
+    intro l; simp [expandItem]
+  cases dir <;> simp [readStack, readL, readR, setSides, hb, expandItem_append,
+    expandItem_of_not_mem _ _ _ h1, expandItem_of_not_mem _ _ _ h2,
+    expandItem_of_not_mem _ _ _ h3, expandItem_of_not_mem _ _ _ h4, h7]
+
+theorem readStack_modifyNxt_reopen (s : WalkState) (a b : TEntry) (rest : List TEntry)
+    (dir : Bool) (i : ItemId) (ch : List ItemId) (ht : s.tstack = a :: b :: rest)
+    (hb : b.spans = setSides dir [i] []) (ha : i ∉ a.spans.1 ++ a.spans.2)
+    (hrest : i ∉ readStack rest) :
+    readStack ((modifyNxt fun t => { t with spans := setSides dir ch [] }).run s).2.tstack =
+      expandItem i ch (readStack s.tstack) := by
+  rw [run_modifyNxt, ht]
+  exact readStack_reopen a b rest dir i ch hb ha hrest
+
 /-! ### The statement: the walk's child lists are restrictions of `refOrder` -/
 
 /-- The leaf items (vertices and edges) under `i`, in `ch` order; `fuel ≥` the depth of `i`. -/

@@ -1211,6 +1211,25 @@ vertex sets are nested sub-ears) — all checked by `check_stref`, seeds 0..1000
 edge is a tree edge, hence `PairEq` to some `g.edges[e]!`; from `DfsForestSpec.joins`) are the two
 structural facts about blocks. `#print axioms refBlocks_st`: propext, Classical.choice, Quot.sound.
 
+**The simulation (`walk_st'`, `walk_vsOriented`; open).** The relation is `readStack (tstack above
+the base) = stNest pieces` with `pieces` the reference's pieces for the open ear, *up to expanding
+the items closed inside the ear back to the children they were closed with* (`expandItem`): a
+closed item occurs on the stack as the single item of a one-sided entry and the reference lists
+its leaves instead. Per-primitive steps, all proved: `readStack_pushTstack` (`pushTstack v d i`
+pushes the piece `⟨stackDir[d], [i]⟩`, matching the reference's `dirs[d]`), `readStack_mergeTstackTops`
+(no change), `readStack_fold` (the vertex close folds the top entry to one piece on side `!edgeDir`,
+matching the reference's `StPiece.mk lowDir (stNest sub)`), `readStack_finishTstackTop` (a close
+replaces the entry's items by the new item: `expandItem item … = …`) and `readStack_reopen` /
+`readStack_modifyNxt_reopen` (`maybeUnwrapNxt`'s reopen of a closed S / P node under the top is the
+inverse expansion). What remains is threading the relation through `finishEdge` (the loops) and
+`walkTree`/`walkEarTree` under the ear-shape hypotheses — which entries loop 1 / the `firstIdx`
+loop / the `origTstack + 3` loop pop are the `EarFinish.loops`/`EarShape` facts — and, for
+`walk_st'`, turning the final expansion chain into `ch i = restrictCh … (refOrder …) i`: the
+children of a closed item are the items of its entry at the close, each a leaf or a closed item
+whose leaves are contiguous in the reference order, and `restrictCh` collapses each such run to the
+child. `walk_vsOriented` follows from the same thread: `makeVs` at a close uses `stackDir[topDepth]`,
+the side of the piece, and the block of `i` is the block being built when `i` closes.
+
 **The restriction argument (`StRestrict.lean`).** `stItem_of_block` proves `Items.StItem items i`
 for one block `b` with `b.St` from `Items.WF`, `ch i = restrictCh … order i` where `order` contains
 `b.items` as a segment, and the `VsOriented` clauses for `i`. With `vs i = (some s, some t)` the
@@ -1260,7 +1279,7 @@ Classical.choice, Quot.sound.
 | `Before`, `Side`, `Nb`, `NbV`, `VInv` (`nil`, `single`, `extend`, `step`, `step_back`, `step_tree`), `block_st`, `root_block_st`, `refOut_boundary_back/tree`, `refOut_ret_back/tree`, `refOuts_nil/cons/zero`, `refTree_node` | `StRefEt.lean` | def / proved |
 | `Before.*` (`or_of_mem_mem`, `filter`, `filter_of`, `map`, `cons`, `append_left/right`, `filterMap`, …), `collapseRuns_sublist`, `before_collapseRuns`, `Precedes.of_before/before/ne/asymm/trans`, `Items.below_of_mem_leaves`, `leaves_of_type`, `leaves_succ`, `Tree.child_below_child`, `Tree.child_class`, `Tree.v_child_eq`, `Tree.type_ne_F`, `find?_leaves_vertItem`, `before_ch_of_before_order`, `edgeOf_eq_some` | `StRestrict.lean` | proved |
 | `stItem_of_block` (the restriction argument for one block, §7.6), `stItem_of_refOrder` (on the block from `VsOriented`, with `refBlocks_st` as `hbl` and `refBlocks_root_edge` as `hre`) | `StRestrict.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
-| reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes) | `StRef.lean` | proved |
+| reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop`, `readStack_reopen`/`readStack_modifyNxt_reopen` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes and reopens) | `StRef.lean` | proved |
 
 ## 8. Planarity
 
