@@ -26,6 +26,68 @@ theorem getElem!_vs {j : ItemId} (h : j < items.size) : items[j]!.vs = items.vs 
 end Items
 
 namespace Ghost
+section helpers
+variable {α : Type} [Inhabited α]
+theorem push_get!_last (a : Array α) (x : α) : (a.push x)[a.size]! = x := by
+  rw [Array.getElem!_eq_getD_getElem?, Array.getElem?_push_eq]; rfl
+theorem push_get!_lt (a : Array α) (x : α) {k : Nat} (hk : k < a.size) : (a.push x)[k]! = a[k]! := by
+  rw [Array.getElem!_eq_getD_getElem?, Array.getElem!_eq_getD_getElem?, Array.getElem?_push_lt hk, Array.getElem?_eq_getElem hk]
+theorem append_get!_right (a b : Array α) (k : Nat) : (a ++ b)[a.size + k]! = b[k]! := by
+  rw [Array.getElem!_eq_getD_getElem?, Array.getElem!_eq_getD_getElem?,
+    Array.getElem?_append_right (Nat.le_add_right _ _), Nat.add_sub_cancel_left]
+theorem append_get!_left (a b : Array α) {k : Nat} (hk : k < a.size) : (a ++ b)[k]! = a[k]! := by
+  rw [Array.getElem!_eq_getD_getElem?, Array.getElem!_eq_getD_getElem?, Array.getElem?_append_left hk]
+theorem set!_get!_self (a : Array α) {i : Nat} (x : α) (hi : i < a.size) : (a.set! i x)[i]! = x := by
+  rw [Array.getElem!_eq_getD_getElem?, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_self_of_lt hi]
+  rfl
+theorem set!_get!_ne (a : Array α) {i k : Nat} (x : α) (h : i ≠ k) : (a.set! i x)[k]! = a[k]! := by
+  rw [Array.getElem!_eq_getD_getElem?, Array.getElem!_eq_getD_getElem?, Array.set!_eq_setIfInBounds,
+    Array.getElem?_setIfInBounds_ne h]
+theorem modify_get!_ne (a : Array α) {i k : Nat} (f : α → α) (h : i ≠ k) : (a.modify i f)[k]! = a[k]! := by
+  rw [Array.getElem!_eq_getD_getElem?, Array.getElem!_eq_getD_getElem?, Array.getElem?_modify, if_neg h]
+theorem modify_get!_self (a : Array α) {i : Nat} (f : α → α) (hi : i < a.size) : (a.modify i f)[i]! = f a[i]! := by
+  rw [Array.getElem!_eq_getD_getElem?, Array.getElem!_eq_getD_getElem?, Array.getElem?_modify, if_pos rfl,
+    Array.getElem?_eq_getElem hi]; rfl
+end helpers
+
+theorem modify_twin_node (a : Array NodeEdge) (j : Nat) (t : Option Nat) (k : Nat) :
+    (a.modify j fun ne => { ne with twin := t })[k]!.node = a[k]!.node := by
+  rw [Array.getElem!_eq_getD_getElem?, Array.getElem!_eq_getD_getElem?, Array.getElem?_modify]
+  split
+  · cases a[k]? <;> rfl
+  · rfl
+theorem modify_twin_nvs (a : Array NodeEdge) (j : Nat) (t : Option Nat) (k : Nat) :
+    (a.modify j fun ne => { ne with twin := t })[k]!.nvs = a[k]!.nvs := by
+  rw [Array.getElem!_eq_getD_getElem?, Array.getElem!_eq_getD_getElem?, Array.getElem?_modify]
+  split
+  · cases a[k]? <;> rfl
+  · rfl
+
+namespace PreFrom
+variable {α : Type} {b : Nat} {a a' : Array α}
+theorem set!_of (h : PreFrom b a a') (i : Nat) (x : α) (hi : i < b ∨ a.size ≤ i) : PreFrom b a (a'.set! i x) :=
+  ⟨by rw [Array.size_set!]; exact h.1, fun k hk hka => by
+    rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (by omega)]; exact h.2 k hk hka⟩
+theorem modify_of (h : PreFrom b a a') (i : Nat) (f : α → α) (hi : i < b ∨ a.size ≤ i) :
+    PreFrom b a (a'.modify i f) :=
+  ⟨by rw [Array.size_modify]; exact h.1, fun k hk hka => by
+    rw [Array.getElem?_modify, ite_eq_right (by omega)]; exact h.2 k hk hka⟩
+end PreFrom
+
+theorem Items.mem_desc_iff_children {items : Items} {a x : ItemId} (ha : a < items.size) :
+    x ∈ items.desc a ↔ x = a ∨ ∃ c ∈ items.ch a, x ∈ items.desc c := by
+  rw [Items.mem_desc]
+  constructor
+  · rintro ⟨hx, hb⟩
+    rcases Relation.ReflTransGen.cases_head hb with rfl | ⟨c, hc, hcx⟩
+    · exact Or.inl rfl
+    · exact Or.inr ⟨c, hc, Items.mem_desc.2 ⟨hx, hcx⟩⟩
+  · rintro (rfl | ⟨c, hc, hx⟩)
+    · exact ⟨ha, Relation.ReflTransGen.refl⟩
+    · rw [Items.mem_desc] at hx; exact ⟨hx.1, Relation.ReflTransGen.head hc hx.2⟩
+
+theorem Items.one_le_nEdges_of_hasCap {g : Graph} {items : Items} {i : ItemId} (h : items.hasCap i = true) : 1 ≤ items.nEdges g i := by
+  unfold Items.nEdges Items.capCount; rw [if_pos h]; omega
 
 structure StepNum (cur : ItemId) (ty : NodeType) (p pn : Option Nat) (s σ : RelabelState) : Prop where
   g_eq : σ.g = s.g
@@ -184,29 +246,9 @@ structure StepEnd (curIdx n : Nat) (s σ : RelabelState) : Prop where
   order : σ.order = s.order
   subtreeEnd : σ.subtreeEnd = s.subtreeEnd.set! curIdx n
 
-structure StepSlot (i n : Nat) (s σ : RelabelState) : Prop where
-  g_eq : σ.g = s.g
-  items_eq : σ.items = s.items
-  vertIndex : σ.vertIndex = s.vertIndex
-  edgeIndex : σ.edgeIndex = s.edgeIndex
-  edgeFlipped : σ.edgeFlipped = s.edgeFlipped
-  par : σ.par = s.par
-  subtreeEnd : σ.subtreeEnd = s.subtreeEnd
-  types : σ.types = s.types
-  origId : σ.origId = s.origId
-  chBounds : σ.chBounds = s.chBounds
-  nodeVerts : σ.nodeVerts = s.nodeVerts
-  nvBounds : σ.nvBounds = s.nvBounds
-  vertParNv : σ.vertParNv = s.vertParNv
-  nodeEdges : σ.nodeEdges = s.nodeEdges
-  neBounds : σ.neBounds = s.neBounds
-  adjBounds : σ.adjBounds = s.adjBounds
-  adjDat : σ.adjDat = s.adjDat
-  vertPos : σ.vertPos = s.vertPos
-  order : σ.order = s.order
-  chDat : σ.chDat = s.chDat.set! i n
-/-- Child slot `i` set to `n`, and node-edge `j` twinned with the next node-edge to be written. -/
-structure StepSlotTwin (i n j : Nat) (s σ : RelabelState) : Prop where
+/-- Child slot `i` set to `n`; with `tw = some j`, node-edge `j` is twinned with the next node-edge
+to be written. -/
+structure StepSlotT (i n : Nat) (tw : Option Nat) (s σ : RelabelState) : Prop where
   g_eq : σ.g = s.g
   items_eq : σ.items = s.items
   vertIndex : σ.vertIndex = s.vertIndex
@@ -226,7 +268,8 @@ structure StepSlotTwin (i n j : Nat) (s σ : RelabelState) : Prop where
   vertPos : σ.vertPos = s.vertPos
   order : σ.order = s.order
   chDat : σ.chDat = s.chDat.set! i n
-  nodeEdges : σ.nodeEdges = s.nodeEdges.modify j fun ne => { ne with twin := some s.nodeEdges.size }
+  nodeEdges : σ.nodeEdges =
+    tw.elim s.nodeEdges fun j => s.nodeEdges.modify j fun ne => { ne with twin := some s.nodeEdges.size }
 
 /-- Entry condition of a `relabel` call. -/
 structure CallPre (g : Graph) (items : Items) (cur : ItemId) (s : RelabelState) : Prop where
@@ -317,13 +360,13 @@ structure LoopInv (g : Graph) (items : Items) (cur : ItemId) (ct : Option Nat) (
     σ.vertParNv[σ.idx (done.filter (· < 1 + g.nv))[k]]! = some (nvSt + (items.vs cur).1.toList.length + k)
   par_nv_none : ∀ c ∈ done, 1 + g.nv ≤ c → σ.vertParNv[σ.idx c]! = none
   twin : (items.type cur).isNode → ∀ k (hk : k < (done.filter (· ≥ 1 + g.nv)).length),
-    (σ.nodeEdges[neSt + items.capCount cur + k]!).twin =
+    (σ.tree g).twin (neSt + items.capCount cur + k) =
       some σ.neBounds[σ.idx (done.filter (· ≥ 1 + g.nv))[k]]! ∧
     (items.hasCap (done.filter (· ≥ 1 + g.nv))[k] →
-      (σ.nodeEdges[σ.neBounds[σ.idx (done.filter (· ≥ 1 + g.nv))[k]]!]!).twin =
+      (σ.tree g).twin σ.neBounds[σ.idx (done.filter (· ≥ 1 + g.nv))[k]]! =
         some (neSt + items.capCount cur + k))
   cap_none : ¬ (items.type cur).isNode → ∀ c ∈ done, items.hasCap c →
-    (σ.nodeEdges[σ.neBounds[σ.idx c]!]!).twin = none
+    (σ.tree g).twin σ.neBounds[σ.idx c]! = none
   cap : items.hasCap cur → (σ.nodeEdges[neSt]!).twin = ct
   nodes : ∀ c ∈ done, ∀ j ∈ items.desc c, NodeS g items σ j ∧ LowB items (Bounds.of s7) σ j
 
@@ -424,19 +467,72 @@ theorem LoopInv.mem_ch_done (he : Entry g items cur p pn ct curIdx chSt nvSt neS
   rw [← Items.mem_ordered_iff (g := g) (nvSt := nvSt) (pos := pos), ← he.children_eq, hi.split]
   exact List.mem_append_left _ hc
 
-theorem StepSlot.cons {i n : Nat} (hc : Consistent g items σ) (h : StepSlot i n σ σ1) :
+theorem StepSlotT.nodeEdges_size {i n : Nat} {tw : Option Nat} (h : StepSlotT i n tw σ σ1) :
+    σ1.nodeEdges.size = σ.nodeEdges.size := by
+  rw [h.nodeEdges]; cases tw <;> simp
+
+theorem StepSlotT.nodeEdges_node {i n : Nat} {tw : Option Nat} (h : StepSlotT i n tw σ σ1) (k : Nat) :
+    σ1.nodeEdges[k]!.node = σ.nodeEdges[k]!.node := by
+  rw [h.nodeEdges]; cases tw
+  · rfl
+  · exact modify_twin_node _ _ _ _
+
+theorem StepSlotT.nodeEdges_nvs {i n : Nat} {tw : Option Nat} (h : StepSlotT i n tw σ σ1) (k : Nat) :
+    σ1.nodeEdges[k]!.nvs = σ.nodeEdges[k]!.nvs := by
+  rw [h.nodeEdges]; cases tw
+  · rfl
+  · exact modify_twin_nvs _ _ _ _
+
+theorem StepSlotT.cons {i n : Nat} {tw : Option Nat} (hc : Consistent g items σ) (h : StepSlotT i n tw σ σ1) :
     Consistent g items σ1 := by
-  obtain ⟨hg, hit, hvi, hei, hef, hpar, hse, hty, hor, hcb, hnv, hnvb, hvp, hne, hneb, hab, had, hvpos, hord,
-    hcd⟩ := h
+  have hsz := h.nodeEdges_size
+  obtain ⟨hg, hit, hvi, hei, hef, hpar, hse, hty, hor, hcb, hnv, hnvb, hvp, hneb, hab, had, hvpos, hord,
+    hcd, -⟩ := h
+  constructor <;> simp only [hg, hit, hvi, hei, hef, hpar, hse, hty, hor, hcb, hnv, hnvb, hvp, hneb, hab, had,
+    hvpos, hord, hcd, hsz, Array.size_set!] <;> cons_transfer hc
+
+theorem StepEnd.cons {curIdx n : Nat} (hc : Consistent g items σ) (h : StepEnd curIdx n σ σ1) :
+    Consistent g items σ1 := by
+  obtain ⟨hg, hit, hvi, hei, hef, hpar, hty, hor, hcb, hcd, hnv, hnvb, hvp, hne, hneb, hab, had, hvpos, hord,
+    hse⟩ := h
   constructor <;> simp only [hg, hit, hvi, hei, hef, hpar, hse, hty, hor, hcb, hnv, hnvb, hvp, hne, hneb, hab, had,
     hvpos, hord, hcd, Array.size_set!] <;> cons_transfer hc
 
-theorem StepSlotTwin.cons {i n j : Nat} (hc : Consistent g items σ) (h : StepSlotTwin i n j σ σ1) :
-    Consistent g items σ1 := by
-  obtain ⟨hg, hit, hvi, hei, hef, hpar, hse, hty, hor, hcb, hnv, hnvb, hvp, hneb, hab, had, hvpos, hord, hcd,
-    hne⟩ := h
+/-- Transfer `Agree B s0 _` along equations of all fields. -/
+macro "agree_transfer" ha:term : tactic =>
+  `(tactic| first
+    | exact ($ha).g_eq | exact ($ha).items_eq | exact ($ha).order | exact ($ha).types | exact ($ha).par
+    | exact ($ha).subtreeEnd | exact ($ha).origId | exact ($ha).vertParNv | exact ($ha).chBounds
+    | exact ($ha).nvBounds | exact ($ha).neBounds | exact ($ha).nodeVerts | exact ($ha).adjBounds
+    | exact ($ha).adjDat | exact ($ha).chDat | exact ($ha).nodeEdges | exact ($ha).nodeEdges_node
+    | exact ($ha).nodeEdges_nvs | exact ($ha).vertIndex_size | exact ($ha).vertIndex | exact ($ha).edgeIndex_size
+    | exact ($ha).edgeIndex | exact ($ha).edgeFlipped_size | exact ($ha).edgeFlipped | exact ($ha).vertPos_size)
+
+theorem StepSlotT.agree {B : Bounds} {s0 : RelabelState} {i n : Nat} {tw : Option Nat}
+    (h : StepSlotT i n tw σ σ1) (ha : Agree B s0 σ) (hi : i < B.chDat ∨ s0.chDat.size ≤ i)
+    (hj : ∀ j, tw = some j → j < B.nodeEdges ∨ s0.nodeEdges.size ≤ j) : Agree B s0 σ1 := by
+  have hnode := h.nodeEdges_node
+  have hnvs := h.nodeEdges_nvs
+  obtain ⟨hg, hit, hvi, hei, hef, hpar, hse, hty, hor, hcb, hnv, hnvb, hvp, hneb, hab, had, hvpos, hord,
+    hcd, hne⟩ := h
+  constructor <;> (try simp only [hg, hit, hvi, hei, hef, hpar, hse, hty, hor, hcb, hnv, hnvb, hvp, hneb, hab, had,
+    hvpos, hord, hcd]) <;> first
+    | agree_transfer ha
+    | exact PreFrom.set!_of ha.chDat _ _ hi
+    | (rw [hne]; cases tw with
+        | none => exact ha.nodeEdges
+        | some j => exact PreFrom.modify_of ha.nodeEdges _ _ (hj j rfl))
+    | (intro k hk; rw [hnode]; exact ha.nodeEdges_node k hk)
+    | (intro k hk; rw [hnvs]; exact ha.nodeEdges_nvs k hk)
+
+theorem StepEnd.agree {B : Bounds} {s0 : RelabelState} {curIdx n : Nat} (h : StepEnd curIdx n σ σ1)
+    (ha : Agree B s0 σ) (hi : curIdx < B.idx ∨ s0.subtreeEnd.size ≤ curIdx) : Agree B s0 σ1 := by
+  obtain ⟨hg, hit, hvi, hei, hef, hpar, hty, hor, hcb, hcd, hnv, hnvb, hvp, hne, hneb, hab, had, hvpos, hord,
+    hse⟩ := h
   constructor <;> simp only [hg, hit, hvi, hei, hef, hpar, hse, hty, hor, hcb, hnv, hnvb, hvp, hne, hneb, hab, had,
-    hvpos, hord, hcd, Array.size_set!, Array.size_modify] <;> cons_transfer hc
+    hvpos, hord, hcd] <;> first
+    | agree_transfer ha
+    | exact PreFrom.set!_of ha.subtreeEnd _ _ hi
 
 /-- The call for the next child `c` starts from a `CallPre` state. -/
 theorem LoopInv.pre (hwf : items.WF g) (hpre : CallPre g items cur s)
@@ -456,30 +552,20 @@ theorem LoopInv.pre (hwf : items.WF g) (hpre : CallPre g items cur s)
     have hne : c' ≠ c := hnd.2.2 c' hc' c List.mem_cons_self
     exact Finset.disjoint_left.1 (hwf.tree.desc_disjoint (hi.mem_ch_done he hc') hcc hne) hjc' hj
 
-theorem LoopInv.step_v (hwf : items.WF g) (hpre : CallPre g items cur s)
+/-- One iteration of the children loop: the slot write (and twin for a non-V child of a node),
+then the recursive call for `c`. -/
+theorem LoopInv.step (hwf : items.WF g) (hpre : CallPre g items cur s)
     (he : Entry g items cur p pn ct curIdx chSt nvSt neSt pos children s s7)
     (hi : LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children done (c :: rest) b σ)
-    (hv : c < 1 + g.nv) (h1 : StepSlot (chSt + b.2.2) σ.types.size σ σ1)
-    (h3 : CallPost g items c (some curIdx) (some b.1) none σ1 σ3) :
-    LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children (done ++ [c]) rest (b.1 + 1, b.2.1, b.2.2 + 1) σ3 := by
-  sorry
-
-theorem LoopInv.step_e (hwf : items.WF g) (hpre : CallPre g items cur s)
-    (he : Entry g items cur p pn ct curIdx chSt nvSt neSt pos children s s7)
-    (hi : LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children done (c :: rest) b σ)
-    (hv : ¬ c < 1 + g.nv) (hn : (items.type cur).isNode = true)
-    (h1 : StepSlotTwin (chSt + b.2.2) σ.types.size b.2.1 σ σ1)
-    (h3 : CallPost g items c (some curIdx) none (some b.2.1) σ1 σ3) :
-    LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children (done ++ [c]) rest (b.1, b.2.1 + 1, b.2.2 + 1) σ3 := by
-  sorry
-
-theorem LoopInv.step_n (hwf : items.WF g) (hpre : CallPre g items cur s)
-    (he : Entry g items cur p pn ct curIdx chSt nvSt neSt pos children s s7)
-    (hi : LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children done (c :: rest) b σ)
-    (hv : ¬ c < 1 + g.nv) (hn : ¬ (items.type cur).isNode = true)
-    (h1 : StepSlot (chSt + b.2.2) σ.types.size σ σ1)
-    (h3 : CallPost g items c (some curIdx) none none σ1 σ3) :
-    LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children (done ++ [c]) rest (b.1, b.2.1, b.2.2 + 1) σ3 := by
+    {tw pn' ct' : Option Nat} {b' : Nat × Nat × Nat}
+    (hcase : (c < 1 + g.nv ∧ tw = none ∧ pn' = some b.1 ∧ ct' = none ∧ b' = (b.1 + 1, b.2.1, b.2.2 + 1)) ∨
+      (¬ c < 1 + g.nv ∧ (items.type cur).isNode = true ∧ tw = some b.2.1 ∧ pn' = none ∧ ct' = some b.2.1 ∧
+        b' = (b.1, b.2.1 + 1, b.2.2 + 1)) ∨
+      (¬ c < 1 + g.nv ∧ ¬ (items.type cur).isNode = true ∧ tw = none ∧ pn' = none ∧ ct' = none ∧
+        b' = (b.1, b.2.1, b.2.2 + 1)))
+    (h1 : StepSlotT (chSt + b.2.2) σ.types.size tw σ σ1)
+    (h3 : CallPost g items c (some curIdx) pn' ct' σ1 σ3) :
+    LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children (done ++ [c]) rest b' σ3 := by
   sorry
 
 /-- After the loop, writing `subtreeEnd[curIdx]` completes the call's contract. -/

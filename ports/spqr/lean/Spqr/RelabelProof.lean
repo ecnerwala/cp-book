@@ -71,21 +71,21 @@ theorem relabel_spec {g : Graph} {items : Items} (hwf : items.WF g) :
         have hcc := hi.mem_ch he
         simp only [wp_bind, wp_get, wp_modify, wp_pure, wp_ite]
         split_ifs with hv hn
-        · refine wp_abs _ (StepSlot (s2.chDat.size + b.2.2) σ.types.size σ) _ (by constructor <;> rfl)
+        · refine wp_abs _ (StepSlotT (s2.chDat.size + b.2.2) σ.types.size none σ) _ (by constructor <;> rfl)
             fun σ1 hs1 => ?_
           refine wp_mono (ih c _ _ _ σ1 (hi.pre hwf hpre he (hs1.cons hi.cons) hs1.order)
             (loop_fuel hwf.tree hcur hcc hf)) fun _ σ3 hpost => ⟨_, rfl, done ++ [c], ?_⟩
-          exact hi.step_v hwf hpre he hv hs1 hpost
-        · refine wp_abs _ (StepSlotTwin (s2.chDat.size + b.2.2) σ.types.size b.2.1 σ) _ (by constructor <;> rfl)
+          exact hi.step hwf hpre he (Or.inl ⟨hv, rfl, rfl, rfl, rfl⟩) hs1 hpost
+        · refine wp_abs _ (StepSlotT (s2.chDat.size + b.2.2) σ.types.size (some b.2.1) σ) _ (by constructor <;> rfl)
             fun σ1 hs1 => ?_
           refine wp_mono (ih c _ _ _ σ1 (hi.pre hwf hpre he (hs1.cons hi.cons) hs1.order)
             (loop_fuel hwf.tree hcur hcc hf)) fun _ σ3 hpost => ⟨_, rfl, done ++ [c], ?_⟩
-          exact hi.step_e hwf hpre he hv hn hs1 hpost
-        · refine wp_abs _ (StepSlot (s2.chDat.size + b.2.2) σ.types.size σ) _ (by constructor <;> rfl)
+          exact hi.step hwf hpre he (Or.inr (Or.inl ⟨hv, hn, rfl, rfl, rfl, rfl⟩)) hs1 hpost
+        · refine wp_abs _ (StepSlotT (s2.chDat.size + b.2.2) σ.types.size none σ) _ (by constructor <;> rfl)
             fun σ1 hs1 => ?_
           refine wp_mono (ih c _ _ _ σ1 (hi.pre hwf hpre he (hs1.cons hi.cons) hs1.order)
             (loop_fuel hwf.tree hcur hcc hf)) fun _ σ3 hpost => ⟨_, rfl, done ++ [c], ?_⟩
-          exact hi.step_n hwf hpre he hv hn hs1 hpost
+          exact hi.step hwf hpre he (Or.inr (Or.inr ⟨hv, hn, rfl, rfl, rfl, rfl⟩)) hs1 hpost
       · intro b σ ⟨done, hi⟩
         try simp only [wp_modify]
         exact hi.fin hwf hpre he (by constructor <;> rfl)
@@ -101,21 +101,21 @@ theorem relabel_spec {g : Graph} {items : Items} (hwf : items.WF g) :
         have hcc := hi.mem_ch he
         simp only [wp_bind, wp_get, wp_modify, wp_pure, wp_ite]
         split_ifs with hv hn
-        · refine wp_abs _ (StepSlot (s2.chDat.size + b.2.2) σ.types.size σ) _ (by constructor <;> rfl)
+        · refine wp_abs _ (StepSlotT (s2.chDat.size + b.2.2) σ.types.size none σ) _ (by constructor <;> rfl)
             fun σ1 hs1 => ?_
           refine wp_mono (ih c _ _ _ σ1 (hi.pre hwf hpre he (hs1.cons hi.cons) hs1.order)
             (loop_fuel hwf.tree hcur hcc hf)) fun _ σ3 hpost => ⟨_, rfl, done ++ [c], ?_⟩
-          exact hi.step_v hwf hpre he hv hs1 hpost
-        · refine wp_abs _ (StepSlotTwin (s2.chDat.size + b.2.2) σ.types.size b.2.1 σ) _ (by constructor <;> rfl)
+          exact hi.step hwf hpre he (Or.inl ⟨hv, rfl, rfl, rfl, rfl⟩) hs1 hpost
+        · refine wp_abs _ (StepSlotT (s2.chDat.size + b.2.2) σ.types.size (some b.2.1) σ) _ (by constructor <;> rfl)
             fun σ1 hs1 => ?_
           refine wp_mono (ih c _ _ _ σ1 (hi.pre hwf hpre he (hs1.cons hi.cons) hs1.order)
             (loop_fuel hwf.tree hcur hcc hf)) fun _ σ3 hpost => ⟨_, rfl, done ++ [c], ?_⟩
-          exact hi.step_e hwf hpre he hv hn hs1 hpost
-        · refine wp_abs _ (StepSlot (s2.chDat.size + b.2.2) σ.types.size σ) _ (by constructor <;> rfl)
+          exact hi.step hwf hpre he (Or.inr (Or.inl ⟨hv, hn, rfl, rfl, rfl, rfl⟩)) hs1 hpost
+        · refine wp_abs _ (StepSlotT (s2.chDat.size + b.2.2) σ.types.size none σ) _ (by constructor <;> rfl)
             fun σ1 hs1 => ?_
           refine wp_mono (ih c _ _ _ σ1 (hi.pre hwf hpre he (hs1.cons hi.cons) hs1.order)
             (loop_fuel hwf.tree hcur hcc hf)) fun _ σ3 hpost => ⟨_, rfl, done ++ [c], ?_⟩
-          exact hi.step_n hwf hpre he hv hn hs1 hpost
+          exact hi.step hwf hpre he (Or.inr (Or.inr ⟨hv, hn, rfl, rfl, rfl, rfl⟩)) hs1 hpost
       · intro b σ ⟨done, hi⟩
         try simp only [wp_modify]
         exact hi.fin hwf hpre he (by constructor <;> rfl)
