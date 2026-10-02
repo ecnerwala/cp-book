@@ -76,9 +76,14 @@ theorem ear_mergeLate (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.is
 
 /-- The vertex close: loop 3 merges, the unwrap, the two merges, the retarget and the type-1 close. -/
 theorem ear_closeVert (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
-    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = true) :
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = true)
+    (hD : D = d + 1) (hlen : base.length = origTstack) (hs₂ : Shape (feS₂ d o s)) :
     CloseVertOk D curV s.stackDir[d]! o.cls.isType1 origTstack (feSingle d o s) (feS₂ d o s) := by
-  sorry
+  have hlow' : o.cls.lowval d < d := by rw [ho]; exact hlow
+  obtain ⟨c, mid, py, vy, hC⟩ := hE.close ht hlow'
+  subst hv hD hlen
+  exact closeVertOk_of_close _ hC hs₂ hlow' hE.path
+    (fun k hk => by rw [hE.sv_child ht]; exact hE.path_child ht k hk) (hE.dir_d hlow')
 
 /-- The P-check after the vertex close. -/
 theorem ear_finishP_vert (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
@@ -103,48 +108,6 @@ theorem ear_finishP_tree (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls
   rw [hts] at hvs
   simp only [List.nil_append, List.cons_append, List.tail_cons, List.head!_cons] at hvs
   exact hE.sub_bot py (by rw [hsub]; simp) hvs
-
-/-- The P-check of a back edge. -/
-theorem getSide_setSides_self {α : Type} (dir : Bool) (a b : α) : getSide (setSides dir a b) dir = a := by
-  cases dir <;> rfl
-
-/-- `maybeUnwrapNxt` on a one-sided single-item `nxt` keeps the stack shape and every entry's edge
-set (the unwrapped entry holds the children of its item, hence the same edges). -/
-theorem maybeUnwrapNxt_edges {ty : NodeType} (hs : Shape s) (hty : ty ∉ [NodeType.F, .V, .Q])
-    {a b : TEntry} {rest : List TEntry} (hts : s.tstack = a :: b :: rest) {i : ItemId}
-    (hside : getSide b.spans (!s.stackDir[b.topDepth]!) = [])
-    (hsingle : getSide b.spans s.stackDir[b.topDepth]! = [i]) :
-    ∃ b', (after (maybeUnwrapNxt ty) s).tstack = a :: b' :: rest ∧
-      (after (maybeUnwrapNxt ty) s).g = s.g ∧ (after (maybeUnwrapNxt ty) s).stackVerts = s.stackVerts ∧
-      (after (maybeUnwrapNxt ty) s).stackDir = s.stackDir ∧
-      b'.vStart = b.vStart ∧ b'.topDepth = b.topDepth ∧
-      getSide b'.spans (!s.stackDir[b.topDepth]!) = [] ∧
-      (∀ e, e < s.g.ne → (b'.edges s.g (after (maybeUnwrapNxt ty) s).items e ↔ b.edges s.g s.items e)) ∧
-      (∀ t : TEntry, ∀ e, t.edges s.g (after (maybeUnwrapNxt ty) s).items e ↔ t.edges s.g s.items e) := by
-  have hh : i = (getSide b.spans s.stackDir[b.topDepth]!).head! := by rw [hsingle]; rfl
-  unfold after
-  rw [maybeUnwrapNxt_run_eq ty s a b rest hts _ rfl i hh]
-  have hpush : ∀ t : TEntry, ∀ e, t.edges s.g (s.items.push ⟨ty, (none, none), []⟩) e ↔ t.edges s.g s.items e :=
-    fun _ e => TEntry.edges_congr (fun _ _ _ => Items.Below_push_nil _ rfl) e
-  by_cases h1 : ty = .R ∨ s.ternarize = true
-  · rw [if_pos h1, run_allocItem]
-    exact ⟨b, hts, rfl, rfl, rfl, rfl, rfl, hside, fun e _ => hpush b e, hpush⟩
-  rw [if_neg h1]
-  by_cases h2 : s.items[i]!.type = ty
-  · rw [if_pos h2]
-    refine ⟨_, rfl, rfl, rfl, rfl, rfl, rfl, getSide_setSides_not _ _, fun e he => ?_, fun _ _ => Iff.rfl⟩
-    have hib : i ∈ b.spans.1 ++ b.spans.2 := by
-      rw [mem_of_getSide_nil _ b.spans hside, hsingle]; exact List.mem_singleton_self i
-    have hilt : i < s.items.size := hs.span b (by simp [hts]) i hib
-    have hget : s.items[i]! = s.items[i] := getElem!_pos s.items i hilt
-    have hity : Items.type s.items i = ty := by rw [Items.type_eq_getElem hilt, ← hget]; exact h2
-    have hie : ∀ e, e < s.g.ne → edgeItem s.g e ≠ i := fun e he =>
-      hs.edgeItem_ne he (hs.node_of_type hilt hty hity)
-    have hch : s.items[i]!.ch = Items.ch s.items i := by rw [Items.ch_eq_getElem hilt, hget]
-    rw [TEntry.edges_single _ i hside hsingle, hch]
-    exact TEntry.edges_unwrap _ b.vStart b.topDepth b.firstIdx i hie he
-  · rw [if_neg h2, run_allocItem]
-    exact ⟨b, hts, rfl, rfl, rfl, rfl, rfl, hside, fun e _ => hpush b e, hpush⟩
 
 /-- A back edge: the P-check merges the fresh `(curV, lv)` edge entry into the `(curV, lv)` entry of
 `base` (`EarFinish.p_entry`); the result is one-sided on `stackDir[lv]`, attached at `curV`,
@@ -302,7 +265,7 @@ theorem ear_tail_tree (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.is
 transported to the tail through the `Step`s of the preceding blocks. -/
 theorem finishOk_of_guards (ho : o.cls = .ret lv kind) (hlow : lv < d)
     (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base)
-    (hi : s.Inv' D) (hs : Shape s)
+    (hlen : base.length = origTstack) (hi : s.Inv' D) (hs : Shape s)
     (hD : D = if o.cls.isTree then d + 1 else d) (hv : curV < s.g.nv) (he : o.e < s.g.ne)
     (hq : Items.ch s.items (edgeItem s.g o.e) = [])
     (hends : Items.PairEq (if o.cls.isTree then (o.dest, s.stackVerts[d]!) else (curV, s.stackVerts[lv]!))
@@ -322,11 +285,16 @@ theorem finishOk_of_guards (ho : o.cls = .ret lv kind) (hlow : lv < d)
   have st₀ : Step D curV s (feS₀ d o s) :=
     Step.modifyVs hi hs (edgeItem s.g o.e) _ (by show 1 + s.g.nv + o.e < _; omega)
   have hv₀ : curV < (feS₀ d o s).g.nv := by rw [st₀.g]; exact hv
+  have st₁ : o.cls.isTree = true → Step D curV (feS₀ d o s) (feS₁ d o s) := fun ht =>
+    Step.closeEars st₀.inv st₀.shape hv₀ (hears ht)
+  have st₂ : o.cls.isTree = true → Step D curV (feS₁ d o s) (feS₂ d o s) := fun ht =>
+    Step.mergeLate (st₁ ht).inv (st₁ ht).shape (by rw [(st₁ ht).g]; exact hv₀)
+      (ear_mergeLate ho hlow ht hg hE hi hs (by rw [hD, if_pos ht]))
   refine
     { e_lt := he
       ears := hears
       late := fun ht => ear_mergeLate ho hlow ht hg hE hi hs (by rw [hD, if_pos ht])
-      vert := fun ht hv' => ear_closeVert ho hlow ht hg hE hi hs hv'
+      vert := fun ht hv' => ear_closeVert ho hlow ht hg hE hi hs hv' (by rw [hD, if_pos ht]) hlen (st₂ ht).shape
       rest_vert := fun ht hv' => ⟨ear_finishP_vert ho hlow ht hg hE hi hs hv',
         fun h => by simp [hv'] at h, fun h => by simp [hv'] at h, fun h => by simp [hv'] at h⟩
       rest_tree := fun ht hv' => ?_
@@ -334,11 +302,9 @@ theorem finishOk_of_guards (ho : o.cls = .ret lv kind) (hlow : lv < d)
       ends := fun hb => by simpa [hb] using hends
       lv_le := fun _ => by omega
       rest_back := fun hb => ?_ }
-  · have st₁ : Step D curV _ (feS₁ d o s) := Step.closeEars st₀.inv st₀.shape hv₀ (hears ht)
-    have hv₁ : curV < (feS₁ d o s).g.nv := by rw [st₁.g]; exact hv₀
-    have st₂ : Step D curV _ (feS₂ d o s) :=
-      Step.mergeLate st₁.inv st₁.shape hv₁ (ear_mergeLate ho hlow ht hg hE hi hs (by rw [hD, if_pos ht]))
-    have hv₂ : curV < (feS₂ d o s).g.nv := by rw [st₂.g]; exact hv₁
+  · have st₁ := st₁ ht
+    have st₂ := st₂ ht
+    have hv₂ : curV < (feS₂ d o s).g.nv := by rw [st₂.g, st₁.g]; exact hv₀
     have hp := ear_finishP_tree (curV := curV) ho hlow ht hg hE hi hs hv'
     have st₃ := Step.finishP (v := curV) st₂.inv st₂.shape hv₂ hp
     have st := st₀.trans (st₁.trans (st₂.trans st₃))
@@ -799,9 +765,9 @@ theorem finishEdge_step {v d : Nat} {o : DfsOut} {n : Nat} {hasVert : Bool} {D :
     by_cases hge : d ≤ o.cls.lowval d
     · exact finishBoundary_inv (origTstack := n) hge hi hs hb (ear_boundary hge hg hi hs hb)
     · obtain ⟨lv, kind, ho, hl⟩ := ret_of_lowval_lt (Nat.lt_of_not_le hge)
-      obtain ⟨sub, base, -, hE⟩ := hb.ear
+      obtain ⟨sub, base, hlen, hE⟩ := hb.ear
       have st := finishEdge_inv v d lv kind o n hasVert ho hl hb.v_lt hi hs
-        (finishOk_of_guards ho hl hg hE hi hs hD hb.v_lt hb.e_lt hb.q (hb.ends lv kind ho) hb.vert)
+        (finishOk_of_guards ho hl hg hE hlen hi hs hD hb.v_lt hb.e_lt hb.q (hb.ends lv kind ho) hb.vert)
       exact ⟨st.inv, st.shape⟩
   refine ⟨?_, hst.2⟩
   by_cases ht : o.cls.isTree = true

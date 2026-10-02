@@ -185,6 +185,7 @@ structure EarClose (curV d l : Nat) (o : DfsOut) (hasVert : Bool) (base : List T
   sub_edges : ∀ t ∈ c :: mid ++ [py, vy], ∀ e, e < s.g.ne → t.edges s.g st.items e → subEdges o e
   sub_cover : ∀ e, e < s.g.ne → subEdges o e → ∃ t ∈ c :: mid ++ [py, vy], t.edges s.g st.items e
   y_edges : ∀ e, e < s.g.ne → s.g.Inc e vy.vStart → subEdges o e
+  vy_top : d < vy.topDepth
   py_item : ∃ i, py.spans = setSides s.stackDir[l]! [i] [] ∧ ∀ p, ¬ Items.IsParent st.items p i
   py_bot : py.vStart = vy.vStart
   py_top : py.topDepth = l
