@@ -183,6 +183,6 @@ theorem planarRelabelTree_base (g : Graph) (w : PlanarWalkState) :
 theorem planarRelabel_proj (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) :
     (g.planarSpqrTree ternarize vertOrder edgeOrder).toSpqrTree = g.spqrTree ternarize vertOrder edgeOrder := by
   unfold Graph.planarSpqrTree Graph.spqrTree
-  rw [planarRelabelTree_base, planarWalk_base]
+  rw [planarRelabelTree_base, planarWalk_base, Fast.relabelTreeFast_eq, Graph.walkFast_items]
 
 end Spqr
