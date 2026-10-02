@@ -268,13 +268,15 @@ theorem numNonIsolated_ident {es : List (Nat × Nat)} {n a b : Nat} (hab : a ≠
 /-- The 1-sum on the disjoint union: identify `v₁` (with an edge in `es₁`) and `n₁ + v₂` (with
 an edge in `es₂`) by conjugating `rs₁.union rs₂` with a transposition of two of their
 quarter-edges. -/
-theorem IsPlanarEmbedding.oneSum {es₁ es₂ : List (Nat × Nat)} {n₁ n₂ : Nat}
+theorem IsPlanarEmbedding.oneSum_conj {es₁ es₂ : List (Nat × Nat)} {n₁ n₂ : Nat}
     {rs₁ rs₂ : RotationSystem} (h₁ : IsPlanarEmbedding es₁ n₁ rs₁)
-    (h₂ : IsPlanarEmbedding es₂ n₂ rs₂) {v₁ v₂ : Nat} (hv₁ : HasEdge es₁ v₁)
-    (hv₂ : HasEdge es₂ v₂) :
-    Planar (identEdges v₁ (n₁ + v₂) (es₁ ++ shiftEdges n₁ es₂)) (n₁ + n₂) := by
-  obtain ⟨a, ha, ha2, hva⟩ := hv₁.exists_quarter
-  obtain ⟨b₂, hb₂, hb2, hvb⟩ := hv₂.exists_quarter
+    (h₂ : IsPlanarEmbedding es₂ n₂ rs₂) {v₁ v₂ a b₂ : Nat}
+    (ha : a < 4 * es₁.length) (hb₂ : b₂ < 4 * es₂.length) (habdir : a % 2 = b₂ % 2)
+    (hva : QE.vert es₁ a = some v₁) (hvb : QE.vert es₂ b₂ = some v₂) :
+    IsPlanarEmbedding (identEdges v₁ (n₁ + v₂) (es₁ ++ shiftEdges n₁ es₂)) (n₁ + n₂)
+      ((rs₁.union rs₂).conj a (rs₁.size + b₂)) := by
+  have hv₁ := hasEdge_of_vert hva
+  have hv₂ := hasEdge_of_vert hvb
   have hU := h₁.union h₂
   have hs₁ := h₁.size
   have hs₂ := h₂.size
@@ -339,7 +341,6 @@ theorem IsPlanarEmbedding.oneSum {es₁ es₂ : List (Nat × Nat)} {n₁ n₂ : 
     (hCb 3 (by decide)) (hCra 3 (by decide)) (hCrb 3 (by decide))
   have hNI := numNonIsolated_ident (n := n₁ + n₂) hw (by omega) (by omega) hea heb
   have hCC := ccCount_ident_of_not_conn (n := n₁ + n₂) hw (by omega) (by omega) hea heb hnc
-  refine ⟨rs.conj a b, ?_⟩
   exact {
     size := by
       rw [RotationSystem.conj_size, hsz]
@@ -359,5 +360,14 @@ theorem IsPlanarEmbedding.oneSum {es₁ es₂ : List (Nat × Nat)} {n₁ n₂ : 
       rw [numComponents_eq_ccCount hev, numComponents_eq_ccCount hU.verts] at *
       simp only [identEdges, List.length_map] at *
       omega }
+
+theorem IsPlanarEmbedding.oneSum {es₁ es₂ : List (Nat × Nat)} {n₁ n₂ : Nat}
+    {rs₁ rs₂ : RotationSystem} (h₁ : IsPlanarEmbedding es₁ n₁ rs₁)
+    (h₂ : IsPlanarEmbedding es₂ n₂ rs₂) {v₁ v₂ : Nat} (hv₁ : HasEdge es₁ v₁)
+    (hv₂ : HasEdge es₂ v₂) :
+    Planar (identEdges v₁ (n₁ + v₂) (es₁ ++ shiftEdges n₁ es₂)) (n₁ + n₂) := by
+  obtain ⟨a, ha, ha2, hva⟩ := hv₁.exists_quarter
+  obtain ⟨b, hb, hb2, hvb⟩ := hv₂.exists_quarter
+  exact ⟨_, h₁.oneSum_conj h₂ ha hb (ha2.trans hb2.symm) hva hvb⟩
 
 end Spqr
