@@ -348,6 +348,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
 | `walkEarTree = walkTree` (`walkEarTree_eq_walkTree`, `walkEar_eq_walk`) | `EarSpec.lean` | proved |
 | frame rule `walkTree_local` | `EarSpec.lean` | sorry |
+| typing/allocation part of `Items.WF` (`Items.Tree` sizes/types, I/O leaves, `vs_shape`, `vs_lt`): `walk_typing` | `WalkTyping.lean` | proved (`walk_q_children` sorry: needs span shape) |
 | §4.2b walk invariant (`EntryInv`, `Inv`), `mergeTstackTops_sound`, `finishEdge_inv`, `walkTree_inv` | `WalkSpec.lean` | sorry |
 | Invariant W, Lemmas 4.3/4.4 (`earOut_one_entry`, `ascend_frame_one_entry`) | `EarSpec.lean` | sorry / hard |
 | 4.5 maximality / R 3-connected | `spqrTree_r_three_connected` | hard |

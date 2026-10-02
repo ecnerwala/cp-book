@@ -220,6 +220,7 @@ flattened state machine:
                          one theorem per phase
     Spqr/EarSpec.lean    walkEarTree = walkTree, tstack frame rule, per-ear lemmas
     Spqr/SepPair.lean    separation pairs / classes / DFS ancestry definitions (PROOF.md §3)
+    Spqr/WalkTyping.lean typing/allocation invariant of the walk (`walk_typing`; only `walk_q_children` admitted)
     Spqr/Proofs/SepPair.lean  Facts A–C proved (no sorry)
     Spqr/Blocks.lean     blocks (SameBlock, block roots / tops, InBlock) relative to the DFS forest (PROOF.md §2)
     Spqr/Proofs/Blocks.lean  Lemma 2.1 proved (no sorry): sameBlock_iff, blockRoot_cut, ret_child_sameBlock
