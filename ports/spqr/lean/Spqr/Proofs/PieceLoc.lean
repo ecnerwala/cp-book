@@ -24,6 +24,18 @@ theorem loc_lt (h : P.loc q = some l) : l < 4 * P.ves.length := by
   obtain ⟨k, hk, _, hl⟩ := loc_data h
   omega
 
+theorem loc_mod_two (h : P.loc q = some l) : l % 2 = q % 2 := by
+  obtain ⟨k, _, _, hl⟩ := loc_data h
+  omega
+
+theorem vert_loc (h : P.loc q = some l) :
+    QE.vert P.es l = some (if QE.side q = 0 then (P.ends (QE.edge q)).1
+      else (P.ends (QE.edge q)).2) := by
+  obtain ⟨k, _, hk, rfl⟩ := loc_data h
+  have he : QE.edge (4 * k + q % 4) = k := by unfold QE.edge; omega
+  have hs : QE.side (4 * k + q % 4) = QE.side q := by unfold QE.side; omega
+  simp only [QE.vert, he, hs, es, List.getElem?_map, hk, Option.map_some]
+
 theorem loc_injective (hq : P.loc q = some l) (hr : P.loc r = some l) : q = r := by
   obtain ⟨k, _, hk, hl⟩ := loc_data hq
   obtain ⟨k', _, hk', hl'⟩ := loc_data hr
