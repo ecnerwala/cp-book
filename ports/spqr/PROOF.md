@@ -348,6 +348,14 @@ that survive to be closed are all separation pairs and every separation pair is 
 separation pair of `B` (virtual edges stand for connected pieces attached at their two ends, so a
 cut of the skeleton lifts to a cut of `B`), which would have been closed as an S or P.
 
+The graph-theoretic half is done: `Proofs/SepPairExhaust.lean` proves `sepPair_iff` — over a block
+with its sorted DFS tree, `{a, b}` with `a` an ancestor of `b` is a separation pair iff it is a
+`Type1Pair` (a type-1 child of `b` to `depth a` plus two further edges, or a bond: two parallel
+`a–b` edges plus a third edge) or a `Type2Pair` (`a` not the root, `b` strictly below `a`'s child
+`a'`, no child of `b` returning both above `a` and into `(a, b)`, no back edge from `T_{a'} − T_b`
+above `a`) — and the corollary `three_connected_of_no_split`: a block with no type-1 and no type-2
+pair has no separation pair at all. What remains is the walk-side half below.
+
 Formalizing 4.5 directly on the walk is the research-scale part. The planned route avoids a
 separate "all separation pairs are found" theorem by proving the stronger local statement in 4.3:
 each merge rule fires iff the corresponding candidate is not a separation pair, by Fact B/C applied
@@ -377,6 +385,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | 2.1 blocks ↔ `lowval ≥ d` branches (`sameBlock_iff`, `blockRoot_cut`, `ret_child_sameBlock`) | `Blocks.lean`, `Proofs/Blocks.lean` | proved |
 | Facts A–C (`sepPair_comparable`, type-1 class / above-between / sorted prefix-suffix, `type2_first_out`) | `SepPair.lean`, `Proofs/SepPair.lean` | proved |
 | Fact D (laminar intervals): `edgePostorder`, type-1 classes are intervals + laminar, `type2_class_interval`, `type2Block_laminar_block` | `Proofs/{Postorder,Interval,Type2}.lean` | proved (type-2 vs type-2 nesting open, see §3) |
+| 4.5 exhaustiveness: separation pairs of a block = type-1 ∪ type-2 pairs (`sepPair_iff`, `three_connected_of_no_split`) | `SepPairExhaust.lean`, `Proofs/SepPairExhaust.lean` | proved |
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
 | `walkEarTree = walkTree` (`walkEarTree_eq_walkTree`, `walkEar_eq_walk`) | `EarSpec.lean` | proved |
 | frame rule `walkTree_local` via `Lifts`/`Sim` simulation (`Sim.closeEars`, `Sim.mergeLate`, `Sim.finishRest`, `Sim.finishBoundary` proved) | `Sim.lean`, `Frame.lean`, `EarSpec.lean` | `Sim.closeVert` (loop 3 mechanics) and `Sim.walkTree` (invariant threading) admitted; rest proved |

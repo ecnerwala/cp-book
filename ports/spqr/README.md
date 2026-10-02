@@ -226,6 +226,8 @@ flattened state machine:
     Spqr/Proofs/{Postorder,Interval,Type2}.lean  Fact D: edge postorder, classes are laminar intervals (no sorry)
     Spqr/Blocks.lean, Spqr/Proofs/Blocks.lean  blocks ↔ lowval ≥ d (PROOF.md §2, no sorry)
     Spqr/Proofs/Dfs.lean  phase-1 spec: dfsForest_spanning, lowpoint/classify lemmas (no sorry)
+    Spqr/SepPairExhaust.lean  Type1Pair / Type2Pair / ThreeConnected (PROOF.md §4.5)
+    Spqr/Proofs/SepPairExhaust.lean  separation pairs = type-1 ∪ type-2 pairs proved (no sorry): sepPair_iff, three_connected_of_no_split
     Spqr/Blocks.lean     blocks (SameBlock, block roots / tops, InBlock) relative to the DFS forest (PROOF.md §2)
     Spqr/Proofs/Blocks.lean  Lemma 2.1 proved (no sorry): sameBlock_iff, blockRoot_cut, ret_child_sameBlock
     DumpLean.lean        dump harness (SPQR_EAR=1 switches to walkEarTree)
