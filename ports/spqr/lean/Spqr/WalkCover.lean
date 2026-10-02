@@ -420,10 +420,181 @@ theorem q_cons (h : s.Full g P X) {x q j : Nat} (hx : X x) (hq0 : 0 < q) (hqlt :
       List.nil_append] at h1 h2 h3
     rcases eq_or_ne i x with rfl | hix <;> rcases eq_or_ne i q with rfl | hiq
     · exact absurd rfl hxq
-    · simp only [eq_self_iff_true, ite_true, ite_eq_right hiq, ite_eq_right (Ne.symm hiq)] at h1 h2 ⊢; omega
-    · simp only [eq_self_iff_true, ite_true, ite_eq_right hix, ite_eq_right (Ne.symm hix)] at h1 h2 ⊢; omega
+    · simp only [ite_true, ite_eq_right hiq, ite_eq_right (Ne.symm hiq)] at h1 h2 ⊢; omega
+    · simp only [ite_true, ite_eq_right hix, ite_eq_right (Ne.symm hix)] at h1 h2 ⊢; omega
     · simp only [ite_eq_right hix, ite_eq_right (Ne.symm hix), ite_eq_right hiq, ite_eq_right (Ne.symm hiq)] at h1 h2 ⊢; omega
+
+
+/-- The block branch without a bridge: `q` gets `backedge.spans.1 ++ t.spans.2`, then goes under `j`. -/
+theorem q_merge (h : s.Full g P X) {q j : Nat} (hq0 : 0 < q) (hqlt : q < 1 + g.nv + g.ne) (hP : ¬ P q)
+    (hqch : Items.ch s.items q = []) (hj : j < s.items.size) (hjne : ∀ e, e < g.ne → j ≠ edgeItem g e)
+    (hb : ∀ b ∈ s.tstack.head?, b.spans.2 = []) (ht : ∀ t ∈ s.tstack.tail.head?, t.spans.1 = []) :
+    ({ s with
+        items := (s.items.modify q fun it =>
+            { it with ch := s.tstack.head!.spans.1 ++ s.tstack.tail.head!.spans.2 }).modify j
+          fun it => { it with ch := it.ch ++ [q] },
+        tstack := s.tstack.tail.tail }).Full g (fun i => P i ∨ i = q) X := by
+  have hq : q < s.items.size := Nat.lt_of_lt_of_le hqlt h.place.size
+  refine h.step_fixed hq0 hqlt ((h.place.q_merge hq).append_fixed (by simpa using hj) hq0 hqlt hP) (by simp)
+    (fun e he hP' => ?_) fun i => ?_
+  · rw [not_or] at hP'
+    rw [Items.ch_modify_ne _ _ _ _ (hjne e he), Items.ch_modify_ne _ _ _ _ (Ne.symm hP'.2)]
+  · have hb' := head!_spans2_nil hb
+    have ht' := head!_spans1_nil ht
+    simp only [cnt]
+    have h1 := Items.chCount_modify s.items hq
+      (fun it => { it with ch := s.tstack.head!.spans.1 ++ s.tstack.tail.head!.spans.2 }) i
+    have h2 := Items.chCount_modify (s.items.modify q fun it =>
+      { it with ch := s.tstack.head!.spans.1 ++ s.tstack.tail.head!.spans.2 })
+      (by simpa using hj) (fun it => { it with ch := it.ch ++ [q] }) i
+    have h3 := spansCount_head_tail s.tstack i
+    have h4 := spansCount_head_tail s.tstack.tail i
+    rw [← Place.ch_eq_getElem _ (by simpa using hj)] at h2
+    simp only [hb', ht', hqch, List.count_nil, List.count_append, List.count_singleton, beq_iff_eq,
+      List.append_nil, List.nil_append] at h1 h2 h3 h4
+    rcases eq_or_ne i q with rfl | hiq
+    · simp only [ite_true] at h2 ⊢; omega
+    · simp only [ite_eq_right hiq, ite_eq_right (Ne.symm hiq)] at h2 ⊢; omega
+
+
+/-- The self-loop case: `q` gets `[x]`, then goes under `j`. -/
+theorem q_single (h : s.Full g P X) {x q j : Nat} (hx : X x) (hq0 : 0 < q) (hqlt : q < 1 + g.nv + g.ne)
+    (hP : ¬ P q) (hqch : Items.ch s.items q = []) (hj : j < s.items.size)
+    (hjne : ∀ e, e < g.ne → j ≠ edgeItem g e) :
+    ({ s with
+        items := (s.items.modify q fun it => { it with ch := [x] }).modify j
+          fun it => { it with ch := it.ch ++ [q] } }).Full g (fun i => P i ∨ i = q) (fun i => X i ∧ i ≠ x) := by
+  have hq : q < s.items.size := Nat.lt_of_lt_of_le hqlt h.place.size
+  have hn := h.place.loose_node x hx
+  have hxq : x ≠ q := by omega
+  refine h.step_node_fixed hq0 hqlt
+    ((h.place.q_single hx hq).append_fixed (by simpa using hj) hq0 hqlt hP) (by simp) (fun e he _ hne => ?_) fun i => ?_
+  · rw [Items.ch_modify_ne _ _ _ _ (hjne e he), Items.ch_modify_ne _ _ _ _ hne.symm]
+  · simp only [cnt]
+    have h1 := Items.chCount_modify s.items hq (fun it => { it with ch := [x] }) i
+    have h2 := Items.chCount_modify (s.items.modify q fun it => { it with ch := [x] })
+      (by simpa using hj) (fun it => { it with ch := it.ch ++ [q] }) i
+    rw [← Place.ch_eq_getElem _ (by simpa using hj)] at h2
+    simp only [hqch, List.count_nil, List.count_append, List.count_singleton, beq_iff_eq] at h1 h2
+    rcases eq_or_ne i x with rfl | hix <;> rcases eq_or_ne i q with rfl | hiq
+    · exact absurd rfl hxq
+    · simp only [ite_true, ite_eq_right hiq, ite_eq_right (Ne.symm hiq)] at h1 h2 ⊢; omega
+    · simp only [ite_true, ite_eq_right hix, ite_eq_right (Ne.symm hix)] at h1 h2 ⊢; omega
+    · simp only [ite_eq_right hix, ite_eq_right (Ne.symm hix), ite_eq_right hiq, ite_eq_right (Ne.symm hiq)]
+        at h1 h2 ⊢; omega
+
+/-- `walkForest`: the last entry's second side goes under the root. -/
+theorem root_append (h : s.Full g P X) (hb : ∀ t ∈ s.tstack.head?, t.spans.1 = []) :
+    ({ s with
+        items := s.items.modify rootItem fun it => { it with ch := it.ch ++ s.tstack.head!.spans.2 },
+        tstack := s.tstack.tail }).Full g P X := by
+  have h0 : rootItem < s.items.size := Nat.lt_of_lt_of_le (show (0 : Nat) < 1 + g.nv + g.ne by omega) h.place.size
+  refine h.of_cnt h.place.root_append (by simp) (fun e _ _ => ?_) fun i => ?_
+  · exact Items.ch_modify_ne _ _ _ _ (by show (0 : Nat) ≠ 1 + g.nv + e; omega)
+  · have hb' := head!_spans1_nil hb
+    simp only [cnt]
+    have h1 := Items.chCount_modify s.items h0 (fun it => { it with ch := it.ch ++ s.tstack.head!.spans.2 }) i
+    have h2 := spansCount_head_tail s.tstack i
+    simp only [List.count_append, hb', List.nil_append, ← Place.ch_eq_getElem s.items h0] at h1 h2
+    omega
+
+theorem dropCh_mergeTop {x : Nat} (h : (s.dropCh x).Full g P X) (hm : MergeOK s) :
+    (({ s with tstack := WalkM.mergeTop s.tstack }).dropCh x).Full g P X := h.mergeTop hm
+theorem dropCh_fold {x : Nat} (h : (s.dropCh x).Full g P X) (curV : Nat) (edgeDir : Bool) :
+    (({ s with tstack := match s.tstack with
+      | a :: rest => { a with vStart := curV, spans := setSides (!edgeDir) (a.spans.1 ++ a.spans.2) [] } :: rest
+      | [] => [] }).dropCh x).Full g P X := h.fold curV edgeDir
 
 end Full
 end WalkState
+
+/-! ### The primitives, as `wp` facts -/
+
+open WalkState
+
+variable {g : Graph} {P X : ItemId → Prop} {s : WalkState}
+
+theorem wp_and {A B : α → WalkState → Prop} {m : WalkM α} (ha : wp m A s) (hb : wp m B s) :
+    wp m (fun a s' => A a s' ∧ B a s') s := ⟨ha, hb⟩
+
+theorem modifyItem_spec' (i : Nat) (f : Item → Item) :
+    wp (modifyItem i f) (fun _ s' => s' = { s with items := s.items.modify i f }) s := rfl
+theorem modify_spec' (f : WalkState → WalkState) : wp (modify f : WalkM Unit) (fun _ s' => s' = f s) s := rfl
+theorem allocItem_spec' (ty : NodeType) :
+    wp (allocItem ty) (fun item s' => item = s.items.size ∧
+      s' = { s with items := s.items.push ⟨ty, (none, none), []⟩ }) s := ⟨rfl, rfl⟩
+
+theorem mergeTstackTops_full (h : s.Full g P X) (hm : MergeOK s) :
+    wp mergeTstackTops (fun _ s' => s'.Full g P X) s := by
+  rw [wp_mergeTstackTops]; exact h.mergeTop hm
+
+theorem loop_full {I B : WalkState → Prop} {cond : WalkM Bool} {body : WalkM Unit}
+    (hc : ∀ s, wp cond (fun _ s' => s' = s) s)
+    (hb : ∀ s, I s → B s → wp body (fun _ s' => I s') s) :
+    ∀ (n : Nat) (s : WalkState), I s → LoopSides B cond body n s → wp (loop n cond body) (fun _ s' => I s') s
+  | 0, _, h, _ => h
+  | n + 1, s, h, hl => by
+    simp only [loop, wp_bind, wp_ite]
+    refine wp_mono _ (wp_and (hc s) hl) ?_
+    rintro b s' ⟨rfl, hl'⟩
+    split
+    · next hb' =>
+      obtain ⟨hB, hrest⟩ := hl' hb'
+      exact wp_mono _ (wp_and (hb s' h hB) hrest) fun _ s₂ ⟨h₂, hl₂⟩ => loop_full hc hb n s₂ h₂ hl₂
+    · exact h
+
+theorem maybeUnwrapNxt_full (h : s.Full g P X) (ty : NodeType) (hty : ty ∈ [NodeType.S, .P, .R])
+    (hu : UnwrapOK s ty) :
+    wp (maybeUnwrapNxt ty)
+      (fun item s' => (s'.dropCh item).Full g P (fun i => X i ∨ i = item) ∧ ¬ X item) s := by
+  have halloc : wp (allocItem ty)
+      (fun item s' => (s'.dropCh item).Full g P (fun i => X i ∨ i = item) ∧ ¬ X item) s :=
+    ⟨(h.push ty).dropCh_fresh (x := s.items.size) (by simp) (Items.ch_push_size _ rfl),
+      fun hx => Nat.lt_irrefl _ (h.place.loose_node _ hx).2⟩
+  have hroot : Items.type s.items 0 ≠ ty := by
+    have hr : Items.type s.items 0 = .F := h.place.root_type
+    rw [hr]; rintro rfl; simp at hty
+  unfold maybeUnwrapNxt
+  simp only [wp_bind, wp_get, wp_ite, wp_pure, wp_nxt, wp_stackDir, wp_getItem, wp_modifyNxt]
+  split
+  · exact halloc
+  · next hcond =>
+    split
+    · next heq =>
+      rw [beq_iff_eq, Items.type_getElem!'] at heq
+      rcases hts : s.tstack with _ | ⟨a, _ | ⟨t, rest⟩⟩
+      · rw [hts] at heq
+        exact absurd heq (by cases s.stackDir[([] : List TEntry).tail.head!.topDepth]! <;> exact hroot)
+      · rw [hts] at heq
+        exact absurd heq (by cases s.stackDir[[a].tail.head!.topDepth]! <;> exact hroot)
+      · rw [hts] at heq
+        simp only [List.tail_cons, head!_cons] at heq ⊢
+        cases hl : getSide t.spans s.stackDir[t.topDepth]! with
+        | nil => rw [hl] at heq; exact absurd heq hroot
+        | cons x xs =>
+          rw [hl, List.head!_cons] at heq
+          obtain ⟨rfl, hside⟩ := hu ((Bool.not_eq_true _).mp hcond) a t rest hts x xs hl heq
+          simp only [List.head!_cons]
+          have hlt : x < s.items.size := by
+            by_contra hge
+            rw [Items.type_of_le _ _ (Nat.le_of_not_lt hge)] at heq
+            rw [← heq] at hty; simp at hty
+          have hn := h.place.node_ge (x := x) (heq ▸ hty)
+          rw [Items.ch_getElem! _ _ hlt]
+          refine ⟨h.unwrap hts hl hside hn hlt, fun hx => ?_⟩
+          have := h.place.loose _ hx
+          have h2 := count_getSide_le t.spans s.stackDir[t.topDepth]! x
+          have h3 : spansCount s.tstack x ≤ s.cnt x := Nat.le_add_right _ _
+          rw [hts] at h3
+          simp only [spansCount_cons, hl, List.count_singleton, beq_self_eq_true, ite_true] at h2 h3
+          omega
+    · exact halloc
+
+theorem finishTstackTop_full {x : Nat} (h : (s.dropCh x).Full g P X) (hx : X x) (hc : CloseOK s) :
+    wp (finishTstackTop x) (fun _ s' => s'.Full g P (fun i => X i ∧ i ≠ x)) s := by
+  obtain ⟨a, rest, hts, hside⟩ := hc
+  unfold finishTstackTop
+  simp only [wp_bind, wp_cur, wp_stackDir, wp_makeVs, wp_modifyItem, wp_modifyCur, hts, head!_cons]
+  exact h.finishTop hx hts hside _
+
 end Spqr
