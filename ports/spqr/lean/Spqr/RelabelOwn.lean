@@ -992,6 +992,222 @@ theorem ownership (hx : items.OwnExtra g) (hor : items.ROriented g) : t.Ownershi
       rw [← hnvs, hnvs', H.layoutNvs_cap hx hi hcap]
       exact ⟨rfl, rfl⟩
 
+/-! #### Twins -/
+
+omit H in
+theorem filter_nonV_length {i : ItemId} (hn : (items.type i).isNode = true) (nvSt : Nat)
+    (pos : Nat → Nat) :
+    ((items.ordered g i nvSt pos).filter (· ≥ 1 + g.nv)).length =
+      items.nEdges g i - items.capCount i := by
+  rw [← List.countP_eq_length_filter, (Items.ordered_perm i nvSt pos).countP_eq,
+    Items.nEdges_eq hn, Nat.add_sub_cancel]
+
+/-- A non-V child of a node has a cap (a Q child of a node is a leaf, by `OwnExtra`). -/
+theorem child_hasCap (hx : items.OwnExtra g) {p c : ItemId} (hp : (items.type p).isNode = true)
+    (hc : c ∈ items.ch p) (hge : 1 + g.nv ≤ c) : items.hasCap c = true := by
+  have hn := H.tree.isNode_of_ge (H.tree.child_lt hc) hge
+  by_cases hQ : items.type c = .Q
+  · rw [Items.hasCap_Q hQ, hx.q_leaf_of_node p c hc hp hQ]; rfl
+  · exact Items.hasCap_of_ne_Q hn hQ
+
+theorem child_nEdges_pos (hx : items.OwnExtra g) {p c : ItemId} (hp : (items.type p).isNode = true)
+    (hc : c ∈ items.ch p) (hge : 1 + g.nv ≤ c) : 0 < items.nEdges g c := by
+  have hcap := H.child_hasCap hx hp hc hge
+  rw [Items.nEdges_eq (H.tree.isNode_of_ge (H.tree.child_lt hc) hge)]
+  simp [Items.capCount, hcap]
+
+omit H in
+theorem twin_none_of_ge {ne : Nat} (h : t.nodeEdges.size ≤ ne) : t.twin ne = none := by
+  unfold SpqrTree.twin; rw [Array.getElem?_eq_none h]; rfl
+
+omit H in
+theorem twin_of_lt {ne : Nat} (h : ne < t.nodeEdges.size) :
+    t.twin ne = (t.nodeEdges[ne]?.getD default).twin := by
+  unfold SpqrTree.twin; rw [Array.getElem?_eq_getElem h]; rfl
+
+theorem ne_decomp {ne : Nat} (h : ne < t.nodeEdges.size) :
+    ∃ j k, j < items.size ∧ k < items.nEdges g j ∧ ne = (t.neRange (idx j)).1 + k := by
+  obtain ⟨j, hj, h1, h2⟩ := H.ne_locate h
+  have := (H.node j hj).ne_range
+  exact ⟨j, ne - (t.neRange (idx j)).1, hj, by omega, by omega⟩
+
+theorem ne_lt_size {j : ItemId} (hj : j < items.size) {k : Nat} (hk : k < items.nEdges g j) :
+    (t.neRange (idx j)).1 + k < t.nodeEdges.size := by
+  have := (H.node j hj).ne_range; have := H.neEn_le_size (H.idx_lt hj); omega
+
+theorem nodeOfNe_at (hx : items.OwnExtra g) {j : ItemId} (hj : j < items.size) {k : Nat}
+    (hk : k < items.nEdges g j) : t.nodeOfNe ((t.neRange (idx j)).1 + k) = some (idx j) := by
+  obtain ⟨pos, hl, hnode, -⟩ := H.nodeEdge_at hx hj hk
+  unfold SpqrTree.nodeOfNe
+  rw [Array.getElem!_of_lt _ _ (H.ne_lt_size hj hk), Option.map_some, hnode]
+
+/-- The cap of a node `j` is twinned with edge `capCount p + k'` of its parent `p` when `p` is a
+node (where `j` is the `k'`-th non-V child of `p`), and has no twin otherwise. -/
+theorem twin_cap {j : ItemId} (hj : j < items.size) (hcap : items.hasCap j = true) :
+    (∃ p, j ∈ items.ch p ∧ (items.type p).isNode = true ∧
+      ∃ pos, RelabelLayout g items t idx p pos ∧
+      ∃ k', ∃ hk' : k' < ((items.ordered g p (t.nvRange (idx p)).1 pos).filter (· ≥ 1 + g.nv)).length,
+        ((items.ordered g p (t.nvRange (idx p)).1 pos).filter (· ≥ 1 + g.nv))[k'] = j ∧
+        t.twin (t.neRange (idx j)).1 = some ((t.neRange (idx p)).1 + items.capCount p + k') ∧
+        t.twin ((t.neRange (idx p)).1 + items.capCount p + k') = some (t.neRange (idx j)).1) ∨
+    (∃ p, j ∈ items.ch p ∧ (items.type p).isNode = false ∧ t.twin (t.neRange (idx j)).1 = none) := by
+  have ht := H.tree
+  have hn : (items.type j).isNode = true := by
+    unfold Items.hasCap at hcap; exact (Bool.and_eq_true_iff.1 hcap).1
+  have hge : 1 + g.nv ≤ j := (ht.isNode_iff hj).1 hn
+  obtain ⟨p, hp⟩ := ht.parent_exists hj (by iomega)
+  have hps := ht.parent_lt hp
+  by_cases hpn : (items.type p).isNode = true
+  · left
+    obtain ⟨pos, hl⟩ := (H.node p hps).layout
+    have hmem : j ∈ (items.ordered g p (t.nvRange (idx p)).1 pos).filter (· ≥ 1 + g.nv) :=
+      List.mem_filter.2 ⟨Items.mem_ordered.2 hp, by simpa using hge⟩
+    obtain ⟨k', hk', hjk⟩ := List.mem_iff_getElem.1 hmem
+    obtain ⟨h1, h2⟩ := hl.twin hpn k' hk'
+    rw [hjk] at h1 h2
+    exact ⟨p, hp, hpn, pos, hl, k', hk', hjk, h2, h1⟩
+  · right
+    exact ⟨p, hp, Bool.eq_false_iff.2 hpn,
+      (H.node p hps).child_cap_twin_none hpn j hp hcap⟩
+
+theorem twin_invol : ∀ ne ne', t.twin ne = some ne' → t.twin ne' = some ne := by
+  intro ne ne' h
+  by_cases hne : ne < t.nodeEdges.size
+  swap
+  · rw [twin_none_of_ge (Nat.le_of_not_lt hne)] at h; cases h
+  obtain ⟨j, k, hj, hk, rfl⟩ := H.ne_decomp hne
+  have hn := isNode_of_nEdges_pos (g := g) (items := items) (i := j) (by omega)
+  by_cases hc : items.capCount j ≤ k
+  · obtain ⟨pos, hl⟩ := (H.node j hj).layout
+    have hk' : k - items.capCount j <
+        ((items.ordered g j (t.nvRange (idx j)).1 pos).filter (· ≥ 1 + g.nv)).length := by
+      rw [filter_nonV_length hn]; omega
+    obtain ⟨h1, h2⟩ := hl.twin hn (k - items.capCount j) hk'
+    rw [show (t.neRange (idx j)).1 + items.capCount j + (k - items.capCount j) =
+      (t.neRange (idx j)).1 + k by omega] at h1 h2
+    rw [h1] at h
+    obtain rfl := Option.some.inj h
+    exact h2
+  · have hk0 : k = 0 := by have := Items.capCount_le (items := items) j; omega
+    have hcap : items.hasCap j = true := by
+      unfold Items.capCount at hc; by_contra h'; simp [h'] at hc
+    subst hk0
+    rw [Nat.add_zero] at h ⊢
+    rcases H.twin_cap hj hcap with ⟨p, -, -, pos, -, k', -, -, h1, h2⟩ | ⟨p, -, -, h1⟩
+    · rw [h1] at h; obtain rfl := Option.some.inj h; exact h2
+    · rw [h1] at h; cases h
+
+theorem twin_ne (hx : items.OwnExtra g) : ∀ ne ne', t.twin ne = some ne' → ne ≠ ne' := by
+  intro ne ne' h
+  by_cases hne : ne < t.nodeEdges.size
+  swap
+  · rw [twin_none_of_ge (Nat.le_of_not_lt hne)] at h; cases h
+  obtain ⟨j, k, hj, hk, rfl⟩ := H.ne_decomp hne
+  have hn := isNode_of_nEdges_pos (g := g) (items := items) (i := j) (by omega)
+  have hnode := H.nodeOfNe_at hx hj hk
+  by_cases hc : items.capCount j ≤ k
+  · obtain ⟨pos, hl⟩ := (H.node j hj).layout
+    have hk' : k - items.capCount j <
+        ((items.ordered g j (t.nvRange (idx j)).1 pos).filter (· ≥ 1 + g.nv)).length := by
+      rw [filter_nonV_length hn]; omega
+    obtain ⟨h1, -⟩ := hl.twin hn (k - items.capCount j) hk'
+    rw [show (t.neRange (idx j)).1 + items.capCount j + (k - items.capCount j) =
+      (t.neRange (idx j)).1 + k by omega, h] at h1
+    obtain rfl := Option.some.inj h1
+    have hmem := List.mem_filter.1 (List.getElem_mem hk')
+    have hcm := Items.mem_ordered.1 hmem.1
+    have hge : 1 + g.nv ≤ ((items.ordered g j (t.nvRange (idx j)).1 pos).filter (· ≥ 1 + g.nv))[k - items.capCount j] := by
+      simpa using hmem.2
+    have hpos := H.child_nEdges_pos hx hn hcm hge
+    have hnode' := H.nodeOfNe_at hx (H.tree.child_lt hcm) hpos
+    rw [Nat.add_zero] at hnode'
+    intro heq
+    rw [heq, hnode'] at hnode
+    exact H.tree.child_ne hcm (H.idx_inj (H.tree.child_lt hcm) hj (Option.some.inj hnode))
+  · have hk0 : k = 0 := by have := Items.capCount_le (items := items) j; omega
+    have hcap : items.hasCap j = true := by
+      unfold Items.capCount at hc; by_contra h'; simp [h'] at hc
+    subst hk0
+    rw [Nat.add_zero] at h hnode ⊢
+    rcases H.twin_cap hj hcap with ⟨p, hp, hpn, pos, hl, k', hk', -, h1, -⟩ | ⟨p, -, -, h1⟩
+    · rw [h1] at h; obtain rfl := Option.some.inj h
+      have hps := H.tree.parent_lt hp
+      have hkp : items.capCount p + k' < items.nEdges g p := by
+        rw [filter_nonV_length hpn] at hk'; omega
+      have hnode' := H.nodeOfNe_at hx hps hkp
+      rw [← Nat.add_assoc] at hnode'
+      intro heq
+      rw [heq, hnode'] at hnode
+      exact H.tree.child_ne hp (H.idx_inj hj hps (Option.some.inj hnode).symm)
+    · rw [h1] at h; cases h
+
+theorem twins (hx : items.OwnExtra g) : t.Twins := by
+  have ht := H.tree
+  refine ⟨H.twin_invol, H.twin_ne hx, ?_, ?_, ?_⟩
+  · -- twin_parent
+    intro n ne hn hcap
+    obtain ⟨j, hj, rfl⟩ := H.idx_surj hn
+    unfold SpqrTree.capNe at hcap
+    rw [H.hasCap_eq hj] at hcap
+    split_ifs at hcap with hc
+    obtain rfl := Option.some.inj hcap
+    rcases H.twin_cap hj hc with ⟨p, hp, hpn, pos, hl, k', hk', -, h1, -⟩ | ⟨p, hp, hpn, h1⟩
+    · left
+      have hps := ht.parent_lt hp
+      refine ⟨idx p, (H.node p hps).child_par j hp, by rw [H.type hps]; exact hpn, _, h1, ?_⟩
+      have hkp : items.capCount p + k' < items.nEdges g p := by
+        rw [filter_nonV_length hpn] at hk'; omega
+      have := H.nodeOfNe_at hx hps hkp
+      rwa [← Nat.add_assoc] at this
+    · right
+      have hps := ht.parent_lt hp
+      exact ⟨h1, idx p, (H.node p hps).child_par j hp, by rw [H.type hps]; simp [hpn]⟩
+  · -- noncap_children
+    intro n hn hnode
+    obtain ⟨j, hj, rfl⟩ := H.idx_surj hn
+    rw [H.type hj] at hnode
+    obtain ⟨pos, hl⟩ := (H.node j hj).layout
+    have hcc : (if t.hasCap (idx j) = true then 1 else 0) = items.capCount j := by
+      rw [H.hasCap_eq hj]; rfl
+    rw [hcc, hl.children, List.filter_map, List.map_map]
+    have hfil : (items.ordered g j (t.nvRange (idx j)).1 pos).filter
+        ((fun c => decide (t.type c ≠ .V)) ∘ idx) =
+        (items.ordered g j (t.nvRange (idx j)).1 pos).filter (· ≥ 1 + g.nv) := by
+      apply List.filter_congr
+      intro c hc
+      have hc' := Items.mem_ordered.1 hc
+      simp only [Function.comp, H.type_child hc', decide_eq_decide]
+      constructor
+      · exact fun h => ht.child_ge_of_ne_V hc' h
+      · intro h hV; have := ht.child_lt_of_V hc' hV; iomega
+    rw [hfil]
+    have hne := (H.node j hj).ne_range
+    have hlen := filter_nonV_length (g := g) (items := items) hnode (t.nvRange (idx j)).1 pos
+    apply List.ext_getElem
+    · simp [SpqrTree.nodeEdgesOf, hne, hlen]
+    intro k' h1 h2
+    have hk' : k' < ((items.ordered g j (t.nvRange (idx j)).1 pos).filter (· ≥ 1 + g.nv)).length := by
+      simpa using h2
+    have hkn : items.capCount j + k' < items.nEdges g j := by rw [hlen] at hk'; omega
+    obtain ⟨htw, -⟩ := hl.twin hnode k' hk'
+    simp only [List.getElem_map, List.getElem_drop, SpqrTree.nodeEdgesOf, List.getElem_range,
+      Function.comp]
+    rw [← twin_of_lt (H.ne_lt_size hj hkn), ← Nat.add_assoc, htw]
+    have hmem := List.mem_filter.1 (List.getElem_mem hk')
+    have hcm := Items.mem_ordered.1 hmem.1
+    have hge : 1 + g.nv ≤ ((items.ordered g j (t.nvRange (idx j)).1 pos).filter (· ≥ 1 + g.nv))[k'] := by
+      simpa using hmem.2
+    unfold SpqrTree.capNe
+    rw [H.hasCap_eq (ht.child_lt hcm), H.child_hasCap hx hnode hcm hge]
+    rfl
+  · -- cap_none
+    intro n hn hnode
+    obtain ⟨j, hj, rfl⟩ := H.idx_surj hn
+    rw [H.type hj] at hnode
+    unfold SpqrTree.nEdges
+    rw [(H.node j hj).ne_range, Items.nEdges_eq_zero (Bool.eq_false_iff.2 hnode)]
+    omega
+
 end RelabelAll
 
 end Spqr
