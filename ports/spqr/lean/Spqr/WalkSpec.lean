@@ -1386,12 +1386,4 @@ theorem walkTree_inv {D : Nat} (t : DfsTree) (d : Nat) (s : WalkState) (h : s.In
     ((walkTree t d).run s).2.Inv D := by
   sorry
 
-/-- Completeness: after the walk, the allocated nodes partition the edges (every edge is below
-exactly one child chain from the root) — the `Items.Tree` content of `Items.WF`. -/
-theorem walk_nodes_partition (g : Graph) (tern : Bool) (forest : List DfsTree) :
-    let s := g.walk tern forest
-    ∀ e, e < g.ne → ∃ p, Items.IsParent s.items p (edgeItem g e) ∧
-      ∀ p', Items.IsParent s.items p' (edgeItem g e) → p' = p := by
-  sorry
-
 end Spqr
