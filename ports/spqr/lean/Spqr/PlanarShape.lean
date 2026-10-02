@@ -18,6 +18,10 @@ variable (t : SpqrTree)
 structure ChildShape : Prop where
   /-- `O` and `I` items are leaves. -/
   leaf : ∀ i, i < t.size → t.type i = .O ∨ t.type i = .I → t.children i = []
+  /-- The children of `i` tile its subtree range: the `k`-th child is numbered `i + 1` plus the
+  sizes of the subtrees of the children before it. -/
+  tile : ∀ i, i < t.size → ∀ k, k < (t.children i).length →
+    (t.children i)[k]! = i + 1 + (((t.children i).take k).map fun c => t.subtreeEnd[c]! - c).sum
 
 end SpqrTree
 
