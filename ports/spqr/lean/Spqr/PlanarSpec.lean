@@ -45,9 +45,9 @@ abbrev Graph.planarTree (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : Li
   g.planarSpqrTree ternarize vertOrder edgeOrder
 
 /-- Soundness of the per-node flag: a planar S/P/R node's local rotation system is a planar
-embedding of its skeleton. Admitted; plan in PROOF.md §7.4 (S: the cycle layout `layoutRot .S` is
+embedding of its skeleton. Admitted; plan in PROOF.md §8.4 (S: the cycle layout `layoutRot .S` is
 the two-face embedding; P: the bond layout is the `k`-face embedding of `k` parallel edges;
-R: the walk's `node_planarity` matches, i.e. the t-stack invariant of §7.2 at the moment the R item
+R: the walk's `node_planarity` matches, i.e. the t-stack invariant of §8.2 at the moment the R item
 is finished, mapped through `mapRot`). -/
 theorem nodePlanar_sound (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (i : Nat)
     (hty : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.type i = .S ∨
@@ -60,7 +60,7 @@ theorem nodePlanar_sound (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : L
   sorry
 
 /-- Completeness of the per-node flag: a node flagged nonplanar has a nonplanar skeleton.
-Admitted (Kuratowski-style; plan in PROOF.md §7.3: the `mergePlanarity` nesting obstruction
+Admitted (Kuratowski-style; plan in PROOF.md §8.3: the `mergePlanarity` nesting obstruction
 exhibits a `K₅` / `K₃,₃` subdivision in the skeleton). -/
 theorem nodePlanar_complete (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (i : Nat)
     (hi : i < (g.planarTree ternarize vertOrder edgeOrder).size)
@@ -70,7 +70,7 @@ theorem nodePlanar_complete (g : Graph) (ternarize : Bool) (vertOrder edgeOrder 
   sorry
 
 /-- Soundness of the glued embedding: it is a planar embedding of `g` (Euler's formula per
-component). Admitted; plan in PROOF.md §7.5 (2-sum of planar embeddings along twin edges). -/
+component). Admitted; plan in PROOF.md §8.5 (2-sum of planar embeddings along twin edges). -/
 theorem planarEmbed_sound (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
     (rs : RotationSystem) (h : (g.planarTree ternarize vertOrder edgeOrder).planarEmbed = some rs) :
     IsPlanarEmbedding g.edges.toList g.nv rs := by

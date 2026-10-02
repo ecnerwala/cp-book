@@ -569,3 +569,167 @@ that refinement is left to the preservation proof.
 | `finishTstackTop_stItem` | `StWalk.lean` | sorry (mechanical) |
 | `finishEdge_topClosable`, `finishEdge_stInv` | `StWalk.lean` | sorry (hard) |
 | `walk_st` | `StSpec.lean` | sorry (from `finishEdge_stInv`) |
+
+## 8. Planarity
+
+The planar variant (`planar_spqr_tree`, `with_planarity`) runs the same walk and relabel with extra
+state; the Lean port (`PlanarWalk.lean`, `PlanarRelabel.lean`, `PlanarEmbed.lean`) is a
+conservative extension of the ordinary one, and the pure specification is `Planar.lean`.
+
+### 8.1 Quarter-edges and rotation systems
+
+A quarter-edge is `q = 4 e + 2 side + dir` **[def `QE`]**: `side` picks an endpoint of edge `e`
+(`side = 0` is `edges[e].1`), `dir` one of the two corners at that endpoint. `q ^^^ 1` is the other
+corner at the same endpoint, `q ^^^ 3` the corner across the edge. A `RotationSystem` **[def]** is
+`rotAdj : Array (Option Nat)`; `rotAdj[q]` is the corner facing `q` around their common vertex.
+Well-formedness **[def `IsEmbedding`]**: total on the `4 |E|` quarter-edges, an involution, pairing
+corners at the same vertex with opposite `dir`, and with exactly `2 · #(non-isolated vertices)`
+orbits of `q ↦ rotAdj[q ^^^ 1]` (every vertex gives two orbits, one per `dir`, so the pairing is a
+genuine cyclic order at each vertex). Faces are the orbits of `q ↦ rotAdj[q ^^^ 3]`, again counted
+twice. `IsPlanarEmbedding` **[def]** adds Euler's formula per component,
+`#faces + 2 V = 2 (2 C + E)` with `C` the number of components with an edge and `V` the non-isolated
+vertices; `Planar es n` **[def]** is the existence of such a rotation system. All of these are
+decidable, which is what `CheckPlanarLean.lean` executes.
+
+### 8.2 What a planar tstack entry is (Invariant P)
+
+Fix a tstack entry `t` with edge set `E(t)` (§4.2), bottom terminal `vStart` and top `anc topDepth`.
+Think of the whole *upper* DFS stack — every ancestor at depth `≤ topDepth`, i.e. every vertex a
+back edge of `E(t)` can return to — contracted into a single vertex `T`. The *piece* of `t` is
+`E(t)` with `T` as its top terminal: an interior spine along the ear (the tree path from `vStart`
+down), the sub-ears already merged into it, and the back edges from the spine to `T`.
+
+`tstack_planarity_t` **[def `Planarity`]** stores, per side (left / right of the spine), the
+exposed ends of the piece's two outer-face boundary walks:
+
+* `bot_ends` **[`PlSide.bot`]**: the outer and inner exposed quarter-edge of the walk along the
+  tree part of the boundary, attached to the bottom-most / top-most vertex of the spine;
+* `top_ends`, `top_depths` **[`PlSide.top`]**: the outer-most and inner-most exposed back edge
+  leaving the piece on that side towards `T`, and the depths they return to; the back edges
+  in between are chained through `quarter_edge_matches` (**[`Qem`]**, `link`) — this is the
+  "linked list of the far ends of the back edges on that side". The ends are stored at `T`
+  too: `rotAdj` entries at quarter-edges of back edges whose top is an ancestor are filled in
+  while the ancestor is still on the DFS stack.
+
+Side `0` holds a minimal return (`sides[0].top_depths[0] = topDepth` whenever any back edge is
+open), and within a side depths increase inwards (`top_depths[0] ≤ top_depths[1]`).
+
+**Invariant P (per entry).** Whenever `t` is on the tstack with `planarity = some p`:
+
+1. *(embedded)* the piece of `t` has a planar embedding `ρ_t` (a rotation system on its
+   quarter-edges, with `T` contracted) in which both terminals `vStart` and `T` lie on the outer
+   face, and `qem` restricted to the quarter-edges of `E(t)` agrees with `ρ_t` on every pair of
+   corners that are *not* exposed;
+2. *(boundary)* the two outer-face boundary walks of `ρ_t`, split at the terminals, are exactly
+   described by the two sides: on each side the walk runs `bot_ends[0]` (at `vStart`) … along the
+   spine and the merged sub-ears … `bot_ends[1]`, then along the chain of back-edge ends
+   `top_ends[0]` … `top_ends[1]` at `T`, the ends still unmatched in `qem` being precisely the four
+   `bot_ends` / `top_ends` entries; the back edges on a side are nested, the outer one returning
+   shallower (`top_depths` increasing inwards);
+3. the span items of each side (`spans`, with their flip bits `PlEntry.flips`) are the pieces lying
+   along that boundary walk, in order, and a flipped item has its own two sides swapped.
+
+`planarity = none` **[`PlEntry.pl = none`]** records that the piece (with its terminals forced onto
+the outer face) is nonplanar.
+
+### 8.3 Why the merge test is exactly the obstruction
+
+`merge_tstack_tops` **[`mergeTstackTops`]** glues the top entry `b` (the deeper part of the ear,
+pushed later) under the entry `a` below it along their shared terminal (`a`'s bottom spine vertex =
+`b`'s top, both terminals of the union being `a.vStart` and `T`). Embedding the union means
+choosing, on each side, which boundary walk `b`'s side goes on; `flip_tstack_planarity`
+**[`flipEntry`, `flipBeforeMerge`]** has already made that choice consistently with the st-side
+the spans were assigned (`b`'s minimal return goes on side `0`). `merge_planarity` then joins side
+by side **[`mergeSide`]**: `a.bot_ends[1]` is linked to `b.bot_ends[0]` (the spine continues), and
+`a.top_ends[1]` to `b.top_ends[0]` (the chains of back-edge ends concatenate), unless
+`a.top_depths[1] > b.top_depths[0]`.
+
+Why this is the obstruction: two back edges `x → anc p` and `y → anc q` drawn on the same side of
+the spine, with `y` above `x`, are two arcs from the spine to `T` that must *nest*: the outer arc
+starts lower (`x`) and, once `T` is expanded back into the ancestor path, ends shallower
+(`p ≤ q`); otherwise their endpoints interleave along the cycle spine + ancestor path and the arcs
+cross. `b`'s back edges start lower than all of `a`'s and are placed inside `a`'s chain, so they
+must end deeper than all of `a`'s: `b.top_depths[0] ≥ a.top_depths[1]`. If `a`'s innermost return
+is deeper than `b`'s outermost, that pair crosses.
+Since the flip already put `b`'s shallowest return on the side where the deepest open return is
+side `0`'s minimum, failure on either side means both sides are blocked by a previous back edge
+returning deeper — the obstruction Andrew's description names — and `a.planarity := none`. This is
+the LR-planarity conflict for same-side return edges, specialised to the two pieces being merged.
+
+The other planarity steps keep Invariant P:
+
+* `make_edge_planarity` **[`makeEdgePlanarity`]**: a single virtual edge is a planar piece; a
+  tree edge exposes both of its corners on each side (`bot_ends`), a back edge exposes its lower
+  corners as `bot_ends` and its upper corners as the (one-element) side-`0` chain of returns.
+* `finish_tstack_top` / `node_planarity` **[`finishMatches`]**: closing an S/P/R item replaces the
+  piece by its cap edge; the four exposed ends of the piece are recorded as the cap's matches, so
+  the cap is a planar piece with the same boundary. `maybe_unwrap_nxt` **[`unwrapPlanarity`]** is
+  the inverse (the recorded matches become the ends again).
+* closing the back edges when the walk returns to their target depth **[`closeSide`,
+  `pruneSide`]**: a return to the current vertex `v` is no longer a back edge to `T` but part of
+  the spine at `v`; its ends move from `top_ends` to `bot_ends` (`link bot_ends[1] top_ends[1]`,
+  pop the chain, `edge_top_depths` recovers the next return depth);
+* leaving a child **[`foldPlanarity`]**: when the ear is left through its base, side `1` holds
+  only returns to `lowval`, and is folded around onto side `0`, so the finished sub-ear is a piece
+  with its two terminals `lowval`-ancestor and base on the outer face.
+
+### 8.4 Why each S/P/R local embedding is planar
+
+Relabel **[`planarRelabel`, `layoutRot`, `setupNode`, `applyFlips`]** maps the recorded matches
+into `ne_embedding.rot_adj` over the node-edge quarter-edges `4 ne + 2 side + dir`.
+
+* **S**: `layoutRot .S` is the cycle `nvSt, nvSt+1, …` closed by the cap, embedded as a polygon:
+  two faces, `2 V` vertex orbits, `2 · (2 - V + V) = 4` face orbits.
+* **P**: the bond of `k` parallel edges in the order the children were listed; `k` faces,
+  Euler gives `2 · (2 - 2 + k) = 2k` face orbits.
+* **R**: the rotation is `node_planarity`'s matches at the moment the R item was finished, mapped
+  through `mapRot` (the cap's quarter-edges renumbered to the node edge, children's virtual edges
+  flipped as `applyFlips` says). By Invariant P at that moment the piece was embedded with its
+  terminals on the outer face, and the cap closes the outer face, so the restriction is a planar
+  embedding of the skeleton. Nonplanar R nodes get `node_planar = false` and all `rot_adj` entries
+  unset; S and P nodes are always planar.
+
+### 8.5 Why gluing through twins preserves planarity
+
+`planar_embed` **[`planarEmbed`, `embedItem`]** processes items bottom-up over the preorder.
+Every item reports the exposed ends of its cap (`outerE`); an S/P/R node links its children's
+exposed ends according to its local rotation, through the twin of each non-cap node-edge, i.e. a
+2-sum along the virtual edge: the child's embedding (with its cap on the outer face — the cap is
+an edge of the skeleton, so it lies on two faces, and we can choose either) is inserted into the
+face of the parent's embedding on the side of the virtual edge. The 2-sum of two planar
+embeddings along an edge is planar: the two faces incident to the virtual edge are merged into
+one, vertices `V_1 + V_2 - 2`, edges `E_1 + E_2 - 2`, faces `F_1 + F_2 - 2`, and Euler's formula is
+preserved. Vertex items splice the blocks hanging off a vertex into its rotation (one new face
+merge per block, each component is embedded separately, which is the per-component Euler
+formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
+(`planarEmbed_isSome_iff`, proved).
+
+### 8.6 Lean plan (planarity)
+
+| statement | file | status |
+|---|---|---|
+| quarter-edges, `RotationSystem`, `IsEmbedding`, `IsPlanarEmbedding`, `Planar` | `Planar.lean` | def |
+| planar walk (`planarWalk`), relabel (`planarSpqrTree`), gluing (`planarEmbed`) | `PlanarWalk.lean`, `PlanarRelabel.lean`, `PlanarEmbed.lean` | def |
+| `planarWalk_base`, `planarWalk_proj` (planar walk = ordinary walk + aux) | `PlanarWalkProj.lean` | **proved** (`propext`, `Quot.sound`) |
+| `planarRelabelTree_base`, `planarRelabel_proj` | `PlanarRelabelProj.lean` | **proved** (`propext`, `Quot.sound`) |
+| `planarEmbed_isSome_iff` | `PlanarSpec.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
+| Invariant P (§8.2) as a Lean predicate on `PlanarWalkState` | — | to state |
+| `nodePlanar_sound` (S, P cases: direct from `layoutRot`; R case: Invariant P at finish) | `PlanarSpec.lean` | sorry |
+| `nodePlanar_complete` (Kuratowski-style certificate from the §8.3 crossing) | `PlanarSpec.lean` | sorry, hard |
+| `planarEmbed_sound` (2-sum along twins, per component) | `PlanarSpec.lean` | sorry |
+| `spqrTree_planar` (`→` from `planarEmbed_sound`; `←` needs completeness + skeletons are minors of `g`) | `PlanarSpec.lean` | sorry |
+
+Admitted cases, precisely: `nodePlanar_sound` is admitted for all three node types (the S and P
+cases are routine counting over `layoutRot`; the R case needs Invariant P); `nodePlanar_complete`
+entirely; `planarEmbed_sound` entirely (its content is the 2-sum lemma plus the `V`/`Q`/`F` item
+splicing); `spqrTree_planar` entirely. Everything else in this section is proved.
+
+Work packages:
+* **Invariant P**: state §8.2 on `PlanarWalkState` (per `plStack` entry, over `qem`), prove it
+  for `makeEdgePlanarity`, `mergeSide`, `closeSide`/`pruneSide`, `foldPlanarity`,
+  `finishMatches`/`unwrapPlanarity`; the merge-side crossing argument gives the `none` case.
+* **Local embeddings**: `nodePlanar_sound` S and P by computation on `layoutRot`; R from
+  Invariant P via `planarRelabel`'s `mapRot`.
+* **Gluing**: a 2-sum lemma on `IsPlanarEmbedding` (face/vertex orbit counting under `link`
+  of two exposed corners) and the bottom-up induction over `embedItem`.
+* **Completeness**: the crossing of §8.3 as a `K₅`/`K₃,₃` subdivision — the hard, optional one.

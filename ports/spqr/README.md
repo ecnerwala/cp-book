@@ -232,7 +232,20 @@ flattened state machine:
                          Items.StNumbered, spqrTree_st = relabel_st ∘ walk_st, relabel-side lemmas
     Spqr/StWalk.lean     walk-side st invariant WalkState.StInv (st-ordering with a hole) and the
                          setSides / merge / fold side lemmas
+    Spqr/Planar.lean     quarter-edges, RotationSystem, IsEmbedding / IsPlanarEmbedding (Euler), Planar
+    Spqr/PlanarWalk.lean, PlanarRelabel.lean, PlanarEmbed.lean
+                         the planar variant: planarWalk (walk + tstack planarity state, flip bits as
+                         absolute Bools), PlanarSpqrTree extends SpqrTree (nodePlanar, neRotAdj),
+                         planarEmbed (gluing through twin edges, Option RotationSystem)
+    Spqr/PlanarWalkProj.lean, PlanarRelabelProj.lean
+                         planarWalk_proj / planarRelabel_proj: the planar variant projects onto the
+                         ordinary one (proved)
+    Spqr/PlanarSpec.lean nodePlanar_sound / nodePlanar_complete / planarEmbed_sound /
+                         planarEmbed_isSome_iff / spqrTree_planar
     DumpLean.lean        dump harness (SPQR_EAR=1 switches to walkEarTree)
+    DumpPlanarLean.lean  planar dump harness, prints what cpp/dump.cpp prints (SPQR_EMBED=1 appends
+                         the glued embedding, as cpp/dump_embed.cpp does)
+    CheckPlanarLean.lean runs the decidable Spqr.Planar spec on the planar output
 
 Proof status: the specification and theorem statements are complete; the phase theorems
 (`dfsForest_spanning`, `walk_items_wf`, `relabelTree_wf`, `relabelTree_represents`,
@@ -246,6 +259,25 @@ derived from `walk_st` and `relabel_st`, both `sorry`; proved there are `vchildr
 side-bookkeeping lemmas `pushTstack_onSide`, `merge_onSide`, `fold_onSide`; admitted are
 `layoutNode_r_bracket`, `relabel_st`, `chain_stackDir_const`, `finishTstackTop_stItem`,
 `finishEdge_topClosable`, `finishEdge_stInv`, `walk_st` (so `#print axioms Spqr.spqrTree_st`
-reports `sorryAx`). Runtime: the proof-carrying implementation uses `List ++` for span merges and
+reports `sorryAx`).
+
+Planarity (`PROOF.md` §8): the planar variant is implemented and differential-tested against
+`cpp/dump.cpp` + `cpp/dump_embed.cpp` (`node_planar`, `ne_rot_adj`, `nonplanar_build_same` and the
+glued `planar_embed` rotation system; byte-identical on seeds 0..300):
+
+    lake build dump_planar_lean check_planar_lean
+    g++ -std=c++23 -O2 -I ../../src cpp/dump.cpp -o cpp/dump_cpp
+    g++ -std=c++23 -O2 -I ../../src cpp/dump_embed.cpp -o cpp/dump_embed_cpp
+    ../compare_planar_lean.sh 0 300          # also runs check_planar_lean on every seed
+
+`check_planar_lean` evaluates the decidable spec: every planar S/P/R node's local rotation system
+is an `IsPlanarEmbedding` of its skeleton, nonplanar nodes are R nodes with all entries unset, and
+the glued embedding (when present) is an `IsPlanarEmbedding` of the input (passes on 0..300).
+Proved: `planarWalk_proj`, `planarRelabel_proj` (the planar variant is a conservative extension
+of the ordinary walk / relabel, so the decomposition proofs are unaffected by planarity) and
+`planarEmbed_isSome_iff`. Admitted with proof plans: `nodePlanar_sound`, `nodePlanar_complete`,
+`planarEmbed_sound`, `spqrTree_planar`. The planar executable is as slow as the ordinary one
+(same `List`-based walk).
+Runtime: the proof-carrying implementation uses `List ++` for span merges and
 `List.mergeSort`, so it is not linear-time; a cost-instrumented linear-time refinement (cat-lists,
 verified bucket sort) with a `fast = slow` theorem is separate, in-progress work.
