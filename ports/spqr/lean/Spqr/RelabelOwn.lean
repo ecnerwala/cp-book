@@ -23,10 +23,6 @@ macro "iomega" : tactic => `(tactic| ((try unfold ItemId at *); (try delta ItemI
 
 /-! ### Generic array / list helpers -/
 
-theorem Array.getElem!_eq_getD_getElem? {α : Type} [Inhabited α] (a : Array α) (i : Nat) :
-    a[i]! = a[i]?.getD default := by
-  rw [Array.getElem!_eq_getD, Array.getD_eq_getD_getElem?]
-
 theorem Array.getElem!_of_lt {α : Type} [Inhabited α] (a : Array α) (i : Nat) (h : i < a.size) :
     a[i]? = some a[i]! := by
   rw [Array.getElem!_eq_getD_getElem?, Array.getElem?_eq_getElem h]; rfl
@@ -224,19 +220,12 @@ theorem Tree.isNode_of_ge (ht : items.Tree g) {c : ItemId} (hc : c < items.size)
 
 /-! ### `ordered` -/
 
-theorem ordered_perm (i : ItemId) (nvSt : Nat) (pos : Nat → Nat) :
-    (items.ordered g i nvSt pos).Perm (items.ch i) := by
-  unfold Items.ordered
-  split
-  · exact List.Perm.refl _
-  · exact List.mergeSort_perm _ _
-
 theorem ordered_eq_of_ne_R {i : ItemId} (h : items.type i ≠ .R) (nvSt : Nat) (pos : Nat → Nat) :
     items.ordered g i nvSt pos = items.ch i := by
   unfold Items.ordered; simp [h]
 
 theorem mem_ordered {i c : ItemId} {nvSt : Nat} {pos : Nat → Nat} :
-    c ∈ items.ordered g i nvSt pos ↔ c ∈ items.ch i := (ordered_perm i nvSt pos).mem_iff
+    c ∈ items.ordered g i nvSt pos ↔ c ∈ items.ch i := (ordered_perm (i := i) (nvSt := nvSt) (pos := pos)).mem_iff
 
 /-! ### Per-type counting facts -/
 
@@ -459,7 +448,7 @@ theorem ordered_filter_V (ht : items.Tree g) {i : ItemId} (hnd : (items.nvList g
   · rw [ordered_eq_of_ne_R hR]
   have hpos := hpos hR
   have hperm : ((items.ordered g i nvSt pos).filter (· < 1 + g.nv)).Perm
-      ((items.ch i).filter (· < 1 + g.nv)) := (ordered_perm i nvSt pos).filter _
+      ((items.ch i).filter (· < 1 + g.nv)) := (ordered_perm (i := i) (nvSt := nvSt) (pos := pos)).filter _
   have hLpw : ((items.ch i).filter (· < 1 + g.nv)).Pairwise
       fun a b => items.loc g nvSt pos a < items.loc g nvSt pos b := by
     rw [List.pairwise_iff_getElem]
@@ -479,7 +468,7 @@ theorem ordered_filter_V (ht : items.Tree g) {i : ItemId} (hnd : (items.nvList g
     · subst h; exact absurd rfl hab
     · exact Nat.ne_of_gt (List.pairwise_iff_getElem.1 hLpw q p hq hp h)
   have hMnd : ((items.ordered g i nvSt pos).filter (· < 1 + g.nv)).Nodup :=
-    List.filter_sublist.nodup ((ordered_perm i nvSt pos).nodup_iff.2 (ht.ch_nodup i))
+    List.filter_sublist.nodup ((ordered_perm (i := i) (nvSt := nvSt) (pos := pos)).nodup_iff.2 (ht.ch_nodup i))
   have hMle : ((items.ordered g i nvSt pos).filter (· < 1 + g.nv)).Pairwise
       fun a b => items.loc g nvSt pos a ≤ items.loc g nvSt pos b := by
     have h2 : items.ordered g i nvSt pos =
@@ -501,7 +490,7 @@ theorem edgeChildren_length (i : ItemId) (nvSt : Nat) (pos : Nat → Nat) :
     (items.edgeChildren g pos (items.ordered g i nvSt pos)).length =
       (items.ch i).countP (· ≥ 1 + g.nv) := by
   unfold Items.edgeChildren
-  rw [List.length_map, ← List.countP_eq_length_filter, (ordered_perm i nvSt pos).countP_eq]
+  rw [List.length_map, ← List.countP_eq_length_filter, (ordered_perm (i := i) (nvSt := nvSt) (pos := pos)).countP_eq]
 
 end Items
 
@@ -793,7 +782,7 @@ theorem children_perm {i : ItemId} (hi : i < items.size) :
     (t.children (idx i)).Perm ((items.ch i).map idx) := by
   obtain ⟨pos, hl⟩ := (H.node i hi).layout
   rw [hl.children]
-  exact (Items.ordered_perm i _ pos).map idx
+  exact (Items.ordered_perm (i := i) (pos := pos)).map idx
 
 theorem hasCap_eq {i : ItemId} (hi : i < items.size) : t.hasCap (idx i) = items.hasCap i := by
   unfold SpqrTree.hasCap Items.hasCap
@@ -1113,7 +1102,7 @@ theorem filter_nonV_length {i : ItemId} (hn : (items.type i).isNode = true) (nvS
     (pos : Nat → Nat) :
     ((items.ordered g i nvSt pos).filter (· ≥ 1 + g.nv)).length =
       items.nEdges g i - items.capCount i := by
-  rw [← List.countP_eq_length_filter, (Items.ordered_perm i nvSt pos).countP_eq,
+  rw [← List.countP_eq_length_filter, (Items.ordered_perm (i := i) (nvSt := nvSt) (pos := pos)).countP_eq,
     Items.nEdges_eq hn, Nat.add_sub_cancel]
 
 /-- A non-V child of a node has a cap (a Q child of a node is a leaf, `Shapes.q_leaf_of_node`). -/
@@ -1179,7 +1168,7 @@ theorem twin_cap {j : ItemId} (hj : j < items.size) (hcap : items.hasCap j = tru
     obtain ⟨k', hk', hjk⟩ := List.mem_iff_getElem.1 hmem
     obtain ⟨h1, h2⟩ := hl.twin hpn k' hk'
     rw [hjk] at h1 h2
-    exact ⟨p, hp, hpn, pos, hl, k', hk', hjk, h2, h1⟩
+    exact ⟨p, hp, hpn, pos, hl, k', hk', hjk, h2 hcap, h1⟩
   · right
     exact ⟨p, hp, Bool.eq_false_iff.2 hpn,
       (H.node p hps).child_cap_twin_none hpn j hp hcap⟩
@@ -1201,7 +1190,11 @@ theorem twin_invol : ∀ ne ne', t.twin ne = some ne' → t.twin ne' = some ne :
       (t.neRange (idx j)).1 + k by omega] at h1 h2
     rw [h1] at h
     obtain rfl := Option.some.inj h
-    exact h2
+    have hmem := List.mem_filter.1 (List.getElem_mem hk')
+    have hcm := Items.mem_ordered.1 hmem.1
+    have hge : 1 + g.nv ≤ ((items.ordered g j (t.nvRange (idx j)).1 pos).filter (· ≥ 1 + g.nv))[k - items.capCount j] := by
+      simpa using hmem.2
+    exact h2 (H.child_hasCap hn hcm hge)
   · have hk0 : k = 0 := by have := Items.capCount_le (items := items) j; omega
     have hcap : items.hasCap j = true := by
       unfold Items.capCount at hc; by_contra h'; simp [h'] at hc

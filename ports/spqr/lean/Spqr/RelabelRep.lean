@@ -390,14 +390,6 @@ theorem interval_cover {α : Type} (L : List α) (lo hi : α → Nat) (a : Nat)
   · rintro ⟨k, hk, h1, h2⟩
     exact ⟨(hA k hk).trans h1, h2.trans_le (hB (L.length - 1 - k) k hk (by omega))⟩
 
-omit h in
-theorem ordered_perm (i : ItemId) (nvSt : Nat) (pos : Nat → Nat) :
-    (items.ordered g i nvSt pos).Perm (items.ch i) := by
-  unfold Items.ordered
-  split_ifs
-  · exact List.Perm.refl _
-  · exact List.mergeSort_perm _ _
-
 theorem below_iff_aux : ∀ n i, i < items.size → (items.desc i).card = n →
     idx i < t.subtreeEnd[idx i]! ∧
     ∀ j, j < items.size → (items.Below i j ↔ idx i ≤ idx j ∧ idx j < t.subtreeEnd[idx i]!) := by
@@ -407,7 +399,7 @@ theorem below_iff_aux : ∀ n i, i < items.size → (items.desc i).card = n →
   intro i hi hn
   obtain ⟨pos, hl⟩ := (h.node i hi).layout
   have hmem : ∀ c, c ∈ items.ordered g i (t.nvRange (idx i)).1 pos ↔ c ∈ items.ch i :=
-    fun c => (ordered_perm i _ pos).mem_iff
+    fun c => (Items.ordered_perm (i := i) (pos := pos)).mem_iff
   have ihc : ∀ c ∈ items.ordered g i (t.nvRange (idx i)).1 pos,
       idx c < t.subtreeEnd[idx c]! ∧
       ∀ j, j < items.size → (items.Below c j ↔ idx c ≤ idx j ∧ idx j < t.subtreeEnd[idx c]!) :=
@@ -489,7 +481,7 @@ theorem mem_children_iff {i : ItemId} (hi : i < items.size) (n : Nat) :
     n ∈ t.children (idx i) ↔ ∃ c ∈ items.ch i, idx c = n := by
   obtain ⟨pos, hl⟩ := (h.node i hi).layout
   rw [hl.children, List.mem_map]
-  simp only [(ordered_perm i _ pos).mem_iff]
+  simp only [(Items.ordered_perm (i := i) (pos := pos)).mem_iff]
 
 /-! ### `Represents` fields that need only `Items.WF` -/
 
@@ -566,7 +558,7 @@ theorem nEdges_not_node {i : ItemId} (hn : (items.type i).isNode = false) : item
 omit h in
 theorem ordered_filter_perm (i : ItemId) (nvSt : Nat) (pos : Nat → Nat) (p : ItemId → Bool) :
     ((items.ordered g i nvSt pos).filter p).Perm ((items.ch i).filter p) :=
-  (ordered_perm i nvSt pos).filter p
+  (Items.ordered_perm (i := i) (nvSt := nvSt) (pos := pos)).filter p
 
 theorem type_Q_eq {i : ItemId} (hi : i < items.size) (hQ : items.type i = .Q) :
     ∃ e, e < g.ne ∧ i = edgeItem g e := by
@@ -584,7 +576,7 @@ theorem type_Q_eq {i : ItemId} (hi : i < items.size) (hQ : items.type i = .Q) :
 
 theorem hasCap_eq {i : ItemId} (hi : i < items.size) : t.hasCap (idx i) = items.hasCap i := by
   obtain ⟨pos, hl⟩ := (h.node i hi).layout
-  have hperm := ordered_perm (items := items) (g := g) i (t.nvRange (idx i)).1 pos
+  have hperm := Items.ordered_perm (items := items) (g := g) (i := i) (nvSt := (t.nvRange (idx i)).1) (pos := pos)
   by_cases hQ : items.type i = .Q
   · obtain ⟨e, he, rfl⟩ := h.type_Q_eq hi hQ
     have key : (((items.ordered g (edgeItem g e) (t.nvRange (idx (edgeItem g e))).1 pos).map idx).any
@@ -1306,7 +1298,7 @@ theorem twin_glue : ∀ ne ne', t.twin ne = some ne' →
     have hp0s := parent_lt hp0
     by_cases hn0 : (items.type p0).isNode = true
     · obtain ⟨pos0, hl0⟩ := (h.node p0 hp0s).layout
-      have hperm := ordered_perm (items := items) (g := g) p0 (t.nvRange (idx p0)).1 pos0
+      have hperm := Items.ordered_perm (items := items) (g := g) (i := p0) (nvSt := (t.nvRange (idx p0)).1) (pos := pos0)
       have haV : items.type a ≠ .V := by intro hV; rw [hV] at hn; cases hn
       have hage : ¬ a < 1 + g.nv := fun hlt => haV ((h.type_V_iff hp0s hp0).2 hlt)
       have hmem : a ∈ (items.ordered g p0 (t.nvRange (idx p0)).1 pos0).filter (· ≥ 1 + g.nv) :=
@@ -1315,6 +1307,7 @@ theorem twin_glue : ∀ ne ne', t.twin ne = some ne' →
       obtain ⟨p', q', hp', hq', hpq⟩ := h.virt_glue hp0s hn0 hl0 hj
       have htw := (hl0.twin hn0 j hj).2
       rw [hja] at htw hq'
+      have htw := htw hc
       rw [ht] at htw
       cases htw
       rw [hq] at hp'; rw [hp] at hq'
@@ -1353,7 +1346,7 @@ theorem r_virt_nvs {a : ItemId} (ha : a < items.size)
   obtain ⟨u, v, -, hlen4⟩ := h.nvList_R ha hR
   set F := (items.ordered g a (t.nvRange (idx a)).1 pos).filter (· ≥ 1 + g.nv) with hF
   have hcF : F[j] ∈ F := List.getElem_mem hj
-  have hcm : F[j] ∈ items.ch a := (ordered_perm a _ pos).mem_iff.1 (List.mem_filter.1 hcF).1
+  have hcm : F[j] ∈ items.ch a := (Items.ordered_perm (i := a) (pos := pos)).mem_iff.1 (List.mem_filter.1 hcF).1
   have hcge : F[j] ≥ 1 + g.nv := by simpa using (List.mem_filter.1 hcF).2
   have hcV : items.type F[j] ≠ .V := fun hV =>
     absurd ((h.type_V_iff ha hcm).1 hV) (not_lt.2 hcge)

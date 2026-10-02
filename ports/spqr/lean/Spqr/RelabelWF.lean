@@ -95,7 +95,7 @@ theorem chain {i : ItemId} {pos : Nat → Nat}
     intro hk
     obtain ⟨ih1, ih2⟩ := ih (by omega)
     have hmem : L[k]! ∈ items.ch i := by
-      rw [getElem!_pos L k hk]; exact (Items.ordered_perm i _ pos).mem_iff.1 (List.getElem_mem hk)
+      rw [getElem!_pos L k hk]; exact (Items.ordered_perm (i := i) (pos := pos)).mem_iff.1 (List.getElem_mem hk)
     have hc := hch _ hmem
     have hidx := child_idx_eq hl hk
     rw [← hL] at hidx
@@ -153,7 +153,7 @@ theorem subtree_props : ∀ i, i < items.size →
     obtain ⟨k', hk', h3, h4⟩ := h2 j h1 hj
     refine ⟨_, ?_, h3, h4⟩
     rw [getElem!_pos (items.ordered g i (t.nvRange (idx i)).1 pos) _ hk']
-    exact (Items.ordered_perm i _ pos).mem_iff.1 (List.getElem_mem hk')
+    exact (Items.ordered_perm (i := i) (pos := pos)).mem_iff.1 (List.getElem_mem hk')
 
 theorem child_subtree_pos (i : ItemId) :
     ∀ c ∈ items.ch i, idx c < t.subtreeEnd[idx c]! :=
@@ -165,7 +165,7 @@ theorem child_idx_bounds {i : ItemId} (hi : i < items.size) {c : ItemId} (hc : c
   obtain ⟨pos, hl⟩ := (H.node i hi).layout
   have hch := H.child_subtree_pos i
   set L := items.ordered g i (t.nvRange (idx i)).1 pos with hL
-  have hcL : c ∈ L := (Items.ordered_perm i _ pos).mem_iff.2 hc
+  have hcL : c ∈ L := (Items.ordered_perm (i := i) (pos := pos)).mem_iff.2 hc
   obtain ⟨k, hk, hkc⟩ := List.getElem_of_mem hcL
   rw [← hkc, ← getElem!_pos L k hk, child_idx_eq hl hk]
   have h0 := chainEnd_mono hl hch (Nat.zero_le k) hk.le
@@ -282,10 +282,10 @@ theorem preorder : t.Preorder := by
     rw [List.mem_filter, List.mem_range, List.mem_map, decide_eq_true_eq, H.parent_eq_iff hi]
     constructor
     · rintro ⟨c, hc, rfl⟩
-      have hc' := (Items.ordered_perm i _ pos).mem_iff.1 hc
+      have hc' := (Items.ordered_perm (i := i) (pos := pos)).mem_iff.1 hc
       exact ⟨H.idx_lt (H.tree.child_lt hc'), c, hc', rfl⟩
     · rintro ⟨-, c, hc, rfl⟩
-      exact ⟨c, (Items.ordered_perm i _ pos).mem_iff.2 hc, rfl⟩
+      exact ⟨c, (Items.ordered_perm (i := i) (pos := pos)).mem_iff.2 hc, rfl⟩
   · intro n hn
     obtain ⟨i, hi, rfl⟩ := H.idx_surj hn
     obtain ⟨pos, hl⟩ := (H.node i hi).layout
@@ -386,7 +386,7 @@ theorem shape_local (hor : items.ROriented g) {i : ItemId} (hi : i < items.size)
         rw [hEdef]
         unfold Items.edgeChildren Items.virtualEdges
         rw [List.map_map]
-        refine (((Items.ordered_perm i _ pos).filter _).map _).trans ?_
+        refine (((Items.ordered_perm (i := i) (pos := pos)).filter _).map _).trans ?_
         rw [ht.filter_nonV_eq]
         exact List.Perm.refl _
       have hinj : ∀ a ∈ items.nvList g i, ∀ b ∈ items.nvList g i, pos a = pos b → a = b := by
