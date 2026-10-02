@@ -222,6 +222,7 @@ flattened state machine:
     Spqr/Sim.lean, Spqr/Frame.lean  Lifts/Sim relation: walk on tstack `top ++ bot` simulates walk on `top`; finishEdge block lemmas (Sim.closeVert, Sim.finishEdge, Sim.walkTree proved; only the stack-shape fact `walkTree_guards` admitted)
     Spqr/SepPair.lean    separation pairs / classes / DFS ancestry definitions (PROOF.md §3)
     Spqr/WalkTyping.lean typing/allocation invariant of the walk (`walk_typing`; only `walk_q_children` admitted)
+    Spqr/WalkPlace.lean  placement invariant: each item id in at most one span/ch list ⇒ ch lists nodup, parent unique (walk_place; walk_covered/walk_tstack_nil/walk_root_children/walk_reach admitted pending the ear side-emptiness fact)
     Spqr/Proofs/SepPair.lean  Facts A–C proved (no sorry)
     Spqr/SepPairExhaust.lean, Spqr/Proofs/SepPairExhaust.lean  separation pairs of a block = type-1 ∪ type-2 pairs; three_connected_of_no_split (no sorry)
     Spqr/Contract.lean, Spqr/Proofs/Contract.lean  skeleton = contraction of a laminar family of 2-attached pieces; separation pairs of skeleton vs block (non-terminal pairs), threeConnected_contract_iff_dfs, TwoAttached.sepClass_mem (0 sorry)
