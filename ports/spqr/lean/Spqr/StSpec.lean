@@ -1,5 +1,6 @@
 import Mathlib.Data.List.Nodup
 import Spqr.Correctness
+import Spqr.StLayout
 
 /-!
 # The st-ordering layer of the output
@@ -150,21 +151,22 @@ theorem edgeChildren_dominance (l : List (Nat × Nat))
   pairwise_dominance_of_sorted_sum l h
 
 /-- The reverse fill of `layoutNode` for an R node: with `edgeChildren` in dominance order and each
-`(a, c)` oriented `a < c`, every row `2 nv` of the layout holds the lower incidences of `nv`, row
-`2 nv + 1` the higher ones, with non-increasing destination. -/
+`(a, c)` oriented `a < c`, row `2 nv` of the layout (`LayoutR.row`) holds the lower incidences of
+`nv`, row `2 nv + 1` the higher ones, each with non-increasing destination. Proved in
+`Spqr.StLayout` by relating the imperative layout to a fold model (`LayoutR.run`). -/
 theorem layoutNode_r_bracket (node nvSt nvEn neSt neEn : Nat) (edgeChildren : List (Nat × Nat))
+    (hv : nvSt + 2 ≤ nvEn)
     (hor : ∀ p ∈ edgeChildren, nvSt ≤ p.1 ∧ p.1 < p.2 ∧ p.2 < nvEn)
     (hdom : edgeChildren.Pairwise fun p q => p ≠ q → ¬ (q.1 ≤ p.1 ∧ q.2 ≤ p.2))
     (hnd : edgeChildren.Nodup) (hne : neEn = neSt + edgeChildren.length + 1) :
     let l := layoutNode .R node nvSt nvEn neSt neEn edgeChildren
     ∀ nv, nvSt ≤ nv → nv < nvEn →
-      let row (r : Nat) : List NodeAdj :=
-        (List.range (l.adjBounds[r + 1 - 2 * nvSt]! - l.adjBounds[r - 2 * nvSt]!)).map fun k =>
-          l.adjDat[l.adjBounds[r - 2 * nvSt]! + k - 2 * neSt]!
-      (∀ a ∈ row (2 * nv), a.destNv < nv) ∧ (∀ a ∈ row (2 * nv + 1), nv < a.destNv) ∧
-      ((row (2 * nv)).map (·.destNv)).Pairwise (· ≥ ·) ∧
-      ((row (2 * nv + 1)).map (·.destNv)).Pairwise (· ≥ ·) := by
-  sorry
+      (∀ a ∈ LayoutR.row nvSt neSt l (2 * nv), a.destNv < nv) ∧
+      (∀ a ∈ LayoutR.row nvSt neSt l (2 * nv + 1), nv < a.destNv) ∧
+      ((LayoutR.row nvSt neSt l (2 * nv)).map (·.destNv)).Pairwise (· ≥ ·) ∧
+      ((LayoutR.row nvSt neSt l (2 * nv + 1)).map (·.destNv)).Pairwise (· ≥ ·) :=
+  fun nv h1 h2 =>
+    LayoutR.layoutNode_R_bracket node nvSt nvEn neSt neEn edgeChildren hv hor hdom hnd hne nv h1 h2
 
 /-! ### The theorems -/
 
