@@ -28,6 +28,8 @@ import Spqr.SepPairExhaust
 import Spqr.Proofs.SepPairExhaust
 import Spqr.StSpec
 import Spqr.StWalk
+import Spqr.StEar
+import Spqr.StFrame
 import Spqr.Planar
 import Spqr.PlanarWalk
 import Spqr.PlanarRelabel
@@ -39,6 +41,5 @@ import Spqr.Proofs.ForestSpec
 import Spqr.Contract
 import Spqr.Proofs.Contract
 import Spqr.Proofs.SepClasses
-import Spqr.StEar
 import Spqr.RMax
 import Spqr.Proofs.RMax
