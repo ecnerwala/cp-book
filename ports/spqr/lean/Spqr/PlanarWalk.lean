@@ -9,7 +9,7 @@ The planar walk is the ordinary walk (`Spqr.Walk`) run on the same `WalkState`, 
 and its `Planarity` data), closed S/P/R items record four quarter-edge matches, and the global
 `qem` (quarter-edge matches) accumulates the partial rotation system. Every step below is a base
 step lifted by `liftW` interleaved with steps that only touch the auxiliary state, so the base
-component of the planar walk is the ordinary walk (`planarWalk_proj`, in `Spqr.PlanarSpec`).
+component of the planar walk is the ordinary walk (`planarWalk_proj`, in `Spqr.PlanarWalkProj`).
 
 Virtual edge `ve = item - (1 + nv)` caps item `item`; its quarter-edges are `4 ve + 2 side + dir`.
 
@@ -280,10 +280,6 @@ def pushEdgeTstack (vStart topDepth e : Nat) (isTree : Bool) : PlanarWalkM Unit 
   let item := edgeItem (← liftW get).g e
   let pl ← makeEdgePlanarity item topDepth isTree
   pushTstack vStart topDepth item (some pl)
-def popTstack : PlanarWalkM (TEntry × PlEntry) := do
-  let t ← liftW WalkM.popTstack
-  let p ← popPl
-  return (t, p)
 
 def mergeTstackTops : PlanarWalkM Unit := do
   liftW WalkM.mergeTstackTops
@@ -374,7 +370,7 @@ def flipForLowval (lowval origTstack : Nat) : PlanarWalkM Unit := do
   if let some p := e.pl then
     if (p.sides.1.top.map (·.depths.2)) == some lowval then modifyPlAt (origTstack + 2) flipEntry
   let n ← liftW WalkM.tstackSize
-  for i in [origTstack + 3 : n] do
+  (List.range' (origTstack + 3) (n - (origTstack + 3))).forM fun i => do
     if (← topDepthAt i) == lowval then modifyPlAt i flipEntry
 
 /-- Leaving a child along an edge of direction `edgeDir`: fold both sides onto `!edgeDir`. -/
@@ -406,12 +402,15 @@ def planarFinishEdge (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : B
         let item ← allocItem .I
         let vs ← liftW (WalkM.makeVs nxtV d)
         liftW (WalkM.modifyItem item fun it => { it with vs := vs })
-        let (t, tp) ← popTstack
+        let t ← liftW WalkM.popTstack
+        let tp ← popPl
         liftW (WalkM.modifyItem qItem fun it => { it with ch := item :: t.spans.2 })
         setItemFlips qItem (false :: tp.flips.2)
       else
-        let (backedge, bp) ← popTstack
-        let (t, tp) ← popTstack
+        let backedge ← liftW WalkM.popTstack
+        let bp ← popPl
+        let t ← liftW WalkM.popTstack
+        let tp ← popPl
         liftW (WalkM.modifyItem qItem fun it => { it with ch := backedge.spans.1 ++ t.spans.2 })
         setItemFlips qItem (bp.flips.1 ++ tp.flips.2)
     else
@@ -519,7 +518,8 @@ open PlanarWalkM in
 def planarWalkForest (forest : List DfsTree) : PlanarWalkM Unit :=
   forest.forM fun t => do
     planarWalkTree t 0
-    let (top, tp) ← popTstack
+    let top ← liftW WalkM.popTstack
+    let tp ← popPl
     liftW (WalkM.modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 })
     modifyItemFlips rootItem (· ++ tp.flips.2)
 
