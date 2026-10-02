@@ -193,12 +193,6 @@ theorem RStep.inv_absurd (h : s.Inv d) (h2 : s.g.TwoConnected) (hr : s.RStep d c
   · exact hr.ne h.symm
   · exact hcurA.ne h2 he₁ hE₁ he₀ (fun h => hU₀ (.inl h)) h
 
-theorem EntryInv'.toEntryInv {D : Nat} {t : TEntry} (h : s.EntryInv' D [] t) : s.EntryInv D t :=
-  ⟨h.conn, fun v e e' he he' hE hE' hv hv' =>
-    match h.attached v e e' he he' hE hE' hv hv' with
-    | .inl h => h
-    | .inr ⟨_, h, _⟩ => absurd h (List.not_mem_nil)⟩
-
 /-- `cur` is 2-attached at `{cur.vStart, stackVerts[d]}` under `Inv' D` when the stack vertices
 `stackVerts[d+1..D]` all equal `cur.vStart` (`cur` is the top entry, so `Term'` is `Term`). -/
 theorem RStep.cur_attached {D : Nat} (h : s.Inv' D)
@@ -210,8 +204,8 @@ theorem RStep.cur_attached {D : Nat} (h : s.Inv' D)
   rwa [hr.cur_top] at this
 
 /-- The union is 2-attached at `{nxt.vStart, stackVerts[d]}`: `nxt` may attach at `cur.vStart`
-(as `stackVerts[d+1..D]` or as the bottom of the entry above it in `Term'`), which is interior to
-`U`. -/
+(as `stackVerts[d+1..D]`, or through `Term'` at a terminal of `cur`, the entry above it), which is
+interior to `U`. -/
 theorem RStep.union_attached {D : Nat} (h : s.Inv' D)
     (hmid : ∀ k, d < k → k ≤ D → s.stackVerts[k]! = cur.vStart) (hr : s.RStep d cur nxt rest) :
     s.g.TwoAttached (s.rU cur nxt) nxt.vStart s.stackVerts[d]! := by
@@ -226,12 +220,17 @@ theorem RStep.union_attached {D : Nat} (h : s.Inv' D)
     · exact absurd h hvc
     · exact .inr h
   · rcases hnxt.attached v e e' he he' hE (fun h => hE' (.inr h)) hv hv' with
-      (h | ⟨k, h1, h2, rfl⟩) | ⟨t', ht', rfl⟩
+      (h | ⟨k, h1, h2, rfl⟩) | ⟨t', ht', hT⟩
     · exact .inl h
     · rcases Nat.eq_or_lt_of_le h1 with h1 | h1
       · exact .inr (by rw [← h1, hr.nxt_top])
       · exact absurd (hmid k (by have := hr.nxt_top; omega) h2) hvc
-    · exact absurd (congrArg TEntry.vStart (List.mem_singleton.1 ht')) hvc
+    · obtain rfl := List.mem_singleton.1 ht'
+      rcases hT with hT | ⟨k, h1, h2, rfl⟩
+      · exact absurd hT hvc
+      · rcases Nat.eq_or_lt_of_le h1 with h1 | h1
+        · exact .inr (by rw [← h1, hr.cur_top])
+        · exact absurd (hmid k (by have := hr.cur_top; omega) h2) hvc
 
 /-- The R case of loop 1 is an `RCloseShape`, from the invariant `Inv' D` at any depth `D ≥ d`
 whose intermediate stack vertices `stackVerts[d+1..D]` all equal `cur.vStart` (at the R branch of

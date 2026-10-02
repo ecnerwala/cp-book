@@ -212,7 +212,7 @@ theorem iter_succ' (body : WalkM Unit) (k : Nat) (s : WalkState) :
   | succ k ih => exact ih _
 
 /-- `Inv`/`Shape` at every iterate of Loop 1 whose guards `CloseEarsOk.body` supplies. -/
-theorem closeEars_iter_step {D v nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv D) (hs : Shape s)
+theorem closeEars_iter_step {D v nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : Shape s)
     (hv : v < s.g.nv) (hok : CloseEarsOk D nxtV d e edgeDir s) (k : Nat)
     (hk : ∀ j, j ≤ k → result (loop1Cond d) (iter (loop1Body d edgeDir) j (ceS₁ nxtV d e s)) = true) :
     Step D v s (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)) := by
@@ -237,7 +237,7 @@ takes `FinishOk`/`FinishGuards` (stack shape) as hypotheses; `dfs` is the sorted
 block `s.g` and `stackVerts[0..d]` its ancestor chain of `curV`. -/
 theorem finishEdge_rInvAt {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsOut) (origTstack : Nat)
     (hasVert : Bool) (ho : o.cls = .ret lv kind) (hlow : lv < d) (hv : curV < s.g.nv)
-    (hi : s.Inv D) (hs : Shape s) (hok : FinishOk D curV d lv o origTstack hasVert s)
+    (hi : s.Inv' D) (hs : Shape s) (hok : FinishOk D curV d lv o origTstack hasVert s)
     (hg : FinishGuards d o origTstack hasVert s)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hd : dfs.depth curV = d) (hcur : s.stackVerts[d]! = curV)
@@ -250,7 +250,7 @@ theorem finishEdge_rInvAt {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsO
 state settled at `c` (no entry has bottom `c` yet) leaves a state settled at its parent
 `stackVerts[d]`: once `c`'s out-edges are done every `(c, l)` class has been P-merged into the single
 `(c, l)` entry, which is then `maximal`. -/
-theorem walkTree_rInvAt {D : Nat} (d : Nat) (c : Nat) (outs : List DfsOut) (hi : s.Inv D) (hs : Shape s)
+theorem walkTree_rInvAt {D : Nat} (d : Nat) (c : Nat) (outs : List DfsOut) (hi : s.Inv' D) (hs : Shape s)
     (hg : GuardsTree (.node c outs) (d + 1) s)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hc : dfs.IsParent s.stackVerts[d]! c) (hR : s.RInvAt dfs c) :
@@ -267,7 +267,7 @@ need the Loop-1 ear content (entries with `topDepth > d` have `vStart = nxtV`; t
 `topDepth ≥ d` hold exactly the tree edge and the child's subtree edges) as a further hypothesis
 or from `EarShape`; only `tstack`, `cur_top`, `nxt_top`, `ne` follow from `run_loop1Cond`,
 `loop1Type_run` and the head-`topDepth` induction. -/
-theorem loop1_rBranch {D nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv D) (hs : Shape s)
+theorem loop1_rBranch {D nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : Shape s)
     (hok : CloseEarsOk D nxtV d e edgeDir s)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hc : nxtV = s.stackVerts[d + 1]!) (hR : s.RInvAt dfs s.stackVerts[d]!) (k : Nat)
@@ -278,9 +278,9 @@ theorem loop1_rBranch {D nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv D) (hs : S
   sorry
 
 /-- The R skeleton closed at any R branch of Loop 1 is 3-connected (modulo `loop1_rBranch`): the
-walk at depth `d` runs under `Inv (d+1)` (via `Step`; `RBranch.threeConnected` itself only needs
+walk at depth `d` runs under `Inv' (d+1)` (via `Step`; `RBranch.threeConnected` itself only needs
 `Inv' (d+1)`), and `Step` keeps `g` and `stackVerts`. -/
-theorem loop1_r_threeConnected {nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv (d + 1)) (hs : Shape s)
+theorem loop1_r_threeConnected {nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' (d + 1)) (hs : Shape s)
     (hok : CloseEarsOk (d + 1) nxtV d e edgeDir s) (hv : nxtV < s.g.nv)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hc : nxtV = s.stackVerts[d + 1]!) (hR : s.RInvAt dfs s.stackVerts[d]!) (k : Nat)
@@ -295,7 +295,7 @@ theorem loop1_r_threeConnected {nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv (d 
   have st := closeEars_iter_step (v := nxtV) hi hs hv hok k hk
   have hg : sk.g = s.g := st.g
   exact ⟨cur, nxt, rest, hb,
-    hb.threeConnected (.of_inv st.inv) (hg ▸ h2) (hg ▸ hsp) (hg ▸ hrt) hR'⟩
+    hb.threeConnected st.inv (hg ▸ h2) (hg ▸ hsp) (hg ▸ hrt) hR'⟩
 
 end WalkState
 

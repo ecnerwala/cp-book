@@ -361,6 +361,187 @@ theorem Shape.frame (hg : s'.g = s.g) (hi : s'.items = s.items) (hts : s'.tstack
   exact ⟨by rw [hg, hi]; exact size, by rw [hi]; exact root, by rw [hg, hi]; exact vert,
     by rw [hg, hi]; exact edge, by rw [hi]; exact ch_lt, by rw [hi, hts]; exact span⟩
 
+end WalkState
+
+namespace TEntry
+
+variable {D D' : Nat} {s : WalkState} {t : TEntry} {v : Nat}
+
+theorem Term.mono (hD : D ≤ D') (h : t.Term D s v) : t.Term D' s v := by
+  rcases h with hv | ⟨k, h1, h2, h3⟩
+  · exact .inl hv
+  · exact .inr ⟨k, h1, Nat.le_trans h2 hD, h3⟩
+
+/-- `v` is a terminal of `t` or of an entry above `t`. -/
+def Term' (D : Nat) (s : WalkState) (above : List TEntry) (t : TEntry) (v : Nat) : Prop :=
+  t.Term D s v ∨ ∃ t' ∈ above, t'.Term D s v
+
+theorem Term'_of_Term {above : List TEntry} (h : t.Term D s v) : t.Term' D s above v := .inl h
+
+theorem Term'_nil : t.Term' D s [] v ↔ t.Term D s v := by simp [Term']
+
+end TEntry
+
+namespace WalkState
+
+variable {D D' : Nat} {s s' : WalkState}
+
+/-- `EntryInv` with the attachment set widened by the terminals of the entries `above`. -/
+structure EntryInv' (D : Nat) (s : WalkState) (above : List TEntry) (t : TEntry) : Prop where
+  conn : s.g.ConnEdges (t.edges s.g s.items)
+  attached : s.g.AttachedIn (t.edges s.g s.items) (t.Term' D s above)
+
+/-- The entries `l` of the stack, read top-down, below the entries `above` (nearest first). -/
+def Stack (D : Nat) (s : WalkState) : List TEntry → List TEntry → Prop
+  | _, [] => True
+  | above, t :: rest => s.EntryInv' D above t ∧ s.Stack D (t :: above) rest
+
+/-- `Inv` with the attachment set of every open entry widened to `Term'`: its own terminals or
+those of the entries above it (`above`, nearest last). The context of the top entry is empty, so
+the top entry satisfies `EntryInv D` and every close (`finishTstackTop` acts on the top) records a
+strictly 2-attached item. -/
+structure Inv' (D : Nat) (s : WalkState) : Prop where
+  entries : ∀ above t below, s.tstack = above ++ t :: below → s.EntryInv' D above t
+  nodes : ∀ i, 1 + s.g.nv + s.g.ne ≤ i → i < s.items.size → s.ItemInv i
+
+theorem Stack_nil {A : List TEntry} : s.Stack D A [] := trivial
+
+theorem Stack_cons {A rest : List TEntry} {t : TEntry} :
+    s.Stack D A (t :: rest) ↔ s.EntryInv' D A t ∧ s.Stack D (t :: A) rest := Iff.rfl
+
+theorem EntryInv'.of_entryInv {above : List TEntry} {t : TEntry} (h : s.EntryInv D t) :
+    s.EntryInv' D above t :=
+  ⟨h.conn, h.attached.mono fun _ hv => .inl hv⟩
+
+theorem EntryInv'.toEntryInv {t : TEntry} (h : s.EntryInv' D [] t) : s.EntryInv D t :=
+  ⟨h.conn, h.attached.mono fun v hv => by
+    rcases hv with hv | ⟨_, h, _⟩
+    · exact hv
+    · simp at h⟩
+
+theorem EntryInv'.congr {A : List TEntry} {t : TEntry} (hg : s'.g = s.g) (hsv : s'.stackVerts = s.stackVerts)
+    (hE : ∀ e, e < s.g.ne → (t.edges s.g s'.items e ↔ t.edges s.g s.items e))
+    (h : s.EntryInv' D A t) : s'.EntryInv' D A t := by
+  refine ⟨?_, ?_⟩ <;> rw [hg]
+  · exact (Graph.ConnEdges.congr hE).2 h.conn
+  · refine (Graph.AttachedIn.congr hE).2 (h.attached.mono fun v hv => ?_)
+    simp only [TEntry.Term', TEntry.Term, hsv] at hv ⊢
+    exact hv
+
+theorem EntryInv'.perm {A A' : List TEntry} {t : TEntry} (h : ∀ x, x ∈ A ↔ x ∈ A') (hs : s.EntryInv' D A t) :
+    s.EntryInv' D A' t :=
+  ⟨hs.conn, hs.attached.mono fun _ hv => hv.elim .inl fun ⟨t', ht', hT⟩ => .inr ⟨t', (h t').1 ht', hT⟩⟩
+
+theorem EntryInv'.mono {A : List TEntry} {t : TEntry} (hD : D ≤ D') (h : s.EntryInv' D A t) :
+    s.EntryInv' D' A t :=
+  ⟨h.conn, h.attached.mono fun _ hv => hv.elim (fun h => .inl (h.mono hD))
+    fun ⟨t', h1, h2⟩ => .inr ⟨t', h1, h2.mono hD⟩⟩
+
+/-- Replacing the context `A` by `A'`: every terminal of `A` at which an entry of `l` is attached
+is a terminal of that entry or of `A'`. -/
+theorem Stack.transfer {A A' l : List TEntry}
+    (h : ∀ t ∈ l, ∀ v, (∃ t' ∈ A, t'.Term D s v) → s.g.Touches (t.edges s.g s.items) v →
+      t.Term D s v ∨ ∃ t' ∈ A', t'.Term D s v)
+    (hs : s.Stack D A l) : s.Stack D A' l := by
+  induction l generalizing A A' with
+  | nil => exact Stack_nil
+  | cons t rest ih =>
+    obtain ⟨ht, hrest⟩ := Stack_cons.1 hs
+    refine Stack_cons.2 ⟨⟨ht.conn, ht.attached.strengthen.mono ?_⟩, ih (A := t :: A) (A' := t :: A') ?_ hrest⟩
+    · rintro v ⟨hv, htouch, -⟩
+      rcases hv with hv | hv
+      · exact .inl hv
+      · exact h t (by simp) v hv htouch
+    · intro u hu v hv htouch
+      obtain ⟨t', ht', hT⟩ := hv
+      simp only [List.mem_cons] at ht'
+      rcases ht' with rfl | ht'
+      · exact .inr ⟨t', by simp, hT⟩
+      · rcases h u (by simp [hu]) v ⟨t', ht', hT⟩ htouch with h' | ⟨t'', h1, h2⟩
+        · exact .inl h'
+        · exact .inr ⟨t'', by simp [h1], h2⟩
+
+theorem Stack.mono_above {A A' l : List TEntry} (h : ∀ t' ∈ A, t' ∈ A') (hs : s.Stack D A l) :
+    s.Stack D A' l :=
+  hs.transfer fun _ _ _ ⟨t', ht', hT⟩ _ => .inr ⟨t', h t' ht', hT⟩
+
+theorem Stack.monoD {A l : List TEntry} (hD : D ≤ D') (hs : s.Stack D A l) : s.Stack D' A l := by
+  induction l generalizing A with
+  | nil => exact Stack_nil
+  | cons t rest ih =>
+    obtain ⟨ht, hrest⟩ := Stack_cons.1 hs
+    exact Stack_cons.2 ⟨ht.mono hD, ih hrest⟩
+
+theorem Stack.congr {A l : List TEntry} (hg : s'.g = s.g) (hsv : s'.stackVerts = s.stackVerts)
+    (hE : ∀ t ∈ l, ∀ e, e < s.g.ne → (t.edges s.g s'.items e ↔ t.edges s.g s.items e))
+    (hs : s.Stack D A l) : s'.Stack D A l := by
+  induction l generalizing A with
+  | nil => exact Stack_nil
+  | cons t rest ih =>
+    obtain ⟨ht, hrest⟩ := Stack_cons.1 hs
+    exact Stack_cons.2 ⟨ht.congr hg hsv (hE t (by simp)), ih (fun u hu => hE u (by simp [hu])) hrest⟩
+
+theorem Stack.of_entryInv {A : List TEntry} : ∀ {l : List TEntry}, (∀ t ∈ l, s.EntryInv D t) → s.Stack D A l
+  | [], _ => Stack_nil
+  | t :: rest, h => Stack_cons.2 ⟨.of_entryInv (h t (by simp)), Stack.of_entryInv fun u hu => h u (by simp [hu])⟩
+
+/-- `Stack` read off the stack decomposition (the context is the reversed prefix). -/
+theorem Stack_iff {A : List TEntry} : ∀ {l : List TEntry}, s.Stack D A l ↔
+    ∀ above t below, l = above ++ t :: below → s.EntryInv' D (above.reverse ++ A) t
+  | [] => ⟨fun _ above t below h => by cases above <;> simp at h, fun _ => Stack_nil⟩
+  | t :: rest => by
+    rw [Stack_cons, Stack_iff (A := t :: A) (l := rest)]
+    constructor
+    · rintro ⟨h1, h2⟩ above u below heq
+      cases above with
+      | nil =>
+        simp only [List.nil_append, List.cons.injEq] at heq
+        obtain ⟨rfl, rfl⟩ := heq
+        simpa using h1
+      | cons a above =>
+        simp only [List.cons_append, List.cons.injEq] at heq
+        obtain ⟨rfl, heq⟩ := heq
+        refine (h2 above u below heq).perm fun x => ?_
+        simp only [List.mem_append, List.mem_reverse, List.mem_cons, List.reverse_cons,
+          List.not_mem_nil, or_false]
+        tauto
+    · intro h
+      refine ⟨by simpa using h [] t rest rfl, fun above u below heq => (h (t :: above) u below (by simp [heq])).perm
+        fun x => ?_⟩
+      simp only [List.mem_append, List.mem_reverse, List.mem_cons, List.reverse_cons,
+        List.not_mem_nil, or_false]
+      tauto
+
+theorem Inv'.stack (h : s.Inv' D) : s.Stack D [] s.tstack :=
+  Stack_iff.2 fun above t below hts => (h.entries above t below hts).perm fun x => by simp
+
+theorem Inv'.ofStack (h : s.Stack D [] s.tstack)
+    (hn : ∀ i, 1 + s.g.nv + s.g.ne ≤ i → i < s.items.size → s.ItemInv i) : s.Inv' D :=
+  ⟨fun above t below hts => (Stack_iff.1 h above t below hts).perm fun x => by simp, hn⟩
+
+theorem Inv'.setTstack (h : s.Inv' D) (l : List TEntry) (hl : s.Stack D [] l) : Inv' D { s with tstack := l } :=
+  Inv'.ofStack (hl.congr (s := s) rfl rfl fun _ _ _ _ => Iff.rfl)
+    fun i hi hsz => ItemInv.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) (h.nodes i hi hsz)
+
+theorem Inv'.of_inv (h : s.Inv D) : s.Inv' D := Inv'.ofStack (Stack.of_entryInv h.entries) h.nodes
+
+theorem Inv'.mono (h : s.Inv' D) (hD : D ≤ D') : s.Inv' D' := Inv'.ofStack (h.stack.monoD hD) h.nodes
+
+/-- The top entry satisfies the original `EntryInv`. -/
+theorem Inv'.top {t : TEntry} {rest : List TEntry} (h : s.Inv' D) (hs : s.tstack = t :: rest) :
+    s.EntryInv D t := by
+  have := h.stack; rw [hs] at this
+  exact (Stack_cons.1 this).1.toEntryInv
+
+theorem Inv'.frame (hg : s'.g = s.g) (hsv : s'.stackVerts = s.stackVerts) (hi : s'.items = s.items)
+    (hts : s'.tstack = s.tstack) (h : s.Inv' D) : s'.Inv' D := by
+  refine Inv'.ofStack (by rw [hts]; exact h.stack.congr hg hsv (fun _ _ _ _ => by rw [hi]))
+    fun i hi' hsz => ItemInv.congr hg (by rw [hi]) (fun _ _ => by rw [hi]) (h.nodes i ?_ ?_)
+  · rwa [hg] at hi'
+  · rwa [hi] at hsz
+
+/-! ### Running the primitives (continued) -/
+
 /-- The attachment of an entry whose terminals above `topDepth` are its bottom, interior, or
 untouched: it is 2-attached at `vStart` and `stackVerts[topDepth]`. -/
 theorem TwoAttached.of_term {E : Nat → Prop} {t : TEntry} (h : s.g.AttachedIn E (t.Term D s))
@@ -691,12 +872,202 @@ theorem finishTstackTop_complete (item : ItemId) (t : TEntry) (rest : List TEntr
     · exact ItemInv.congr (s := s) rfl (Items.vs_modify_of_ne item f hi')
         (fun _ _ => Items.Below_modify_of_not_below item f (hnb i hi')) (h.nodes i hi hsize)
 
+/-! ### `Inv'` preservation by the primitives -/
+
+theorem Inv'.alloc (ty : NodeType) (h : s.Inv' D) (hsize : 1 + s.g.nv + s.g.ne ≤ s.items.size) :
+    Inv' D { s with items := s.items.push ⟨ty, (none, none), []⟩ } := by
+  have hB : ∀ a i, Items.Below (s.items.push ⟨ty, (none, none), []⟩) a i ↔ Items.Below s.items a i :=
+    fun _ _ => Items.Below_push_nil _ rfl
+  refine Inv'.ofStack (h.stack.congr (s := s) rfl rfl (fun _ _ e _ => TEntry.edges_congr (fun i _ e => hB i _) e))
+    fun i hi hsz => ?_
+  have hsz' : i < s.items.size + 1 := by simpa using hsz
+  by_cases hi' : i = s.items.size
+  · subst hi'
+    have hE : ∀ e, e < s.g.ne → ¬ Items.EdgeBelow s.g (s.items.push ⟨ty, (none, none), []⟩) s.items.size e := by
+      intro e he hb
+      rcases hb.head_cases with heq | ⟨c, hc, _⟩
+      · have : s.items.size = 1 + s.g.nv + e := heq
+        omega
+      · simp [Items.IsParent, Items.ch_push_size ⟨ty, (none, none), []⟩ rfl] at hc
+    exact ⟨Graph.ConnEdges.empty hE, fun _ _ _ => Graph.TwoAttached.empty hE⟩
+  · exact ItemInv.congr (s := s) rfl (Items.vs_push_of_ne _ hi') (fun e _ => hB i _) (h.nodes i hi (by omega))
+
+theorem Inv'.modifyVs (j : ItemId) (vsv : Option Nat × Option Nat) (h : s.Inv' D) (hj : j < 1 + s.g.nv + s.g.ne) :
+    Inv' D { s with items := s.items.modify j fun it => { it with vs := vsv } } := by
+  have hB : ∀ a i, Items.Below (s.items.modify j fun it => { it with vs := vsv }) a i ↔ Items.Below s.items a i :=
+    fun _ _ => Items.Below_modify_ch_eq j (fun it => { it with vs := vsv }) fun _ => rfl
+  refine Inv'.ofStack (h.stack.congr (s := s) rfl rfl (fun _ _ e _ => TEntry.edges_congr (fun i _ e => hB i _) e))
+    fun i hi hsz => ?_
+  have hsz' : i < s.items.size := by simpa using hsz
+  have hne : i ≠ j := by intro h; subst h; exact absurd hi (Nat.not_le.2 hj)
+  exact ItemInv.congr (s := s) rfl (Items.vs_modify_of_ne _ _ hne) (fun e _ => hB i _) (h.nodes i hi hsz')
+
+theorem Inv'.pushVert (v d : Nat) (h : s.Inv' D)
+    (hc : s.g.ConnEdges (Items.EdgeBelow s.g s.items (vertItem v)))
+    (ha : s.g.TwoAttached (Items.EdgeBelow s.g s.items (vertItem v)) v v) :
+    ((pushVertTstack v d).run s).2.Inv' D := by
+  rw [pushVertTstack, run_pushTstack]
+  refine Inv'.ofStack (Stack_cons.2 ⟨?_, (h.stack.mono_above (by simp)).congr (s := s) rfl rfl (fun _ _ _ _ => Iff.rfl)⟩)
+    fun i hi hsz => ItemInv.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) (h.nodes i hi hsz)
+  have hE : ∀ e, TEntry.edges s.g s.items ⟨v, d, s.nxtEdgeIdx, setSides s.stackDir[d]! [vertItem v] []⟩ e ↔
+      Items.EdgeBelow s.g s.items (vertItem v) e := by
+    intro e; simp only [TEntry.edges, mem_setSides, List.mem_singleton, exists_eq_left]
+  refine ⟨(Graph.ConnEdges.congr fun e _ => hE e).2 hc, ?_⟩
+  refine ((Graph.AttachedIn.congr fun e _ => hE e).2 (Graph.twoAttached_iff.1 ha)).mono fun x hx => ?_
+  rcases hx with rfl | rfl <;> exact .inl (.inl rfl)
+
+theorem Inv'.pushEdge (vStart topDepth e : Nat) (h : s.Inv' D) (_he : e < s.g.ne)
+    (hq : Items.ch s.items (edgeItem s.g e) = [])
+    (hend : Items.PairEq (vStart, s.stackVerts[topDepth]!) s.g.edges[e]!) (hD : topDepth ≤ D) :
+    ((pushEdgeTstack vStart topDepth e).run s).2.Inv' D := by
+  rw [run_pushEdgeTstack]
+  refine Inv'.ofStack (Stack_cons.2 ⟨?_, (h.stack.mono_above (by simp)).congr (s := s) rfl rfl (fun _ _ _ _ => Iff.rfl)⟩)
+    fun i hi hsz => ItemInv.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) (h.nodes i hi hsz)
+  have hE := TEntry.edges_edgeEntry (items := s.items) s.stackDir[topDepth]! vStart topDepth s.nxtEdgeIdx e hq
+  refine ⟨Graph.ConnEdges.single hE,
+    (Graph.twoAttached_iff.1 (Graph.TwoAttached.single_of_pairEq hE hend)).mono fun x hx => .inl ?_⟩
+  rcases hx with rfl | rfl
+  · exact .inl rfl
+  · exact .inr ⟨topDepth, Nat.le_refl _, hD, rfl⟩
+
+/-- `mergeTstackTops` under `MergeOk`, when the entries below are edge-disjoint from the two merged
+ones (so none of them is attached at a vertex interior to the union). -/
+theorem Inv'.mergeTop (cur nxt : TEntry) (rest : List TEntry) (hs : s.tstack = cur :: nxt :: rest)
+    (h : s.Inv' D) (hok : MergeOk D s cur nxt)
+    (hdisj : ∀ t ∈ rest, ∀ e, e < s.g.ne → t.edges s.g s.items e →
+      ¬ (cur.edges s.g s.items e ∨ nxt.edges s.g s.items e)) :
+    (mergeTstackTops.run s).2.Inv' D := by
+  rw [mergeTstackTops_run_eq s cur nxt rest hs]
+  have hst := h.stack; rw [hs] at hst
+  obtain ⟨hc, hn, hrest⟩ := (Stack_cons.1 hst).imp_right Stack_cons.1
+  have hc' : s.EntryInv D cur := hc.toEntryInv
+  have hcur : ∀ v, ¬ s.g.Interior (fun e => cur.edges s.g s.items e ∨ nxt.edges s.g s.items e) v →
+      cur.Term D s v → (TEntry.mergeInto cur nxt).Term D s v := by
+    rintro v hint (rfl | ⟨k, h1, h2, h3⟩)
+    · rcases hok.bottom with h | h
+      · exact h
+      · exact absurd h hint
+    · exact .inr ⟨k, Nat.le_trans (Nat.min_le_right _ _) h1, h2, h3⟩
+  have hnxt : ∀ v, nxt.Term D s v → (TEntry.mergeInto cur nxt).Term D s v := by
+    rintro v (hv | ⟨k, h1, h2, h3⟩)
+    · exact .inl hv
+    · exact .inr ⟨k, Nat.le_trans (Nat.min_le_left _ _) h1, h2, h3⟩
+  refine Inv'.ofStack (Stack_cons.2 ⟨?_, ?_⟩) fun i hi hsz => ItemInv.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) (h.nodes i hi hsz)
+  · have hm := TEntry.edges_mergeInto (g := s.g) (items := s.items) cur nxt
+    refine EntryInv'.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) ⟨?_, ?_⟩
+    · exact (Graph.ConnEdges.congr fun e _ => hm e).2 (Graph.ConnEdges.union hc'.conn hn.conn hok.share)
+    · refine (Graph.AttachedIn.congr fun e _ => hm e).2 ((Graph.AttachedIn.union hc'.attached hn.attached).mono ?_)
+      rintro v ⟨hv, hint⟩
+      refine .inl ?_
+      rcases hv with hv | hv | ⟨t', ht', hT⟩
+      · exact hcur v hint hv
+      · exact hnxt v hv
+      · simp only [List.mem_singleton] at ht'; subst ht'
+        exact hcur v hint hT
+  · refine (hrest.transfer ?_).congr (s := s) rfl rfl (fun _ _ _ _ => Iff.rfl)
+    intro t ht v hv htouch
+    refine .inr ⟨TEntry.mergeInto cur nxt, by simp, ?_⟩
+    obtain ⟨t', ht', hT⟩ := hv
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ht'
+    rcases ht' with rfl | rfl
+    · exact hnxt v hT
+    · refine hcur v (fun hint => ?_) hT
+      obtain ⟨e, he, hte, hinc⟩ := htouch
+      exact hdisj t ht e he hte (hint e he hinc)
+
+/-- Popping the top entry `t`: every remaining entry attached at a terminal of `t` has it as its
+own terminal. -/
+theorem Inv'.pop (t : TEntry) (rest : List TEntry) (hs : s.tstack = t :: rest) (h : s.Inv' D)
+    (hgone : ∀ u ∈ rest, ∀ v, t.Term D s v → s.g.Touches (u.edges s.g s.items) v → u.Term D s v) :
+    Inv' D { s with tstack := rest } := by
+  have hst := h.stack; rw [hs] at hst
+  obtain ⟨-, hrest⟩ := Stack_cons.1 hst
+  refine Inv'.ofStack ((hrest.transfer ?_).congr (s := s) rfl rfl (fun _ _ _ _ => Iff.rfl))
+    fun i hi hsz => ItemInv.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) (h.nodes i hi hsz)
+  intro u hu v hv htouch
+  obtain ⟨t'', ht'', hT⟩ := hv
+  simp only [List.mem_singleton] at ht''; subst ht''
+  exact .inl (hgone u hu v hT htouch)
+
+/-- `finishTstackTop` (the hypotheses of `finishTstackTop_complete`). -/
+theorem Inv'.finishTop (item : ItemId) (t : TEntry) (rest : List TEntry)
+    (hs : s.tstack = t :: rest) (h : s.Inv' D)
+    (hitem : item < s.items.size) (hnode : 1 + s.g.nv + s.g.ne ≤ item)
+    (hroot : ∀ p, ¬ Items.IsParent s.items p item)
+    (hfree : ∀ t' ∈ s.tstack, item ∉ t'.spans.1 ++ t'.spans.2)
+    (hside : getSide t.spans (!s.stackDir[t.topDepth]!) = [])
+    (hmid : ∀ k, t.topDepth < k → k ≤ D → s.stackVerts[k]! = t.vStart ∨
+      s.g.Interior (t.edges s.g s.items) s.stackVerts[k]! ∨ ¬ s.g.Touches (t.edges s.g s.items) s.stackVerts[k]!) :
+    ((finishTstackTop item).run s).2.Inv' D := by
+  rw [finishTstackTop_run_eq s item t rest hs]
+  set dir := s.stackDir[t.topDepth]!
+  set f : Item → Item := fun it =>
+    { it with vs := setSides dir (some s.stackVerts[t.topDepth]!) (some t.vStart),
+              ch := getSide t.spans dir }
+  have hst := h.stack; rw [hs] at hst
+  obtain ⟨ht', hrest⟩ := Stack_cons.1 hst
+  have ht := ht'.toEntryInv
+  have hitem_edge : ∀ e, e < s.g.ne → edgeItem s.g e ≠ item := by
+    intro e he; show 1 + s.g.nv + e ≠ item; omega
+  have hnb : ∀ i, i ≠ item → ¬ Items.Below s.items i item := fun i hi hb =>
+    hi (Items.Below.eq_of_no_parent hroot hb)
+  have hsub : ∀ e, e < s.g.ne →
+      (Items.EdgeBelow s.g (s.items.modify item f) item e ↔ t.edges s.g s.items e) := by
+    intro e he
+    have hch : Items.ch (s.items.modify item f) item = getSide t.spans dir := by
+      rw [Items.ch_modify_at item f hitem]
+    have hne : ∀ c ∈ getSide t.spans dir, c ≠ item := fun c hc hce => by
+      subst hce; exact hfree t (by simp [hs]) ((mem_of_getSide_nil dir t.spans hside c).2 hc)
+    simp only [TEntry.edges, Items.EdgeBelow, mem_of_getSide_nil dir t.spans hside]
+    constructor
+    · intro hb
+      rcases hb.head_cases with heq | ⟨c, hc, hb⟩
+      · exact absurd heq.symm (hitem_edge e he)
+      · simp only [Items.IsParent, hch] at hc
+        exact ⟨c, hc, (Items.Below_modify_of_not_below item f (hnb c (hne c hc))).1 hb⟩
+    · rintro ⟨c, hc, hb⟩
+      exact .head (by simpa [Items.IsParent, hch] using hc)
+        ((Items.Below_modify_of_not_below item f (hnb c (hne c hc))).2 hb)
+  have hE' : ∀ e, e < s.g.ne →
+      (TEntry.edges s.g (s.items.modify item f) { t with spans := setSides dir [item] [] } e ↔
+        t.edges s.g s.items e) := by
+    intro e he
+    rw [← hsub e he]
+    simp only [TEntry.edges]
+    constructor
+    · rintro ⟨i, hi, hb⟩
+      rwa [List.mem_singleton.1 ((mem_setSides dir [item] i).1 hi)] at hb
+    · exact fun hb => ⟨item, (mem_setSides dir [item] item).2 (List.mem_singleton.2 rfl), hb⟩
+  refine Inv'.ofStack (Stack_cons.2 ⟨?_, ?_⟩) ?_
+  · exact ⟨(Graph.ConnEdges.congr hE').2 ht.conn,
+      (Graph.AttachedIn.congr hE').2 (ht.attached.mono fun _ hv => .inl hv)⟩
+  · refine (hrest.transfer ?_).congr (s := s) rfl rfl
+      (fun u hu e _ => TEntry.edges_modify_of_not_mem item f hroot (hfree u (by simp [hs, hu])) e)
+    intro u _ v hv _
+    obtain ⟨t'', ht'', hT⟩ := hv
+    rw [List.mem_singleton] at ht''; rw [ht''] at hT
+    exact .inr ⟨{ t with spans := setSides dir [item] [] }, by simp, hT⟩
+  · intro i hi hsize
+    simp only [Array.size_modify] at hsize
+    by_cases hi' : i = item
+    · subst hi'
+      refine ⟨(Graph.ConnEdges.congr hsub).2 ht.conn, ?_⟩
+      intro u v huv
+      rw [Items.vs_modify_at i f hitem] at huv
+      have h2 := (Graph.TwoAttached.congr hsub).2 (TwoAttached.of_term ht.attached hmid)
+      rcases setSides_eq _ _ _ _ _ huv with ⟨hu, hv⟩ | ⟨hu, hv⟩ <;>
+        simp only [Option.some.injEq] at hu hv <;> subst hu hv
+      · exact h2.comm
+      · exact h2
+    · exact ItemInv.congr (s := s) rfl (Items.vs_modify_of_ne item f hi')
+        (fun _ _ => Items.Below_modify_of_not_below item f (hnb i hi')) (h.nodes i hi hsize)
+
 /-! ### Steps -/
 
 /-- One walk step that keeps the invariant and the shape and does not disturb the graph, the
 vertex stack, or the subtree of `vertItem v`. -/
 structure Step (D v : Nat) (s s' : WalkState) : Prop where
-  inv : s'.Inv D
+  inv : s'.Inv' D
   shape : Shape s'
   g : s'.g = s.g
   sv : s'.stackVerts = s.stackVerts
@@ -704,22 +1075,22 @@ structure Step (D v : Nat) (s s' : WalkState) : Prop where
 
 variable {v : Nat}
 
-theorem Step.refl (hi : s.Inv D) (hs : Shape s) : Step D v s s := ⟨hi, hs, rfl, rfl, fun _ => Iff.rfl⟩
+theorem Step.refl (hi : s.Inv' D) (hs : Shape s) : Step D v s s := ⟨hi, hs, rfl, rfl, fun _ => Iff.rfl⟩
 
 theorem Step.trans {s₁ s₂ s₃ : WalkState} (h₁ : Step D v s₁ s₂) (h₂ : Step D v s₂ s₃) : Step D v s₁ s₃ :=
   ⟨h₂.inv, h₂.shape, h₂.g.trans h₁.g, h₂.sv.trans h₁.sv, fun i => (h₂.below i).trans (h₁.below i)⟩
 
 theorem Step.of_eq (h : Step D v s s') {s'' : WalkState} (he : s'' = s') : Step D v s s'' := he ▸ h
 
-theorem Step.frame (hi : s.Inv D) (hs : Shape s) (hg : s'.g = s.g) (hsv : s'.stackVerts = s.stackVerts)
+theorem Step.frame (hi : s.Inv' D) (hs : Shape s) (hg : s'.g = s.g) (hsv : s'.stackVerts = s.stackVerts)
     (hitems : s'.items = s.items) (hts : s'.tstack = s.tstack) : Step D v s s' :=
   ⟨hi.frame hg hsv hitems hts, hs.frame hg hitems hts, hg, hsv, fun _ => by rw [hitems]⟩
 
-theorem Step.alloc (hi : s.Inv D) (hs : Shape s) (ty : NodeType) :
+theorem Step.alloc (hi : s.Inv' D) (hs : Shape s) (ty : NodeType) :
     Step D v s { s with items := s.items.push ⟨ty, (none, none), []⟩ } :=
   ⟨hi.alloc ty hs.size, hs.push ty, rfl, rfl, fun _ => Items.Below_push_nil _ rfl⟩
 
-theorem Step.modifyVs (hi : s.Inv D) (hs : Shape s) (j : ItemId) (vsv : Option Nat × Option Nat)
+theorem Step.modifyVs (hi : s.Inv' D) (hs : Shape s) (j : ItemId) (vsv : Option Nat × Option Nat)
     (hj : j < 1 + s.g.nv + s.g.ne) :
     Step D v s { s with items := s.items.modify j fun it => { it with vs := vsv } } := by
   refine ⟨hi.modifyVs j vsv hj, ?_, rfl, rfl, fun _ => Items.Below_modify_ch_eq j (fun it => { it with vs := vsv }) fun _ => rfl⟩
@@ -727,7 +1098,7 @@ theorem Step.modifyVs (hi : s.Inv D) (hs : Shape s) (j : ItemId) (vsv : Option N
   rw [Items.IsParent, Items.ch_eq_getElem hj']
   exact hc
 
-theorem Step.pushVert (hi : s.Inv D) (hs : Shape s) (d : Nat) (hv : v < s.g.nv)
+theorem Step.pushVert (hi : s.Inv' D) (hs : Shape s) (d : Nat) (hv : v < s.g.nv)
     (hc : s.g.ConnEdges (Items.EdgeBelow s.g s.items (vertItem v)))
     (ha : s.g.TwoAttached (Items.EdgeBelow s.g s.items (vertItem v)) v v) :
     Step D v s ((pushVertTstack v d).run s).2 := by
@@ -740,7 +1111,7 @@ theorem Step.pushVert (hi : s.Inv D) (hs : Shape s) (d : Nat) (hv : v < s.g.nv)
     · exact hs.span t ht i hit
   all_goals first | rfl | exact fun _ => Iff.rfl
 
-theorem Step.pushEdge (hi : s.Inv D) (hs : Shape s) (vStart topDepth e : Nat) (he : e < s.g.ne)
+theorem Step.pushEdge (hi : s.Inv' D) (hs : Shape s) (vStart topDepth e : Nat) (he : e < s.g.ne)
     (hq : Items.ch s.items (edgeItem s.g e) = [])
     (hend : Items.PairEq (vStart, s.stackVerts[topDepth]!) s.g.edges[e]!) (hD : topDepth ≤ D) :
     Step D v s ((pushEdgeTstack vStart topDepth e).run s).2 := by
@@ -753,20 +1124,21 @@ theorem Step.pushEdge (hi : s.Inv D) (hs : Shape s) (vStart topDepth e : Nat) (h
     · exact hs.span t ht i hit
   all_goals first | rfl | exact fun _ => Iff.rfl
 
-/-- `mergeTstackTops` keeps the invariant when the top two entries satisfy `MergeOk` (on a stack
-with fewer than two entries it empties the stack). -/
+/-- `mergeTstackTops` keeps the invariant when the top two entries satisfy `MergeOk` and the entries
+below are edge-disjoint from them (on a stack with fewer than two entries it empties the stack). -/
 def MergeTopOk (D : Nat) (s : WalkState) : Prop :=
-  ∀ cur nxt rest, s.tstack = cur :: nxt :: rest → MergeOk D s cur nxt
+  ∀ cur nxt rest, s.tstack = cur :: nxt :: rest → MergeOk D s cur nxt ∧
+    ∀ t ∈ rest, ∀ e, e < s.g.ne → t.edges s.g s.items e → ¬ (cur.edges s.g s.items e ∨ nxt.edges s.g s.items e)
 
-theorem Step.mergeTop (hi : s.Inv D) (hs : Shape s) (hok : MergeTopOk D s) :
+theorem Step.mergeTop (hi : s.Inv' D) (hs : Shape s) (hok : MergeTopOk D s) :
     Step D v s (mergeTstackTops.run s).2 := by
   match hts : s.tstack with
   | [] | [_] =>
     rw [run_mergeTstackTops, hts]
-    exact ⟨⟨fun t ht => by simp [mergeTops] at ht, fun i hi' hsz => ItemInv.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) (hi.nodes i hi' hsz)⟩,
+    exact ⟨hi.setTstack _ Stack_nil,
       hs.tstack (by simp [mergeTops]), rfl, rfl, fun _ => Iff.rfl⟩
   | cur :: nxt :: rest =>
-    refine ⟨mergeTstackTops_sound cur nxt rest hts hi (hok cur nxt rest hts), ?_, ?_, ?_, ?_⟩ <;>
+    refine ⟨Inv'.mergeTop cur nxt rest hts hi (hok cur nxt rest hts).1 (hok cur nxt rest hts).2, ?_, ?_, ?_, ?_⟩ <;>
       rw [mergeTstackTops_run_eq s cur nxt rest hts]
     · refine hs.tstack fun t ht i hit => ?_
       simp only [List.mem_cons] at ht
@@ -793,8 +1165,8 @@ theorem loop_succ_run (fuel : Nat) (cond : WalkM Bool) (body : WalkM Unit) (s : 
 hypothesis `Ok` holds is a step. -/
 theorem Step.loop (cond : WalkM Bool) (body : WalkM Unit) (Ok : WalkState → Prop) (fuel : Nat)
     (hcond : ∀ s, (cond.run s).2 = s)
-    (hbody : ∀ s, v < s.g.nv → s.Inv D → Shape s → (cond.run s).1 = true → Ok s → Step D v s (body.run s).2)
-    (hv : v < s.g.nv) (hi : s.Inv D) (hs : Shape s)
+    (hbody : ∀ s, v < s.g.nv → s.Inv' D → Shape s → (cond.run s).1 = true → Ok s → Step D v s (body.run s).2)
+    (hv : v < s.g.nv) (hi : s.Inv' D) (hs : Shape s)
     (hok : ∀ k, (∀ j, j ≤ k → (cond.run (iter body j s)).1 = true) → Ok (iter body k s)) :
     Step D v s ((loop fuel cond body).run s).2 := by
   induction fuel generalizing s with
@@ -863,7 +1235,7 @@ structure FinishTopOk (D : Nat) (s : WalkState) : Prop where
     s.g.Interior ((curE s).edges s.g s.items) s.stackVerts[k]! ∨
     ¬ s.g.Touches ((curE s).edges s.g s.items) s.stackVerts[k]!
 
-theorem Step.finishTop (hi : s.Inv D) (hs : Shape s) (hv : v < s.g.nv) (item : ItemId)
+theorem Step.finishTop (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv) (item : ItemId)
     (hok : FinishTopOk D s) (hf : ItemFree s item) : Step D v s ((finishTstackTop item).run s).2 := by
   match hts : s.tstack with
   | [] => exact absurd hts hok.nonempty
@@ -875,7 +1247,7 @@ theorem Step.finishTop (hi : s.Inv D) (hs : Shape s) (hv : v < s.g.nv) (item : I
     have hnb : ¬ Items.Below s.items (vertItem v) item := fun hb => by
       have h1 : 1 + v = item := Items.Below.eq_of_no_parent hf.root hb
       have h2 := hf.node; omega
-    refine ⟨finishTstackTop_complete item t rest hts hi hf.lt hf.node hf.root hf.free hside hmid, ?_, ?_, ?_, ?_⟩ <;>
+    refine ⟨Inv'.finishTop item t rest hts hi hf.lt hf.node hf.root hf.free hside hmid, ?_, ?_, ?_, ?_⟩ <;>
       rw [finishTstackTop_run_eq s item t rest hts]
     · refine (hs.modify item (fun it =>
           { it with vs := setSides s.stackDir[t.topDepth]! (some s.stackVerts[t.topDepth]!) (some t.vStart),
@@ -906,7 +1278,7 @@ structure UnwrapRes (D v : Nat) (s : WalkState) (r : ItemId × WalkState) : Prop
   step : Step D v s r.2
   free : ItemFree r.2 r.1
 
-theorem Step.allocRes (hi : s.Inv D) (hs : Shape s) (ty : NodeType) :
+theorem Step.allocRes (hi : s.Inv' D) (hs : Shape s) (ty : NodeType) :
     UnwrapRes D v s ((allocItem ty).run s) := by
   rw [run_allocItem]
   refine ⟨Step.alloc hi hs ty, by simp, hs.size, fun p hp => ?_, fun t ht hmem => ?_⟩
@@ -914,7 +1286,7 @@ theorem Step.allocRes (hi : s.Inv D) (hs : Shape s) (ty : NodeType) :
     exact hs.no_parent_size p hp
   · exact Nat.lt_irrefl _ (hs.span t ht _ hmem)
 
-theorem maybeUnwrapNxt_spec {ty : NodeType} (hi : s.Inv D) (hs : Shape s) (hty : ty ∉ [NodeType.F, .V, .Q])
+theorem maybeUnwrapNxt_spec {ty : NodeType} (hi : s.Inv' D) (hs : Shape s) (hty : ty ∉ [NodeType.F, .V, .Q])
     (hok : UnwrapOk ty s) : UnwrapRes D v s ((maybeUnwrapNxt ty).run s) := by
   match hts : s.tstack with
   | [] | [_] => have := hok.two; rw [hts] at this; simp at this
@@ -949,13 +1321,16 @@ theorem maybeUnwrapNxt_spec {ty : NodeType} (hi : s.Inv D) (hs : Shape s) (hty :
         intro e he
         rw [TEntry.edges_single dir i side single, hb', hch]
         exact TEntry.edges_unwrap dir b.vStart b.topDepth b.firstIdx i hie he
-      have hinv : Inv D { s with tstack := a :: b' :: rest } := by
-        refine ⟨fun t ht => ?_, fun j hj hsz => ItemInv.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) (hi.nodes j hj hsz)⟩
-        simp only [List.mem_cons] at ht
-        rcases ht with ht | ht | ht
-        · rw [ht]; exact EntryInv.congr (s := s) rfl rfl rfl rfl (fun _ _ => Iff.rfl) (hi.entries a (by simp [hts]))
-        · rw [ht]; exact EntryInv.congr (s := s) (t := b) rfl rfl rfl rfl hb'E (hi.entries b (by simp [hts]))
-        · exact EntryInv.congr (s := s) rfl rfl rfl rfl (fun _ _ => Iff.rfl) (hi.entries t (by simp [hts, ht]))
+      have hinv : Inv' D { s with tstack := a :: b' :: rest } := by
+        have hst := hi.stack; rw [hts] at hst
+        obtain ⟨ha, hb, hrest⟩ := (Stack_cons.1 hst).imp_right Stack_cons.1
+        refine hi.setTstack _ (Stack_cons.2 ⟨ha, Stack_cons.2 ⟨?_, hrest.transfer fun u _ x hx _ => .inr ?_⟩⟩)
+        · exact ⟨(Graph.ConnEdges.congr hb'E).2 hb.conn, (Graph.AttachedIn.congr hb'E).2 hb.attached⟩
+        · obtain ⟨t', ht', hT⟩ := hx
+          simp only [List.mem_cons, List.not_mem_nil, or_false] at ht'
+          rcases ht' with rfl | rfl
+          · exact ⟨b', by simp, hT⟩
+          · exact ⟨_, by simp, hT⟩
       have hshape : Shape { s with tstack := a :: b' :: rest } := by
         refine hs.tstack fun t ht j hj => ?_
         simp only [List.mem_cons] at ht
@@ -978,18 +1353,19 @@ structure CloseTwoOk (D : Nat) (s : WalkState) : Prop where
   merge : MergeTopOk D s
   finish : FinishTopOk D (after mergeTstackTops s)
 
-theorem Step.closeTwo (hi : s.Inv D) (hs : Shape s) (hv : v < s.g.nv) (item : ItemId)
+theorem Step.closeTwo (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv) (item : ItemId)
     (hok : CloseTwoOk D s) (hf : ItemFree s item) :
     Step D v s ((finishTstackTop item).run (mergeTstackTops.run s).2).2 := by
   have st := Step.mergeTop (v := v) hi hs hok.merge
   exact st.trans (Step.finishTop st.inv st.shape (by rw [st.g]; exact hv) item hok.finish hf.merge)
 
 /-- Re-targeting the top entry's bottom to `curV` (the `modifyCur` of the vertex close): the old
-bottom is `curV`, interior, or a path vertex. -/
+bottom is `curV`, interior, or a path vertex, and the entries below are edge-disjoint from the top. -/
 structure RetargetOk (D curV : Nat) (s : WalkState) : Prop where
   nonempty : s.tstack ≠ []
   old : (curE s).vStart = curV ∨ s.g.Interior ((curE s).edges s.g s.items) (curE s).vStart ∨
     ∃ k, (curE s).topDepth ≤ k ∧ k ≤ D ∧ (curE s).vStart = s.stackVerts[k]!
+  disj : ∀ u ∈ s.tstack.tail, ∀ e, e < s.g.ne → u.edges s.g s.items e → ¬ (curE s).edges s.g s.items e
 
 def retarget (curV : Nat) (edgeDir : Bool) : WalkM Unit :=
   modifyCur fun t => { t with vStart := curV, spans := setSides (!edgeDir) (t.spans.1 ++ t.spans.2) [] }
@@ -1000,7 +1376,43 @@ theorem retarget_run_eq (curV : Nat) (edgeDir : Bool) (s : WalkState) (t : TEntr
       ((), { s with tstack := { t with vStart := curV, spans := setSides (!edgeDir) (t.spans.1 ++ t.spans.2) [] } :: rest }) := by
   rw [retarget, run_modifyCur, hs]
 
-theorem Step.retarget (hi : s.Inv D) (hs : Shape s) (curV : Nat) (edgeDir : Bool) (hok : RetargetOk D curV s) :
+/-- `retarget` under `RetargetOk.old` for the top entry `t`, when the entries below are
+edge-disjoint from `t`. -/
+theorem Inv'.retarget (curV : Nat) (edgeDir : Bool) (t : TEntry) (rest : List TEntry)
+    (hs : s.tstack = t :: rest) (h : s.Inv' D)
+    (old : t.vStart = curV ∨ s.g.Interior (t.edges s.g s.items) t.vStart ∨
+      ∃ k, t.topDepth ≤ k ∧ k ≤ D ∧ t.vStart = s.stackVerts[k]!)
+    (hdisj : ∀ u ∈ rest, ∀ e, e < s.g.ne → u.edges s.g s.items e → ¬ t.edges s.g s.items e) :
+    ((retarget curV edgeDir).run s).2.Inv' D := by
+  rw [retarget_run_eq curV edgeDir s t rest hs]
+  set t' : TEntry := { t with vStart := curV, spans := setSides (!edgeDir) (t.spans.1 ++ t.spans.2) [] } with ht'
+  have hE : ∀ e, t'.edges s.g s.items e ↔ t.edges s.g s.items e := by
+    intro e; simp only [TEntry.edges, ht', mem_setSides]
+  have hst := h.stack; rw [hs] at hst
+  obtain ⟨ht, hrest⟩ := Stack_cons.1 hst
+  have hT : ∀ v, ¬ s.g.Interior (t.edges s.g s.items) v → t.Term D s v → t'.Term D s v := by
+    rintro v hint (rfl | ⟨k, h1, h2, h3⟩)
+    · rcases old with h | h | ⟨k, h1, h2, h3⟩
+      · exact .inl h
+      · exact absurd h hint
+      · exact .inr ⟨k, h1, h2, h3⟩
+    · exact .inr ⟨k, h1, h2, h3⟩
+  refine Inv'.ofStack (Stack_cons.2 ⟨?_, ?_⟩) fun i hi hsz => ItemInv.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) (h.nodes i hi hsz)
+  · refine EntryInv'.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) ⟨(Graph.ConnEdges.congr fun e _ => hE e).2 ht.conn, ?_⟩
+    refine (Graph.AttachedIn.congr fun e _ => hE e).2 (ht.attached.strengthen.mono ?_)
+    rintro v ⟨hv, -, hint⟩
+    rcases hv with hv | ⟨_, h, _⟩
+    · exact .inl (hT v hint hv)
+    · simp at h
+  · refine (hrest.transfer ?_).congr (s := s) rfl rfl (fun _ _ _ _ => Iff.rfl)
+    intro u hu v hv htouch
+    obtain ⟨t'', ht'', hT'⟩ := hv
+    simp only [List.mem_singleton] at ht''; subst ht''
+    refine .inr ⟨t', by simp, hT v (fun hint => ?_) hT'⟩
+    obtain ⟨e, he, hue, hinc⟩ := htouch
+    exact hdisj u hu e he hue (hint e he hinc)
+
+theorem Step.retarget (hi : s.Inv' D) (hs : Shape s) (curV : Nat) (edgeDir : Bool) (hok : RetargetOk D curV s) :
     Step D v s ((retarget curV edgeDir).run s).2 := by
   match hts : s.tstack with
   | [] => exact absurd hts hok.nonempty
@@ -1009,25 +1421,11 @@ theorem Step.retarget (hi : s.Inv D) (hs : Shape s) (curV : Nat) (edgeDir : Bool
     have old := hok.old
     rw [hc] at old
     rw [retarget_run_eq curV edgeDir s t rest hts]
+    have hinv := Inv'.retarget curV edgeDir t rest hts hi old fun u hu e he hue => by
+      have := hok.disj u (by rw [hts]; exact hu) e he hue
+      rwa [hc] at this
+    rw [retarget_run_eq curV edgeDir s t rest hts] at hinv
     set t' : TEntry := { t with vStart := curV, spans := setSides (!edgeDir) (t.spans.1 ++ t.spans.2) [] } with ht'
-    have hE : ∀ e, t'.edges s.g s.items e ↔ t.edges s.g s.items e := by
-      intro e; simp only [TEntry.edges, ht', mem_setSides]
-    have ht := hi.entries t (by simp [hts])
-    have hinv : Inv D { s with tstack := t' :: rest } := by
-      refine ⟨fun u hu => ?_, fun j hj hsz => ItemInv.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) (hi.nodes j hj hsz)⟩
-      simp only [List.mem_cons] at hu
-      rcases hu with rfl | hu
-      · refine ⟨(Graph.ConnEdges.congr fun e _ => hE e).2 ht.conn, ?_⟩
-        refine (Graph.AttachedIn.congr fun e _ => hE e).2 (ht.attached.strengthen.mono ?_)
-        rintro x ⟨hx, htouch, hint⟩
-        show x = curV ∨ ∃ k, t.topDepth ≤ k ∧ k ≤ D ∧ x = s.stackVerts[k]!
-        rcases hx with rfl | ⟨k, h1, h2, h3⟩
-        · rcases old with h | h | ⟨k, h1, h2, h3⟩
-          · exact .inl h
-          · exact absurd h hint
-          · exact .inr ⟨k, h1, h2, h3⟩
-        · exact .inr ⟨k, h1, h2, h3⟩
-      · exact EntryInv.congr (s := s) rfl rfl rfl rfl (fun _ _ => Iff.rfl) (hi.entries u (by simp [hts, hu]))
     refine ⟨hinv, hs.tstack fun u hu i hi' => ?_, rfl, rfl, fun _ => Iff.rfl⟩
     simp only [List.mem_cons] at hu
     rcases hu with rfl | hu
@@ -1071,7 +1469,7 @@ theorem loop1Type_result (d : Nat) (edgeDir : Bool) (s : WalkState) :
   · split <;> simp
 
 /-- The S case of loop 1 merges the entry at depth `> d` into the tree edge. -/
-theorem Step.loop1Type (hi : s.Inv D) (hs : Shape s) {d : Nat} {edgeDir : Bool}
+theorem Step.loop1Type (hi : s.Inv' D) (hs : Shape s) {d : Nat} {edgeDir : Bool}
     (hok : (nxtE s).topDepth > d → MergeTopOk D { s with stackDir := s.stackDir.set! (nxtE s).topDepth edgeDir }) :
     Step D v s (after (loop1Type d edgeDir) s) := by
   unfold after; rw [loop1Type_run]
@@ -1093,7 +1491,7 @@ structure Loop1BodyOk (D d : Nat) (edgeDir : Bool) (s : WalkState) : Prop where
   unwrap : UnwrapOk (l1Ty d edgeDir s) (l1S₁ d edgeDir s)
   close : CloseTwoOk D (l1S₂ d edgeDir s)
 
-theorem Step.loop1Body (hi : s.Inv D) (hs : Shape s) (hv : v < s.g.nv) {d : Nat} {edgeDir : Bool}
+theorem Step.loop1Body (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv) {d : Nat} {edgeDir : Bool}
     (hok : Loop1BodyOk D d edgeDir s) : Step D v s ((loop1Body d edgeDir).run s).2 := by
   have st₁ : Step D v s (l1S₁ d edgeDir s) := Step.loop1Type hi hs hok.mergeS
   have hv₁ : v < (l1S₁ d edgeDir s).g.nv := by rw [st₁.g]; exact hv
@@ -1112,7 +1510,7 @@ structure CloseEarsOk (D nxtV d e : Nat) (edgeDir : Bool) (s : WalkState) : Prop
   body : ∀ k, (∀ j, j ≤ k → result (loop1Cond d) (iter (loop1Body d edgeDir) j (ceS₁ nxtV d e s)) = true) →
     Loop1BodyOk D d edgeDir (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s))
 
-theorem Step.closeEars (hi : s.Inv D) (hs : Shape s) (hv : v < s.g.nv) {nxtV d e : Nat} {edgeDir : Bool}
+theorem Step.closeEars (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv) {nxtV d e : Nat} {edgeDir : Bool}
     (hok : CloseEarsOk D nxtV d e edgeDir s) : Step D v s ((closeEars nxtV d e edgeDir).run s).2 := by
   have st₁ : Step D v s (ceS₁ nxtV d e s) := Step.pushEdge hi hs nxtV d e hok.e_lt hok.q hok.ends hok.d_le
   exact st₁.trans (Step.loop (loop1Cond d) (Spqr.loop1Body d edgeDir) (Loop1BodyOk D d edgeDir) _ (fun _ => rfl)
@@ -1133,7 +1531,7 @@ structure MergeLateOk (D d : Nat) (s : WalkState) : Prop where
     (∀ j, j ≤ k → result (loop2Cond s.firstOccurrence[d]!) (iter mergeTstackTops j s) = true) →
     MergeTopOk D (iter mergeTstackTops k s)
 
-theorem Step.mergeLate (hi : s.Inv D) (hs : Shape s) (hv : v < s.g.nv) {d : Nat} (hok : MergeLateOk D d s) :
+theorem Step.mergeLate (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv) {d : Nat} (hok : MergeLateOk D d s) :
     Step D v s ((mergeLate d).run s).2 := by
   rw [mergeLate_run]
   by_cases h : (curE s).firstIdx > s.firstOccurrence[d]!
@@ -1195,7 +1593,7 @@ structure CloseVertOk (D curV : Nat) (edgeDir isType1 : Bool) (origTstack : Nat)
   retarget : RetargetOk D curV (cvS₄ isType1 origTstack isSingle s)
   finish : isType1 = true → FinishTopOk D (cvS₅ curV edgeDir isType1 origTstack isSingle s)
 
-theorem Step.vertPre (hi : s.Inv D) (hs : Shape s) (hv : v < s.g.nv) {isType1 : Bool} {origTstack : Nat}
+theorem Step.vertPre (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv) {isType1 : Bool} {origTstack : Nat}
     {isSingle : Bool}
     (hok : isType1 = false → ∀ k,
       (∀ j, j ≤ k → result (loop3Cond origTstack) (iter mergeTstackTops j s) = true) →
@@ -1207,7 +1605,7 @@ theorem Step.vertPre (hi : s.Inv D) (hs : Shape s) (hv : v < s.g.nv) {isType1 : 
       (fun _ _ hi hs _ hok => Step.mergeTop hi hs hok) hv hi hs (hok rfl)
   · exact Step.refl hi hs
 
-theorem Step.vertUnwrap (hi : s.Inv D) (hs : Shape s) {isType1 isSingle : Bool}
+theorem Step.vertUnwrap (hi : s.Inv' D) (hs : Shape s) {isType1 isSingle : Bool}
     (hok : isType1 = true → UnwrapOk (if isSingle then .S else .R) s) :
     Step D v s ((vertUnwrap isType1 isSingle).run s).2 ∧
       ∀ i, ((vertUnwrap isType1 isSingle).run s).1 = some i → ItemFree ((vertUnwrap isType1 isSingle).run s).2 i := by
@@ -1217,7 +1615,7 @@ theorem Step.vertUnwrap (hi : s.Inv D) (hs : Shape s) {isType1 isSingle : Bool}
     simp only [WalkState.vertUnwrap, ↓reduceIte, WalkM.map_run, Option.some.injEq]
     exact ⟨r.step, fun i h => h ▸ r.free⟩
 
-theorem Step.closeVert' (hi : s.Inv D) (hs : Shape s) (hv : v < s.g.nv) {curV : Nat} {edgeDir isType1 : Bool}
+theorem Step.closeVert' (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv) {curV : Nat} {edgeDir isType1 : Bool}
     {origTstack : Nat} {isSingle : Bool} (hok : CloseVertOk D curV edgeDir isType1 origTstack isSingle s) :
     Step D v s ((closeVert' curV edgeDir isType1 origTstack isSingle).run s).2 := by
   have st₁ : Step D v s (cvS₁ isType1 origTstack isSingle s) := Step.vertPre hi hs hv hok.loop3
@@ -1245,7 +1643,7 @@ structure FinishPOk (D curV lowval : Nat) (isType1 : Bool) (s : WalkState) : Pro
   ok : result (condP curV lowval isType1) s = true →
     UnwrapOk .P s ∧ CloseTwoOk D (after (maybeUnwrapNxt .P) s)
 
-theorem Step.finishP (hi : s.Inv D) (hs : Shape s) (hv : v < s.g.nv) {curV lowval : Nat} {isType1 : Bool}
+theorem Step.finishP (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv) {curV lowval : Nat} {isType1 : Bool}
     (hok : FinishPOk D curV lowval isType1 s) : Step D v s ((finishP curV lowval isType1).run s).2 := by
   simp only [Spqr.finishP, WalkM.run_bind, run_condP]
   by_cases h : result (condP curV lowval isType1) s = true
@@ -1267,7 +1665,7 @@ structure FinishTailOk (D curV d : Nat) (hasVert isSingle : Bool) (s : WalkState
   att : hasVert = false → s.g.TwoAttached (Items.EdgeBelow s.g s.items (vertItem curV)) curV curV
   merge : hasVert = false → isSingle = false → MergeTopOk D (after (pushVertTstack curV d) s)
 
-theorem Step.finishTail (hi : s.Inv D) (hs : Shape s) {curV d : Nat} (hv : curV < s.g.nv) {hasVert isSingle : Bool}
+theorem Step.finishTail (hi : s.Inv' D) (hs : Shape s) {curV d : Nat} (hv : curV < s.g.nv) {hasVert isSingle : Bool}
     (hok : FinishTailOk D curV d hasVert isSingle s) :
     Step D curV s ((finishTail curV d hasVert isSingle).run s).2 := by
   cases hasVert
@@ -1282,7 +1680,7 @@ structure FinishRestOk (D curV d lowval : Nat) (isType1 hasVert isSingle : Bool)
   p : FinishPOk D curV lowval isType1 s
   tail : FinishTailOk D curV d hasVert isSingle (after (finishP curV lowval isType1) s)
 
-theorem Step.finishRest (hi : s.Inv D) (hs : Shape s) {curV d lowval : Nat} (hv : curV < s.g.nv)
+theorem Step.finishRest (hi : s.Inv' D) (hs : Shape s) {curV d lowval : Nat} (hv : curV < s.g.nv)
     {isType1 hasVert isSingle : Bool} (hok : FinishRestOk D curV d lowval isType1 hasVert isSingle s) :
     Step D curV s ((finishRest curV d lowval isType1 hasVert isSingle).run s).2 := by
   have st₁ := Step.finishP (v := curV) hi hs hv hok.p
@@ -1326,7 +1724,7 @@ structure FinishOk (D curV d lv : Nat) (o : DfsOut) (origTstack : Nat) (hasVert 
 
 /-- `finishEdge` preserves the invariant on a returning edge, under `FinishOk`. -/
 theorem finishEdge_inv (curV d lv : Nat) (kind : RetKind) (o : DfsOut) (origTstack : Nat) (hasVert : Bool)
-    (ho : o.cls = .ret lv kind) (hlow : lv < d) (hv : curV < s.g.nv) (hi : s.Inv D) (hs : Shape s)
+    (ho : o.cls = .ret lv kind) (hlow : lv < d) (hv : curV < s.g.nv) (hi : s.Inv' D) (hs : Shape s)
     (hok : FinishOk D curV d lv o origTstack hasVert s) :
     Step D curV s ((finishEdge curV d o origTstack hasVert).run s).2 := by
   have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
@@ -1368,11 +1766,11 @@ theorem finishEdge_inv (curV d lv : Nat) (kind : RetKind) (o : DfsOut) (origTsta
 /-- The back-edge case: push the back edge `o.e = {curV, stackVerts[lv]}` at depth `lv`, then the
 type-1 P-check and the vertex push. -/
 theorem finishEdge_back_inv (curV d lv : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool)
-    (ho : o.cls = .ret lv .backEdge) (hlow : lv < d) (hv : curV < s.g.nv) (hi : s.Inv D) (hs : Shape s)
+    (ho : o.cls = .ret lv .backEdge) (hlow : lv < d) (hv : curV < s.g.nv) (hi : s.Inv' D) (hs : Shape s)
     (he : o.e < s.g.ne) (hq : Items.ch s.items (edgeItem s.g o.e) = [])
     (hend : Items.PairEq (curV, s.stackVerts[lv]!) s.g.edges[o.e]!) (hD : lv ≤ D)
     (hrest : FinishRestOk D curV d lv true hasVert true (feBack curV lv d o s)) :
-    ((finishEdge curV d o origTstack hasVert).run s).2.Inv D := by
+    ((finishEdge curV d o origTstack hasVert).run s).2.Inv' D := by
   have ht : o.cls.isTree = false := by rw [ho]; rfl
   have h1 : o.cls.isType1 = true := by rw [ho]; rfl
   refine (finishEdge_inv curV d lv .backEdge o origTstack hasVert ho hlow hv hi hs
@@ -1380,10 +1778,5 @@ theorem finishEdge_back_inv (curV d lv : Nat) (o : DfsOut) (origTstack : Nat) (h
   all_goals first | exact fun h => absurd h (by rw [ht]; decide) | (rw [h1]; exact hrest)
 
 end WalkState
-
-/-- The whole walk preserves the invariant (the ear frame rule fixes the depth bound). -/
-theorem walkTree_inv {D : Nat} (t : DfsTree) (d : Nat) (s : WalkState) (h : s.Inv D) :
-    ((walkTree t d).run s).2.Inv D := by
-  sorry
 
 end Spqr
