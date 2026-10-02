@@ -23,6 +23,70 @@ theorem getElem!_type {j : ItemId} (h : j < items.size) : items[j]!.type = items
 theorem getElem!_vs {j : ItemId} (h : j < items.size) : items[j]!.vs = items.vs j := by
   simp [vs, getElem!_pos, h]
 
+theorem getElem!_vs_all (items : Items) (a : ItemId) : items[a]!.vs = items.vs a := by
+  simp only [Items.vs, getElem!_def]
+  split <;> simp_all
+  rfl
+
+theorem type_F_of_ge {i : ItemId} (hi : items.size ≤ i) : items.type i = .F := by
+  simp [Items.type, Array.getElem?_eq_none_iff.2 hi]
+
+theorem Tree.V_range (ht : items.Tree g) {i : Nat} (h : items.type i = .V) : 1 ≤ i ∧ i < 1 + g.nv := by
+  by_cases hi : i < items.size
+  · have h0 : items.type 0 = .F := ht.root
+    refine ⟨?_, ?_⟩
+    · rcases Nat.eq_zero_or_pos i with rfl | hpos
+      · rw [h0] at h; cases h
+      · exact hpos
+    · by_contra hge
+      by_cases he : i < 1 + g.nv + g.ne
+      · have := ht.edge (i - 1 - g.nv) (by omega)
+        have e : edgeItem g (i - 1 - g.nv) = i := by
+          unfold edgeItem; show (1 + g.nv + (i - 1 - g.nv) : Nat) = i; omega
+        rw [e, h] at this
+        cases this
+      · have := ht.node i (by omega) hi
+        rw [h] at this; simp at this
+  · rw [type_F_of_ge (Nat.not_lt.1 hi)] at h; cases h
+
+theorem Tree.Q_range (ht : items.Tree g) {i : Nat} (h : items.type i = .Q) :
+    1 + g.nv ≤ i ∧ i < 1 + g.nv + g.ne := by
+  by_cases hi : i < items.size
+  · have h0 : items.type 0 = .F := ht.root
+    refine ⟨?_, ?_⟩
+    · by_contra hlt
+      rcases Nat.eq_zero_or_pos i with rfl | hpos
+      · rw [h0] at h; cases h
+      · have := ht.vert (i - 1) (by omega)
+        have e : vertItem (i - 1) = i := by
+          unfold vertItem; show (1 + (i - 1) : Nat) = i; omega
+        rw [e, h] at this
+        cases this
+    · by_contra hge
+      have := ht.node i (by omega) hi
+      rw [h] at this; simp at this
+  · rw [type_F_of_ge (Nat.not_lt.1 hi)] at h; cases h
+
+theorem WF.nvList_lt (hwf : items.WF g) (cur : ItemId) : ∀ v ∈ items.nvList g cur, v < g.nv := by
+  intro v hv
+  simp only [Items.nvList, List.mem_append, List.mem_map, List.mem_filter] at hv
+  rcases hv with (hv | ⟨c, ⟨hc, hlt⟩, rfl⟩) | hv
+  · exact hwf.endpoints.vs_lt cur v (Or.inl (Option.mem_def.1 (Option.mem_toList.1 hv)))
+  · have hc0 : c ≠ 0 := fun h => hwf.tree.root_no_parent cur (by subst h; exact hc)
+    simp only [decide_eq_true_eq] at hlt
+    omega
+  · exact hwf.endpoints.vs_lt cur v (Or.inr (Option.mem_def.1 (Option.mem_toList.1 hv)))
+
+theorem isEmpty_ordered {cur : ItemId} {nvSt : Nat} {pos : Nat → Nat} :
+    (items.ordered g cur nvSt pos).isEmpty = (items.ch cur).isEmpty :=
+  Bool.eq_iff_iff.2 (by simp only [List.isEmpty_iff_length_eq_zero, ordered_perm.length_eq])
+
+theorem nEdges_eq_ordered {cur : ItemId} {nvSt : Nat} {pos : Nat → Nat} :
+    (if (items.type cur).isNode = true then (items.ordered g cur nvSt pos).countP (· ≥ 1 + g.nv) else 0) +
+      (if ((items.type cur).isNode && !(items.type cur == NodeType.Q && !(items.ordered g cur nvSt pos).isEmpty)) = true
+        then 1 else 0) = items.nEdges g cur := by
+  rw [Items.nEdges, Items.capCount, Items.hasCap, ordered_perm.countP_eq, isEmpty_ordered]
+
 end Items
 
 namespace Ghost
@@ -388,6 +452,53 @@ theorem Entry.nodup_children (hwf : items.WF g)
     (he : Entry g items cur p pn ct curIdx chSt nvSt neSt pos children s s7) : children.Nodup := by
   rw [he.children_eq]; exact Items.ordered_perm.nodup_iff.2 (hwf.tree.ch_nodup cur)
 
+theorem foldl_set!_size (vl : List Nat) (n : Nat) (a : Array Nat) :
+    ((vl.zipIdx n).foldl (fun a x => a.set! x.1 x.2) a).size = a.size := by
+  induction vl generalizing n a with
+  | nil => rfl
+  | cons v vl ih => rw [List.zipIdx_cons, List.foldl_cons, ih, Array.size_set!]
+
+theorem foldl_set!_get_of_not_mem (vl : List Nat) (n : Nat) (a : Array Nat) {v : Nat} (hv : v ∉ vl) :
+    ((vl.zipIdx n).foldl (fun a x => a.set! x.1 x.2) a)[v]! = a[v]! := by
+  induction vl generalizing n a with
+  | nil => rfl
+  | cons w vl ih =>
+    rw [List.zipIdx_cons, List.foldl_cons, ih _ _ (fun h => hv (List.mem_cons_of_mem _ h))]
+    dsimp only
+    exact set!_get!_ne (i := w) (k := v) _ _ (fun h => hv (by subst h; exact List.mem_cons_self ..))
+
+theorem foldl_set!_posOK (vl : List Nat) (n : Nat) (a : Array Nat) (hlt : ∀ v ∈ vl, v < a.size) :
+    ∀ v ∈ vl, n ≤ ((vl.zipIdx n).foldl (fun a x => a.set! x.1 x.2) a)[v]! ∧
+      vl[((vl.zipIdx n).foldl (fun a x => a.set! x.1 x.2) a)[v]! - n]? = some v := by
+  induction vl generalizing n a with
+  | nil => intro v hv; cases hv
+  | cons w vl ih =>
+    intro v hv
+    rw [List.zipIdx_cons, List.foldl_cons]
+    dsimp only
+    by_cases hmem : v ∈ vl
+    · obtain ⟨h1, h2⟩ := ih (n + 1) (a.set! w n)
+        (fun u hu => by rw [Array.size_set!]; exact hlt u (List.mem_cons_of_mem _ hu)) v hmem
+      refine ⟨by omega, ?_⟩
+      have hsucc : ∀ m, n + 1 ≤ m → m - n = (m - (n + 1)) + 1 := by intros; omega
+      rw [hsucc _ h1, List.getElem?_cons_succ]
+      exact h2
+    · have hw : v = w := by
+        rcases List.mem_cons.1 hv with h | h
+        · exact h
+        · exact absurd h hmem
+      subst hw
+      rw [foldl_set!_get_of_not_mem vl (n + 1) _ hmem, set!_get!_self _ _ (hlt v (List.mem_cons_self ..))]
+      exact ⟨le_rfl, by rw [Nat.sub_self]; rfl⟩
+
+theorem foldl_set!_map (nvs : List NodeVert) (n : Nat) (a : Array Nat) :
+    (nvs.zipIdx n).foldl (fun a x => a.set! x.1.vert x.2) a =
+      ((nvs.map (·.vert)).zipIdx n).foldl (fun a x => a.set! x.1 x.2) a := by
+  induction nvs generalizing n a with
+  | nil => rfl
+  | cons nv nvs ih =>
+    rw [List.map_cons, List.zipIdx_cons, List.zipIdx_cons, List.foldl_cons, List.foldl_cons, ih]
+
 theorem entry_of_steps {s1 s2 s3 s4 s6 : RelabelState} {b : Bool} (hwf : items.WF g) (hpre : CallPre g items cur s)
     (ct : Option Nat)
     (h1 : StepNum cur (items.type cur) p pn s s1) (h2 : StepVQ g items cur s.types.size s1 s2)
@@ -411,7 +522,278 @@ theorem entry_of_steps {s1 s2 s3 s4 s6 : RelabelState} {b : Bool} (hwf : items.W
     (hb : b = true ↔ ((items.type cur).isNode && !(items.type cur == NodeType.Q && !children.isEmpty)) = true) :
     Entry g items cur p pn ct s.types.size s2.chDat.size s2.nodeVerts.size s4.nodeEdges.size
       (fun v => s4.vertPos[v]!) children s s7 := by
-  sorry
+  have hc := hpre.cons
+  have hcur := hpre.lt
+  have hnotmem : cur ∉ s.order.toList := hpre.fresh cur (Items.mem_desc_self hcur)
+  have hV := @Items.Tree.V_range _ _ hwf.tree cur
+  have hQ := @Items.Tree.Q_range _ _ hwf.tree cur
+  -- state equations
+  have eg : s7.g = g := by rw [h7.g_eq, h6.g_eq, h4.g_eq, h3.g_eq, h2.g_eq, h1.g_eq, hc.g_eq]
+  have ei : s7.items = items := by
+    rw [h7.items_eq, h6.items_eq, h4.items_eq, h3.items_eq, h2.items_eq, h1.items_eq, hc.items_eq]
+  have e4g : s4.g = g := by rw [h4.g_eq, h3.g_eq, h2.g_eq, h1.g_eq, hc.g_eq]
+  have e4i : s4.items = items := by rw [h4.items_eq, h3.items_eq, h2.items_eq, h1.items_eq, hc.items_eq]
+  have e2ch : s2.chDat = s.chDat := by rw [h2.chDat, h1.chDat]
+  have e2nv : s2.nodeVerts = s.nodeVerts := by rw [h2.nodeVerts, h1.nodeVerts]
+  have e4ne : s4.nodeEdges = s.nodeEdges := by rw [h4.nodeEdges, h3.nodeEdges, h2.nodeEdges, h1.nodeEdges]
+  have e_order : s7.order = s.order.push cur := by
+    rw [h7.order, h6.order, h4.order, h3.order, h2.order, h1.order]
+  have e_types : s7.types = s.types.push (items.type cur) := by
+    rw [h7.types, h6.types, h4.types, h3.types, h2.types, h1.types]
+  have e_par : s7.par = s.par.push p := by rw [h7.par, h6.par, h4.par, h3.par, h2.par, h1.par]
+  have e_pn : s7.vertParNv = s.vertParNv.push pn := by
+    rw [h7.vertParNv, h6.vertParNv, h4.vertParNv, h3.vertParNv, h2.vertParNv, h1.vertParNv]
+  have e_se : s7.subtreeEnd = s.subtreeEnd.push 0 := by
+    rw [h7.subtreeEnd, h6.subtreeEnd, h4.subtreeEnd, h3.subtreeEnd, h2.subtreeEnd, h1.subtreeEnd]
+  have e_orig : s7.origId =
+      if items.type cur = .V then (s.origId.push none).set! s.types.size (some (cur - 1))
+      else if items.type cur = .Q then (s.origId.push none).set! s.types.size (some (cur - 1 - g.nv))
+      else s.origId.push none := by
+    rw [h7.origId, h6.origId, h4.origId, h3.origId, h2.origId, h1.origId]
+  have e_vi : s7.vertIndex =
+      if items.type cur = .V then s.vertIndex.set! (cur - 1) (some s.types.size) else s.vertIndex := by
+    rw [h7.vertIndex, h6.vertIndex, h4.vertIndex, h3.vertIndex, h2.vertIndex, h1.vertIndex]
+  have e_ei : s7.edgeIndex =
+      if items.type cur = .Q then s.edgeIndex.set! (cur - 1 - g.nv) (some s.types.size) else s.edgeIndex := by
+    rw [h7.edgeIndex, h6.edgeIndex, h4.edgeIndex, h3.edgeIndex, h2.edgeIndex, h1.edgeIndex]
+  have e_ef : s7.edgeFlipped =
+      if items.type cur = .Q then
+        s.edgeFlipped.set! (cur - 1 - g.nv) ((items.vs cur).1 != some (g.edges[cur - 1 - g.nv]!).1)
+      else s.edgeFlipped := by
+    rw [h7.edgeFlipped, h6.edgeFlipped, h4.edgeFlipped, h3.edgeFlipped, h2.edgeFlipped, h1.edgeFlipped]
+  have e_vp : s4.vertPos = if (items.type cur == .R) = true then
+      ((((items.nvList g cur).map (fun v => (⟨s.types.size, v⟩ : NodeVert))).zipIdx s.nodeVerts.size).foldl
+        (fun a x => a.set! x.1.vert x.2) s.vertPos)
+      else s.vertPos := by
+    rw [h4.vertPos, h3.vertPos, h2.vertPos, h1.vertPos, e2nv]
+  have e7vp : s7.vertPos = s4.vertPos := by rw [h7.vertPos, h6.vertPos]
+  have e_chD : s7.chDat = s.chDat ++ children.toArray := by
+    rw [h7.chDat, h6.chDat, h4.chDat, h3.chDat, e2ch]
+  have e_nv : s7.nodeVerts =
+      s.nodeVerts ++ ((items.nvList g cur).map (fun v => (⟨s.types.size, v⟩ : NodeVert))).toArray := by
+    rw [h7.nodeVerts, h6.nodeVerts, h4.nodeVerts, h3.nodeVerts, e2nv]
+  -- children
+  have hch' : children = items.ordered g cur s.nodeVerts.size (fun v => s4.vertPos[v]!) := by
+    rw [hch, e2nv]
+    unfold RelabelM.orderedList Items.ordered Items.loc
+    rw [Items.getElem!_type hcur, Items.getElem!_ch hcur, e4g, e4i]
+    simp only [Items.getElem!_vs_all]
+  have hie : children.isEmpty = (items.ch cur).isEmpty := by rw [hch']; exact Items.isEmpty_ordered
+  have hne : (if (items.type cur).isNode = true then children.countP (· ≥ 1 + g.nv) else 0) +
+      (if ((items.type cur).isNode && !(items.type cur == NodeType.Q && !children.isEmpty)) = true then 1 else 0)
+      = items.nEdges g cur := by
+    rw [hch']; exact Items.nEdges_eq_ordered
+  -- the layout
+  rw [e2ch, e2nv, e4ne]
+  rw [e2ch, e2nv, e4ne, e4i, hne, List.length_map] at h6
+  simp only [Items.getElem!_vs_all] at h6
+  rw [e4ne] at h7
+  set L := (items.nvList g cur).length with hL
+  set nE := items.nEdges g cur with hnE
+  have h6' : StepLay children
+      (entryLayout g items cur s.types.size s.nodeVerts.size s.nodeEdges.size (fun v => s4.vertPos[v]!) children)
+      (s.chDat.size + children.length) s.nodeVerts.size (s.nodeVerts.size + L) (s.nodeEdges.size + nE) s4 s6 := h6
+  clear h6
+  set l := entryLayout g items cur s.types.size s.nodeVerts.size s.nodeEdges.size (fun v => s4.vertPos[v]!) children
+    with hl
+  have hsz : Layout.Sz L nE l := by
+    have := layoutNode_sz (items.type cur) s.types.size s.nodeVerts.size (s.nodeVerts.size + L) s.nodeEdges.size
+      (s.nodeEdges.size + nE) (items.edgeChildren g (fun v => s4.vertPos[v]!) children)
+    rw [Nat.add_sub_cancel_left, Nat.add_sub_cancel_left] at this
+    exact this
+  have e_ne : s7.nodeEdges = if b = true then
+      (s.nodeEdges ++ l.edges).modify s.nodeEdges.size (fun ne => { ne with twin := ct })
+      else s.nodeEdges ++ l.edges := by
+    rw [h7.nodeEdges, h6'.nodeEdges, e4ne]
+  have e_adjD : s7.adjDat = s.adjDat ++ l.adjDat := by
+    rw [h7.adjDat, h6'.adjDat, h4.adjDat, h3.adjDat, h2.adjDat, h1.adjDat]
+  have e_adjB : s7.adjBounds = s.adjBounds ++ l.adjBounds.extract 1 (2 * L + 1) := by
+    rw [h7.adjBounds, h6'.adjBounds, h4.adjBounds, h3.adjBounds, h2.adjBounds, h1.adjBounds,
+      Nat.add_sub_cancel_left]
+  have e_chB : s7.chBounds = s.chBounds.push (s.chDat.size + children.length) := by
+    rw [h7.chBounds, h6'.chBounds, h4.chBounds, h3.chBounds, h2.chBounds, h1.chBounds]
+  have e_nvB : s7.nvBounds = s.nvBounds.push (s.nodeVerts.size + L) := by
+    rw [h7.nvBounds, h6'.nvBounds, h4.nvBounds, h3.nvBounds, h2.nvBounds, h1.nvBounds]
+  have e_neB : s7.neBounds = s.neBounds.push (s.nodeEdges.size + nE) := by
+    rw [h7.neBounds, h6'.neBounds, h4.neBounds, h3.neBounds, h2.neBounds, h1.neBounds]
+  have hne7 : s7.nodeEdges.size = s.nodeEdges.size + nE := by
+    rw [e_ne]; split_ifs <;> simp only [Array.size_modify, Array.size_append, hsz.1]
+  have hnv7 : s7.nodeVerts.size = s.nodeVerts.size + L := by
+    simp only [e_nv, Array.size_append, List.size_toArray, List.length_map, ← hL]
+  have hch7 : s7.chDat.size = s.chDat.size + children.length := by
+    simp only [e_chD, Array.size_append, List.size_toArray]
+  have hvp4 : s4.vertPos.size = g.nv := by
+    rw [e_vp]; split_ifs <;> simp only [foldl_set!_map, foldl_set!_size, hc.vertPos_size]
+  have hmapvert : ((items.nvList g cur).map (fun v => (⟨s.types.size, v⟩ : NodeVert))).map (·.vert) =
+      items.nvList g cur := by simp [Function.comp_def]
+  refine
+    { cons := ?_, agree := ?_, curIdx_eq := rfl, chSt_eq := rfl, nvSt_eq := rfl, neSt_eq := rfl
+      cur_not_mem := hnotmem, order := e_order, types := e_types, par := e_par, vertParNv := e_pn
+      subtreeEnd := e_se, origId := ?_, vertIndex := ?_, edgeIndex := ?_, children_eq := hch', pos_ok := ?_
+      chBounds := e_chB, nvBounds := e_nvB, neBounds := e_neB, chDat := e_chD, nodeVerts := e_nv
+      nodeEdges_size := hne7, edge_node := ?_, edge_nvs := ?_, adj_bounds := ?_, adj_dat := ?_, cap := ?_ }
+  · -- Consistent
+    refine
+      { g_eq := eg, items_eq := ei
+        order_size := by rw [e_order, e_types, Array.size_push, Array.size_push, hc.order_size]
+        order_nodup := by
+          rw [e_order, Array.toList_push]
+          refine List.nodup_append.2 ⟨hc.order_nodup, List.nodup_singleton _, fun a ha b hb => ?_⟩
+          rw [List.mem_singleton] at hb; subst hb
+          exact fun h => hnotmem (h ▸ ha)
+        par_size := by rw [e_par, e_types, Array.size_push, Array.size_push, hc.par_size]
+        subtreeEnd_size := by rw [e_se, e_types, Array.size_push, Array.size_push, hc.subtreeEnd_size]
+        origId_size := by
+          rw [e_orig, e_types]; split_ifs <;> simp only [Array.size_set!, Array.size_push, hc.origId_size]
+        vertParNv_size := by rw [e_pn, e_types, Array.size_push, Array.size_push, hc.vertParNv_size]
+        chBounds_size := by rw [e_chB, e_types, Array.size_push, Array.size_push, hc.chBounds_size]
+        nvBounds_size := by rw [e_nvB, e_types, Array.size_push, Array.size_push, hc.nvBounds_size]
+        neBounds_size := by rw [e_neB, e_types, Array.size_push, Array.size_push, hc.neBounds_size]
+        ch_last := by rw [e_chB, e_types, Array.size_push, hch7, ← hc.chBounds_size, push_get!_last]
+        nv_last := by rw [e_nvB, e_types, Array.size_push, hnv7, ← hc.nvBounds_size, push_get!_last]
+        ne_last := by rw [e_neB, e_types, Array.size_push, hne7, ← hc.neBounds_size, push_get!_last]
+        adjBounds_size := by
+          rw [e_adjB, Array.size_append, Array.size_extract, hsz.2.1, hnv7, hc.adjBounds_size]; omega
+        adjDat_size := by rw [e_adjD, Array.size_append, hsz.2.2, hne7, hc.adjDat_size]; omega
+        vertIndex_size := by rw [e_vi]; split_ifs <;> simp only [Array.size_set!, hc.vertIndex_size]
+        edgeIndex_size := by rw [e_ei]; split_ifs <;> simp only [Array.size_set!, hc.edgeIndex_size]
+        edgeFlipped_size := by rw [e_ef]; split_ifs <;> simp only [Array.size_set!, hc.edgeFlipped_size]
+        vertPos_size := by rw [e7vp, hvp4]
+        vert_index_mem := ?_, edge_index_mem := ?_ }
+    · intro v hv
+      rw [e_order, Array.toList_push, List.mem_append, List.mem_singleton]
+      rw [e_vi] at hv
+      split_ifs at hv with hVt
+      · by_cases hveq : v = cur - 1
+        · right; subst hveq; have := hV hVt; unfold vertItem; show (1 + (cur - 1) : Nat) = cur; omega
+        · left; rw [set!_get!_ne _ _ (Ne.symm hveq)] at hv; exact hc.vert_index_mem v hv
+      · left; exact hc.vert_index_mem v hv
+    · intro e he
+      rw [e_order, Array.toList_push, List.mem_append, List.mem_singleton]
+      rw [e_ei] at he
+      split_ifs at he with hQt
+      · by_cases heeq : e = cur - 1 - g.nv
+        · right; subst heeq; have := hQ hQt; unfold edgeItem; show (1 + g.nv + (cur - 1 - g.nv) : Nat) = cur; omega
+        · left; rw [set!_get!_ne _ _ (Ne.symm heeq)] at he; exact hc.edge_index_mem e he
+      · left; exact hc.edge_index_mem e he
+  · -- Agree
+    refine
+      { g_eq := by rw [eg, hc.g_eq], items_eq := by rw [ei, hc.items_eq]
+        order := by rw [e_order, Array.toList_push]; exact List.prefix_append _ _
+        types := by rw [e_types]; exact PreFrom.push _
+        par := by rw [e_par]; exact PreFrom.push _
+        subtreeEnd := by rw [e_se]; exact PreFrom.push _
+        origId := by
+          rw [e_orig]
+          split_ifs
+          · exact (PreFrom.push _).set!_of _ _ (Or.inr (le_of_eq hc.origId_size))
+          · exact (PreFrom.push _).set!_of _ _ (Or.inr (le_of_eq hc.origId_size))
+          · exact PreFrom.push _
+        vertParNv := by rw [e_pn]; exact PreFrom.push _
+        chBounds := by rw [e_chB]; exact PreFrom.push _
+        nvBounds := by rw [e_nvB]; exact PreFrom.push _
+        neBounds := by rw [e_neB]; exact PreFrom.push _
+        nodeVerts := by rw [e_nv]; exact PreFrom.append _
+        adjBounds := by rw [e_adjB]; exact PreFrom.append _
+        adjDat := by rw [e_adjD]; exact PreFrom.append _
+        chDat := by rw [e_chD]; exact PreFrom.append _
+        nodeEdges := by
+          rw [e_ne]
+          split_ifs
+          · exact (PreFrom.append _).modify_of _ _ (Or.inr le_rfl)
+          · exact PreFrom.append _
+        nodeEdges_node := fun k hk => by
+          rw [e_ne]; split_ifs
+          · rw [modify_twin_node, append_get!_left _ _ hk]
+          · rw [append_get!_left _ _ hk]
+        nodeEdges_nvs := fun k hk => by
+          rw [e_ne]; split_ifs
+          · rw [modify_twin_nvs, append_get!_left _ _ hk]
+          · rw [append_get!_left _ _ hk]
+        vertIndex_size := by rw [e_vi]; split_ifs <;> simp only [Array.size_set!]
+        vertIndex := fun v hv => by
+          rw [e_vi]; split_ifs with hVt
+          · apply set!_get!_ne
+            intro heq
+            apply hnotmem
+            have := hc.vert_index_mem v hv
+            unfold vertItem at this
+            rw [← heq, show (1 + (cur - 1) : Nat) = cur by have := hV hVt; omega] at this
+            exact this
+          · rfl
+        edgeIndex_size := by rw [e_ei]; split_ifs <;> simp only [Array.size_set!]
+        edgeIndex := fun e he => by
+          rw [e_ei]; split_ifs with hQt
+          · apply set!_get!_ne
+            intro heq
+            apply hnotmem
+            have := hc.edge_index_mem e he
+            unfold edgeItem at this
+            rw [← heq, show (1 + g.nv + (cur - 1 - g.nv) : Nat) = cur by have := hQ hQt; omega] at this
+            exact this
+          · rfl
+        edgeFlipped_size := by rw [e_ef]; split_ifs <;> simp only [Array.size_set!]
+        edgeFlipped := fun e he => by
+          rw [e_ef]; split_ifs with hQt
+          · apply set!_get!_ne
+            intro heq
+            apply hnotmem
+            have := hc.edge_index_mem e he
+            unfold edgeItem at this
+            rw [← heq, show (1 + g.nv + (cur - 1 - g.nv) : Nat) = cur by have := hQ hQt; omega] at this
+            exact this
+          · rfl
+        vertPos_size := by rw [e7vp, hvp4, hc.vertPos_size] }
+  · -- origId
+    rw [e_orig]
+    have hsz' : s.types.size < (s.origId.push none).size := by rw [Array.size_push, hc.origId_size]; omega
+    have hlast : (s.origId.push none)[s.types.size]! = none := by
+      rw [← hc.origId_size]; exact push_get!_last _ _
+    cases hty : items.type cur <;>
+      simp only [Items.origOf, hty, reduceCtorEq, ↓reduceIte] <;>
+      first | exact set!_get!_self _ _ hsz' | exact hlast
+  · -- vertIndex
+    intro hVt
+    rw [e_vi, if_pos hVt, set!_get!_self]
+    rw [hc.vertIndex_size]; have := hV hVt; omega
+  · -- edgeIndex
+    intro hQt
+    have := hQ hQt
+    refine ⟨?_, ?_⟩
+    · rw [e_ei, if_pos hQt, set!_get!_self]; rw [hc.edgeIndex_size]; omega
+    · rw [e_ef, if_pos hQt, set!_get!_self]; rw [hc.edgeFlipped_size]; omega
+  · -- pos_ok
+    intro hR v hv
+    have e_vp' : s4.vertPos =
+        ((items.nvList g cur).zipIdx s.nodeVerts.size).foldl (fun a x => a.set! x.1 x.2) s.vertPos := by
+      rw [e_vp, if_pos (by simp [hR]), foldl_set!_map, hmapvert]
+    show s.nodeVerts.size ≤ s4.vertPos[v]! ∧ _
+    rw [e_vp']
+    exact foldl_set!_posOK _ _ _ (fun u hu => by rw [hc.vertPos_size]; exact hwf.nvList_lt cur u hu) v hv
+  · -- edge_node
+    intro k hk
+    rw [e_ne]; split_ifs
+    · rw [modify_twin_node, append_get!_right]
+    · rw [append_get!_right]
+  · -- edge_nvs
+    intro k hk
+    rw [e_ne]; split_ifs
+    · rw [modify_twin_nvs, append_get!_right]
+    · rw [append_get!_right]
+  · -- adj_bounds
+    intro j hj1 hj2
+    rw [e_adjB, show 2 * s.nodeVerts.size + j = s.adjBounds.size + (j - 1) by rw [hc.adjBounds_size]; omega,
+      append_get!_right, Array.getElem!_eq_getD_getElem?, Array.getElem!_eq_getD_getElem?,
+      Array.getElem?_extract, hsz.2.1, if_pos (by omega), show 1 + (j - 1) = j by omega]
+  · -- adj_dat
+    intro j hj
+    rw [e_adjD, show 2 * s.nodeEdges.size + j = s.adjDat.size + j by rw [hc.adjDat_size], append_get!_right]
+  · -- cap
+    intro hcap
+    have hb' : b = true := hb.2 (by rw [hie]; exact hcap)
+    rw [e_ne, if_pos hb', modify_get!_self]
+    rw [Array.size_append, hsz.1]
+    exact Nat.lt_add_of_pos_right (Items.one_le_nEdges_of_hasCap hcap)
 
 theorem loop_init (hpre : CallPre g items cur s)
     (he : Entry g items cur p pn ct curIdx chSt nvSt neSt pos children s s7) {nv0 ne0 : Nat}
