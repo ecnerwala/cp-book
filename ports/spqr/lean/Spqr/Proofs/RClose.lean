@@ -192,11 +192,40 @@ theorem RStep.inv_absurd (h : s.Inv d) (h2 : s.g.TwoConnected) (hr : s.RStep d c
   · exact hr.ne h.symm
   · exact hcurA.ne h2 he₁ hE₁ he₀ (fun h => hU₀ (.inl h)) h
 
+/-- `cur` is 2-attached at `{cur.vStart, stackVerts[d]}` under `Inv D` when the stack vertices
+`stackVerts[d+1..D]` all equal `cur.vStart`. -/
+theorem RStep.cur_attached {D : Nat} (h : s.Inv D)
+    (hmid : ∀ k, d < k → k ≤ D → s.stackVerts[k]! = cur.vStart) (hr : s.RStep d cur nxt rest) :
+    s.g.TwoAttached (cur.edges s.g s.items) cur.vStart s.stackVerts[d]! := by
+  have hcur := h.entries cur (by simp [hr.tstack])
+  have := TwoAttached.of_term hcur.attached fun k h1 h2 =>
+    .inl (hmid k (by have := hr.cur_top; omega) h2)
+  rwa [hr.cur_top] at this
+
+/-- The union is 2-attached at `{nxt.vStart, stackVerts[d]}`: `nxt` may attach at `cur.vStart`,
+which is interior to `U`. -/
+theorem RStep.union_attached {D : Nat} (h : s.Inv D)
+    (hmid : ∀ k, d < k → k ≤ D → s.stackVerts[k]! = cur.vStart) (hr : s.RStep d cur nxt rest) :
+    s.g.TwoAttached (s.rU cur nxt) nxt.vStart s.stackVerts[d]! := by
+  have hnxt := h.entries nxt (by simp [hr.tstack])
+  have hcurA := hr.cur_attached h hmid
+  intro v e e' he he' hE hE' hv hv'
+  have hvc : v ≠ cur.vStart := by
+    rintro rfl
+    exact hE' (hr.interior e' he' hv')
+  rcases hE with hE | hE
+  · rcases hcurA v e e' he he' hE (fun h => hE' (.inl h)) hv hv' with h | h
+    · exact absurd h hvc
+    · exact .inr h
+  · rcases hnxt.attached v e e' he he' hE (fun h => hE' (.inr h)) hv hv' with h | ⟨k, h1, h2, rfl⟩
+    · exact .inl h
+    · rcases Nat.eq_or_lt_of_le h1 with h1 | h1
+      · exact .inr (by rw [← h1, hr.nxt_top])
+      · exact absurd (hmid k (by have := hr.nxt_top; omega) h2) hvc
+
 /-- The R case of loop 1 is an `RCloseShape`, from the invariant `Inv D` at any depth `D ≥ d` whose
 intermediate stack vertices `stackVerts[d+1..D]` all equal `cur.vStart` (at the R branch of
-`finishEdge` at depth `d`: `D = d+1` and `cur.vStart = stackVerts[d+1]`, the child). `cur` is then
-2-attached at `{cur.vStart, stackVerts[d]}`; `nxt` may attach at `cur.vStart`, which is interior to
-`U`, so `U` is 2-attached at `{nxt.vStart, stackVerts[d]}`. -/
+`finishEdge` at depth `d`: `D = d+1` and `cur.vStart = stackVerts[d+1]`, the child). -/
 theorem RStep.rCloseShape' {D : Nat} (h : s.Inv D)
     (hmid : ∀ k, d < k → k ≤ D → s.stackVerts[k]! = cur.vStart)
     (h2 : s.g.TwoConnected) (hr : s.RStep d cur nxt rest)
@@ -207,29 +236,13 @@ theorem RStep.rCloseShape' {D : Nat} (h : s.Inv D)
   have hnxt := h.entries nxt (by simp [hr.tstack])
   obtain ⟨e₀, he₀, hU₀⟩ := hr.proper
   obtain ⟨e₁, he₁, hE₁⟩ := hr.cur_ne
-  have hcurA : s.g.TwoAttached (cur.edges s.g s.items) cur.vStart s.stackVerts[d]! := by
-    have := TwoAttached.of_term hcur.attached fun k h1 h2 =>
-      .inl (hmid k (by have := hr.cur_top; omega) h2)
-    rwa [hr.cur_top] at this
+  have hcurA := hr.cur_attached h hmid
   have hcurT := (hcurA.touches h2 he₁ hE₁ he₀ (fun h => hU₀ (.inl h))).1
   have hnxtC := hr.nxt_touches h2 hcurA
   obtain ⟨wf, sub⟩ := hr.pieces.wf h2 ⟨e₀, he₀, hU₀⟩
   have conn : s.g.ConnEdges (s.rU cur nxt) :=
     Graph.ConnEdges.union hcur.conn hnxt.conn fun _ _ => ⟨cur.vStart, hcurT, hnxtC⟩
-  have att : s.g.TwoAttached (s.rU cur nxt) nxt.vStart s.stackVerts[d]! := by
-    intro v e e' he he' hE hE' hv hv'
-    have hvc : v ≠ cur.vStart := by
-      rintro rfl
-      exact hE' (hr.interior e' he' hv')
-    rcases hE with hE | hE
-    · rcases hcurA v e e' he he' hE (fun h => hE' (.inl h)) hv hv' with h | h
-      · exact absurd h hvc
-      · exact .inr h
-    · rcases hnxt.attached v e e' he he' hE (fun h => hE' (.inr h)) hv hv' with h | ⟨k, h1, h2, rfl⟩
-      · exact .inl h
-      · rcases Nat.eq_or_lt_of_le h1 with h1 | h1
-        · exact .inr (by rw [← h1, hr.nxt_top])
-        · exact absurd (hmid k (by have := hr.nxt_top; omega) h2) hvc
+  have att := hr.union_attached h hmid
   obtain ⟨-, hne, hts, htt, -⟩ :=
     Graph.twoAttached_union_classes h2 att ⟨e₁, he₁, .inl hE₁⟩ ⟨e₀, he₀, hU₀⟩
   exact ⟨wf, sub, conn, att, hts, htt, hne, ⟨e₀, he₀, hU₀⟩, hc.single, hc.maximal, hc.type1,

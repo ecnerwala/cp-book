@@ -62,6 +62,8 @@ import Spqr.RMax
 import Spqr.Proofs.RMax
 import Spqr.RClose
 import Spqr.Proofs.RClose
+import Spqr.RInv
+import Spqr.Proofs.RInv
 import Spqr.PlanarGlue
 import Spqr.Proofs.Orbits
 import Spqr.Proofs.PlanarGlue
