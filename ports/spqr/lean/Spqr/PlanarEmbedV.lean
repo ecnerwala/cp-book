@@ -138,7 +138,7 @@ theorem embedItem_step_V (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
     simp only [EmbedState.exposedAt, hlookup, ite_eq_right hji]
   have himax : t.Maximal i i := ⟨le_rfl, hi, fun p hp =>
     t.parent_lt hwf hi ((t.parent_some_iff i p).2 hp)⟩
-  refine ⟨⟨⟨⟨?_, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩, ?_⟩, ?_, ?_⟩
+  refine ⟨⟨⟨⟨⟨?_, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩, ?_⟩, ?_, ?_⟩, ?_⟩
   · rw [hrot, vLoop_rotAdj_size, h.rot_size]
   · rw [setOuterPair_outer_size, houter, h.outer_size]
   · intro j hj q he
@@ -210,5 +210,44 @@ theorem embedItem_step_V (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
       exact (t.v_parent_not_v hwf hi ht hp hpt).elim
     · obtain ⟨q, hq⟩ := h.outer_present j (by omega) hjs p hp hpt hne
       exact ⟨q, (hoth j hji q).2 hq⟩
+  · intro j hjs hjt v hv
+    by_cases hji : j = i
+    · subst j
+      obtain ⟨hc, _⟩ := t.vLoop_children g hwf hsh hrep.ne hsep hi ht hv s h
+      refine ⟨?_, ?_, ?_⟩
+      · intro q hq
+        rw [hexpose] at hq
+        rcases hc with ⟨hr, _⟩ | ⟨a, b, ρ, hr, he⟩
+        · change r.1 = (none, none) at hr
+          simp [hr] at hq
+        · change r.1 = (some a, some b) at hr
+          obtain ⟨la, lb, hla, hlb, hab, hva⟩ := he.boundary
+          have hvl : QE.vert g.edges.toList a = some v :=
+            (t.pieceBelow_loc_vert hwf hrep.ne hla).symm.trans hva
+          have hvr : QE.vert g.edges.toList b = some v := by
+            rw [← t.pieceBelow_loc_vert hwf hrep.ne hlb]
+            exact (he.planar.same_vertex la (by
+              rw [he.planar.size]
+              simpa only [Piece.es, List.length_map] using Piece.loc_lt hla) lb hab).symm.trans hva
+          rcases hq with hq | hq
+          · have heq : a = q := Option.some.inj (by simpa only [hr] using hq)
+            exact heq ▸ hvl
+          · have heq : b = q := Option.some.inj (by simpa only [hr] using hq)
+            exact heq ▸ hvr
+      · intro k q hk
+        rcases hnewslot k q hk with ⟨rfl, _⟩ | ⟨rfl, _⟩ <;> omega
+      · intro _ hne
+        rcases hc with ⟨_, he⟩ | ⟨a, b, ρ, hr, he⟩
+        · exact (hne he).elim
+        · exact ⟨a, (hexpose a).2 (Or.inl (by rw [hr]))⟩
+    · obtain ⟨hvert, hslots, hpres⟩ := h.outer_vertex j hjs hjt v hv
+      refine ⟨?_, ?_, ?_⟩
+      · intro q hq; exact hvert q ((hoth j hji q).1 hq)
+      · intro k q hk
+        rw [hlookup, ite_eq_right hji] at hk
+        exact hslots k q hk
+      · intro hj hne
+        obtain ⟨q, hq⟩ := hpres (by omega) hne
+        exact ⟨q, (hoth j hji q).2 hq⟩
 
 end Spqr.PlanarSpqrTree
