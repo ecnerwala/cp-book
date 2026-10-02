@@ -6,6 +6,7 @@ import Spqr.Correctness
 import Spqr.PlanarInv
 import Spqr.PlanarEmbedSteps
 import Spqr.PlanarEmbedFold
+import Spqr.PlanarEmbedRoot
 import Spqr.WalkPieceSep
 import Spqr.RelabelChildShape
 import Spqr.Spec
@@ -209,20 +210,21 @@ theorem nodePlanar_complete (g : Graph) (ternarize : Bool) (vertOrder edgeOrder 
       ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i) := by
   sorry
 
-/-- At the root (item `0`, the `F` item of `g`, no parent): `edgesBelow 0` is every edge of `g`,
-`outerE[0]` is all unset, so `GluedUpTo 0` says the glued rotation is total and agrees with a
-planar embedding of `g.edges` under the identity renumbering. Admitted (tree facts about the
-root item). -/
+/-- The root piece contains every edge, and its local quarter-edge numbering permutes the
+original quarter-edges. Its closed planar embedding transports to the glued rotation. -/
 theorem glued_root (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
     (hwf : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.WF) (s : PlanarSpqrTree.EmbedState)
     (h : (g.planarTree ternarize vertOrder edgeOrder).GluedUpTo g 0 s) :
     IsPlanarEmbedding g.edges.toList g.nv ⟨s.rotAdj⟩ := by
-  sorry
+  apply (g.planarTree ternarize vertOrder edgeOrder).glued_root_of g hwf ?_ ?_ s h
+  · rw [planarRelabel_proj]
+    exact spqrTree_childShape g ternarize vertOrder edgeOrder
+  · rw [planarRelabel_proj]
+    rfl
 
 /-- Soundness of the glued embedding: it is a planar embedding of `g` (Euler's formula per
 component). The reverse-preorder fold is `forM_reverse_range_inv` with the invariant `GluedUpTo`
-(`gluedUpTo_init` proved); the per-item steps `embedItem_step_{F,V,Q,leaf,node}` and the root
-assembly `glued_root` are admitted (plan in PROOF.md §8.5: `twoSum_planar` for S/P/R with
+(`gluedUpTo_init` proved); Q and node steps remain admitted (plan in PROOF.md §8.5: `twoSum_planar` for S/P/R with
 `nodePlanar_sound`, `oneSum_planar` for V/Q, `disjointUnion_planar` for F). The tree's `WF` comes
 from `spqrTree_wf'`, hence the `g.WF` / `OrderOK` hypotheses. -/
 theorem planarEmbed_sound (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder edgeOrder : List Nat)

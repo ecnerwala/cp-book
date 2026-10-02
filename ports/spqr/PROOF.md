@@ -1502,7 +1502,7 @@ framing later children and all other maximal pieces by edge disjointness.
 nonempty case with `v_child_boundary`. `setOuterPair_lookup` exposes only slots 0/1,
 and `v_parent_not_v` discharges the attachment/presence conditions for the new V row.
 The V theorem and every loop/frame helper were audited with `#print axioms`:
-only standard axioms occur. Q, node, and `glued_root` remain admitted.
+only standard axioms occur. Q and node remain admitted.
 
 Q also needs the boundary of a V item itself to be at that item's original vertex.
 On `nv=3, edges=[(0,1),(1,2)]`, the actual tree is the chain
@@ -1540,6 +1540,18 @@ The checker validates cap endpoints and slot presence on seeds 0..300 and the
 single-edge/star/self-loop/isolated-vertices cases, with zero violations.
 The capped-node-child case of Q still needs its cofacial contract audited;
 these endpoint corrections do not claim that Q's current statement is sufficient.
+
+`glued_root` is proved. `edgesBelow 0` is a permutation of `range t.ne`, rather
+than the identity enumeration claimed by its old docstring. Each item's piece is
+included in its parent's by `edgesBelow_eq`; induction along the decreasing parent
+chain covers every Q item at the root. Bijections and nodup then give the edge
+permutation. With the F row unexposed, the actual rotation is total and transports
+along `Piece.loc`. `IsPlanarEmbedding.reindex` preserves the vertex/face orbit
+counts by `orbitCount_congr` and the graph counts by equal edge membership.
+The generic `glued_root_of` also handles a zero-size tree (its graph is edgeless).
+`glued_root_of` and its transport helpers have standard axioms only. The named
+`glued_root` obtains `ChildShape` from `spqrTree_childShape`, whose sole admission
+is the accepted `walk_items_wf`; its projection and edge-count transport add none.
 
 | statement | file | status |
 |---|---|---|
@@ -1594,14 +1606,16 @@ these endpoint corrections do not claim that Q's current statement is sufficient
 | `EmbedM.link`/`outer`/`setOuter` frame lemmas on an abstract `EmbedState` (`link_some_run`, `link_outerE`, `link_rotAdj_size`, `link_rotAdj_get`, `link_exposedAt`, `setOuter_run`, `setOuter_rotAdj`, `setOuter_outerE_*`, `setOuter_exposedAt_ne`) | `PlanarEmbedLink.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `ChildShape.tile` (the `k`-th child of `i` is `i + 1 +` the subtree sizes of the earlier children; from `RelabelAll.child_idx_eq`/`children_sum`), `children_eq` (`toSpqrTree.children` = `PlanarSpqrTree.children`), `range'_children`, `edgesBelow_eq` (`edgesBelow i` = the item's own `Q` edge followed by the children's `edgesBelow`, under `Preorder.subtree_eq` + `ChildShape.tile`) | `PlanarShape.lean`, `RelabelChildShape.lean`, `PlanarEmbedBelow.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`; `spqrTree_childShape` inherits `walk_items_wf`'s `sorryAx` like `spqrTree_wf'`) |
 | `embedItem_step_leaf_of` (the `O`/`I` step from `GluedUpTo (i+1)` + `subtreeEnd[i] = i+1`), `embedItem_leaf` (`embedItem` is the identity on leaves), `edgesBelow_leaf`, `isPlanarEmbedding_nil`; `subtreeEnd_leaf` (`WF.preorder.subtree_eq` + `ChildShape.leaf`), `embedItem_step_leaf`, dispatcher `embedItem_step`, `gluedUpTo_planarEmbed` | `PlanarEmbedLeaf.lean`, `PlanarEmbedFold.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`); `embedItem_step`/`gluedUpTo_planarEmbed` modulo the two admitted steps Q/node. The former unconditional `embedItem_step_*` (no `WF`) were false for an arbitrary `PlanarSpqrTree` (an `O` item with a `Q` item in its `subtreeEnd` range), and `WF` alone is still too weak for the leaf step: `WF` admits an `O` item `2` with a `V` child `3` carrying a block-root `Q` child `4` (`nv_layout` with `a = b = []`, `twin_parent` with the non-node parent `V`); after items `4`, `3` the two ends of `4`'s edge exposed at `3` are `some none` in `rotAdj` but not `exposedAt 2`, so `GluedUpTo 2` fails although `embedItem 2` is the identity — hence `ChildShape.leaf` |
-| `glued_root` (`GluedUpTo 0` at the root `F` item is `IsPlanarEmbedding` of `g`) | `PlanarSpec.lean` | sorry |
+| `glued_root` | `PlanarSpec.lean` | **proved**, `sorryAx` only through accepted `walk_items_wf` via `spqrTree_childShape` |
+| `glued_root_of`, `edgesBelow_subset_root`, `mem_edgesBelow_root_iff`, `edgesBelow_root_perm`, `pieceBelow_root_perm` | `PlanarEmbedRoot.lean` | **proved** (standard axioms) |
+| `IsPlanarEmbedding.reindex`, `graphCounts_congr`, `Piece.loc_xor` | `Proofs/PlanarReindex.lean`, `Proofs/PieceLoc.lean` | **proved** (standard axioms) |
 | `planarEmbed_sound` | `PlanarSpec.lean` | proved from `gluedUpTo_planarEmbed` (with `WF`/`ChildShape` of `g.planarTree …` from `spqrTree_wf'`/`spqrTree_childShape` via `planarRelabel_proj`, hence the `g.WF`/`OrderOK` hypotheses) + `glued_root` |
 | `spqrTree_planar` (`→` from `planarEmbed_sound`; `←` needs completeness + skeletons are minors of `g`) | `PlanarSpec.lean` | sorry |
 
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): `spqrTree_wf` (inherited by `planarRelabel_rot_spec`, `neRotAdj_segment`);
 `nodePlanar_sound_R`; the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
 `planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`,
-`embedItem_step_Q`, `embedItem_step_node`, `glued_root` (hence
+`embedItem_step_Q`, `embedItem_step_node` (hence
 `planarEmbed_sound`); `spqrTree_planar`. The S and P
 cases of `nodePlanar_sound` are proved except for the `Shape` of the
 skeleton (`spqrTree_wf`, which inherits `relabelTree_wf`'s `sorry`); the local counting itself
@@ -1629,5 +1643,5 @@ Work packages:
   `disjointUnion_planar` (`RotationSystem.union`) are proved; the bottom-up induction over
   `embedItem` is done (`forM_reverse_range_inv`), what remains are the per-item steps
   `embedItem_step_*` (each one `link` = one splice of two pieces' exposed ends; the node step must
-  supply `twoSum_planar`'s `hdeg`/`hface`/`hconn` from the skeleton's shape) and `glued_root`.
+  supply `twoSum_planar`'s `hdeg`/`hface`/`hconn` from the skeleton's shape).
 * **Completeness**: the crossing of §8.3 as a `K₅`/`K₃,₃` subdivision — the hard, optional one.
