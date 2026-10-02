@@ -1225,6 +1225,11 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 | `planarRelabelTree_base`, `planarRelabel_proj` | `PlanarRelabelProj.lean` | **proved** (`propext`, `Quot.sound`) |
 | `planarEmbed_isSome_iff` | `PlanarSpec.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | orbit counting: `numOrbits` = orbit minima, `numOrbits_involution`; `numComponents` by label relaxation | `Planar.lean`, `Proofs/Planar.lean` | def / **proved** |
+| `numOrbits_eq_orbitCount` (executable orbit minima count = `orbitCount` for a permutation of `range n`) | `Proofs/OrbitCount.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
+| `numComponents_eq_ccCount` (label relaxation converges in `n` rounds to component minima; `numComponents` = number of `EdgesConn` classes with an edge) | `Proofs/CompCount.lean` | **proved** (standard axioms) |
+| `ccCount_union`, `ccCount_ident_of_conn` / `_of_not_conn` (component count under disjoint union and identification of two non-isolated vertices) | `Proofs/CompGlue.lean` | **proved** (standard axioms) |
+| `TwoSum.numNonIsolated_edges` (`V + 2 = V₁ + V₂`), `TwoSum.numComponents_edges` (`C + 1 = C₁ + C₂`, via `WF.conn`: the 2-sum is `G₁ ⊔ (G₂ + n₁)` with `u`, `v` identified) | `Proofs/TwoSumCount.lean`, `Proofs/TwoSumComp.lean` | **proved** (standard axioms) |
+| `TwoSum.splice_isPlanarEmbedding`, `TwoSum.planar` (explicit splice of two planar embeddings along the virtual edge, `f = f₁ + f₂ − 2`) | `PlanarGlue.lean`, `Proofs/PlanarGlue.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | closed forms of `layoutRot .S` / `.P`; `cycleRot_isPlanarEmbedding`, `bondRot_isPlanarEmbedding` | `PlanarLayout.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `layoutRot_S_shift`, `layoutRot_P_shift` (renumbering a node's edges from 0) | `PlanarInv.lean` | **proved** |
 | Invariant P (§8.2) as a Lean structure: `Piece`, `SideWalk`, `InvariantP`, `StackInv` | `PlanarInv.lean` | def (the deliverable is the statement) |
@@ -1235,7 +1240,7 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 | `nodePlanar_sound_R` (Invariant P at finish, mapped by `mapRot`) | `PlanarSpec.lean` | sorry |
 | `nodePlanar_sound` = S ∨ P ∨ R cases | `PlanarSpec.lean` | proved from the three |
 | `nodePlanar_complete` (Kuratowski-style certificate from the §8.3 crossing) | `PlanarSpec.lean` | sorry, hard |
-| `twoSum_planar`, `oneSum_planar`, `disjointUnion_planar` (gluing on `Planar`) | `PlanarInv.lean` | sorry (explicit splice with `f₁ + f₂ − 2` faces: `PlanarGlue`) |
+| `twoSum_planar`, `oneSum_planar`, `disjointUnion_planar` (gluing on `Planar`) | `PlanarInv.lean` | sorry (`twoSum_planar`: transport from `TwoSum.planar` — identify `twoSumEdges`/`n₁ + n₂ − 2` with `TwoSum.edges`/`TwoSum.nVerts = n₁ + n₂` and supply `TwoSum.WF`'s `deg`/`face`/`conn`) |
 | `WalkInv` / `Preserves` (Hoare triple on `PlanarWalkM`), `Preserves.frame`, `Preserves.popPair`, `planarFinishEdge_inv`, `planarWalkOut_inv` (+ `Tree`/`Outs`), `planarWalkOut_stackInv` | `PlanarInvSteps.lean` | def / **proved** modulo the per-step lemmas |
 | `pushVertTstack_inv` (a fresh vertex entry has no exposed ends, so `StackInv` exempts it) | `PlanarInvSteps.lean` | **proved** |
 | per-step lemmas `pushEdgeTstack_inv`, `mergeTstackTops_inv`, `maybeUnwrapNxt_inv`, `finishTstackTop_inv`, `closeBackedges_inv`, `flipBeforeMerge_inv`, `pruneBackedges_inv`, `flipForLowval_inv`, `modifyCur_foldSides_inv` (one `planarFinishEdge` step each preserves Invariant P) | `PlanarInvSteps.lean` | sorry |
@@ -1247,7 +1252,8 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): `planarRelabel_rot_spec` (hence `neRotAdj_segment`);
 `nodePlanar_sound_R`; the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
-`planarWalkOut_stackInv`); `nodePlanar_complete`; `twoSum_planar`,
+`planarWalkOut_stackInv`); `nodePlanar_complete`; `twoSum_planar` (its explicit construction
+`TwoSum.planar` is fully proved, including the three counting bridges),
 `oneSum_planar`, `disjointUnion_planar`; `embedItem_step_F`, `embedItem_step_V`,
 `embedItem_step_Q`, `embedItem_step_leaf`, `embedItem_step_node`, `glued_root` (hence
 `planarEmbed_sound`); `spqrTree_planar`. The S and P
