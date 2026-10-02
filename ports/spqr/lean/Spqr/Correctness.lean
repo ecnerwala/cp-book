@@ -1,0 +1,59 @@
+import Spqr.Build
+import Spqr.Spec
+import Spqr.ItemSpec
+
+/-!
+# Correctness theorems
+
+Top level: `spqrTree_wf` and `spqrTree_represents`. They are assembled from one theorem per
+phase; each phase theorem is proven in its own module (`Spqr.Proofs.*`). Statements below that
+are still `sorry` are listed in the README.
+-/
+
+namespace Spqr
+
+/-- Phase 1: the DFS forest is a spanning forest of `g` in which every edge appears exactly once
+as an out-edge (tree edge from the parent, or back edge from the deeper endpoint / loop). -/
+theorem dfsForest_spanning (g : Graph) (vo eo : List Nat) :
+    let forest := g.dfsForest vo eo
+    -- every vertex appears exactly once
+    ((forest.flatMap DfsTree.verts).Perm (List.range g.nv)) ∧
+    -- every edge appears exactly once
+    ((forest.flatMap DfsTree.edges).Perm (List.range g.ne)) := by
+  sorry
+
+/-- Phase 2: the walk's items satisfy the item-level specification. -/
+theorem walk_items_wf (g : Graph) (tern : Bool) (vo eo : List Nat) :
+    Items.WF g (g.walk tern (g.dfsForest vo eo)).items := by
+  sorry
+
+/-- Phase 3: relabelling a well-formed item tree gives a well-formed output ... -/
+theorem relabelTree_wf (g : Graph) (items : Items) (h : items.WF g) :
+    (relabelTree g items).WF := by
+  sorry
+
+/-- ... that represents `g` (3-connectivity of R skeletons is the one property not implied by the
+item-level `Shapes`; it is proven from the walk invariants in `Spqr.Proofs.Rigid`). -/
+theorem relabelTree_represents (g : Graph) (items : Items) (h : items.WF g)
+    (hR : ∀ i, i < (relabelTree g items).size → (relabelTree g items).type i = .R →
+      SpqrTree.ThreeConnected ((relabelTree g items).nVerts i)
+        (((relabelTree g items).skeleton i).map fun p =>
+          (p.1 - ((relabelTree g items).nvRange i).1, p.2 - ((relabelTree g items).nvRange i).1))) :
+    (relabelTree g items).Represents g := by
+  sorry
+
+theorem spqrTree_r_three_connected (g : Graph) (tern : Bool) (vo eo : List Nat) :
+    let t := g.spqrTree tern vo eo
+    ∀ i, i < t.size → t.type i = .R →
+      SpqrTree.ThreeConnected (t.nVerts i)
+        ((t.skeleton i).map fun p => (p.1 - (t.nvRange i).1, p.2 - (t.nvRange i).1)) := by
+  sorry
+
+theorem spqrTree_wf (g : Graph) (tern : Bool) (vo eo : List Nat) : (g.spqrTree tern vo eo).WF :=
+  relabelTree_wf g _ (walk_items_wf g tern vo eo)
+
+theorem spqrTree_represents (g : Graph) (tern : Bool) (vo eo : List Nat) :
+    (g.spqrTree tern vo eo).Represents g :=
+  relabelTree_represents g _ (walk_items_wf g tern vo eo) (spqrTree_r_three_connected g tern vo eo)
+
+end Spqr

@@ -90,6 +90,26 @@ def cls : DfsOut → OutClass | back _ _ cls => cls | tree _ cls _ => cls
 def dest : DfsOut → Nat | back _ dest _ => dest | tree _ _ child => child.v
 end DfsOut
 
+mutual
+/-- Vertices of the tree, in preorder. -/
+def DfsTree.verts : DfsTree → List Nat
+  | .node v outs => v :: DfsOut.vertsList outs
+def DfsOut.vertsList : List DfsOut → List Nat
+  | [] => []
+  | .back .. :: rest => DfsOut.vertsList rest
+  | .tree _ _ child :: rest => child.verts ++ DfsOut.vertsList rest
+end
+
+mutual
+/-- Edges of the tree (tree and back edges), in preorder. -/
+def DfsTree.edges : DfsTree → List Nat
+  | .node _ outs => DfsOut.edgesList outs
+def DfsOut.edgesList : List DfsOut → List Nat
+  | [] => []
+  | .back e _ _ :: rest => e :: DfsOut.edgesList rest
+  | .tree e _ child :: rest => e :: child.edges ++ DfsOut.edgesList rest
+end
+
 /-- The two smallest distinct depths reachable from a subtree, with `(d, d)` meaning "none". -/
 abbrev Lowvals := Nat × Nat
 
