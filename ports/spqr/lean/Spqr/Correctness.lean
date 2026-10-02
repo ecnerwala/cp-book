@@ -1,6 +1,7 @@
 import Spqr.Build
 import Spqr.Spec
 import Spqr.ItemSpec
+import Spqr.Proofs.Dfs
 
 /-!
 # Correctness theorems
@@ -14,13 +15,14 @@ namespace Spqr
 
 /-- Phase 1: the DFS forest is a spanning forest of `g` in which every edge appears exactly once
 as an out-edge (tree edge from the parent, or back edge from the deeper endpoint / loop). -/
-theorem dfsForest_spanning (g : Graph) (vo eo : List Nat) :
+theorem dfsForest_spanning (g : Graph) (hg : g.WF) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
+    (heo : OrderOK g.ne eo) :
     let forest := g.dfsForest vo eo
     -- every vertex appears exactly once
     ((forest.flatMap DfsTree.verts).Perm (List.range g.nv)) ∧
     -- every edge appears exactly once
-    ((forest.flatMap DfsTree.edges).Perm (List.range g.ne)) := by
-  sorry
+    ((forest.flatMap DfsTree.edges).Perm (List.range g.ne)) :=
+  dfsForest_spanning' hg hvo heo
 
 /-- Phase 2: the walk's items satisfy the item-level specification. -/
 theorem walk_items_wf (g : Graph) (tern : Bool) (vo eo : List Nat) :
