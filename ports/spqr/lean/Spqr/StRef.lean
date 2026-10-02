@@ -1,4 +1,4 @@
-import Spqr.Walk
+import Spqr.ItemSpec
 
 /-!
 # The st-order reference
@@ -88,5 +88,40 @@ def refBlocks (g : Graph) (forest : List DfsTree) : List (List ItemId) :=
 /-- The reference st-order of the leaf items (blocks concatenated; no item lies in two blocks). -/
 def refOrder (g : Graph) (forest : List DfsTree) : List ItemId :=
   (refBlocks g forest).flatMap id
+
+/-! ### The statement: the walk's child lists are restrictions of `refOrder` -/
+
+/-- The leaf items (vertices and edges) under `i`, in `ch` order; `fuel ≥` the depth of `i`. -/
+def Items.leaves (items : Items) : Nat → ItemId → List ItemId
+  | 0, i => [i]
+  | fuel + 1, i =>
+    match Items.type items i with
+    | .V | .Q => [i]
+    | _ => (Items.ch items i).flatMap (Items.leaves items fuel)
+
+/-- Collapse runs of equal elements. -/
+def collapseRuns : List ItemId → List ItemId
+  | [] => []
+  | [x] => [x]
+  | x :: y :: xs => if x = y then collapseRuns (y :: xs) else x :: collapseRuns (y :: xs)
+
+/-- The restriction of `order` to the children of `i`: each leaf is replaced by the child of `i`
+it lies under, and runs are collapsed. -/
+def restrictCh (items : Items) (fuel : Nat) (order : List ItemId) (i : ItemId) : List ItemId :=
+  collapseRuns (order.filterMap fun x =>
+    (Items.ch items i).find? fun c => x ∈ Items.leaves items fuel c)
+
+/-- The walk lists the children of every S / P / R item in the reference st-order
+(differentially tested by `check_stref`). -/
+theorem walk_st' (g : Graph) (tern : Bool) (vo eo : List Nat) (i : ItemId)
+    (hi : i < (g.walk tern (g.dfsForest vo eo)).items.size)
+    (ht : Items.type (g.walk tern (g.dfsForest vo eo)).items i = .S ∨
+      Items.type (g.walk tern (g.dfsForest vo eo)).items i = .P ∨
+      Items.type (g.walk tern (g.dfsForest vo eo)).items i = .R) :
+    Items.ch (g.walk tern (g.dfsForest vo eo)).items i =
+      restrictCh (g.walk tern (g.dfsForest vo eo)).items
+        (g.walk tern (g.dfsForest vo eo)).items.size
+        (refOrder g (g.dfsForest vo eo)) i := by
+  sorry
 
 end Spqr
