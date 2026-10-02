@@ -73,6 +73,56 @@ the first entry returning above `d`. -/
 def Loop1Range (d : Nat) (sub hi : List TEntry) : Prop :=
   ∃ lo, sub = hi ++ lo ∧ (∀ t ∈ hi, d ≤ t.topDepth) ∧ (∀ t ∈ lo.head?, t.topDepth < d)
 
+/-- Loop 1 read on the original stack: after consuming the entries `done` (top first) of its range,
+the current piece has bottom `l1Bot o done` (the bottom of the last consumed entry, initially the
+child) and edge set `l1Edges o s done` (the tree edge plus the consumed entries' edges). -/
+def l1Bot (o : DfsOut) (done : List TEntry) : Nat := ((done.getLast?).map TEntry.vStart).getD o.dest
+def l1Edges (o : DfsOut) (s : WalkState) (done : List TEntry) (e : Nat) : Prop :=
+  e = o.e ∨ ∃ t ∈ done, t.edges s.g s.items e
+
+/-- Merging the loop-1 piece `(v, E)` (bottom `v`, edges `E`, top `d`) with the entry `t`:
+`MergeOk.share`/`bottom` at depth `d + 1`. -/
+structure L1Merge (d : Nat) (s : WalkState) (v : Nat) (E : Nat → Prop) (t : TEntry) : Prop where
+  share : (∃ e, e < s.g.ne ∧ t.edges s.g s.items e) →
+    ∃ x, s.g.Touches E x ∧ s.g.Touches (t.edges s.g s.items) x
+  bottom : v = t.vStart ∨ (∃ k, d ≤ k ∧ k ≤ d + 1 ∧ v = s.stackVerts[k]!) ∨
+    s.g.Interior (fun e => E e ∨ t.edges s.g s.items e) v
+
+/-- Closing the loop-1 piece `(v, E)` with the entry `t`: the merge, and `FinishTopOk.mid` at the
+only intermediate depth `d + 1`. -/
+structure L1Close (d : Nat) (s : WalkState) (v : Nat) (E : Nat → Prop) (t : TEntry) : Prop
+    extends L1Merge d s v E t where
+  mid : s.stackVerts[d + 1]! = t.vStart ∨
+    s.g.Interior (fun e => E e ∨ t.edges s.g s.items e) s.stackVerts[d + 1]! ∨
+    ¬ s.g.Touches (fun e => E e ∨ t.edges s.g s.items e) s.stackVerts[d + 1]!
+
+/-- `t` unwraps as a `ty` node (`maybeUnwrapNxt ty`): if the head of a side of `t` is a `ty` item,
+`t` is that single root item, whose children are on no entry. -/
+def L1Unwrap (s : WalkState) (ty : NodeType) (t : TEntry) : Prop :=
+  ∀ dir h, (getSide t.spans dir).head! = h → Items.type s.items h = ty →
+    getSide t.spans dir = [h] ∧ (∀ p, ¬ Items.IsParent s.items p h) ∧
+    ∀ c ∈ Items.ch s.items h, ∀ u ∈ s.tstack, c ∉ u.spans.1 ++ u.spans.2
+
+/-- The splits `done ++ rest` of loop 1's range reached at iteration boundaries: an entry at depth
+`d` is closed alone, a deeper one is S-merged and closed together with the entry under it. -/
+inductive L1Reach (d : Nat) : List TEntry → List TEntry → List TEntry → Prop
+  | nil (hi : List TEntry) : L1Reach d hi [] hi
+  | close {hi done : List TEntry} {t : TEntry} {rest : List TEntry} :
+    L1Reach d hi done (t :: rest) → t.topDepth = d → L1Reach d hi (done ++ [t]) rest
+  | series {hi done : List TEntry} {t t' : TEntry} {rest : List TEntry} :
+    L1Reach d hi done (t :: t' :: rest) → d < t.topDepth → L1Reach d hi (done ++ [t, t']) rest
+
+/-- What loop 1 needs of its range `hi` (top first), read in the state before `finishEdge`: at every
+reached split, the next entry `t` closes (depth `d`; as a `P` node when it shares the piece's
+bottom), or is S-merged and the entry under it closes (as an `S` node). -/
+def Loop1Spec (d : Nat) (o : DfsOut) (s : WalkState) (hi : List TEntry) : Prop :=
+  ∀ done t rest, L1Reach d hi done (t :: rest) →
+    (t.topDepth = d → L1Close d s (l1Bot o done) (l1Edges o s done) t ∧
+      (t.vStart = l1Bot o done → L1Unwrap s .P t)) ∧
+    (d < t.topDepth → L1Merge d s (l1Bot o done) (l1Edges o s done) t ∧
+      ∃ t' rest', rest = t' :: rest' ∧ L1Close d s t.vStart (l1Edges o s (done ++ [t])) t' ∧
+        L1Unwrap s .S t')
+
 /-- The bottom two entries of an ear with lowval `l` and chain bottom `y`: the vertex entry `vy` of
 `y` (holding only `vertItem y`, hence only `y`'s boundary blocks) under the `(y, l)` piece `py`, a
 single root item on the side `stackDir[l]` attached at `y` and `stackVerts[l]`. -/
@@ -129,6 +179,8 @@ structure EarFinish (curV d : Nat) (o : DfsOut) (hasVert : Bool) (sub base : Lis
     (∃ i, t.spans = setSides s.stackDir[t.topDepth]! [i] [] ∧ ∀ p, ¬ Items.IsParent s.items p i) ∧
     ∀ v, s.g.Touches (t.edges s.g s.items) v →
       v = curV ∨ v = s.stackVerts[t.topDepth]! ∨ s.g.Interior (t.edges s.g s.items) v
+  /-- Loop 1's per-iteration merge/unwrap/close facts (`Loop1Spec`). -/
+  loop1 : o.cls.isTree = true → o.cls.lowval d < d → ∀ hi, Loop1Range d sub hi → Loop1Spec d o s hi
   /-- The ear's bottom two entries (`EarBottom`) end `sub`. -/
   bottom : o.cls.isTree = true → o.cls.lowval d < d →
     ∃ mid py vy, sub = mid ++ [py, vy] ∧ EarBottom d (o.cls.lowval d) s py vy

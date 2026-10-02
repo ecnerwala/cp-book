@@ -1,6 +1,7 @@
 import Spqr.WalkSpec
 import Spqr.Frame
 import Spqr.EarInv
+import Spqr.EarLoop1
 
 /-!
 # From the tstack guards to `FinishOk`
@@ -55,11 +56,15 @@ cover. Each is stated at the state where the block runs. -/
 
 /-- Loop 1: every iteration merges/unwraps/closes a finished sub-ear (`Loop1BodyOk`). -/
 theorem ear_loop1 (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
-    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (k : Nat)
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s)
+    (hD : D = d + 1) (hv : curV < s.g.nv) (he : o.e < s.g.ne) (hq : Items.ch s.items (edgeItem s.g o.e) = [])
+    (hends : Items.PairEq (o.dest, s.stackVerts[d]!) s.g.edges[o.e]!) (k : Nat)
     (hk : ∀ j, j ≤ k → result (loop1Cond d)
       (iter (Spqr.loop1Body d s.stackDir[d]!) j (ceS₁ o.dest d o.e (feS₀ d o s))) = true) :
     Loop1BodyOk D d s.stackDir[d]! (iter (Spqr.loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s))) := by
-  sorry
+  have hlow' : o.cls.lowval d < d := by rw [ho]; exact hlow
+  obtain ⟨hi', lo, hsplit, hc⟩ := L1Ctx.ofEar hE hs hD ht hlow'
+  exact loop1_ok hc (l1_init hE hi hs hD he hq hends hsplit) hv k hk
 
 /-- Loop 2: every late merge joins entries sharing a terminal (`MergeTopOk`). -/
 theorem ear_mergeLate (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
@@ -299,7 +304,7 @@ theorem finishOk_of_guards (ho : o.cls = .ret lv kind) (hlow : lv < d)
     exact hq
   have hears : o.cls.isTree = true → CloseEarsOk D o.dest d o.e s.stackDir[d]! (feS₀ d o s) := fun ht =>
     ⟨he, hq₀, by show Items.PairEq (o.dest, s.stackVerts[d]!) s.g.edges[o.e]!; simpa [ht] using hends,
-     hdD, ear_loop1 ho hlow ht hg hE hi hs⟩
+     hdD, ear_loop1 ho hlow ht hg hE hi hs (by rw [hD, if_pos ht]) hv he hq (by simpa [ht] using hends)⟩
   have st₀ : Step D curV s (feS₀ d o s) :=
     Step.modifyVs hi hs (edgeItem s.g o.e) _ (by show 1 + s.g.nv + o.e < _; omega)
   have hv₀ : curV < (feS₀ d o s).g.nv := by rw [st₀.g]; exact hv
