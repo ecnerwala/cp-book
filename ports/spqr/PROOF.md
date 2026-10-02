@@ -1736,7 +1736,7 @@ holds, but Q item 2 links quarter-edges 3 and 6, at original vertices 1 and 2.
 The literal tree's projection matched `pathGraph.planarSpqrTree false [0,1,2] [0,1]`
 by execution; this comparison is empirical, not a kernel proof of well-formedness.
 
-`GluedUpTo` extends `GluedOriented` with `outer_vertex`: a V(v) item's exposed
+`GluedVertex` extends `GluedOriented` with `outer_vertex`: a V(v) item's exposed
 ends lie at v, occupy only slots 0/1, and exist whenever the processed piece is
 nonempty. The latter clauses let Q consume the V child's entire open boundary
 and prevent a nonempty closed child from being silently skipped.
@@ -1744,7 +1744,23 @@ Initialization, leaf, F, and V preservation are proved and re-audited with stand
 axioms only. For V, the fold's `OpenEmbedding.boundary` localizes both outer ends
 at v, and its empty-output case has an empty edge list. All three clauses pass
 the extended `check_piece_sep` on seeds 0..300 and the four tiny cases.
-The capped-node-child case of Q still needs its endpoint/cofacial contract audited.
+The cap endpoint condition is independently necessary on two parallel edges
+`nv=2, edges=[(0,1),(0,1)]`, whose tree is `F,V(0),Q(0),Q(1),V(1)`.
+Set every rotation entry to `none`, expose `[6,7,4,5]` at capped Q item 3,
+and leave every other outer row empty. `GluedVertex 3` holds (the child has the
+one-edge rotation), but Q item 2 links quarter-edges 1 and 6 at vertices 0 and 1.
+`badCapState_before`, `badCapState_after`, and `badCapState_excluded` in
+`Proofs/PlanarEmbedCapCounterexample.lean` prove this with standard axioms only.
+The literal tree was also compared with the executable output.
+
+`GluedUpTo` extends `GluedVertex` with `outer_cap`: slots 0/1 are at the first
+original cap endpoint, slots 2/3 at the second, and a processed nonempty capped
+piece exposes all four slots. Initialization, leaf, F, and V preserve the field
+with only standard axioms; F/V have no cap themselves and frame all older rows.
+The checker validates cap endpoints and slot presence on seeds 0..300 and the
+single-edge/star/self-loop/isolated-vertices cases, with zero violations.
+The capped-node-child case of Q still needs its cofacial contract audited;
+these endpoint corrections do not claim that Q's current statement is sufficient.
 
 | statement | file | status |
 |---|---|---|
@@ -1755,6 +1771,7 @@ The capped-node-child case of Q still needs its endpoint/cofacial contract audit
 | `Piece.OpenEmbedding.splice`, `OpenEmbedding.frame`, `v_child_boundary` | `Proofs/PieceSplice.lean`, `PlanarEmbedVBoundary.lean` | **proved** (standard axioms); linking the inner ends of two open pieces agrees with the specified conjugated rotation and leaves exactly the two outer ends open; V children supply these open pieces |
 | `embedItem_step_V`, `vLoop_children`, `vLoop_piece`, `vLoop_open_spec`, `embedItem_V`, `vLoop_*` / `setOuterPair_*` frame lemmas | `PlanarEmbedV.lean`, `PlanarEmbedVLoop.lean` | **proved** (standard axioms); all fields of the strengthened `GluedUpTo` are preserved |
 | `pathEdgeRot_planar`, `badQState_before`, `badQState_after`, `badQState_excluded`; `GluedUpTo.outer_vertex` | `Proofs/PlanarEmbedQCounterexample.lean`, `PlanarEmbedSteps.lean` | **proved** (standard axioms) / boundary contract; initialization, leaf, F, V preserve the strengthened invariant |
+| `badCapState_before`, `badCapState_after`, `badCapState_excluded`; `GluedUpTo.outer_cap` | `Proofs/PlanarEmbedCapCounterexample.lean`, `PlanarEmbedSteps.lean` | **proved** (standard axioms) / cap endpoint and presence contract; initialization, leaf, F, V preserve it |
 | `maximal_not_inSubtree`, `maximal_pieces_disjoint`, `v_children_nonempty`, `v_parent_not_v`, `v_pieces_meet` and tree/localization helpers | `PlanarEmbedTree.lean`, `Proofs/PieceLoc.lean` | **proved** (standard axioms); disjointness of maximal pieces follows from the preorder child partition, and V hypotheses give the shared attachment vertex |
 | `Piece.loc_data`, `mem_of_loc`, `loc_exists`, `loc_lt`, `loc_injective`, `loc_append_left/right`, `agrees_append` | `Proofs/PieceLoc.lean`, `Proofs/PieceAppend.lean` | **proved** |
 | `mem_edgesBelow_data`, `mem_edgesBelow_lt`, `edgeIn_of_mem_edgesBelow`, `edgesBelow_nodup` | `PlanarEmbedEdges.lean` | **proved** |

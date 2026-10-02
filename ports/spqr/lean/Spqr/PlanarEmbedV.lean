@@ -138,7 +138,7 @@ theorem embedItem_step_V (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
     simp only [EmbedState.exposedAt, hlookup, ite_eq_right hji]
   have himax : t.Maximal i i := ⟨le_rfl, hi, fun p hp =>
     t.parent_lt hwf hi ((t.parent_some_iff i p).2 hp)⟩
-  refine ⟨⟨⟨⟨⟨?_, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩, ?_⟩, ?_, ?_⟩, ?_⟩
+  refine ⟨⟨⟨⟨⟨⟨?_, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩, ?_⟩, ?_, ?_⟩, ?_⟩, ?_⟩
   · rw [hrot, vLoop_rotAdj_size, h.rot_size]
   · rw [setOuterPair_outer_size, houter, h.outer_size]
   · intro j hj q he
@@ -249,5 +249,14 @@ theorem embedItem_step_V (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
       · intro hj hne
         obtain ⟨q, hq⟩ := hpres (by omega) hne
         exact ⟨q, (hoth j hji q).2 hq⟩
+  · intro j hjs ne hc p hp
+    have hji : j ≠ i := by
+      intro he; subst j
+      simp [SpqrTree.capNe, SpqrTree.hasCap, ht, NodeType.isNode] at hc
+    obtain ⟨hvert, hpres⟩ := h.outer_cap j hjs ne hc p hp
+    simp only [hlookup, ite_eq_right hji]
+    refine ⟨hvert, ?_⟩
+    intro hj hne
+    exact hpres (by omega) hne
 
 end Spqr.PlanarSpqrTree
