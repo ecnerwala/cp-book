@@ -10,7 +10,8 @@ skeleton (`StNumbered`), its node-edges are listed in a dominance order (`EdgeDo
 adjacency rows are the "center is longest" bracket order (`AdjBracket`). `spqrTree_st` states this
 for the output; it is split into the walk-level `walk_st` (the items' children lists are
 st-orderings, `Items.StNumbered`) and the relabel-level `relabel_st`, following the route of
-`Spqr.Correctness`. The walk invariant behind `walk_st` is in `Spqr.StWalk`; see `PROOF.md` §7.
+`Spqr.Correctness`. `walk_st` and `spqrTree_st` live in `Spqr.StWalk`, with the walk invariant
+behind them; see `PROOF.md` §7.
 -/
 
 namespace Spqr
@@ -170,17 +171,9 @@ theorem layoutNode_r_bracket (node nvSt nvEn neSt neEn : Nat) (edgeChildren : Li
 
 /-! ### The theorems -/
 
-/-- Phase 2: the walk's children lists are in s-t order (`PROOF.md` §7, via `WalkState.StInv`). -/
-theorem walk_st (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    Items.StNumbered (g.walk tern (g.dfsForest vo eo)).items := by
-  sorry
-
 /-- Phase 3: relabelling well-formed items in s-t order gives st-ordered output. -/
 theorem relabel_st (g : Graph) (items : Items) (hst : items.StNumbered) (h : items.WF g) :
     (relabelTree g items).StOrder := by
   sorry
-
-theorem spqrTree_st (g : Graph) (tern : Bool) (vo eo : List Nat) : (g.spqrTree tern vo eo).StOrder := by
-  rw [spqrTree_eq]; exact relabel_st g _ (walk_st g tern vo eo) (walk_items_wf g tern vo eo)
 
 end Spqr

@@ -351,9 +351,18 @@ theorem stInv_topClosable (s : WalkState) (d : Nat) (ord : Nat → Nat) (hinv : 
       (fun x hx => (hbot x hx).2 rfl) (fun x hx => (hor x hx).2 rfl) hsorted
       (hes _ _ (hmem' _ _)) hlow hup
 
-/-- Admitted: `finishEdge` preserves the st-invariant. -/
+/-- Named hypothesis (ear-shape side): at a returning tree edge, every entry above the
+`origTstack` mark with `topDepth ≥ d` lies on the `stackDir[d]` side, so the `loop1` closes find
+one-sided entries (validated on the C++ trace, `PROOF.md` §7.4). -/
+def WalkState.EarsOnSide (s : WalkState) (d origTstack : Nat) : Prop :=
+  ∀ t ∈ s.tstack.take (s.tstack.length - origTstack), d ≤ t.topDepth → t.OnSide s.stackDir[d]!
+
+/-- Admitted: `finishEdge` preserves the st-invariant, under the stack-shape guards of the
+structural proof and the ear-side fact `EarsOnSide`. -/
 theorem finishEdge_stInv (s : WalkState) (curV d : Nat) (o : DfsOut) (origTstack : Nat)
-    (hasVert : Bool) (ord : Nat → Nat) (hinv : s.StInv d ord) :
+    (hasVert : Bool) (ord : Nat → Nat) (hinv : s.StInv d ord)
+    (hg : FinishGuards d o origTstack hasVert s)
+    (hears : o.cls.isTree = true → s.EarsOnSide d origTstack) :
     ((finishEdge curV d o origTstack hasVert).run s).2.StInv d ord := by
   sorry
 
@@ -418,5 +427,20 @@ theorem finishTstackTop_stItem (s : WalkState) (item : ItemId) (h : s.TopClosabl
   · intro p hp
     rw [hvert]
     exact hor p (by rw [hent, List.tail_cons]; exact hp)
+
+/-- Admitted: the walk-level induction in the shape of `WalkInv.walkTree_inv'`: for some
+numbering `ord` of the vertices, the final state satisfies `StInv`. -/
+theorem walk_stInv (g : Graph) (tern : Bool) (vo eo : List Nat) :
+    ∃ ord, (g.walk tern (g.dfsForest vo eo)).StInv 0 ord := by
+  sorry
+
+/-- Phase 2: the walk's children lists are in s-t order (`PROOF.md` §7, via `WalkState.StInv`). -/
+theorem walk_st (g : Graph) (tern : Bool) (vo eo : List Nat) :
+    Items.StNumbered (g.walk tern (g.dfsForest vo eo)).items := by
+  obtain ⟨ord, h⟩ := walk_stInv g tern vo eo
+  exact fun i hi ht => h.items i hi ht
+
+theorem spqrTree_st (g : Graph) (tern : Bool) (vo eo : List Nat) : (g.spqrTree tern vo eo).StOrder := by
+  rw [spqrTree_eq]; exact relabel_st g _ (walk_st g tern vo eo) (walk_items_wf g tern vo eo)
 
 end Spqr
