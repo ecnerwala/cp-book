@@ -36,3 +36,7 @@ root = "CheckStRef"
 [[lean_exe]]
 name = "check_repok"
 root = "CheckRepOK"
+
+[[lean_exe]]
+name = "check_piece_sep"
+root = "CheckPieceSep"

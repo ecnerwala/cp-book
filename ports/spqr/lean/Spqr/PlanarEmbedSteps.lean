@@ -1,6 +1,7 @@
 import Spqr.PlanarInv
 import Spqr.PlanarEmbed
 import Spqr.PlanarShape
+import Spqr.PieceSep
 
 /-!
 # The gluing invariant of `planarEmbed`
@@ -85,7 +86,7 @@ theorem gluedUpTo_init (g : Graph) : t.GluedUpTo g t.size t.initState where
 /-- `F` step: the children are whole components; their exposed ends are closed
 (`disjointUnion_planar`). Admitted. -/
 theorem embedItem_step_F (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
-    (hrep : t.toSpqrTree.Represents g)
+    (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g)
     (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .F)
     (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
     t.GluedUpTo g i ((t.embedItem i).run s).2 := by
@@ -94,7 +95,7 @@ theorem embedItem_step_F (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
 /-- `V` step: the blocks hanging off the vertex are chained through their exposed ends, i.e.
 1-sums at the vertex (`oneSum_planar`), and the two outermost ends stay exposed. Admitted. -/
 theorem embedItem_step_V (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
-    (hrep : t.toSpqrTree.Represents g)
+    (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g)
     (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .V)
     (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
     t.GluedUpTo g i ((t.embedItem i).run s).2 := by
@@ -103,7 +104,7 @@ theorem embedItem_step_V (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
 /-- `Q` step: the real edge `origId i` is added with its four quarter-edges; the two `I`/`O`
 children (the loops / blocks at its endpoints) are 1-summed at the endpoints. Admitted. -/
 theorem embedItem_step_Q (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
-    (hrep : t.toSpqrTree.Represents g)
+    (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g)
     (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .Q)
     (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
     t.GluedUpTo g i ((t.embedItem i).run s).2 := by
@@ -113,7 +114,7 @@ theorem embedItem_step_Q (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
 child's piece through the twin virtual edge (`twoSum_planar`), and the cap's quarter-edges become
 the exposed ends. Admitted. -/
 theorem embedItem_step_node (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
-    (hrep : t.toSpqrTree.Represents g)
+    (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g)
     (i : Nat) (hi : i < t.size)
     (hty : t.types[i]! = .S ∨ t.types[i]! = .P ∨ t.types[i]! = .R)
     (hall : t.nodePlanar.all id = true)

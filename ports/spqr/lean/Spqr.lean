@@ -32,6 +32,7 @@ import Spqr.EarShape
 import Spqr.EarInv
 import Spqr.SepPair
 import Spqr.Proofs.PlanarMap
+import Spqr.Proofs.PlanarAppend
 import Spqr.Proofs.Postorder
 import Spqr.Proofs.SepPair
 import Spqr.Blocks
