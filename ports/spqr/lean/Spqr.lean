@@ -18,3 +18,5 @@ import Spqr.Proofs.Postorder
 import Spqr.Proofs.SepPair
 import Spqr.Blocks
 import Spqr.Proofs.Blocks
+||||||| parent of 330ffc1 (spqr/lean: ofForest bridge (outs, Anc = subtree, EndIn = block); Fact D for type-1 classes)
+import Spqr.Proofs.Interval

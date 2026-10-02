@@ -127,6 +127,10 @@ theorem Sub.trans {s t u : DfsTree} (h : s.Sub t) (h' : t.Sub u) : s.Sub u := by
   | refl => exact h
   | step _ hmem ih => exact .step ih hmem
 
+theorem Sub.child {s : DfsTree} {e : Nat} {cls : OutClass} {child : DfsTree}
+    (ho : DfsOut.tree e cls child ∈ s.outs) : child.Sub s := by
+  cases s; exact .step (.refl _) ho
+
 theorem Sub.edgePostorder_infix {s t : DfsTree} (h : s.Sub t) :
     s.edgePostorder <:+: t.edgePostorder := by
   induction h with
@@ -160,5 +164,191 @@ theorem blocks_laminar_forest {forest : List DfsTree} (hnd : (edgePostorderFores
   · exact t₁.blocks_laminar ((hnd.sublist (List.infix_flatMap_of_mem h₁).sublist)) B₁ hB₁ B₂ hB₂
   · exact .inr (.inr fun x hx hx' =>
       hdisj _ ((t₁.blocks_infix _ hB₁).subset hx) ((t₂.blocks_infix _ hB₂).subset hx'))
+
+end Spqr
+
+/-! ### Vertices, out-lists and edges of subtrees -/
+
+namespace Spqr
+
+theorem DfsTree.v_mem_verts (t : DfsTree) : t.v ∈ t.verts := by
+  cases t; simp [DfsTree.verts, DfsTree.v]
+
+theorem DfsOut.mem_vertsList {outs : List DfsOut} {x : Nat} :
+    x ∈ DfsOut.vertsList outs ↔
+      ∃ e cls child, DfsOut.tree e cls child ∈ outs ∧ x ∈ child.verts := by
+  induction outs with
+  | nil => simp [DfsOut.vertsList]
+  | cons o rest ih =>
+    cases o with
+    | back e dest cls =>
+      simp only [DfsOut.vertsList, ih, List.mem_cons]
+      constructor
+      · rintro ⟨e', c', ch, h, hx⟩
+        exact ⟨e', c', ch, .inr h, hx⟩
+      · rintro ⟨e', c', ch, h | h, hx⟩
+        · cases h
+        · exact ⟨e', c', ch, h, hx⟩
+    | tree e cls child =>
+      simp only [DfsOut.vertsList, ih, List.mem_cons, List.mem_append]
+      constructor
+      · rintro (hx | ⟨e', c', ch, h, hx⟩)
+        · exact ⟨e, cls, child, .inl rfl, hx⟩
+        · exact ⟨e', c', ch, .inr h, hx⟩
+      · rintro ⟨e', c', ch, h | h, hx⟩
+        · cases h
+          exact .inl hx
+        · exact .inr ⟨e', c', ch, h, hx⟩
+
+theorem DfsOut.verts_infix_of_mem {outs : List DfsOut} {e : Nat} {cls : OutClass} {child : DfsTree}
+    (hmem : DfsOut.tree e cls child ∈ outs) : child.verts <:+: DfsOut.vertsList outs := by
+  induction outs with
+  | nil => exact absurd hmem (List.not_mem_nil)
+  | cons o rest ih =>
+    rcases List.mem_cons.mp hmem with rfl | hmem'
+    · exact (List.prefix_append _ _).isInfix
+    · cases o with
+      | back => exact ih hmem'
+      | tree => exact (ih hmem').trans (List.suffix_append _ _).isInfix
+
+theorem DfsTree.Sub.verts_subset {s t : DfsTree} (h : s.Sub t) : s.verts ⊆ t.verts := by
+  induction h with
+  | refl => exact List.Subset.refl _
+  | step _ hmem ih =>
+    exact ih.trans fun x hx =>
+      List.mem_cons_of_mem _ (DfsOut.mem_vertsList.mpr ⟨_, _, _, hmem, hx⟩)
+
+mutual
+theorem DfsTree.exists_sub_of_mem_verts :
+    ∀ (t : DfsTree) {x : Nat}, x ∈ t.verts → ∃ s : DfsTree, s.Sub t ∧ s.v = x
+  | .node v outs, x, h => by
+    rcases List.mem_cons.mp h with rfl | h
+    · exact ⟨_, .refl _, rfl⟩
+    · obtain ⟨e, cls, child, hmem, s, hs, rfl⟩ := DfsOut.exists_sub_of_mem_vertsList outs h
+      exact ⟨s, .step hs hmem, rfl⟩
+theorem DfsOut.exists_sub_of_mem_vertsList :
+    ∀ (outs : List DfsOut) {x : Nat}, x ∈ DfsOut.vertsList outs →
+      ∃ e cls child, DfsOut.tree e cls child ∈ outs ∧ ∃ s : DfsTree, s.Sub child ∧ s.v = x
+  | [], _, h => absurd h (List.not_mem_nil)
+  | .back _ _ _ :: rest, x, h => by
+    obtain ⟨e, cls, child, hmem, hs⟩ := DfsOut.exists_sub_of_mem_vertsList rest h
+    exact ⟨e, cls, child, List.mem_cons_of_mem _ hmem, hs⟩
+  | .tree e cls child :: rest, x, h => by
+    rcases List.mem_append.mp h with h | h
+    · exact ⟨e, cls, child, List.mem_cons_self, DfsTree.exists_sub_of_mem_verts child h⟩
+    · obtain ⟨e', cls', child', hmem, hs⟩ := DfsOut.exists_sub_of_mem_vertsList rest h
+      exact ⟨e', cls', child', List.mem_cons_of_mem _ hmem, hs⟩
+end
+
+mutual
+theorem DfsTree.outsAt_eq_nil : ∀ (t : DfsTree) {x : Nat}, x ∉ t.verts → t.outsAt x = []
+  | .node v outs, x, h => by
+    have hv : v ≠ x := fun hvx => h (hvx ▸ List.mem_cons_self)
+    simp only [DfsTree.outsAt, hv, ↓reduceIte, List.nil_append]
+    exact DfsOut.outsAtList_eq_nil outs fun h' => h (List.mem_cons_of_mem _ h')
+theorem DfsOut.outsAtList_eq_nil :
+    ∀ (outs : List DfsOut) {x : Nat}, x ∉ DfsOut.vertsList outs → DfsOut.outsAtList x outs = []
+  | [], _, _ => rfl
+  | .back _ _ _ :: rest, x, h => DfsOut.outsAtList_eq_nil rest h
+  | .tree e cls child :: rest, x, h => by
+    simp only [DfsOut.vertsList, List.mem_append, not_or] at h
+    simp only [DfsOut.outsAtList, DfsTree.outsAt_eq_nil child h.1,
+      DfsOut.outsAtList_eq_nil rest h.2, List.nil_append]
+end
+
+theorem DfsOut.outsAtList_eq_of_mem {outs : List DfsOut} (hnd : (DfsOut.vertsList outs).Nodup)
+    {e : Nat} {cls : OutClass} {child : DfsTree} (hmem : DfsOut.tree e cls child ∈ outs) {x : Nat}
+    (hx : x ∈ child.verts) : DfsOut.outsAtList x outs = child.outsAt x := by
+  induction outs with
+  | nil => exact absurd hmem (List.not_mem_nil)
+  | cons o rest ih =>
+    rcases List.mem_cons.mp hmem with rfl | hmem'
+    · simp only [DfsOut.vertsList, List.nodup_append] at hnd
+      simp only [DfsOut.outsAtList,
+        DfsOut.outsAtList_eq_nil rest fun h => hnd.2.2 _ hx _ h rfl, List.append_nil]
+    · cases o with
+      | back => exact ih hnd hmem'
+      | tree e' cls' child' =>
+        simp only [DfsOut.vertsList, List.nodup_append] at hnd
+        have hx' : x ∈ DfsOut.vertsList rest := DfsOut.mem_vertsList.mpr ⟨_, _, _, hmem', hx⟩
+        simp only [DfsOut.outsAtList,
+          DfsTree.outsAt_eq_nil child' fun h => hnd.2.2 _ h _ hx' rfl, List.nil_append]
+        exact ih hnd.2.1 hmem'
+
+theorem DfsTree.Sub.outsAt_eq {s t : DfsTree} (hnd : t.verts.Nodup) (h : s.Sub t) :
+    t.outsAt s.v = s.outs := by
+  induction h with
+  | refl =>
+    obtain ⟨v, outs⟩ := s
+    simp only [DfsTree.verts, List.nodup_cons] at hnd
+    simp [DfsTree.outsAt, DfsTree.v, DfsTree.outs, DfsOut.outsAtList_eq_nil outs hnd.1]
+  | @step v outs e cls child hsub hmem ih =>
+    simp only [DfsTree.verts, List.nodup_cons] at hnd
+    have hsv : s.v ∈ child.verts := hsub.verts_subset s.v_mem_verts
+    have hne : v ≠ s.v := fun h => hnd.1 (h ▸ DfsOut.mem_vertsList.mpr ⟨_, _, _, hmem, hsv⟩)
+    simp only [DfsTree.outsAt, hne, ↓reduceIte, List.nil_append]
+    rw [DfsOut.outsAtList_eq_of_mem hnd.2 hmem hsv]
+    exact ih (hnd.2.sublist (DfsOut.verts_infix_of_mem hmem).sublist)
+
+theorem outsAt_forest_eq {forest : List DfsTree} (hnd : (forest.flatMap DfsTree.verts).Nodup)
+    {t : DfsTree} (ht : t ∈ forest) {x : Nat} (hx : x ∈ t.verts) :
+    forest.flatMap (·.outsAt x) = t.outsAt x := by
+  induction forest with
+  | nil => exact absurd ht (List.not_mem_nil)
+  | cons t₀ rest ih =>
+    rw [List.flatMap_cons, List.nodup_append] at hnd
+    rw [List.flatMap_cons]
+    rcases List.mem_cons.mp ht with rfl | ht'
+    · rw [List.flatMap_eq_nil_iff.mpr fun t' ht' => t'.outsAt_eq_nil fun h =>
+        hnd.2.2 _ hx _ ((List.infix_flatMap_of_mem ht').subset h) rfl, List.append_nil]
+    · rw [t₀.outsAt_eq_nil fun h => hnd.2.2 _ h _ ((List.infix_flatMap_of_mem ht').subset hx) rfl,
+        List.nil_append]
+      exact ih hnd.2.1 ht'
+
+/-- The abstract out-list of a vertex of the forest is its node's out-list. -/
+theorem DfsData.ofForest_outs {forest : List DfsTree} (hnd : (forest.flatMap DfsTree.verts).Nodup)
+    {t s : DfsTree} (ht : t ∈ forest) (hsub : s.Sub t) :
+    (DfsData.ofForest forest).outs s.v = s.outs := by
+  show forest.flatMap (·.outsAt s.v) = s.outs
+  rw [outsAt_forest_eq hnd ht (hsub.verts_subset s.v_mem_verts)]
+  exact hsub.outsAt_eq (hnd.sublist (List.infix_flatMap_of_mem ht).sublist)
+
+theorem DfsOut.e_mem_block (o : DfsOut) : o.e ∈ o.block := by
+  cases o <;> simp [DfsOut.block, DfsOut.e]
+
+theorem DfsTree.Sub.e_mem_edgePostorder {s t : DfsTree} (h : s.Sub t) {o : DfsOut}
+    (ho : o ∈ s.outs) : o.e ∈ t.edgePostorder :=
+  h.edgePostorder_infix.subset
+    ((by cases s; exact DfsOut.block_infix_of_mem ho : o.block <:+: s.edgePostorder).subset
+      o.e_mem_block)
+
+mutual
+theorem DfsTree.mem_edgePostorder :
+    ∀ (t : DfsTree) {e : Nat}, e ∈ t.edgePostorder → ∃ s : DfsTree, s.Sub t ∧ ∃ o ∈ s.outs, o.e = e
+  | .node _ outs, e, h => by
+    rcases DfsOut.mem_edgePostorderList outs h with ⟨o, ho, he⟩ | ⟨_, _, _, hmem, s, hs, ho⟩
+    · exact ⟨_, .refl _, o, ho, he⟩
+    · exact ⟨s, .step hs hmem, ho⟩
+theorem DfsOut.mem_edgePostorderList :
+    ∀ (outs : List DfsOut) {e : Nat}, e ∈ DfsOut.edgePostorderList outs →
+      (∃ o ∈ outs, o.e = e) ∨
+        ∃ e₁ cls child, DfsOut.tree e₁ cls child ∈ outs ∧ ∃ s : DfsTree, s.Sub child ∧ ∃ o ∈ s.outs, o.e = e
+  | [], _, h => absurd h (List.not_mem_nil)
+  | .back _ _ _ :: rest, e, h => by
+    rcases List.mem_cons.mp h with rfl | h
+    · exact .inl ⟨_, List.mem_cons_self, rfl⟩
+    · rcases DfsOut.mem_edgePostorderList rest h with ⟨o, ho, he⟩ | ⟨e₁, cls, child, hmem, hs⟩
+      · exact .inl ⟨o, List.mem_cons_of_mem _ ho, he⟩
+      · exact .inr ⟨e₁, cls, child, List.mem_cons_of_mem _ hmem, hs⟩
+  | .tree e₁ cls child :: rest, e, h => by
+    simp only [DfsOut.edgePostorderList, List.mem_append, List.mem_cons] at h
+    rcases h with h | rfl | h
+    · obtain ⟨s, hs, ho⟩ := DfsTree.mem_edgePostorder child h
+      exact .inr ⟨e₁, cls, child, List.mem_cons_self, s, hs, ho⟩
+    · exact .inl ⟨_, List.mem_cons_self, rfl⟩
+    · rcases DfsOut.mem_edgePostorderList rest h with ⟨o, ho, he⟩ | ⟨e₂, cls', child', hmem, hs⟩
+      · exact .inl ⟨o, List.mem_cons_of_mem _ ho, he⟩
+      · exact .inr ⟨e₂, cls', child', List.mem_cons_of_mem _ hmem, hs⟩
+end
 
 end Spqr

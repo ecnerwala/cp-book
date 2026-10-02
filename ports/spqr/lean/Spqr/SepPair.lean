@@ -224,7 +224,11 @@ def DfsData.ofForest (forest : List DfsTree) : DfsData where
   depth v := (forest.findSome? (·.depthAt v 0)).getD 0
   outs v := forest.flatMap (·.outsAt v)
 
-/-- The phase-1 hypotheses, for the forest actually computed. -/
-abbrev DfsForestSpec (g : Graph) (forest : List DfsTree) : Prop := (DfsData.ofForest forest).Spec g
+/-- The phase-1 hypotheses, for the forest actually computed: `Spec` for its abstract view, and
+every vertex and every edge occurs once in the forest. -/
+structure DfsForestSpec (g : Graph) (forest : List DfsTree) : Prop
+    extends (DfsData.ofForest forest).Spec g where
+  verts_nodup : (forest.flatMap DfsTree.verts).Nodup
+  edges_nodup : (edgePostorderForest forest).Nodup
 
 end Spqr
