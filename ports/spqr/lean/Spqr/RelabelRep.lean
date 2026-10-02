@@ -198,20 +198,43 @@ theorem nodeVerts_get {i : ItemId} (hi : i < items.size) {k : Nat}
   rw [Array.getElem?_eq_getElem hlt, ← getElem!_pos]
   exact congrArg some ((h.node i hi).node_verts k hk)
 
+theorem origId_vert {v : Nat} (hv : v < g.nv) : t.origId[(t.vertIndex[v]!).getD 0]! = some v := by
+  rw [h.ridx.vert_index v hv, Option.getD_some]
+  have horig := (h.node _ (h.vertItem_lt hv)).orig
+  rw [Items.origOf, h.type_vertItem hv] at horig
+  rw [horig]
+  show some (1 + v - 1) = some v
+  congr 1; omega
+
 theorem nvOrig_get {i : ItemId} (hi : i < items.size) {k : Nat}
     (hk : k < (items.nvList g i).length) :
     t.nvOrig ((t.nvRange (idx i)).1 + k) = some (items.nvList g i)[k] := by
   obtain ⟨-, hnv⟩ := h.nodeVerts_get hi hk
   have hv := h.nvList_lt hi (List.getElem_mem hk)
-  generalize (items.nvList g i)[k] = v at hnv hv ⊢
-  have hvi := h.ridx.vert_index _ hv
-  have horig := (h.node _ (h.vertItem_lt hv)).orig
-  rw [Items.origOf, h.type_vertItem hv] at horig
-  simp only [SpqrTree.nvOrig, hnv, hvi, Option.getD_some, ← Array.getElem!_opt]
-  show t.origId[idx (vertItem v)]! = some v
-  rw [horig]
-  show some (1 + v - 1) = some v
-  congr 1; omega
+  simp only [SpqrTree.nvOrig, hnv, ← Array.getElem!_opt]
+  exact h.origId_vert hv
+
+theorem nodeVertsOf_length {i : ItemId} (hi : i < items.size) :
+    (t.nodeVertsOf (idx i)).length = (items.nvList g i).length := by
+  have := (h.node i hi).nv_range
+  simp only [SpqrTree.nodeVertsOf, List.length_map, List.length_range]; omega
+
+theorem nodeVertsOf_get {i : ItemId} (hi : i < items.size) {k : Nat}
+    (hk : k < (items.nvList g i).length) :
+    (t.nodeVertsOf (idx i))[k]? = some ⟨idx i, (t.vertIndex[(items.nvList g i)[k]]!).getD 0⟩ := by
+  have hr := (h.node i hi).nv_range
+  obtain ⟨-, hnv⟩ := h.nodeVerts_get hi hk
+  simp only [SpqrTree.nodeVertsOf, List.getElem?_map, List.getElem?_range, hr, Nat.add_sub_cancel_left,
+    hk, Option.map_some, hnv, Option.getD_some]
+
+theorem nv_orig_map {i : ItemId} (hi : i < items.size) :
+    ((t.nodeVertsOf (idx i)).map fun nv => t.origId[nv.vert]!) = (items.nvList g i).map some := by
+  apply List.ext_getElem
+  · simp [h.nodeVertsOf_length hi]
+  · intro k h1 h2
+    simp only [List.getElem_map]
+    rw [(List.getElem_eq_iff _).2 (h.nodeVertsOf_get hi (by simpa using h2))]
+    exact h.origId_vert (h.nvList_lt hi (List.getElem_mem _))
 
 /-! ### Preorder intervals -/
 
@@ -368,6 +391,45 @@ theorem mem_children_iff {i : ItemId} (hi : i < items.size) (n : Nat) :
   obtain ⟨pos, hl⟩ := (h.node i hi).layout
   rw [hl.children, List.mem_map]
   simp only [(ordered_perm i _ pos).mem_iff]
+
+/-! ### `Represents` fields that need only `Items.WF` -/
+
+theorem canonical : ∀ i p, t.parent i = some p →
+    (t.type i = .S → t.type p ≠ .S) ∧ (t.type i = .P → t.type p ≠ .P) := by
+  intro n m hp
+  obtain ⟨c, p, hc, hp', rfl, rfl, hpar⟩ := h.parent_cases hp
+  rw [h.type_eq hc, h.type_eq hp']
+  exact h.shapes.canonical p c hpar
+
+theorem interior : ∀ i v, i < t.size → v < g.nv → ∀ j, t.vertIndex[v]! = some j →
+    (t.parent j = some i ↔
+      (∀ e, SpqrTree.Graph.Incident g v e → t.EdgeIn i e) ∧
+      ∀ c ∈ t.children i, ¬ ∀ e, SpqrTree.Graph.Incident g v e → t.EdgeIn c e) := by
+  intro n v hn hv j hj
+  obtain ⟨a, ha, rfl⟩ := h.idx_surj hn
+  rw [h.ridx.vert_index v hv] at hj
+  cases hj
+  rw [h.parent_eq_iff ha (h.vertItem_lt hv), h.endpoints.interior a v ha hv]
+  constructor
+  · rintro ⟨h1, h2⟩
+    refine ⟨fun e ⟨he, hinc⟩ => (h.edgeIn_iff ha he).2 (h1 e he hinc), ?_⟩
+    intro c' hc' hall
+    obtain ⟨c, hc, rfl⟩ := (h.mem_children_iff ha c').1 hc'
+    exact h2 c hc fun e he hinc => (h.edgeIn_iff (h.ch_lt ha hc) he).1 (hall e ⟨he, hinc⟩)
+  · rintro ⟨h1, h2⟩
+    refine ⟨fun e he hinc => (h.edgeIn_iff ha he).1 (h1 e ⟨he, hinc⟩), ?_⟩
+    intro c hc hall
+    exact h2 (idx c) ((h.mem_children_iff ha _).2 ⟨c, hc, rfl⟩)
+      fun e ⟨he, hinc⟩ => (h.edgeIn_iff (h.ch_lt ha hc) he).2 (hall e he hinc)
+
+/-- `nv_orig_inj`, from `Items.nvList` having no repeats. -/
+theorem nv_orig_inj (hnd : ∀ i, i < items.size → (items.nvList g i).Nodup) :
+    ∀ i, i < t.size → t.type i ≠ .O → t.type i ≠ .Q →
+      ((t.nodeVertsOf i).map fun nv => t.origId[nv.vert]!).Nodup := by
+  intro n hn _ _
+  obtain ⟨a, ha, rfl⟩ := h.idx_surj hn
+  rw [h.nv_orig_map ha]
+  exact (hnd a ha).map (Option.some_injective _)
 
 end RelabelOK
 
