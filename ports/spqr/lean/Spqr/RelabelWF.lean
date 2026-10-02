@@ -301,6 +301,157 @@ theorem preorder (hF : ∀ n, 0 < n → t.type n ≠ .F) : t.Preorder := by
       rw [getElem!_pos L k (by simpa using h2)]
     rw [this]; omega
 
+/-! ### Shape -/
+
+theorem skeleton_eq {i : ItemId} (hi : i < items.size) {pos : Nat → Nat}
+    (hl : RelabelLayout g items t idx i pos)
+    (hloc : (nodeLayout g items t idx i pos).Local (idx i) (t.nvRange (idx i)).1 (t.nvRange (idx i)).2
+      (t.neRange (idx i)).1 (t.neRange (idx i)).2) :
+    (nodeLayout g items t idx i pos).skeleton = t.skeleton (idx i) := by
+  have hne := (H.node i hi).ne_range
+  have hsz := hloc.edges_size
+  unfold Layout.skeleton SpqrTree.skeleton SpqrTree.nodeEdgesOf
+  apply LayoutShape.toList_map_eq
+  · rw [List.length_map, List.length_map, List.length_range]; omega
+  · intro k hk
+    have hk' : k < items.nEdges g i := by omega
+    rw [List.map_map, getElem!_pos (List.map _ (List.range _)) k
+      (by rw [List.length_map, List.length_range]; omega)]
+    simp only [List.getElem_map, List.getElem_range, Function.comp]
+    rw [← Array.getElem!_eq_getD_getElem?, hl.edge_nvs k hk']
+
+open LayoutShape in
+theorem shape_local (hor : items.ROriented g) {i : ItemId} (hi : i < items.size) {pos : Nat → Nat}
+    (hl : RelabelLayout g items t idx i pos) :
+    (nodeLayout g items t idx i pos).Shape (items.type i) (t.nvRange (idx i)).1
+      (t.nvRange (idx i)).2 := by
+  have ht := H.tree
+  have hnv := (H.node i hi).nv_range
+  have hne := (H.node i hi).ne_range
+  have hlen := Items.nvList_length (g := g) (items := items) i
+  unfold nodeLayout
+  by_cases hn : (items.type i).isNode = true
+  · have hy := H.wf.layout_hyps hi hn
+    have h1 := H.wf.one_le_nvList hi hn
+    have hpos := H.wf.nEdges_pos hi hn
+    cases hty : items.type i
+    all_goals simp only [hty] at hn
+    all_goals simp [NodeType.isNode] at hn
+    · -- Q
+      rcases H.wf.nvList_Q hi hty with hv1 | hv2
+      · exact shape_loop _ _ _ _ _ _ _ (Or.inl rfl) (by omega) (by have := hy.1 hv1; omega)
+      · exact shape_QI _ _ _ _ _ _ _ (Or.inl rfl) (by omega) (by have := hy.2.1 (Or.inl hty); omega)
+    · -- I
+      obtain ⟨u, v, huv⟩ := H.wf.vs_two hi (Or.inl hty)
+      have h0 := H.wf.shapes.i_o_leaf i hi (Or.inl hty)
+      rw [huv, h0] at hlen; simp at hlen
+      exact shape_QI _ _ _ _ _ _ _ (Or.inr rfl) (by omega) (by have := hy.2.1 (Or.inr hty); omega)
+    · -- O
+      have hv1 := hy.2.2.2.2.2 hty
+      exact shape_loop _ _ _ _ _ _ _ (Or.inr rfl) (by omega) (by have := hy.1 hv1; omega)
+    · -- S
+      obtain ⟨u, v, xs, huv, hxs, hk, -⟩ := H.wf.shapes.s_shape i hi hty
+      have hV : ((items.ch i).filter (· < 1 + g.nv)).length = xs.length := by
+        rw [← ht.filter_V_eq, hxs, List.length_map]
+      rw [huv] at hlen; simp at hlen
+      exact shape_S _ _ _ _ _ _ (by omega) (by have := hy.2.2.1 hty; omega)
+    · -- P
+      have hcap := Items.hasCap_of_ne_Q (items := items) (i := i) (by rw [hty]; rfl)
+        (by rw [hty]; decide)
+      have h2 := hy.2.2.2.2.1 hcap (Or.inr (Or.inr hty))
+      obtain ⟨u, v, huv⟩ := H.wf.vs_two hi (Or.inr (Or.inr (Or.inl hty)))
+      rw [huv] at hlen; simp at hlen
+      have hn0 : (items.type i).isNode = true := by rw [hty]; rfl
+      have h3 := (H.wf.shapes.p_shape i hi hty).1
+      have hcnt := ht.countP_nonV i
+      have hnE := Items.nEdges_eq (g := g) hn0
+      simp only [Items.capCount, hcap, ↓reduceIte] at hnE
+      exact shape_P _ _ _ _ _ _ (by omega) (by omega)
+    · -- R
+      have h4 := hy.2.2.2.1 hty
+      have hcap := Items.hasCap_of_ne_Q (items := items) (i := i) (by rw [hty]; rfl)
+        (by rw [hty]; decide)
+      have hec := Items.edgeChildren_length (g := g) (items := items) i (t.nvRange (idx i)).1 pos
+      have hE := H.edgeChildren_bounds hor hi hty hl
+      have hn0 : (items.type i).isNode = true := by rw [hty]; rfl
+      have hcnt := ht.countP_nonV i
+      have hnE := Items.nEdges_eq (g := g) hn0
+      simp only [Items.capCount, hcap, ↓reduceIte] at hnE
+      have hposok := hl.pos_ok hty
+      have hnd := H.wf.nv_nodup hi
+      obtain ⟨u, v, huv⟩ := H.wf.vs_two hi (Or.inr (Or.inr (Or.inr hty)))
+      obtain ⟨-, h6, hnodup, -, hnpar, -⟩ := H.wf.shapes.r_shape i hi hty
+      have hvE := H.wf.r_edges_in_nv hi hty
+      set E := items.edgeChildren g pos (items.ordered g i (t.nvRange (idx i)).1 pos) with hEdef
+      set nvSt := (t.nvRange (idx i)).1 with hnvSt
+      have hEperm : E.Perm ((items.virtualEdges i).map fun q => (pos q.1, pos q.2)) := by
+        rw [hEdef]
+        unfold Items.edgeChildren Items.virtualEdges
+        rw [List.map_map]
+        refine (((Items.ordered_perm i _ pos).filter _).map _).trans ?_
+        rw [ht.filter_nonV_eq]
+        exact List.Perm.refl _
+      have hinj : ∀ a ∈ items.nvList g i, ∀ b ∈ items.nvList g i, pos a = pos b → a = b := by
+        intro a ha b hb hab
+        have h1 := (hposok a ha).2
+        have h2 := (hposok b hb).2
+        rw [hab, h2] at h1
+        exact (Option.some_inj.1 h1).symm
+      have hEnd : E.Nodup := by
+        refine hEperm.nodup_iff.2 (List.Nodup.map_on ?_ (hnodup.of_map _))
+        intro q hq q' hq' h
+        obtain ⟨h1, h2⟩ := Prod.mk.inj h
+        exact Prod.ext (hinj _ (hvE q hq).1 _ (hvE q' hq').1 h1) (hinj _ (hvE q hq).2 _ (hvE q' hq').2 h2)
+      have hu0 : (items.nvList g i)[0]? = some u := by
+        simp [Items.nvList, huv]
+      have hvl : (items.nvList g i)[(items.nvList g i).length - 1]? = some v := by
+        rw [← List.getLast?_eq_getElem?]
+        simp only [Items.nvList, huv, Option.toList_some, List.singleton_append]
+        rw [List.getLast?_concat]
+      have hum : u ∈ items.nvList g i := List.mem_iff_getElem?.2 ⟨_, hu0⟩
+      have hvm : v ∈ items.nvList g i := List.mem_iff_getElem?.2 ⟨_, hvl⟩
+      have hpu : pos u = nvSt := by
+        have := Items.PosOK.pos_sub hnd hposok hum
+        rw [Items.idxOf_eq_of_getElem? hnd hu0] at this
+        have := (hposok u hum).1; omega
+      have hpv : pos v = (t.nvRange (idx i)).2 - 1 := by
+        have := Items.PosOK.pos_sub hnd hposok hvm
+        rw [Items.idxOf_eq_of_getElem? hnd hvl] at this
+        have := (hposok v hvm).1; omega
+      have hnotin : (nvSt, (t.nvRange (idx i)).2 - 1) ∉ E := by
+        intro hmem
+        rw [hEperm.mem_iff] at hmem
+        obtain ⟨q, hq, hqe⟩ := List.mem_map.1 hmem
+        obtain ⟨h1, h2⟩ := Prod.mk.inj hqe
+        rw [← hpu] at h1; rw [← hpv] at h2
+        have hq1 := hinj _ (hvE q hq).1 _ hum h1
+        have hq2 := hinj _ (hvE q hq).2 _ hvm h2
+        exact hnpar u v huv q hq (Or.inl (Prod.ext hq1 hq2))
+      exact shape_R _ _ _ _ _ _ (by omega) hE (by omega) (by omega) (by omega)
+        (List.nodup_cons.2 ⟨hnotin, hEnd⟩)
+  · have hn' : (items.type i).isNode = false := Bool.eq_false_iff.2 hn
+    have hne0 := Items.nEdges_eq_zero (g := g) hn'
+    cases hty : items.type i
+    all_goals simp only [hty] at hn'
+    all_goals simp [NodeType.isNode] at hn'
+    · exact shape_F _ _ _ _ _ _ (by omega)
+    · have h0 := H.wf.nvList_V hi hty
+      rw [h0] at hnv; simp at hnv
+      exact shape_V _ _ _ _ _ _ (by omega) (by omega)
+
+theorem shape (hor : items.ROriented g) {i : ItemId} (hi : i < items.size) :
+    t.Shape (idx i) := by
+  obtain ⟨pos, hl, hloc⟩ := H.layout_local hor hi
+  have hS := H.shape_local hor hi hl
+  have hsk := H.skeleton_eq hi hl hloc
+  have hed : t.nEdges (idx i) = (nodeLayout g items t idx i pos).edges.size := by
+    have hne := (H.node i hi).ne_range
+    unfold SpqrTree.nEdges; rw [hloc.edges_size]
+  rcases hr : t.nvRange (idx i) with ⟨s, e⟩
+  simp only [SpqrTree.Shape, Layout.Shape, hr] at hS ⊢
+  rw [H.type hi, ← hsk, hed]
+  exact hS
+
 end RelabelAll
 
 end Spqr
