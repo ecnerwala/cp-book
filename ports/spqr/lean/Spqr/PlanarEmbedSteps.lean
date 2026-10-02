@@ -37,9 +37,10 @@ def EmbedState.exposedAt (s : EmbedState) (j q : Nat) : Prop :=
 
 /-- The gluing invariant after the items `≥ i` have been processed: for every maximal processed
 item `j`, the glued rotation restricted to the real edges below `j` agrees with a planar
-embedding `ρ` of that piece; exactly the exposed ends `outerE[j]` are still unset, and they lie
-on a common face of `ρ`. Quarter-edges of edges not below any processed item are unset, and
-unprocessed items have no exposed ends yet. -/
+embedding `ρ` of that piece; exactly the exposed ends `outerE[j]` are still unset, and each
+exposed pair `outerE[j][2k], outerE[j][2k+1]` is a facing pair of `ρ` (so that a `link` is a
+transposition conjugation of `ρ`). Quarter-edges of edges not below any processed item are unset,
+and unprocessed items have no exposed ends yet. -/
 structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) : Prop where
   rot_size : s.rotAdj.size = 4 * t.ne
   outer_size : s.outerE.size = t.size
@@ -52,9 +53,13 @@ structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) : Prop where
       ∃ lq lr, (t.pieceBelow g j).loc q = some lq ∧ (t.pieceBelow g j).loc r = some lr ∧
         ρ.get lq = some lr) ∧
     (∀ q, (t.pieceBelow g j).Mem q → (s.rotAdj[q]? = some none ↔ s.exposedAt j q)) ∧
-    (∀ q q', s.exposedAt j q → s.exposedAt j q' →
-      ∃ l l', (t.pieceBelow g j).loc q = some l ∧ (t.pieceBelow g j).loc q' = some l' ∧
-        ρ.SameFaceOrbit l l')
+    (∀ k, k < 2 →
+      (∀ a, s.outerE[j]?.bind (fun o => o[2 * k]?) = some (some a) →
+        ∃ b, s.outerE[j]?.bind (fun o => o[2 * k + 1]?) = some (some b) ∧
+          ∃ la lb, (t.pieceBelow g j).loc a = some la ∧ (t.pieceBelow g j).loc b = some lb ∧
+            ρ.get la = some lb) ∧
+      (∀ b, s.outerE[j]?.bind (fun o => o[2 * k + 1]?) = some (some b) →
+        ∃ a, s.outerE[j]?.bind (fun o => o[2 * k]?) = some (some a)))
 
 /-- The initial state of `planarEmbed`. -/
 def initState : EmbedState :=
@@ -80,6 +85,7 @@ theorem gluedUpTo_init (g : Graph) : t.GluedUpTo g t.size t.initState where
 /-- `F` step: the children are whole components; their exposed ends are closed
 (`disjointUnion_planar`). Admitted. -/
 theorem embedItem_step_F (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
+    (hrep : t.toSpqrTree.Represents g)
     (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .F)
     (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
     t.GluedUpTo g i ((t.embedItem i).run s).2 := by
@@ -88,6 +94,7 @@ theorem embedItem_step_F (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
 /-- `V` step: the blocks hanging off the vertex are chained through their exposed ends, i.e.
 1-sums at the vertex (`oneSum_planar`), and the two outermost ends stay exposed. Admitted. -/
 theorem embedItem_step_V (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
+    (hrep : t.toSpqrTree.Represents g)
     (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .V)
     (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
     t.GluedUpTo g i ((t.embedItem i).run s).2 := by
@@ -96,6 +103,7 @@ theorem embedItem_step_V (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
 /-- `Q` step: the real edge `origId i` is added with its four quarter-edges; the two `I`/`O`
 children (the loops / blocks at its endpoints) are 1-summed at the endpoints. Admitted. -/
 theorem embedItem_step_Q (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
+    (hrep : t.toSpqrTree.Represents g)
     (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .Q)
     (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
     t.GluedUpTo g i ((t.embedItem i).run s).2 := by
@@ -105,6 +113,7 @@ theorem embedItem_step_Q (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
 child's piece through the twin virtual edge (`twoSum_planar`), and the cap's quarter-edges become
 the exposed ends. Admitted. -/
 theorem embedItem_step_node (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
+    (hrep : t.toSpqrTree.Represents g)
     (i : Nat) (hi : i < t.size)
     (hty : t.types[i]! = .S ∨ t.types[i]! = .P ∨ t.types[i]! = .R)
     (hall : t.nodePlanar.all id = true)
