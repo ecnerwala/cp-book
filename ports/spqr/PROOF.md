@@ -1400,7 +1400,10 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 | `nodePlanar_sound_R` (Invariant P at finish, mapped by `mapRot`) | `PlanarSpec.lean` | sorry |
 | `nodePlanar_sound` = S ∨ P ∨ R cases | `PlanarSpec.lean` | proved from the three |
 | `nodePlanar_complete` (Kuratowski-style certificate from the §8.3 crossing) | `PlanarSpec.lean` | sorry, hard |
-| `twoSum_planar`, `oneSum_planar`, `disjointUnion_planar` (gluing on `Planar`) | `PlanarInv.lean` | sorry (`twoSum_planar`: transport from `TwoSum.planar` — identify `twoSumEdges`/`n₁ + n₂ − 2` with `TwoSum.edges`/`TwoSum.nVerts = n₁ + n₂` and supply `TwoSum.WF`'s `deg`/`face`/`conn`) |
+| `IsPlanarEmbedding.map`, `Planar.map` (relabelling the vertices by a map injective on the non-isolated ones; `numNonIsolated`/`ccCount` are transported) | `Proofs/PlanarMap.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
+| `RotationSystem.union` (second system's quarter-edges shifted by `rs₁.size`), `union_stepC` = `unionStep`, `union_numFaceOrbits`/`union_numVertexOrbits` (orbits add), `IsPlanarEmbedding.union`, `Planar.union` (`es₁ ++ shiftEdges n₁ es₂` on `n₁ + n₂` vertices) | `Proofs/PlanarUnion.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
+| `RotationSystem.conj a b` (rotation conjugated by the transposition of two quarter-edges `a`, `b` of the same direction: the rotations at their vertices are spliced into one), `conj_stepC` = two `swapImg`s, `conj_numFaceOrbits`/`conj_numVertexOrbits` (`+ 2 =`, when `a`, `b` lie in different `stepC`-invariant halves), `IsPlanarEmbedding.oneSum` (identify `v₁` and `n₁ + v₂`, both with an edge, on `rs₁.union rs₂`: `F + 2 = F₁ + F₂`, `V + 2 = V₁ + V₂`, `C + 1 = C₁ + C₂`) | `Proofs/PlanarOneSum.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
+| `disjointUnion_planar` (= `Planar.union` after `disjointUnionEdges_eq`), `oneSum_planar` (`oneSumEdges_eq`: `oneSumEdges` = `collapse (n₁ + v₂) ∘ ident v₁ (n₁ + v₂)` on the union; `IsPlanarEmbedding.oneSum` when both vertices have an edge, otherwise `Planar.map` alone), `twoSum_planar` (`twoSumEdges_eq`: `twoSumEdges` = `collapse₂ (n₁ + u₂) (n₁ + v₂)` on `TwoSum.edges`; `Planar.map` of `TwoSum.planar`) | `PlanarInv.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`). `twoSum_planar` was **restated**: its former hypotheses (`he₁`, `he₂`, `u₁ ≠ v₁`, `u₂ ≠ v₂`) do not give `TwoSum.WF`'s `deg₁`/`deg₂`/`face`/`conn`, which the explicit splice needs (with a virtual edge whose end has degree 1 the splice rewires the edge to itself; with a bridge on both sides the 2-sum is two 1-sums, not a splice). It now takes `hdeg₁`, `hdeg₂` (`rs.get (4 e + k)` is never a quarter-edge of `e`), `hface` (one virtual edge separates two face orbits) and `hconn` (one virtual edge is not a bridge of its side) verbatim from `TwoSum.WF`. The unconditional statement is true (degenerate cases are 1-sums / relabellings of the pieces) but not needed: at the call site `embedItem_step_node` the skeleton side is a cycle (`S`, ≥ 3 edges), a bond (`P`, ≥ 3 edges) or a 3-connected `R` skeleton, so `hconn` holds on the skeleton side and `hdeg₁`/`hdeg₂` hold because every skeleton/piece vertex has degree ≥ 2 at the virtual edge; `hface` on the skeleton side follows for `S`/`P` from the closed forms of `layoutRot` (`PlanarLayout.lean`) and for `R` needs the face structure of `nodeRot` — supplying these in `embedItem_step_node` is the open part of step 3 |
 | `WalkInv` / `Preserves` (Hoare triple on `PlanarWalkM`), `Preserves.frame`, `Preserves.popPair`, `planarFinishEdge_inv`, `planarWalkOut_inv` (+ `Tree`/`Outs`), `planarWalkOut_stackInv` | `PlanarInvSteps.lean` | def / **proved** modulo the per-step lemmas |
 | `pushVertTstack_inv` (a fresh vertex entry has no exposed ends, so `StackInv` exempts it) | `PlanarInvSteps.lean` | **proved** |
 | per-step lemmas `pushEdgeTstack_inv`, `mergeTstackTops_inv`, `maybeUnwrapNxt_inv`, `finishTstackTop_inv`, `closeBackedges_inv`, `flipBeforeMerge_inv`, `pruneBackedges_inv`, `flipForLowval_inv`, `modifyCur_foldSides_inv` (one `planarFinishEdge` step each preserves Invariant P) | `PlanarInvSteps.lean` | sorry |
@@ -1414,9 +1417,7 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): `spqrTree_wf` (inherited by `planarRelabel_rot_spec`, `neRotAdj_segment`);
 `nodePlanar_sound_R`; the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
-`planarWalkOut_stackInv`); `nodePlanar_complete`; `twoSum_planar` (its explicit construction
-`TwoSum.planar` is fully proved, including the three counting bridges),
-`oneSum_planar`, `disjointUnion_planar`; `embedItem_step_F`, `embedItem_step_V`,
+`planarWalkOut_stackInv`); `nodePlanar_complete`; `embedItem_step_F`, `embedItem_step_V`,
 `embedItem_step_Q`, `embedItem_step_node`, `glued_root` (hence
 `planarEmbed_sound`); `spqrTree_planar`. The S and P
 cases of `nodePlanar_sound` are proved except for the `Shape` of the
@@ -1440,8 +1441,10 @@ Work packages:
   `neRotAdj_segment` is derived from it (`PlanarRotSpec.lean`).
 * **Local embeddings**: S and P done; R (`nodePlanar_sound_R`) from Invariant P at the finish of
   the R item via `planarRelabel`'s `mapRot`.
-* **Gluing**: `twoSum_planar` (explicit splice, `PlanarGlue`), `oneSum_planar`,
-  `disjointUnion_planar`; the bottom-up induction over `embedItem` is done
-  (`forM_reverse_range_inv`), what remains are the per-item steps `embedItem_step_*` (each one
-  `link` = one splice of two pieces' exposed ends) and `glued_root`.
+* **Gluing**: `twoSum_planar` (explicit splice, `PlanarGlue`, under `TwoSum.WF`'s
+  `deg`/`face`/`conn`), `oneSum_planar` (`RotationSystem.conj` on `RotationSystem.union`),
+  `disjointUnion_planar` (`RotationSystem.union`) are proved; the bottom-up induction over
+  `embedItem` is done (`forM_reverse_range_inv`), what remains are the per-item steps
+  `embedItem_step_*` (each one `link` = one splice of two pieces' exposed ends; the node step must
+  supply `twoSum_planar`'s `hdeg`/`hface`/`hconn` from the skeleton's shape) and `glued_root`.
 * **Completeness**: the crossing of §8.3 as a `K₅`/`K₃,₃` subdivision — the hard, optional one.

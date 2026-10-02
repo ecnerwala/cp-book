@@ -148,16 +148,100 @@ def oneSumEdges (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) (v₁ v₂ : Nat)
 def disjointUnionEdges (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) : List (Nat × Nat) :=
   glueEdges n₁ es₁ es₂ []
 
-/-- **2-sum gluing.** Two planar embedded graphs sharing a twin edge glue to a planar graph:
-splice the rotations at `u` and at `v` (the corners facing the twin in each embedding become
-adjacent) and delete the twins; the face count is `f₁ + f₂ - 2` and Euler's formula follows.
-Admitted; the explicit splice is `Spqr.PlanarGlue`. The explicit construction is `Spqr.TwoSum.planar` (`Spqr.PlanarGlue`, `Proofs/PlanarGlue.lean`);
-discharging this statement from it amounts to identifying `twoSumEdges` with `TwoSum.edges`. -/
+/-- Delete the two vertices `a ≠ b`, shifting the vertices after them down. -/
+def collapse₂ (a b x : Nat) : Nat := x - (if a < x then 1 else 0) - (if b < x then 1 else 0)
+
+theorem twoSumEdges_eq (T : TwoSum) (hu₁ : T.u₁ < T.n₁) (hv₁ : T.v₁ < T.n₁)
+    (hes₁ : ∀ p ∈ T.es₁, p.1 < T.n₁ ∧ p.2 < T.n₁) :
+    twoSumEdges T.n₁ T.es₁ T.es₂ T.e₁ T.e₂ T.u₁ T.v₁ T.u₂ T.v₂ =
+      mapEdges (collapse₂ (T.n₁ + T.u₂) (T.n₁ + T.v₂)) T.edges := by
+  have hg : ∀ w, glueVert T.n₁ [(T.u₁, T.u₂), (T.v₁, T.v₂)] w =
+      collapse₂ (T.n₁ + T.u₂) (T.n₁ + T.v₂) (T.vert₂ w) := by
+    intro w
+    unfold glueVert collapse₂ TwoSum.vert₂
+    by_cases h1 : w = T.u₂
+    · subst h1
+      rw [List.find?_cons_of_pos (by simp)]
+      simp only [↓reduceIte]
+      split_ifs <;> omega
+    by_cases h2 : w = T.v₂
+    · subst h2
+      rw [List.find?_cons_of_neg (by simp [Ne.symm h1]), List.find?_cons_of_pos (by simp)]
+      simp only [h1, ↓reduceIte]
+      split_ifs <;> omega
+    rw [List.find?_cons_of_neg (by simp [Ne.symm h1]), List.find?_cons_of_neg (by simp [Ne.symm h2]),
+      List.find?_nil]
+    simp only [h1, h2, ↓reduceIte, List.filter_cons, List.filter_nil, decide_eq_true_eq]
+    split_ifs <;> simp_all <;> omega
+  have hl : ∀ x, x < T.n₁ → collapse₂ (T.n₁ + T.u₂) (T.n₁ + T.v₂) x = x := by
+    intro x hx
+    unfold collapse₂
+    split_ifs <;> omega
+  unfold twoSumEdges glueEdges TwoSum.edges mapEdges
+  rw [List.map_append]
+  congr 1
+  · refine ((List.map_congr_left fun p hp => ?_).trans (List.map_id _)).symm
+    obtain ⟨h1, h2⟩ := hes₁ p (List.mem_of_mem_eraseIdx hp)
+    simp [hl _ h1, hl _ h2]
+  · rw [List.map_map]
+    apply List.map_congr_left
+    intro p hp
+    simp [Function.comp, hg]
+
+/-- **2-sum gluing.** Two planar embedded graphs sharing a twin edge glue to a planar graph.
+Transport of `TwoSum.planar` (`Proofs/PlanarGlue.lean`): `twoSumEdges` is `TwoSum.edges` with the
+two unused vertices `n₁ + u₂`, `n₁ + v₂` deleted (`collapse₂`, `Planar.map`). The hypotheses are
+those of `TwoSum.WF`: `hdeg₁`/`hdeg₂` (the virtual edge is not its own rotation neighbour, i.e.
+its ends have degree `≥ 2`), `hface` (on one side the virtual edge separates two faces) and
+`hconn` (on one side it is not a bridge) — without them the explicit splice is not an
+embedding; the former statement without `hdeg`/`hface`/`hconn` is true but needs the degenerate
+cases (1-sums / relabellings) separately. -/
 theorem twoSum_planar (n₁ n₂ : Nat) (es₁ es₂ : List (Nat × Nat)) (rs₁ rs₂ : RotationSystem)
     (h₁ : IsPlanarEmbedding es₁ n₁ rs₁) (h₂ : IsPlanarEmbedding es₂ n₂ rs₂) (e₁ e₂ u₁ v₁ u₂ v₂ : Nat)
-    (he₁ : es₁[e₁]? = some (u₁, v₁)) (he₂ : es₂[e₂]? = some (u₂, v₂)) (hu₁ : u₁ ≠ v₁) (hu₂ : u₂ ≠ v₂) :
+    (he₁ : es₁[e₁]? = some (u₁, v₁)) (he₂ : es₂[e₂]? = some (u₂, v₂)) (hu₁ : u₁ ≠ v₁) (hu₂ : u₂ ≠ v₂)
+    (hdeg₁ : ∀ k, k < 4 → ∀ s ∈ rs₁.get (4 * e₁ + k), s / 4 ≠ e₁)
+    (hdeg₂ : ∀ k, k < 4 → ∀ s ∈ rs₂.get (4 * e₂ + k), s / 4 ≠ e₂)
+    (hface : ¬rs₁.SameFaceOrbit (4 * e₁) (4 * e₁ + 2) ∨ ¬rs₂.SameFaceOrbit (4 * e₂) (4 * e₂ + 2))
+    (hconn : EdgesConn (es₁.eraseIdx e₁) u₁ v₁ ∨ EdgesConn (es₂.eraseIdx e₂) u₂ v₂) :
     Planar (twoSumEdges n₁ es₁ es₂ e₁ e₂ u₁ v₁ u₂ v₂) (n₁ + n₂ - 2) := by
-  sorry
+  let T : TwoSum := ⟨es₁, n₁, e₁, u₁, v₁, es₂, n₂, e₂, u₂, v₂⟩
+  have W : T.WF rs₁ rs₂ := ⟨he₁, he₂, hu₁, hu₂, hdeg₁, hdeg₂, h₁, h₂, hface, hconn⟩
+  have hmem₁ : (u₁, v₁) ∈ es₁ := List.mem_of_getElem? he₁
+  have hmem₂ : (u₂, v₂) ∈ es₂ := List.mem_of_getElem? he₂
+  obtain ⟨hu₁n, hv₁n⟩ := h₁.verts _ hmem₁
+  obtain ⟨hu₂n, hv₂n⟩ := h₂.verts _ hmem₂
+  rw [twoSumEdges_eq T hu₁n hv₁n h₁.verts]
+  have hv := T.edges_verts W
+  have hne : ∀ p ∈ T.edges, (p.1 ≠ n₁ + u₂ ∧ p.1 ≠ n₁ + v₂) ∧ (p.2 ≠ n₁ + u₂ ∧ p.2 ≠ n₁ + v₂) := by
+    intro p hp
+    simp only [TwoSum.edges, List.mem_append, List.mem_map] at hp
+    rcases hp with hp | ⟨q, -, rfl⟩
+    · obtain ⟨h1, h2⟩ := h₁.verts _ (List.mem_of_mem_eraseIdx hp)
+      omega
+    · simp only [TwoSum.vert₂, T]
+      split_ifs <;> omega
+  have hcol : ∀ x, x ≠ n₁ + u₂ → x ≠ n₁ + v₂ → x < n₁ + n₂ →
+      collapse₂ (n₁ + u₂) (n₁ + v₂) x < n₁ + n₂ - 2 := by
+    intro x h1 h2 h3
+    unfold collapse₂
+    split_ifs <;> omega
+  have hinj : ∀ x y, x ≠ n₁ + u₂ → x ≠ n₁ + v₂ → y ≠ n₁ + u₂ → y ≠ n₁ + v₂ →
+      collapse₂ (n₁ + u₂) (n₁ + v₂) x = collapse₂ (n₁ + u₂) (n₁ + v₂) y → x = y := by
+    intro x y hx1 hx2 hy1 hy2 h
+    unfold collapse₂ at h
+    split_ifs at h <;> omega
+  refine Planar.map hv ?_ ?_ (T.planar W)
+  · intro p hp
+    obtain ⟨⟨a1, a2⟩, ⟨b1, b2⟩⟩ := hne p hp
+    obtain ⟨c1, c2⟩ := hv p hp
+    exact ⟨hcol _ a1 a2 c1, hcol _ b1 b2 c2⟩
+  · intro x y hx hy h
+    obtain ⟨px, hpx, hx'⟩ := hx
+    obtain ⟨py, hpy, hy'⟩ := hy
+    have nx := hne px hpx
+    have ny := hne py hpy
+    rcases hx' with rfl | rfl <;> rcases hy' with rfl | rfl <;>
+      exact hinj _ _ (by tauto) (by tauto) (by tauto) (by tauto) h
 
 /-- Delete the vertex `w`, shifting the vertices after it down by one. -/
 def collapse (w x : Nat) : Nat := if x < w then x else x - 1
