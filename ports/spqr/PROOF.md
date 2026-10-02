@@ -703,6 +703,26 @@ alignment nor the crossing-class cases follows from the current range interface.
 `EntryR.maximal`, `.bond`, and `.single` still need derivations, as does saturation inside
 open entries (the stack-run and closed-R clauses alone do not state it).
 
+The child-return settling claim also fails on a reachable state.
+`checks/RInvReturnCheck.lean` proves `dfsForest_eq` and `returned_not_rInvAt` with only
+`propext`, `Classical.choice`, and `Quot.sound`. For the graph
+`[(0,1), (1,2), (1,2), (1,2), (0,2)]`, its actual DFS visits `0 → 1 → 2`.
+The check executes the two `walkOutPre` prefixes and then `walkTree` at vertex 2.
+The returned stack contains `⟨2, 1, 1, ([], [9])⟩`; item 9 is a P item with
+terminals `(2,1)` and children Q6/Q7 (edges 2 and 3).
+Edges 1 and 0 are outside this item and are not in the same `{2,1}` separation class:
+edge 1 has both endpoints deleted, whereas edge 0 belongs to the path through vertex 0.
+Thus `returned.RInvAt dfs 1` is false for every `dfs`, before the pending tree edge 1
+is processed. This checks the formal `Graph.SepClass`, not a Boolean approximation.
+It refutes the intended reachable-state conclusion; the check does not package all the
+antecedents of the admitted `walkTree_rInvAt` into a formal negation of that implication.
+The return interface must distinguish the preserved base from the provisional frontier,
+and settle the latter only after incorporating the pending tree edge. In particular,
+`walkTree_rInvAt` cannot currently supply the parent-settled hypothesis consumed by
+`finishEdge_rInvAt`; adding interval/run saturation facts cannot repair this timing issue.
+The corrected preservation contracts remain open rather than assuming provisional
+frontier pieces are maximal.
+
 The schedule-specific input is `WalkState.Frontier (o := o) d origTstack s`
 (`Proofs/RInvFrame.lean`), separate from interval ownership and saturation. Since the stack is
 top-first and `origTstack` counts the preserved bottom entries, the split is at
@@ -1060,6 +1080,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
 | 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge`/`walkTree` induction and `walk_ranges` admitted; saturation not a field (attachment-count forms false, §4.6) |
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |
+| 4.5 Child-return settling diagnostic | `checks/RInvReturnCheck.lean` | `dfsForest_eq`, `returned_not_rInvAt` proved with standard axioms; parent-settled conclusion fails before the pending tree edge is processed; preservation contracts need correction |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
