@@ -271,13 +271,15 @@ flattened state machine:
     CheckPlanarLean.lean runs the decidable Spqr.Planar spec on the planar output
 
 Proof status: the specification and theorem statements are complete; the phase theorems
-(`dfsForest_spanning`, `walk_items_wf`, `relabelTree_wf`, `relabelTree_represents`,
-`spqrTree_r_three_connected`, and everything in `EarSpec.lean`) are currently `sorry` and are being
-proved per work package (see `PROOF.md` §6 for the plan and the natural-language proof they follow).
+(`walk_items_wf`, `relabelTree_wf`, `spqrTree_r_three_connected`, `relabel_node_spec`, and
+everything in `EarSpec.lean`) are currently `sorry` and are being proved per work package
+(`relabelTree_represents` and `relabel_st` are proved from `Items.WF` modulo `relabel_node_spec`;
+the three `Items.WF` clauses added for them, `q_root`/`o_parent`/`s_order`, are checked on the walk
+output by `lake build check_repok` + `CheckRepOK` over `gen.py` seeds) (see `PROOF.md` §6 for the plan and the natural-language proof they follow).
 Nothing about correctness is claimed until `#print axioms Spqr.spqrTree_represents` shows only the
 standard axioms.
 The st-order layer (`PROOF.md` §7) is stated in `StSpec.lean`/`StWalk.lean`: `spqrTree_st` is
-derived from `walk_st` and `relabel_st`, both `sorry`; proved there are `vchildren_nv_increasing`,
+derived from `walk_st` (`sorry`) and `relabel_st` (`RelabelSt.lean`, proved modulo `relabel_node_spec`); proved there are `vchildren_nv_increasing`,
 `orderedChildren_sorted`, `orderedChildren_eq_of_ne_R`, `edgeChildren_dominance`,
 `layoutNode_r_bracket` (via `StLayout.lean`), the side-bookkeeping lemmas `pushTstack_onSide`,
 `merge_onSide`, `fold_onSide`, `finishTstackTop_stItem`, and the ear lowval lemmas
@@ -288,7 +290,7 @@ derived from `walk_st` and `relabel_st`, both `sorry`; proved there are `vchildr
 (`refOrder`, an edge-level Even–Tarjan order over the lowval-sorted DFS tree, differentially tested
 against the walk by `lake build check_stref && ./compare_stref.sh 0 300`): admitted are
 `walk_st'` (walk order = reference, the simulation), `stItem_of_refOrder` (the reference is an
-st-order), `relabel_st`, and the alternative-route `finishEdge_stInv`, `walk_stInv` (so
+st-order), and the alternative-route `finishEdge_stInv`, `walk_stInv` (so
 `#print axioms Spqr.spqrTree_st` reports `sorryAx`).
 
 reports `sorryAx`).
