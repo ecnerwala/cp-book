@@ -373,6 +373,41 @@ separate "all separation pairs are found" theorem by proving the stronger local 
 each merge rule fires iff the corresponding candidate is not a separation pair, by Fact B/C applied
 to the lowpoints that the `OutClass`es carry.
 
+**R-maximality, formal statement (`RMax.lean`, `Proofs/RMax.lean`).** An R close of `finishEdge`
+(Loop 1, entries with equal `topDepth` and distinct `vStart`s) is described by the walk-free
+predicate `RCloseShape g d P U s t`: `U` is the union of the closed entries' edges, `s` the top
+entry's `vStart`, `t = stackVerts[topDepth]`, and `P : Pieces` the merged entries' items (the
+maximal sub-pieces of `U`; `P.addParent g U s t` adds the complement of `U` as the parent piece with
+terminals `s, t`, so the R skeleton is `(P.addParent g U s t).contract g`). Its fields:
+
+* graph structure of the close (statement 3 of Invariant W): `wf : P.WF g`, `sub` (sub-pieces are
+  inside `U`), `conn`, `attached : TwoAttached U s t`, `touch_s`, `touch_t`, `ne : s ≠ t`, `proper`;
+* `single`: `U` is one separation class of `{s, t}` (Loop 1 chose R, not P);
+* `maximal`: each sub-piece's complement is one class of its terminal pair (the sub-piece was closed
+  as a maximal item);
+* `bond`: two parallel edges of `U` lie in a common sub-piece (the P-check merged them);
+* `type1`: for a skeleton pair `{a, b}` of `U` (`SkelPair`: vertices of `U`, interior to no
+  sub-piece, not a sub-piece's terminal pair, not `{s, t}`) with `a` an ancestor of `b`, the class
+  `T_c ∪ {b–c}` of a type-1 child `c` of `b` returning to `depth a` is `LaminarWith U`: inside one
+  sub-piece, disjoint from `U`, or containing `U` — the type-1 close / P-check at `b` ran before `U`
+  formed;
+* `type2`: for a skeleton pair `{a, b}` that is a `Type2Pair`, the class of the tree edge `a → a'`
+  towards `b` is `LaminarWith U` — the `firstIdx > firstOccurrence[d]` test fired a
+  `finishTstackTop` before `U` formed.
+
+Proved from these (pure graph theory + §3 Facts, `Proofs/RMax.lean`): `RCloseShape.not_sepPair`
+— no `SkelPair` of `U` is a separation pair of the block (`sepPair_iff'` reduces to a type-1 /
+type-2 pair; its class is 2-attached at `{a, b}`, touches both and is proper, and
+`Pieces.not_laminarWith` shows no such class can be laminar with `U`: inside a sub-piece makes
+`{a, b}` that piece's terminals, disjoint from `U` makes it `{s, t}`, containing `U` contradicts
+`exists_not_mem_end`) — and `RCloseShape.threeConnected :
+((P.addParent g U s t).contract g).ThreeConnected` via `threeConnected_contract_iff`, with the
+terminal pairs handled by `Pieces.WF.not_sepPair_terminal` from `maximal` / `single`
+(`addParent_wf` uses `TwoAttached.conn_compl`: the complement of a 2-attached set in a block is
+connected). Still walk-side (not proved): that the R case of Loop 1 actually produces an
+`RCloseShape` — the content facts `single`, `maximal`, `bond`, `type1`, `type2` about the closed
+entries, on top of the stack-shape fact `walkTree_guards`.
+
 ## 5. Phase 3: relabel
 
 `relabelTree` **[def]** takes the item array and produces `SpqrTree`. It is a plain preorder walk:
@@ -407,7 +442,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | typing/allocation part of `Items.WF` (`Items.Tree` sizes/types, I/O leaves, `vs_shape`, `vs_lt`): `walk_typing` | `WalkTyping.lean` | proved (`walk_q_children` sorry: needs span shape) |
 | §4.2b walk invariant (`EntryInv`, `Inv`): closure lemmas (`GraphLemmas.lean`), `mergeTstackTops_sound`, `finishTstackTop_complete`, `finishEdge_back_inv` (under explicit stack-shape hyps `BackCheckOk`) | `GraphLemmas.lean`, `WalkSpec.lean` | proved; `finishEdge_inv` (remaining branches), `walkTree_inv`, `walk_nodes_partition` sorry |
 | Invariant W, Lemmas 4.3/4.4 (`earOut_one_entry`, `ascend_frame_one_entry`) | `EarSpec.lean` | sorry / hard |
-| 4.5 maximality / R 3-connected | `spqrTree_r_three_connected` | hard |
+| 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; the walk producing an `RCloseShape` (`single`/`maximal`/`bond`/`type1`/`type2`) and `spqrTree_r_three_connected` itself: hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean` | def / proved split |
 | 7 relabel-side: `vchildren_nv_increasing`, `orderedChildren_sorted`, `edgeChildren_dominance`, `layoutNode_r_bracket` | `StSpec.lean`, `StLayout.lean` | proved |
