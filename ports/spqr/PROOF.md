@@ -376,7 +376,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | 1.1, 1.2 DFS spanning + lowpoints | `Proofs/Dfs.lean` (`dfsForest_spanning`, `dfsForest_wf`, `classify_child_*`) | proved |
 | 2.1 blocks ↔ `lowval ≥ d` branches (`sameBlock_iff`, `blockRoot_cut`, `ret_child_sameBlock`) | `Blocks.lean`, `Proofs/Blocks.lean` | proved |
 | Facts A–C (`sepPair_comparable`, type-1 class / above-between / sorted prefix-suffix, `type2_first_out`) | `SepPair.lean`, `Proofs/SepPair.lean` | proved |
-| Fact D (laminar intervals) | — | to state |
+| Fact D (laminar intervals): `edgePostorder`, type-1 classes are intervals + laminar, `type2_class_interval`, `type2Block_laminar_block` | `Proofs/{Postorder,Interval,Type2}.lean` | proved (type-2 vs type-2 nesting open, see §3) |
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
 | `walkEarTree = walkTree` (`walkEarTree_eq_walkTree`, `walkEar_eq_walk`) | `EarSpec.lean` | proved |
 | frame rule `walkTree_local` | `EarSpec.lean` | sorry |

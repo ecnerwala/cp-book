@@ -222,6 +222,9 @@ flattened state machine:
     Spqr/SepPair.lean    separation pairs / classes / DFS ancestry definitions (PROOF.md §3)
     Spqr/WalkTyping.lean typing/allocation invariant of the walk (`walk_typing`; only `walk_q_children` admitted)
     Spqr/Proofs/SepPair.lean  Facts A–C proved (no sorry)
+    Spqr/Proofs/{Postorder,Interval,Type2}.lean  Fact D: edge postorder, classes are laminar intervals (no sorry)
+    Spqr/Blocks.lean, Spqr/Proofs/Blocks.lean  blocks ↔ lowval ≥ d (PROOF.md §2, no sorry)
+    Spqr/Proofs/Dfs.lean  phase-1 spec: dfsForest_spanning, lowpoint/classify lemmas (no sorry)
     Spqr/Blocks.lean     blocks (SameBlock, block roots / tops, InBlock) relative to the DFS forest (PROOF.md §2)
     Spqr/Proofs/Blocks.lean  Lemma 2.1 proved (no sorry): sameBlock_iff, blockRoot_cut, ret_child_sameBlock
     DumpLean.lean        dump harness (SPQR_EAR=1 switches to walkEarTree)
