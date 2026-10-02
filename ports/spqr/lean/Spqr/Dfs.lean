@@ -101,6 +101,16 @@ def DfsOut.vertsList : List DfsOut → List Nat
 end
 
 mutual
+/-- Number of vertices on the longest root-to-leaf path. -/
+def DfsTree.height : DfsTree → Nat
+  | .node _ outs => DfsOut.heightList outs + 1
+def DfsOut.heightList : List DfsOut → Nat
+  | [] => 0
+  | .back .. :: rest => DfsOut.heightList rest
+  | .tree _ _ child :: rest => max child.height (DfsOut.heightList rest)
+end
+
+mutual
 /-- Edges of the tree (tree and back edges), in preorder. -/
 def DfsTree.edges : DfsTree → List Nat
   | .node _ outs => DfsOut.edgesList outs

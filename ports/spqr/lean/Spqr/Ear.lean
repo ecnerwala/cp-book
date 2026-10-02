@@ -139,6 +139,6 @@ def walkEarForest (fuel : Nat) (forest : List DfsTree) : WalkM Unit :=
 
 /-- Phase 2 entry point, ear-structured. -/
 def Graph.walkEar (g : Graph) (ternarize : Bool) (forest : List DfsTree) : WalkState :=
-  (walkEarForest g.nv forest).run (WalkState.init g ternarize) |>.2
+  (walkEarForest (g.nv + 1) forest).run (WalkState.init g ternarize) |>.2
 
 end Spqr
