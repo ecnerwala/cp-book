@@ -2,6 +2,7 @@ import Spqr.WalkSpec
 import Spqr.Frame
 import Spqr.EarInv
 import Spqr.EarLoop1
+import Spqr.EarLoop2
 
 /-!
 # From the tstack guards to `FinishOk`
@@ -68,9 +69,10 @@ theorem ear_loop1 (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree
 
 /-- Loop 2: every late merge joins entries sharing a terminal (`MergeTopOk`). -/
 theorem ear_mergeLate (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
-    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) :
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (hD : D = d + 1) :
     MergeLateOk D d (feS₁ d o s) := by
-  sorry
+  obtain ⟨c₀, R, hL⟩ := hE.late ht (by rw [ho]; exact hlow)
+  exact hD ▸ mergeLateOk_of_late hL
 
 /-- The vertex close: loop 3 merges, the unwrap, the two merges, the retarget and the type-1 close. -/
 theorem ear_closeVert (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
@@ -323,7 +325,7 @@ theorem finishOk_of_guards (ho : o.cls = .ret lv kind) (hlow : lv < d)
   refine
     { e_lt := he
       ears := hears
-      late := fun ht => ear_mergeLate ho hlow ht hg hE hi hs
+      late := fun ht => ear_mergeLate ho hlow ht hg hE hi hs (by rw [hD, if_pos ht])
       vert := fun ht hv' => ear_closeVert ho hlow ht hg hE hi hs hv'
       rest_vert := fun ht hv' => ⟨ear_finishP_vert ho hlow ht hg hE hi hs hv',
         fun h => by simp [hv'] at h, fun h => by simp [hv'] at h, fun h => by simp [hv'] at h⟩
@@ -335,7 +337,7 @@ theorem finishOk_of_guards (ho : o.cls = .ret lv kind) (hlow : lv < d)
   · have st₁ : Step D curV _ (feS₁ d o s) := Step.closeEars st₀.inv st₀.shape hv₀ (hears ht)
     have hv₁ : curV < (feS₁ d o s).g.nv := by rw [st₁.g]; exact hv₀
     have st₂ : Step D curV _ (feS₂ d o s) :=
-      Step.mergeLate st₁.inv st₁.shape hv₁ (ear_mergeLate ho hlow ht hg hE hi hs)
+      Step.mergeLate st₁.inv st₁.shape hv₁ (ear_mergeLate ho hlow ht hg hE hi hs (by rw [hD, if_pos ht]))
     have hv₂ : curV < (feS₂ d o s).g.nv := by rw [st₂.g]; exact hv₁
     have hp := ear_finishP_tree (curV := curV) ho hlow ht hg hE hi hs hv'
     have st₃ := Step.finishP (v := curV) st₂.inv st₂.shape hv₂ hp
