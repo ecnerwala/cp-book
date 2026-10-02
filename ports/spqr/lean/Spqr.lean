@@ -25,3 +25,4 @@ import Spqr.Sim
 import Spqr.Frame
 import Spqr.SepPairExhaust
 import Spqr.Proofs.SepPairExhaust
+import Spqr.StSpec
