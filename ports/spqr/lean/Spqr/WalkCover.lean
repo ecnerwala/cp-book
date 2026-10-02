@@ -597,4 +597,303 @@ theorem finishTstackTop_full {x : Nat} (h : (s.dropCh x).Full g P X) (hx : X x) 
   simp only [wp_bind, wp_cur, wp_stackDir, wp_makeVs, wp_modifyItem, wp_modifyCur, hts, head!_cons]
   exact h.finishTop hx hts hside _
 
+/-! ### `finishEdge` -/
+
+theorem umc_full (h : s.Full g P X) (ty : NodeType) (hty : ty ∈ [NodeType.S, .P, .R])
+    (hu : UnwrapMergeClose ty s) :
+    wp (maybeUnwrapNxt ty >>= fun item => mergeTstackTops >>= fun _ => finishTstackTop item)
+      (fun _ s' => s'.Full g P X) s := by
+  refine bind_spec (wp_and (maybeUnwrapNxt_full h ty hty hu.1) hu.2) ?_
+  rintro item s₂ ⟨⟨h₂, hX₂⟩, hm, hc⟩
+  rw [wp_mergeTstackTops] at hc
+  refine bind_spec mergeTstackTops_spec ?_
+  rintro _ _ rfl
+  exact wp_mono _ (finishTstackTop_full (h₂.dropCh_mergeTop hm) (Or.inr rfl) hc) fun _ s₄ h₄ =>
+    h₄.monoX fun i => ⟨fun h => h.1.resolve_right h.2, fun hx => ⟨Or.inl hx, fun h => hX₂ (h ▸ hx)⟩⟩
+
+theorem loop1Body_full (h : s.Full g P X) {d : Nat} {edgeDir : Bool} (hl : Loop1Sides d edgeDir s) :
+    wp (loop1Body d edgeDir) (fun _ s' => s'.Full g P X) s := by
+  obtain ⟨hm, hl⟩ := hl
+  unfold loop1Body
+  refine bind_spec (P := fun ty s₁ => s₁.Full g P X ∧ ty ∈ [NodeType.S, .P, .R] ∧ UnwrapMergeClose ty s₁) ?_ ?_
+  · unfold loop1Type at hl ⊢
+    simp only [wp_bind, wp_nxt, wp_cur, wp_ite, wp_setStackDir, wp_mergeTstackTops, wp_pure] at hl ⊢
+    split
+    · next hgt =>
+      simp only [hgt, ↓reduceIte] at hl
+      exact ⟨(h.set_stackDir (s.stackDir.set! s.tstack.tail.head!.topDepth edgeDir)).mergeTop (hm hgt), by simp, hl⟩
+    · next hgt =>
+      simp only [hgt, ↓reduceIte] at hl
+      split
+      · next hc => simp only [hc, ↓reduceIte] at hl; exact ⟨h, by simp, hl⟩
+      · next hc => simp only [hc] at hl; exact ⟨h, by simp, hl⟩
+  · rintro ty s₁ ⟨h₁, hty, hu⟩
+    exact umc_full h₁ ty hty hu
+
+theorem loop1Cond_pure (d : Nat) : wp (loop1Cond d) (fun _ s' => s' = s) s := rfl
+theorem loop2Cond_pure (fo : Nat) : wp (loop2Cond fo) (fun _ s' => s' = s) s := rfl
+theorem loop3Cond_pure (o : Nat) : wp (loop3Cond o) (fun _ s' => s' = s) s := rfl
+theorem condP_pure (curV lowval : Nat) (isType1 : Bool) :
+    wp (condP curV lowval isType1) (fun _ s' => s' = s) s := rfl
+
+theorem loop_merge_full (h : s.Full g P X) {cond : WalkM Bool} (hc : ∀ s, wp cond (fun _ s' => s' = s) s)
+    (n : Nat) (hl : LoopSides MergeOK cond mergeTstackTops n s) :
+    wp (loop n cond mergeTstackTops) (fun _ s' => s'.Full g P X) s :=
+  loop_full hc (fun _ h hm => mergeTstackTops_full h hm) n s h hl
+
+theorem closeEars_full (h : s.Full g P X) {nxtV d e : Nat} {edgeDir : Bool}
+    (hq0 : 0 < edgeItem s.g e) (hqlt : edgeItem s.g e < 1 + g.nv + g.ne) (hPe : ¬ P (edgeItem s.g e))
+    (hl : wp (pushEdgeTstack nxtV d e) (fun _ s₁ =>
+      LoopSides (Loop1Sides d edgeDir) (loop1Cond d) (loop1Body d edgeDir) s₁.tstack.length s₁) s) :
+    wp (closeEars nxtV d e edgeDir) (fun _ s' => s'.Full g (fun i => P i ∨ i = edgeItem s.g e) X) s := by
+  unfold closeEars
+  refine bind_spec (wp_and (pushEdgeTstack_spec _ _ _) hl) ?_
+  rintro _ _ ⟨rfl, hl⟩
+  rw [bind_tstackSize]
+  exact loop_full (fun _ => loop1Cond_pure d) (fun _ h hb => loop1Body_full h hb) _ _ (h.cons hq0 hqlt hPe _ _ _ _) hl
+
+theorem mergeLate_full (h : s.Full g P X) {d : Nat} (hs : MergeLateSides d s) :
+    wp (mergeLate d) (fun _ s' => s'.Full g P X) s := by
+  unfold mergeLate
+  rw [bind_get]
+  extract_lets fo
+  rw [bind_cur]
+  split
+  · next hgt => rw [bind_tstackSize]; exact loop_merge_full h (fun _ => loop2Cond_pure fo) _ (hs hgt)
+  · exact h
+
+theorem finishP_full (h : s.Full g P X) {curV lowval : Nat} {isType1 : Bool}
+    (hs : FinishPSides curV lowval isType1 s) :
+    wp (finishP curV lowval isType1) (fun _ s' => s'.Full g P X) s := by
+  unfold finishP
+  refine bind_spec (wp_and (condP_pure curV lowval isType1) hs) ?_
+  rintro b _ ⟨rfl, hb⟩
+  split
+  · next hbt => exact umc_full h .P (by simp) (hb hbt)
+  · exact h
+
+theorem finishTail_full (h : s.Full g P X) {curV d : Nat} {hasVert isSingle : Bool}
+    (hv0 : 0 < vertItem curV) (hvlt : vertItem curV < 1 + g.nv + g.ne)
+    (hPv : hasVert = false → ¬ P (vertItem curV)) (hPv' : hasVert = true → P (vertItem curV))
+    (hs : FinishTailSides curV d hasVert isSingle s) :
+    wp (finishTail curV d hasVert isSingle)
+      (fun hv' s' => s'.Full g (fun i => P i ∨ (hv' = true ∧ i = vertItem curV)) X ∧
+        (hasVert = true → hv' = true)) s := by
+  cases hasVert
+  · have hc := h.cons hv0 hvlt (hPv rfl) curV d s.nxtEdgeIdx s.stackDir[d]!
+    cases isSingle
+    · have hm : MergeOK _ := hs rfl rfl
+      simp only [finishTail, Bool.not_false, ↓reduceIte, wp_bind, wp_pushVertTstack, wp_mergeTstackTops, wp_pure]
+      exact ⟨(hc.mergeTop hm).monoP fun i => by simp, fun h => nomatch h⟩
+    · simp only [finishTail, Bool.not_false, Bool.not_true, Bool.false_eq_true, ↓reduceIte, wp_bind,
+        wp_pushVertTstack, wp_pure]
+      exact ⟨hc.monoP fun i => by simp, fun h => nomatch h⟩
+  · simp only [finishTail, Bool.not_true, Bool.false_eq_true, ↓reduceIte, wp_pure]
+    exact ⟨h.monoP fun i => ⟨Or.inl, fun h' => h'.elim id fun h'' => h''.2 ▸ hPv' rfl⟩, by simp⟩
+
+theorem finishRest_full (h : s.Full g P X) {curV d lowval : Nat} {isType1 hasVert isSingle : Bool}
+    (hv0 : 0 < vertItem curV) (hvlt : vertItem curV < 1 + g.nv + g.ne)
+    (hPv : hasVert = false → ¬ P (vertItem curV)) (hPv' : hasVert = true → P (vertItem curV))
+    (hs : FinishRestSides curV d lowval isType1 hasVert isSingle s) :
+    wp (finishRest curV d lowval isType1 hasVert isSingle)
+      (fun hv' s' => s'.Full g (fun i => P i ∨ (hv' = true ∧ i = vertItem curV)) X ∧
+        (hasVert = true → hv' = true)) s := by
+  unfold finishRest
+  refine bind_spec (wp_and (finishP_full h hs.1) hs.2) ?_
+  rintro _ s₁ ⟨h₁, ht⟩
+  exact finishTail_full h₁ hv0 hvlt hPv hPv' ht
+
+theorem closeVertTail_full {curV : Nat} {edgeDir isSingle : Bool} {k : Bool → WalkM Bool}
+    {K : Bool → WalkState → Prop} {Q : Bool → WalkState → Prop} (item : Option ItemId)
+    (h : match item with
+      | some x => (s.dropCh x).Full g P (fun i => X i ∨ i = x) ∧ ¬ X x
+      | none => s.Full g P X)
+    (hs : CloseVertTailSides curV edgeDir item (K (match item with | some _ => true | none => isSingle)) s)
+    (hk : ∀ b s', s'.Full g P X → K b s' → wp (k b) Q s') :
+    wp (closeVertTail curV edgeDir isSingle k item) Q s := by
+  unfold closeVertTail
+  obtain ⟨hm₁, hs⟩ := hs
+  refine bind_spec (wp_and mergeTstackTops_spec hs) ?_
+  rintro _ _ ⟨rfl, hm₂, hs⟩
+  refine bind_spec (wp_and mergeTstackTops_spec hs) ?_
+  rintro _ _ ⟨rfl, hs⟩
+  refine bind_spec (wp_and (modifyCur_spec _) hs) ?_
+  rintro _ _ ⟨rfl, hs⟩
+  cases item with
+  | some x =>
+    obtain ⟨hx, hX⟩ := h
+    obtain ⟨hc, hs⟩ := hs
+    refine bind_spec (wp_and (finishTstackTop_full
+      (((hx.dropCh_mergeTop hm₁).dropCh_mergeTop hm₂).dropCh_fold curV edgeDir) (Or.inr rfl) hc) hs) ?_
+    rintro _ s₄ ⟨h₄, hK⟩
+    exact hk true s₄ (h₄.monoX fun i =>
+      ⟨fun h => h.1.resolve_right h.2, fun hx' => ⟨Or.inl hx', fun h => hX (h ▸ hx')⟩⟩) hK
+  | none => exact hk isSingle _ (((h.mergeTop hm₁).mergeTop hm₂).fold curV edgeDir) hs
+
+theorem closeVert_full {curV : Nat} {edgeDir isType1 : Bool} {origTstack : Nat} {isSingle : Bool}
+    {k : Bool → WalkM Bool} {K : Bool → WalkState → Prop} {Q : Bool → WalkState → Prop}
+    (h : s.Full g P X) (hs : CloseVertSides curV edgeDir isType1 origTstack isSingle K s)
+    (hk : ∀ b s', s'.Full g P X → K b s' → wp (k b) Q s') :
+    wp (closeVert curV edgeDir isType1 origTstack isSingle k) Q s := by
+  unfold closeVert
+  cases isType1
+  · obtain ⟨hl, hs⟩ := hs.1 rfl
+    simp only [Bool.not_false, ite_true]
+    rw [bind_tstackSize]
+    refine bind_spec (wp_and (loop_merge_full h (fun _ => loop3Cond_pure origTstack) _ hl) hs) ?_
+    rintro _ s₁ ⟨h₁, hs₁⟩
+    exact closeVertTail_full none h₁ hs₁ hk
+  · obtain ⟨hu, hs⟩ := hs.2 rfl
+    simp only [Bool.not_true, Bool.false_eq_true, ite_false]
+    refine bind_spec (map_spec some (wp_and (maybeUnwrapNxt_full h _ (by cases isSingle <;> simp) hu) hs)) ?_
+    rintro _ s₁ ⟨x, rfl, ⟨h₁, hX₁⟩, hs₁⟩
+    exact closeVertTail_full (some x) ⟨h₁, hX₁⟩ hs₁ hk
+
+/-- Postcondition of `finishEdge`: the edge is pushed, and the vertex iff `hv'`. -/
+def FinishPost (g : Graph) (P X : ItemId → Prop) (curV : Nat) (e : Nat) (hasVert : Bool)
+    (hv' : Bool) (s' : WalkState) : Prop :=
+  s'.Full g (fun i => P i ∨ i = edgeItem g e ∨ (hv' = true ∧ i = vertItem curV)) X ∧
+    (hasVert = true → hv' = true)
+
+theorem finishTree_full (hg : s.g = g) (h : s.Full g P X) {curV d : Nat} {o : DfsOut} {origTstack : Nat}
+    {hasVert edgeDir : Bool} (hv : curV < g.nv) (he : o.e < g.ne)
+    (hPe : ¬ P (edgeItem g o.e)) (hPv : hasVert = false → ¬ P (vertItem curV))
+    (hPv' : hasVert = true → P (vertItem curV))
+    (hs : FinishTreeSides curV d o origTstack hasVert edgeDir s) :
+    wp (finishTree curV d o origTstack hasVert edgeDir) (FinishPost g P X curV o.e hasVert) s := by
+  subst hg
+  unfold finishTree
+  obtain ⟨hl, hs⟩ := hs
+  refine bind_spec (wp_and (closeEars_full h (by show 0 < 1 + s.g.nv + o.e; omega)
+    (by show 1 + s.g.nv + o.e < _; omega) hPe hl) hs) ?_
+  rintro _ s₂ ⟨h₂, hml, hs⟩
+  refine bind_spec (wp_and (mergeLate_full h₂ hml) hs) ?_
+  rintro isSingle s₃ ⟨h₃, hs⟩
+  have hconv : ∀ hv' s', s'.Full s.g (fun i => (P i ∨ i = edgeItem s.g o.e) ∨ (hv' = true ∧ i = vertItem curV)) X ∧
+      (hasVert = true → hv' = true) → FinishPost s.g P X curV o.e hasVert hv' s' :=
+    fun hv' s' ⟨h', hh⟩ => ⟨h'.monoP fun i => by tauto, hh⟩
+  have hPv₁ : hasVert = false → ¬ (P (vertItem curV) ∨ vertItem curV = edgeItem s.g o.e) :=
+    fun hh h' => h'.elim (hPv hh) (vertItem_ne_edgeItem hv o.e)
+  have hv0 : 0 < vertItem curV := by show 0 < 1 + curV; omega
+  have hvlt : vertItem curV < 1 + s.g.nv + s.g.ne := by show 1 + curV < _; omega
+  cases hasVert
+  · simp only [Bool.false_eq_true, ite_false]
+    exact wp_mono _ (finishRest_full h₃ hv0 hvlt hPv₁ (fun h => nomatch h) (hs.2 rfl)) hconv
+  · simp only [ite_true]
+    exact closeVert_full h₃ (hs.1 rfl) fun b s' h' hK =>
+      wp_mono _ (finishRest_full h' hv0 hvlt hPv₁ (fun _ => Or.inl (hPv' rfl)) hK) hconv
+
+theorem finishBack_full (hg : s.g = g) (h : s.Full g P X) {curV d : Nat} {o : DfsOut}
+    {hasVert : Bool} (hv : curV < g.nv) (he : o.e < g.ne)
+    (hPe : ¬ P (edgeItem g o.e)) (hPv : hasVert = false → ¬ P (vertItem curV))
+    (hPv' : hasVert = true → P (vertItem curV))
+    (hs : FinishBackSides curV d o hasVert s) :
+    wp (finishBack curV d o hasVert) (FinishPost g P X curV o.e hasVert) s := by
+  subst hg
+  unfold finishBack
+  refine bind_spec (wp_and (pushEdgeTstack_spec _ _ _) hs) ?_
+  rintro _ _ ⟨rfl, hs⟩
+  refine bind_spec (wp_and (modify_spec' _) hs) ?_
+  rintro _ _ ⟨rfl, hs⟩
+  have hc := h.cons (x := edgeItem s.g o.e) (by show 0 < 1 + s.g.nv + o.e; omega)
+    (by show 1 + s.g.nv + o.e < _; omega) hPe curV (o.cls.lowval d) s.nxtEdgeIdx s.stackDir[o.cls.lowval d]!
+  refine wp_mono _ (finishRest_full (hc.of_eq ?_ ?_ ?_) (by show 0 < 1 + curV; omega)
+    (by show 1 + curV < _; omega)
+    (fun hh h' => h'.elim (hPv hh) (vertItem_ne_edgeItem hv o.e)) (fun hh => Or.inl (hPv' hh)) hs) ?_
+  · rfl
+  · rfl
+  · rfl
+  rintro hv' s' ⟨h', hh⟩
+  exact ⟨h'.monoP fun i => by tauto, hh⟩
+
+theorem wp_finishSetup {Q : Bool → WalkState → Prop} (d : Nat) (o : DfsOut) (s : WalkState) :
+    wp (finishSetup d o) Q s = Q s.stackDir[d]! { s with items := s.items.modify (edgeItem s.g o.e) fun it =>
+      { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) } } := rfl
+
+theorem finishEdge_full (h : s.Full g P X) {curV d : Nat} {o : DfsOut} {origTstack : Nat}
+    {hasVert : Bool} (hv : curV < g.nv) (he : o.e < g.ne)
+    (hPe : ¬ P (edgeItem g o.e)) (hPv : hasVert = false → ¬ P (vertItem curV))
+    (hPv' : hasVert = true → P (vertItem curV))
+    (hs : FinishSides curV d o origTstack hasVert s) :
+    wp (finishEdge curV d o origTstack hasVert) (FinishPost g P X curV o.e hasVert) s := by
+  obtain ⟨hg⟩ : ∃ _ : s.g = g, True := ⟨h.place.g_eq, trivial⟩
+  subst hg
+  have hq0 : 0 < edgeItem s.g o.e := by show 0 < 1 + s.g.nv + o.e; omega
+  have hqlt : edgeItem s.g o.e < 1 + s.g.nv + s.g.ne := by show 1 + s.g.nv + o.e < _; omega
+  have hvne : ∀ e, e < s.g.ne → vertItem curV ≠ edgeItem s.g e := fun e _ => vertItem_ne_edgeItem hv e
+  have hvlt : ∀ {X' : ItemId → Prop} (s' : WalkState), s'.Full s.g P X' → vertItem curV < s'.items.size :=
+    fun s' h' =>
+    Nat.lt_of_lt_of_le (by show 1 + curV < _; omega) h'.place.size
+  have hPc : ∀ i, (P i ∨ i = edgeItem s.g o.e) ↔
+      (P i ∨ i = edgeItem s.g o.e ∨ (hasVert = true ∧ i = vertItem curV)) := fun i =>
+    ⟨fun h => h.elim Or.inl fun h => Or.inr (Or.inl h),
+      fun h => h.elim Or.inl fun h => h.elim Or.inr fun ⟨hh, he⟩ => Or.inl (he ▸ hPv' hh)⟩
+  rw [finishEdge_eq]
+  unfold finishEdge'
+  rw [bind_get, bind_stackDir]
+  split
+  · next hge =>
+    have hb := hs.1 hge
+    unfold finishBoundary
+    refine bind_spec (P := fun _ s' => s'.Full s.g P X ∧ s'.tstack = s.tstack) ⟨h.modify_vs _ _, rfl⟩ ?_
+    rintro _ s₁ ⟨h₁, ht₁⟩
+    refine bind_spec (P := fun _ s' => s'.Full s.g P X ∧ s'.tstack = s.tstack)
+      ⟨h₁.of_eq rfl rfl rfl, ht₁⟩ ?_
+    rintro _ s₂ ⟨h₂, ht₂⟩
+    have hqch := h₂.qch o.e he hPe
+    split
+    · next htree =>
+      have hb := hb htree
+      split
+      · next hlow =>
+        simp only [hlow, ↓reduceIte] at hb
+        refine bind_spec (P := fun item s' => s'.Full s.g P (fun i => X i ∨ i = item) ∧ ¬ X item ∧
+          s'.tstack = s.tstack) ⟨h₂.push .I, fun hx => Nat.lt_irrefl _ (h₂.place.loose_node _ hx).2, ht₂⟩ ?_
+        rintro item s₃ ⟨h₃, hX₃, ht₃⟩
+        rw [wp_bind, wp_makeVs]
+        refine bind_spec (P := fun _ s' => s'.Full s.g P (fun i => X i ∨ i = item) ∧ s'.tstack = s.tstack)
+          ⟨h₃.modify_vs _ _, ht₃⟩ ?_
+        rintro _ s₄ ⟨h₄, ht₄⟩
+        refine bind_spec popTstack_spec' ?_
+        rintro _ _ ⟨rfl, rfl⟩
+        simp only [wp_bind, wp_modifyItem, wp_pure]
+        refine ⟨(h₄.q_cons (Or.inr rfl) hq0 hqlt hPe (h₄.qch o.e he hPe)
+          (hvlt _ h₄) hvne (ht₄ ▸ hb)).mono hPc fun i => ?_, fun hh => hh⟩
+        constructor
+        · rintro ⟨hx | rfl, hne⟩
+          · exact hx
+          · exact absurd rfl hne
+        · exact fun hx => ⟨Or.inl hx, fun hh => hX₃ (hh ▸ hx)⟩
+      · next hlow =>
+        simp only [hlow, Bool.false_eq_true, ↓reduceIte] at hb
+        refine bind_spec popTstack_spec' ?_
+        rintro _ _ ⟨rfl, rfl⟩
+        refine bind_spec popTstack_spec' ?_
+        rintro _ _ ⟨rfl, rfl⟩
+        simp only [wp_bind, wp_modifyItem, wp_pure]
+        exact ⟨(h₂.q_merge hq0 hqlt hPe hqch (hvlt _ h₂) hvne (ht₂ ▸ hb.1) (ht₂ ▸ hb.2)).monoP hPc,
+          fun hh => hh⟩
+    · refine bind_spec (modify_spec' _) ?_
+      rintro _ _ rfl
+      have h₃ := h₂.of_eq (s' := { s₂ with totSelfLoops := s₂.totSelfLoops + 1 }) rfl rfl rfl
+      simp only [wp_bind, wp_allocItem, wp_modifyItem, wp_pure]
+      have h₄ := (h₃.push .O).modify_vs s₂.items.size (some curV, none)
+      refine ⟨(h₄.q_single (Or.inr rfl) hq0 hqlt hPe (h₄.qch o.e he hPe)
+        (hvlt _ h₄) hvne).mono hPc fun i => ?_, fun hh => hh⟩
+      constructor
+      · rintro ⟨hx | rfl, hne⟩
+        · exact hx
+        · exact absurd rfl hne
+      · exact fun hx => ⟨Or.inl hx, fun hh => Nat.lt_irrefl _ (hh ▸ h₂.place.loose_node _ hx).2⟩
+  · next hlt =>
+    have hlt' : o.cls.lowval d < d := Nat.lt_of_not_le hlt
+    have hs := hs.2 hlt'
+    rw [wp_finishSetup] at hs
+    rw [wp_bind, wp_makeVs, wp_bind, wp_modifyItem]
+    have h₁ := h.modify_vs (edgeItem s.g o.e) (setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest))
+    split
+    · next htree => exact finishTree_full h₁.place.g_eq h₁ hv he hPe hPv hPv' (hs.1 htree)
+    · next htree =>
+      exact finishBack_full h₁.place.g_eq h₁ hv he hPe hPv hPv' (hs.2 (Bool.not_eq_true _ |>.mp htree))
+
 end Spqr
