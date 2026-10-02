@@ -24,3 +24,11 @@ root = "CheckPlanarLean"
 [[lean_exe]]
 name = "prof_lean"
 root = "ProfLean"
+
+[[lean_exe]]
+name = "dump_stref"
+root = "DumpStRef"
+
+[[lean_exe]]
+name = "check_stref"
+root = "CheckStRef"
