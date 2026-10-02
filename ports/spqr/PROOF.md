@@ -1255,6 +1255,12 @@ checks `StSimOuts` at the start of every out-edge, `StSim` of the child plus `St
 before every `finishEdge` (`sub` above `origTstack` reads as the child's `refTree` pieces) and
 `StSim` at the end of every `walkTree`, and finally that the mirrored items equal `g.walk`'s.
 
+`StUnwrap.lean` composes `StClose.lean` into the tail shared by `loop1Body` and `finishP`:
+`StSim.unwrapMergeClose` (`maybeUnwrapNxt ty; mergeTstackTops; finishTstackTop`) keeps `StRead` above
+`base` and `StItems`, in both the allocation path (`ExpandsList.push`/`InBlock.push`, the new node is
+out of every stack subtree by `bounded`) and the reopen path (`readStack_reopen` + `expandItem_self_iff`;
+the reopened node's children are fresh on the stack because they have a parent and stack items are
+roots); `L1Unwrap` is taken as the hypothesis `hU`, only its `getSide t.spans dir = [h]` clause is used.
 What remains is threading the relation through `finishEdge` (the loops) and
 `walkTree`/`walkEarTree` under the ear-shape hypotheses — which entries loop 1 / the `firstIdx`
 loop / the `origTstack + 3` loop pop are the `EarFinish.loops`/`EarShape` facts; the new closes'
@@ -1319,6 +1325,7 @@ Classical.choice, Quot.sound.
 | `Expands`/`ExpandsList`, `DirsOf`, `StRead`, `VsOrientedAt` (`vsOriented_iff`), `InBlock`, `StItems`, `PathFrame`/`truncTree`, `StSim`, `StSimOuts` (the simulation relation, §7.6); `check_stsim` / `compare_stsim.sh` | `StSim.lean`, `CheckStSim.lean` | def / tested seeds 0..1000 at every `finishEdge` boundary (0 violations) |
 | `ExpandsList.{append, append_inv, cons_iff, det, congr, modify_of_not_below, modify_root, push, expandItem_self_iff, close}` (expansion algebra: framing under `modify`/`push`, `expandItem` of a node is invisible, closing `i` with children `ch` keeps the reading) | `StSim.lean` | proved |
 | `StClose.lean`: `Items.Below.{modify_of_not_below, of_modify, push, of_push, lt_of_chLt}`, `VsOrientedAt.congr`, `InBlock.{congr, modify_root, push}` (framing of the finished-item facts under `modify` of a root / `push`), `readStack_{cons_perm, close, close_perm}`, `StRead.finishTstackTop` (the reading above `base` survives the close of a one-sided top), `StItems.close` (the item facts survive it: `item` is a root not on the stack, the stack below holds roots; `closed` is assumed with `item` exempt) | `StClose.lean` | proved |
+| `StUnwrap.lean`: `readL_append`/`readR_append`, `readStack_cons_perm'`, `mem_readStack_cons`, `mem_expandItem`, `nodup_expandItem`, `mergeTops_cons_cons`, `TEntry.mergeInto_side_nil`, `StSim.allocMergeClose` (`allocItem; mergeTstackTops; finishTstackTop size`), `StSim.reopenMergeClose` (`modifyNxt` reopen of a single node `h`; merge; `finishTstackTop h`), `StSim.unwrapMergeClose` (`maybeUnwrapNxt ty; mergeTstackTops; finishTstackTop` on `c :: t :: _`, both one-sided on `stackDir[t.topDepth]` = the direction at the merged depth, `ty ∈ {S, P, R}`, `L1Unwrap s ty t` as the named hypothesis `hU`): the reading above `base` and `StItems` survive, the new top is `{mergeInto c t with spans := setSides dir [item] []}` with `type item = ty` — the common tail of `loop1Body` and `finishP` | `StUnwrap.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | per-primitive preservation of `StSim` through `finishEdge` (back-edge P merge, loop 1 type-2 merges, loop 2 type-1 closes, loop 3 / `maybeUnwrapNxt`, `finishTstackTop`, `closeVert`, block boundary), `walkTree` induction | — | open |
 | reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop`, `readStack_reopen`/`readStack_modifyNxt_reopen` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes and reopens) | `StRef.lean` | proved |
 
