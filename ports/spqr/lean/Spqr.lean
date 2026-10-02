@@ -2,8 +2,10 @@ import Spqr.Graph
 import Spqr.Dfs
 import Spqr.Items
 import Spqr.Walk
+import Spqr.Ear
 import Spqr.Relabel
 import Spqr.Build
 import Spqr.Spec
 import Spqr.ItemSpec
 import Spqr.Correctness
+import Spqr.EarSpec

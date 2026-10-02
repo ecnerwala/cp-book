@@ -187,6 +187,24 @@ where `Stack(ε, i)` consists of, from bottom to top:
 Statement 3 is the "every closed item is a separation class" direction; statement 1 is what makes
 the induction go through: an ear's walk is self-contained.
 
+### 4.2b Proof architecture: soundness and completeness per step
+
+The decomposition theorems do not need the full interval structure. The per-step invariant on the
+global tstack has two local parts per entry `E = (vStart, topDepth, …)` with edge set `edges(E)`:
+
+* **connected**: `edges(E)` is connected, and so is each item already closed;
+* **2-attached**: every edge of the block not in `edges(E)` meets `edges(E)` only at
+  `{vStart, stackVerts[topDepth]}`.
+
+*Soundness*: every `mergeTstackTops` joins two entries sharing a terminal, so the union is again
+connected and 2-attached (with the terminals computed by the `min topDepth` rule). *Completeness*:
+every item that `finishEdge` closes (S/P/R, or the single entry handed up as a virtual edge) is a
+2-attached connected edge set, i.e. cut off by a genuine 2-vertex separation of the block, and the
+closed items partition the edges. This gives `Items.Tree`, `Items.Endpoints` and the S/P/Q/I/O shapes
+without ears. The ear view (§4.1–4.3) is used only for the *stack-shape* facts these steps rely on
+(`size ≥ origTstack + 3`, `nxt` is the chain/vertex entry, the merge loops never cross a frame) and
+for maximality (§4.5), where Facts C–D are needed.
+
 ### 4.3 Lemma (ear collapse) [hard, the inductive step]
 
 After `finishEdge u d (u → c)` for a **non-first** `ret` edge `u → c` with `lowval l`, the tstack
@@ -293,8 +311,9 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | 1.1, 1.2 DFS spanning + lowpoints | `Correctness.lean` (`dfsForest_spanning`) | sorry |
 | 2.1 blocks ↔ `lowval ≥ d` branches | — | to state |
 | Facts A–D | — (pure graph theory over the sorted DFS tree) | to state |
-| ear-walk reformulation `walkEar`, `walkEar = walkTree` | — | to write |
-| Invariant W, Lemma 4.3 | — | hard |
+| ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
+| `walkEarTree = walkTree`, frame rule `walkTree_local` | `EarSpec.lean` | sorry |
+| Invariant W, Lemmas 4.3/4.4 (`earOut_one_entry`, `ascend_frame_one_entry`) | `EarSpec.lean` | sorry / hard |
 | 4.5 maximality / R 3-connected | `spqrTree_r_three_connected` | hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
 

@@ -30,7 +30,9 @@ def main : IO Unit := do
   let l := toks[p]!; p := p + 1
   let edgeOrder := (List.range l).map fun i => toks[p + i]!
   let g : Graph := ⟨nv, edges⟩
-  let t := g.spqrTree (tern != 0) vertOrder edgeOrder
+  let ear := (← IO.getEnv "SPQR_EAR").isSome
+  let t := if ear then relabelTree g (g.walkEar (tern != 0) (g.dfsForest vertOrder edgeOrder)).items
+    else g.spqrTree (tern != 0) vertOrder edgeOrder
   let nats (xs : Array Nat) := xs.toList.map toString
   let opts (xs : Array (Option Nat)) := xs.toList.map optStr
   let out := String.join [
