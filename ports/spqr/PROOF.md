@@ -569,6 +569,33 @@ cap edge of the child. Everything in `Spec.lean`'s `WF` is a statement about thi
 relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical` are
 `Items.Shapes` transported.
 
+Per-node layout (`LayoutShape.lean`) **[proved]**: for every type the `Layout` that `layoutNode`
+returns for one node is pinned down locally, so the transport above is a rewrite once the per-node
+interface (`RelabelNode`, `RelabelSpec.lean`) identifies node `i`'s `nodeEdges`/`adjBounds`/`adjDat`
+segment with `layoutNode it.type … edgeChildren`. `Layout.Shape type nvSt nvEn` is `SpqrTree.Shape`
+verbatim on a single node's `edges`; `Layout.Local node nvSt nvEn neSt neEn` collects the local
+forms of `WF.adj_bounds_mono`/`adj_last`/`adj_incident`/`adj_dest` and `Ownership.ne_nvs` (sizes `neEn - neSt`, `2(nvEn - nvSt) + 1`, `2(neEn - neSt)`; every edge has
+`node`, `twin := none`, endpoints `nvSt ≤ a ≤ c < nvEn`; bounds monotone and ending at `2·neEn`;
+row `2nv` is a permutation of the edges with `nvs.2 = nv`, row `2nv + 1` of those with
+`nvs.1 = nv`; every entry's `destNv` is an endpoint of its edge). Closed forms of the rows:
+`runF_row` (all bounds `2 neSt`), `runLoop_row`, `runQI_row`, `runP_row` (parallel edges; the row of
+`nvSt + 1` in reverse edge order), `runS_row` (closing edge `(nvSt, nvEn-1)` at `neSt`, path edge `k` at
+`neSt + 1 + k`), and for R `run_entries` on top of `StLayout.run_spec` (slot `0` and the last slot
+are the cap, fill slots carry child edges in strictly decreasing `ne` order). Hypotheses are those
+of `Items.Shapes` read through `vertPos`: Q/I `nvEn - nvSt ∈ {1, 2}`, `neEn - neSt = 1`; P
+`nvEn - nvSt = 2`, `3 ≤ neEn - neSt` (`p_shape`: ≥ 2 virtual edges + the cap); S
+`3 ≤ nvEn - nvSt = neEn - neSt` (`s_shape`); R `nvSt + 2 ≤ nvEn`, `4 ≤ nvEn - nvSt` (`r_shape`:
+≥ 2 V children), `6 ≤ E.length + 1`, `neEn = neSt + E.length + 1`, every child edge
+`nvSt ≤ a < c < nvEn` (`r_shape`'s `q.1 ≠ q.2` plus the orientation `edgeChildren_dominance`
+gives), and `((nvSt, nvEn-1) :: E).Nodup`. The last one is *not* implied by `r_shape` as stated:
+it only makes the children's virtual edges pairwise distinct, not distinct from the node's own
+`vs` (the cap edge), which `Shape .R`'s `Nodup` of the whole skeleton needs — `r_shape` wants the
+extra clause `∀ q ∈ items.virtualEdges i, ¬ PairEq q (u, v)` for `items.vs i = (some u, some v)`.
+`PlanarSpec.neRotAdj_segment` reads no adjacency row (it is about `layoutRot`, which does not look
+at the `Layout`); the layout-side facts its transport needs are the `Local` sizes and
+`bound_last` (the `adjBounds.extract 1 …` pushed by `planarRelabel` has `2(nvEn - nvSt)` entries
+and ends at `2·neEn`).
+
 ## 6. Lean plan (what is proved where)
 
 | statement | file | status |
@@ -600,6 +627,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape'`/`RStep.threeConnected'` (`Proofs/RClose.lean`) give it for Loop 1's R step from `Inv D` + `stackVerts[d+1..D] = cur.vStart` + `RStep` + `RContent` (`Inv d` is contradictory there) |
 | 4.5 walk side: `EntryR`/`RTop`/`RBranch`/`RInvAt`; `RBranch.rStep`, `RBranch.rContent` (all five content fields), `RBranch.threeConnected`; `EntryR.congr`/`RInvAt.congr` + bookkeeping frames; `Items.RSkel3`, `RBranch.rSkel3` | `RInv.lean`, `Proofs/RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RItems.lean` | proved; admitted: `finishEdge_rInvAt`, `walkTree_rInvAt`, `loop1_rBranch` (history preservation), `items_r_three_connected` (all R items of the walk on a block); `spqrTree_r_three_connected` (relabel transport): hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
+| 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); the R `Nodup` hypothesis exceeds `Items.Shapes.r_shape`, see §5 |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
 | 7 relabel-side: `vchildren_nv_increasing`, `orderedChildren_sorted`, `edgeChildren_dominance`, `layoutNode_r_bracket` | `StSpec.lean`, `StLayout.lean` | proved |
 | 7 relabel-side: `relabel_st` | `StSpec.lean` | sorry |

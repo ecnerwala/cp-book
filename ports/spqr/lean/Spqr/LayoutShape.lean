@@ -1697,7 +1697,7 @@ theorem local_R (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : n
         rw [show a.ne - neSt - 1 = a.ne - 1 - neSt by omega]
         exact e3
       · refine ⟨0, List.mem_filter.2 ⟨List.mem_range.2 (by omega), ?_⟩, ?_⟩
-        · rw [hget 0 (by omega), c1]; simp [hits] <;> omega
+        · rw [hget 0 (by omega), c1]; simp [hits]; omega
         · rw [c3]; simp
     · rw [List.length_map, List.length_map, List.length_range, hsz]
       have hpred : ∀ k ∈ List.range (E.length + 1),
