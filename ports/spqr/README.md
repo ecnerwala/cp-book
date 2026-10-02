@@ -1,8 +1,8 @@
 # SPQR tree: Rust and Zig ports of `cp-book/src/graph/spqr_tree.hpp`
 
 Five implementations of the same algorithm, all differential-tested to be byte-identical to the C++
-on every output array (`vert_index`, `edge_index`, `par`, `subtree_end`, `types`, `orig_id`, `ch`,
-`node_verts`, `vert_par_nv`, `node_edges`, `node_adj`, `node_planar`, `ne_rot_adj`, and
+on every output array (`vert_index`, `edge_index`, `edge_flipped`, `par`, `subtree_end`, `types`, `orig_id`, `ch`,
+`node_verts` + `node_nvs`, `vert_par_nv`, `node_edges` + `node_nes`, `node_adj`, `node_planar`, `ne_embedding.rot_adj`, and
 "non-planar build == planar build minus planarity"), on 300 random graphs per variant in debug (all asserts on)
 plus 600 in release, covering disconnected graphs, isolated vertices, bridges,
 self-loops, parallel edges, cycles, rigid graphs, `ternarize` on/off, and empty / full / prefix
@@ -41,7 +41,7 @@ Build:
 Differential test (each variant was run with seeds 0..300 in debug and 5000..5600 in release):
 
     ./compare.sh "./rust/target/release/dump_rs idiomatic" 5000 5600
-    ./compare.sh ./zig/dump_zig_fast_release 5000 5600
+    ./compare.sh ./zig/dump_fast 5000 5600
 
 ## API
 
@@ -54,12 +54,16 @@ Rust (faithful and fast share the output types; fast exposes `spqr_tree_fast::{b
 ```rust
 let t = SpqrTree::build(nv, &edges, ternarize, &vert_order, &edge_order);   // edges: &[[i32; 2]]
 let p = PlanarSpqrTree::build(nv, &edges, ternarize, &vert_order, &edge_order);
-p.node_planar, p.ne_rot_adj, and p.par / p.ch / ... via Deref<Target = SpqrTree>
+p.node_planar, p.ne_embedding.rot_adj, and p.par / p.ch / ... via Deref<Target = SpqrTree>
+t.node_nvs.slice(i, &t.node_verts)   // the nv's of node i (node_verts is flat, node_nvs: CsrIndex holds the bounds; same for node_edges / node_nes)
+t.edge_flipped[e]                    // whether edge e's Q node stores its endpoints swapped
 ```
 Rust idiomatic (`usize` inputs, `Option<Idx>` where the C++ has `-1`, typed `NodeType` / `Csr<T>` outputs):
 ```rust
 let t = spqr_tree_idiomatic::SpqrTree::build(nv, &edges, ternarize, &vert_order, &edge_order);  // edges: &[[usize; 2]]
-t.par[i]: Option<Idx>,  t.types[i]: NodeType,  t.ch: Csr<Idx>,  t.node_verts: Csr<NodeVert { vert: Idx, par_nv: Option<Idx> }>
+t.par[i]: Option<Idx>,  t.types[i]: NodeType,  t.ch: Csr<Idx>,  t.edge_flipped: Vec<bool>,
+t.node_verts: Vec<NodeVert { node: Idx, vert: Idx }> with t.node_nvs: CsrIndex (t.node_nvs.slice(i, &t.node_verts)),  same for node_edges / node_nes,
+p.ne_embedding.rot_adj: Vec<Option<Idx>>
 ```
 Zig (both variants):
 ```zig
@@ -67,11 +71,13 @@ var t = try SpqrTree.build(gpa, NV, edges, ternarize, vert_order, edge_order);  
 defer t.deinit(gpa);
 var p = try PlanarSpqrTree.build(gpa, NV, edges, ternarize, vert_order, edge_order);
 defer p.deinit(gpa);
+t.node_nvs.slice(i, t.node_verts)   // []NodeVert of node i; t.edge_flipped: []bool; p.ne_embedding.rot_adj: []i32
 ```
 
 ## Faithful ports (where they deviate in *form*, never in output)
 
-* Ids stay `i32` (with `-1` = none), and `csr<T>` stays `{bounds, dat}`.
+* Ids stay `i32` (with `-1` = none); `csr<T>` stays `{bounds, dat}` and `csr_index` is `CsrIndex {bounds}`
+  (`node_verts` / `node_edges` are flat with their bounds in `node_nvs` / `node_nes`, as in the C++).
 * The C++ `[&]` lambdas capturing ~30 locals became methods on three state structs
   (`LowvalDfs`, `Builder`, `Relabel`), one per phase, with the same names.
 * `template <bool with_planarity> build_impl` is a const generic `Builder<const WP: bool>`
