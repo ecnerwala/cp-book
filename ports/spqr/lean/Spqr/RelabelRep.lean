@@ -77,6 +77,27 @@ theorem r_edge (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nv
 
 end LayoutFacts
 
+/-- Item-level skeleton of `i`: its cap followed by its virtual edges, as pairs of positions in
+`items.nvList g i`. -/
+def Items.rSkeleton (g : Graph) (items : Items) (i : ItemId) : List (Nat × Nat) :=
+  (((items.vs i).1.getD 0, (items.vs i).2.getD 0) :: items.virtualEdges i).map fun q =>
+    ((items.nvList g i).idxOf q.1, (items.nvList g i).idxOf q.2)
+
+/-- Item-level R 3-connectivity: the contract the R-content proof must establish; here it is only
+transported to the output tree (`RelabelOK.r_three_connected`), not proved. -/
+def Items.RThreeConnected (g : Graph) (items : Items) : Prop :=
+  ∀ i, i < items.size → items.type i = .R →
+    SpqrTree.ThreeConnected (items.nvList g i).length (items.rSkeleton g i)
+
+theorem SpqrTree.ThreeConnected_congr {n : Nat} {es es' : List (Nat × Nat)}
+    (h : ∀ p, p ∈ es ↔ p ∈ es') :
+    SpqrTree.ThreeConnected n es ↔ SpqrTree.ThreeConnected n es' := by
+  simp only [SpqrTree.ThreeConnected, h]
+
+theorem Array.getElem!_eq_getD {α : Type} [Inhabited α] (a : Array α) (i : Nat) :
+    a[i]! = a[i]?.getD default := by
+  simp only [getElem!_def]; cases a[i]? <;> rfl
+
 /-- The phase-3 interface as a hypothesis on an abstract output `t`. -/
 structure RelabelOK (g : Graph) (items : Items) (t : SpqrTree) (idx : ItemId → Nat) : Prop where
   wf : items.WF g
@@ -1234,6 +1255,196 @@ theorem twin_glue (hr : items.RepOK g) : ∀ ne ne', t.twin ne = some ne' →
       have := (h.node p0 hp0s).child_cap_twin_none (by simpa using hn0) a hp0 hc
       rw [this] at ht; cases ht
 
+/-! ### R skeleton transport -/
+
+omit h in
+theorem skeleton_mem (n : Nat) (p : Nat × Nat) :
+    p ∈ t.skeleton n ↔ ∃ k, k < (t.neRange n).2 - (t.neRange n).1 ∧
+      (t.nodeEdges[(t.neRange n).1 + k]!).nvs = p := by
+  simp [SpqrTree.skeleton, SpqrTree.nodeEdgesOf, Array.getElem!_eq_getD]
+
+theorem idxOf_eq_of_pos (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
+    (hR : items.type a = .R) {pos : Nat → Nat} (hl : RelabelLayout g items t idx a pos)
+    {x : Nat} (hx : x ∈ items.nvList g a) :
+    (items.nvList g a).idxOf x = pos x - (t.nvRange (idx a)).1 := by
+  obtain ⟨-, hp⟩ := hl.pos_ok hR x hx
+  obtain ⟨hlt, hget⟩ := List.getElem?_eq_some_iff.1 hp
+  have := (hr.nv_nodup a ha).idxOf_getElem _ hlt
+  rwa [hget] at this
+
+theorem r_virt_nvs (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
+    (hR : items.type a = .R) {pos : Nat → Nat} (hl : RelabelLayout g items t idx a pos)
+    {j : Nat}
+    (hj : j < ((items.ordered g a (t.nvRange (idx a)).1 pos).filter (· ≥ 1 + g.nv)).length) :
+    ∃ x y, items.vs ((items.ordered g a (t.nvRange (idx a)).1 pos).filter (· ≥ 1 + g.nv))[j] =
+        (some x, some y) ∧
+      x ∈ items.nvList g a ∧ y ∈ items.nvList g a ∧
+      (t.nodeEdges[(t.neRange (idx a)).1 + (1 + j)]!).nvs = (pos x, pos y) := by
+  have hn : (items.type a).isNode = true := by rw [hR]; rfl
+  obtain ⟨u, v, -, hlen4⟩ := h.nvList_R ha hR
+  set F := (items.ordered g a (t.nvRange (idx a)).1 pos).filter (· ≥ 1 + g.nv) with hF
+  have hcF : F[j] ∈ F := List.getElem_mem hj
+  have hcm : F[j] ∈ items.ch a := (ordered_perm a _ pos).mem_iff.1 (List.mem_filter.1 hcF).1
+  have hcge : F[j] ≥ 1 + g.nv := by simpa using (List.mem_filter.1 hcF).2
+  have hcV : items.type F[j] ≠ .V := fun hV =>
+    absurd ((h.type_V_iff ha hcm).1 hV) (not_lt.2 hcge)
+  have hcO : items.type F[j] ≠ .O := fun hO => by
+    have := (hr.o_parent a _ hcm hO).1; rw [hR] at this; cases this
+  obtain ⟨x, y, hx, -, -, hO⟩ := h.child_cap_orig hr ha hn hcm hcV
+  have hy' := hO hcO
+  have hxm := h.mem_nvList_of_child hn hcm hcV (Or.inl hx)
+  have hym := h.mem_nvList_of_child hn hcm hcV (Or.inr hy')
+  refine ⟨x, y, Prod.ext hx hy', hxm, hym, ?_⟩
+  have hFlen : F.length = (items.virtualEdges a).length := by
+    rw [(ordered_filter_perm a _ pos _).length_eq, h.virt_length ha, List.countP_eq_length_filter]
+  have hnE := h.nEdges_node ha hn
+  have hcap1 : items.capCount a = 1 := by
+    simp [Items.capCount, Items.hasCap, hR, NodeType.isNode]
+  have hk : 1 + j < items.nEdges g a := by omega
+  have hlay := hl.edge_nvs _ hk
+  rw [nodeLayout, (h.node a ha).nv_range, (h.node a ha).ne_range, Items.edgeChildren, ← hF, hR]
+    at hlay
+  set nvSt := (t.nvRange (idx a)).1 with hnvSt
+  set neSt := (t.neRange (idx a)).1 with hneSt
+  set len := (items.nvList g a).length with hlen0
+  set E := F.map fun c => (pos ((items.vs c).1.getD 0), pos ((items.vs c).2.getD 0)) with hE
+  have hElen : E.length = F.length := List.length_map _
+  have hs := LayoutFacts.r_edge (idx a) nvSt (nvSt + len) neSt (neSt + items.nEdges g a) E
+    (by omega) (by omega) (1 + j) (by omega)
+  rw [ite_eq_right (by omega), show 1 + j - 1 = j by omega, getElem!_pos E j (by omega)] at hs
+  have hEj : E[j]'(by omega) = (pos x, pos y) := by
+    simp only [hE, List.getElem_map, hx, hy', Option.getD_some]
+  rw [hEj] at hs
+  rw [hs] at hlay
+  exact hlay
+
+theorem r_three_connected (hr : items.RepOK g) (hR : items.RThreeConnected g) :
+    ∀ i, i < t.size → t.type i = .R →
+      SpqrTree.ThreeConnected (t.nVerts i)
+        ((t.skeleton i).map fun p => (p.1 - (t.nvRange i).1, p.2 - (t.nvRange i).1)) := by
+  intro n hn hty
+  obtain ⟨a, ha, rfl⟩ := h.idx_surj hn
+  rw [h.type_eq ha] at hty
+  have hnode : (items.type a).isNode = true := by rw [hty]; rfl
+  obtain ⟨pos, hl⟩ := (h.node a ha).layout
+  obtain ⟨u, v, hvs, hlen4⟩ := h.nvList_R ha hty
+  have hnd := hr.nv_nodup a ha
+  have hnv := (h.node a ha).nv_range
+  have hne := (h.node a ha).ne_range
+  have hnE := h.nEdges_node ha hnode
+  have hcap1 : items.capCount a = 1 := by
+    simp [Items.capCount, Items.hasCap, hty, NodeType.isNode]
+  set F := (items.ordered g a (t.nvRange (idx a)).1 pos).filter (· ≥ 1 + g.nv) with hF
+  have hFlen : F.length = (items.virtualEdges a).length := by
+    rw [(ordered_filter_perm a _ pos _).length_eq, h.virt_length ha, List.countP_eq_length_filter]
+  have hperm : F.Perm ((items.ch a).filter fun c => items.type c ≠ .V) := by
+    rw [← h.filter_ge_eq ha]; exact ordered_filter_perm a _ pos _
+  have hu0 : (items.nvList g a)[0]'(by omega) = u :=
+    (List.getElem_eq_iff _).2 (vs_head (g := g) (show (items.vs a).1 = some u by rw [hvs]))
+  have hvl : (items.nvList g a)[(items.nvList g a).length - 1]'(by omega) = v :=
+    (List.getElem_eq_iff _).2 (vs_last (g := g) (show (items.vs a).2 = some v by rw [hvs]))
+  have hidx_u : (items.nvList g a).idxOf u = 0 := by
+    have := hnd.idxOf_getElem 0 (by omega); rwa [hu0] at this
+  have hidx_v : (items.nvList g a).idxOf v = (items.nvList g a).length - 1 := by
+    have := hnd.idxOf_getElem ((items.nvList g a).length - 1) (by omega); rwa [hvl] at this
+  have hcap := h.edge0_nvs hr ha hnode (by omega)
+  have hnV : t.nVerts (idx a) = (items.nvList g a).length := by
+    rw [SpqrTree.nVerts, hnv]; omega
+  rw [hnV, SpqrTree.ThreeConnected_congr (es' := items.rSkeleton g a)]
+  · exact hR a ha hty
+  intro p
+  rw [List.mem_map, Items.rSkeleton, List.mem_map]
+  constructor
+  · rintro ⟨q, hq, rfl⟩
+    rw [skeleton_mem, hne, Nat.add_sub_cancel_left] at hq
+    obtain ⟨k, hk, hq⟩ := hq
+    rcases Nat.eq_zero_or_pos k with rfl | hkpos
+    · rw [Nat.add_zero, hcap] at hq
+      refine ⟨((items.vs a).1.getD 0, (items.vs a).2.getD 0), List.mem_cons_self .., ?_⟩
+      rw [← hq, hvs]
+      simp only [Option.getD_some, hidx_u, hidx_v]
+      exact Prod.ext (by dsimp only; omega) (by dsimp only; omega)
+    · obtain ⟨j, rfl⟩ : ∃ j, k = 1 + j := ⟨k - 1, by omega⟩
+      obtain ⟨x, y, hvsj, hxm, hym, hnvs⟩ := h.r_virt_nvs hr ha hty hl (j := j) (by show j < F.length; omega)
+      rw [hnvs] at hq
+      refine ⟨((items.vs F[j]).1.getD 0, (items.vs F[j]).2.getD 0), List.mem_cons_of_mem _ ?_, ?_⟩
+      · rw [Items.virtualEdges, List.mem_map]
+        exact ⟨F[j], hperm.subset (List.getElem_mem _), rfl⟩
+      · rw [← hq, hvsj]
+        simp only [Option.getD_some]
+        rw [h.idxOf_eq_of_pos hr ha hty hl hxm, h.idxOf_eq_of_pos hr ha hty hl hym]
+  · rintro ⟨q, hq, rfl⟩
+    rcases List.mem_cons.1 hq with rfl | hq
+    · refine ⟨_, (skeleton_mem _ _).2 ⟨0, by rw [hne, Nat.add_sub_cancel_left]; omega, rfl⟩, ?_⟩
+      rw [Nat.add_zero, hcap, hvs]
+      simp only [Option.getD_some, hidx_u, hidx_v]
+      exact Prod.ext (by dsimp only; omega) (by dsimp only; omega)
+    · rw [Items.virtualEdges, List.mem_map] at hq
+      obtain ⟨c, hc, rfl⟩ := hq
+      have hcF : c ∈ F := hperm.mem_iff.2 hc
+      obtain ⟨j, hj, rfl⟩ := List.mem_iff_getElem.1 hcF
+      obtain ⟨x, y, hvsj, hxm, hym, hnvs⟩ := h.r_virt_nvs hr ha hty hl hj
+      refine ⟨_, (skeleton_mem _ _).2 ⟨1 + j, by rw [hne, Nat.add_sub_cancel_left]; omega, rfl⟩, ?_⟩
+      rw [hnvs, hvsj]
+      simp only [Option.getD_some]
+      rw [h.idxOf_eq_of_pos hr ha hty hl hxm, h.idxOf_eq_of_pos hr ha hty hl hym]
+
+/-! ### Assembly -/
+
+/-- `Represents` from the per-node interface, `Items.RepOK`, and item-level R 3-connectivity. -/
+theorem represents (hr : items.RepOK g) (hR : items.RThreeConnected g) :
+    t.Represents g where
+  nv := h.ridx.nv
+  ne := h.ridx.ne
+  q_endpoints := h.q_endpoints hr
+  twin_glue := h.twin_glue hr
+  nv_orig_inj := h.nv_orig_inj hr.nv_nodup
+  separation := h.separation hr
+  interior := h.interior
+  r_three_connected := h.r_three_connected hr hR
+  canonical := h.canonical
+
+/-- `Represents` with the R clause supplied at the output level (the form `Correctness.lean`
+assumes). -/
+theorem represents_of_r (hr : items.RepOK g)
+    (hR : ∀ i, i < t.size → t.type i = .R →
+      SpqrTree.ThreeConnected (t.nVerts i)
+        ((t.skeleton i).map fun p => (p.1 - (t.nvRange i).1, p.2 - (t.nvRange i).1))) :
+    t.Represents g where
+  nv := h.ridx.nv
+  ne := h.ridx.ne
+  q_endpoints := h.q_endpoints hr
+  twin_glue := h.twin_glue hr
+  nv_orig_inj := h.nv_orig_inj hr.nv_nodup
+  separation := h.separation hr
+  interior := h.interior
+  r_three_connected := hR
+  canonical := h.canonical
+
 end RelabelOK
+
+theorem relabelOK_of_wf (g : Graph) (items : Items) (h : items.WF g) :
+    ∃ idx, RelabelOK g items (relabelTree g items) idx := by
+  obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
+  exact ⟨idx, ⟨h, hidx, hnode⟩⟩
+
+/-- Phase-D main result: the relabelled tree represents `g`, given the item contracts. -/
+theorem relabelTree_represents' (g : Graph) (items : Items) (h : items.WF g)
+    (hr : items.RepOK g) (hR : items.RThreeConnected g) :
+    (relabelTree g items).Represents g := by
+  obtain ⟨idx, hok⟩ := relabelOK_of_wf g items h
+  exact hok.represents hr hR
+
+/-- Variant with the output-level R clause, matching `Correctness.relabelTree_represents` up to the
+extra `Items.RepOK` hypothesis. -/
+theorem relabelTree_represents_of_r (g : Graph) (items : Items) (h : items.WF g)
+    (hr : items.RepOK g)
+    (hR : ∀ i, i < (relabelTree g items).size → (relabelTree g items).type i = .R →
+      SpqrTree.ThreeConnected ((relabelTree g items).nVerts i)
+        (((relabelTree g items).skeleton i).map fun p =>
+          (p.1 - ((relabelTree g items).nvRange i).1, p.2 - ((relabelTree g items).nvRange i).1))) :
+    (relabelTree g items).Represents g := by
+  obtain ⟨idx, hok⟩ := relabelOK_of_wf g items h
+  exact hok.represents_of_r hr hR
 
 end Spqr
