@@ -49,6 +49,7 @@ import Spqr.StOriented
 import Spqr.StRef
 import Spqr.StWalk
 import Spqr.StEar
+import Spqr.StRefEt
 import Spqr.StFrame
 import Spqr.Planar
 import Spqr.PlanarWalk

@@ -1,4 +1,4 @@
-import Spqr.Proofs.Dfs
+import Spqr.StRefEt
 import Spqr.Ear
 
 /-!
@@ -13,72 +13,6 @@ fact of `PROOF.md` §7.
 -/
 
 namespace Spqr
-
-theorem lowval_classify_tree {d : Nat} {n : Lowvals} (h : n.1 ≤ d + 1) :
-    (classify d true n).lowval d = n.1 := by
-  unfold classify
-  split
-  · next h1 =>
-    split
-    · next h2 => simp at h2; simp [h2, OutClass.lowval]
-    · next h2 => simp at h1 h2; simp [OutClass.lowval]; omega
-  · rfl
-
-theorem lowval_classify_lt_iff_ret {d : Nat} {isTree : Bool} {n : Lowvals} :
-    (classify d isTree n).lowval d < d ↔ ∃ l k, classify d isTree n = .ret l k := by
-  unfold classify
-  split
-  · next h1 =>
-    split
-    · cases isTree <;> simp [OutClass.lowval]
-    · simp [OutClass.lowval]
-  · next h1 => simp [OutClass.lowval]; omega
-
-namespace DfsOut
-
-/-- The lowval of a well-formed out-edge at depth `d` is the least depth its piece returns to
-(`d + 1` for a bridge). -/
-theorem lowval_eq_lmin {anc : List Nat} {v : Nat} {o : DfsOut} (hwf : o.WF anc v) :
-    o.cls.lowval anc.length = lmin (anc.length + 1) (o.retDepths anc.length) := by
-  cases o with
-  | back e dest cls =>
-    rw [DfsOut.WF] at hwf
-    obtain ⟨i, hi, rfl⟩ := hwf
-    have hi' : i ≤ anc.length := by
-      have := (List.getElem?_eq_some_iff.1 hi).1; simp at this; omega
-    simp only [DfsOut.cls, retDepths, lmin_cons, lmin_nil, lowval_classify_back hi']
-    omega
-  | tree e cls child =>
-    rw [DfsOut.WF] at hwf
-    obtain ⟨-, rfl⟩ := hwf
-    simp only [DfsOut.cls, retDepths]
-    exact lowval_classify_tree (lmin_le _ _)
-
-theorem lowval_mem_retDepths {anc : List Nat} {v : Nat} {o : DfsOut} (hwf : o.WF anc v)
-    (hret : o.cls.lowval anc.length < anc.length) :
-    o.cls.lowval anc.length ∈ o.retDepths anc.length := by
-  rw [lowval_eq_lmin hwf] at hret ⊢
-  rcases lmin_eq_or_mem (anc.length + 1) (o.retDepths anc.length) with h | h
-  · omega
-  · exact h
-
-theorem lowval_le_retDepths {anc : List Nat} {v : Nat} {o : DfsOut} (hwf : o.WF anc v) :
-    ∀ y ∈ o.retDepths anc.length, o.cls.lowval anc.length ≤ y := by
-  intro y hy; rw [lowval_eq_lmin hwf]; exact lmin_le_of_mem hy
-
-theorem ret_of_lowval_lt {anc : List Nat} {v : Nat} {o : DfsOut} (hwf : o.WF anc v)
-    (hret : o.cls.lowval anc.length < anc.length) : ∃ l k, o.cls = .ret l k := by
-  cases o with
-  | back e dest cls =>
-    rw [DfsOut.WF] at hwf
-    obtain ⟨i, -, rfl⟩ := hwf
-    exact lowval_classify_lt_iff_ret.1 hret
-  | tree e cls child =>
-    rw [DfsOut.WF] at hwf
-    obtain ⟨-, rfl⟩ := hwf
-    exact lowval_classify_lt_iff_ret.1 hret
-
-end DfsOut
 
 /-- Two returning out-edges in rank order have non-decreasing lowvals. -/
 theorem lowval_le_of_rank_le {d : Nat} {o o' : DfsOut} {l k l' k'} (ho : o.cls = .ret l k)

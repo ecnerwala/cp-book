@@ -282,16 +282,10 @@ theorem walk_vsOriented (g : Graph) (tern : Bool) (vo eo : List Nat) :
     VsOriented g (g.walk tern (g.dfsForest vo eo)).items (refBlocks g (g.dfsForest vo eo)) := by
   sorry
 
-/-- Even–Tarjan on the reference: every block of `refBlocks` is st-numbered by its sequence
-(induction over `refTree`: every piece spliced at depth `l` joins the open path at depth `l` on
-side `dirs[l]`, so every vertex other than the block's terminals has a neighbour on each side). -/
-theorem refBlocks_st (g : Graph) (vo eo : List Nat) :
-    ∀ b ∈ refBlocks g (g.dfsForest vo eo), b.St g := by
-  sorry
-
 /-- An S / P / R item whose children are listed in the reference order of an st-numbered block,
 with its own and its children's `vs` oriented along that block, is in s-t order (the item's
-virtual edges are the ends of the sub-ears, so the restriction keeps the neighbours). -/
+virtual edges are the ends of the sub-ears, so the restriction keeps the neighbours). `hbl` is
+`refBlocks_st` (`StRefEt.lean`). -/
 theorem stItem_of_refOrder (g : Graph) (tern : Bool) (vo eo : List Nat) (i : ItemId)
     (hi : i < (g.walk tern (g.dfsForest vo eo)).items.size)
     (ht : Items.type (g.walk tern (g.dfsForest vo eo)).items i = .S ∨
@@ -302,7 +296,8 @@ theorem stItem_of_refOrder (g : Graph) (tern : Bool) (vo eo : List Nat) (i : Ite
       restrictCh (g.walk tern (g.dfsForest vo eo)).items
         (g.walk tern (g.dfsForest vo eo)).items.size
         (refOrder g (g.dfsForest vo eo)) i)
-    (hvs : VsOriented g (g.walk tern (g.dfsForest vo eo)).items (refBlocks g (g.dfsForest vo eo))) :
+    (hvs : VsOriented g (g.walk tern (g.dfsForest vo eo)).items (refBlocks g (g.dfsForest vo eo)))
+    (hbl : ∀ b ∈ refBlocks g (g.dfsForest vo eo), b.St g) :
     Items.StItem (g.walk tern (g.dfsForest vo eo)).items i := by
   sorry
 

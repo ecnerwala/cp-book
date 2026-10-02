@@ -51,8 +51,17 @@ theorem spqrTree_r_three_connected (g : Graph) (tern : Bool) (vo eo : List Nat) 
         ((t.skeleton i).map fun p => (p.1 - (t.nvRange i).1, p.2 - (t.nvRange i).1)) := by
   sorry
 
+theorem spqrTree_wf' (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
+    (heo : OrderOK g.ne eo) : (g.spqrTree tern vo eo).WF := by
+  rw [spqrTree_eq]
+  exact relabelTree_wf g _ (walk_items_wf g tern vo eo) (walk_items_rOriented' g hg tern vo eo hvo heo)
+
+/-- Hypothesis-free form, used as such by the planar layer (`PlanarSpec.planarTree_shape`,
+`PlanarRotSpec.planarRelabel_rot_spec`/`neRotAdj_segment'`). Under `g.WF` and `OrderOK` it is
+`spqrTree_wf'`; its `ROriented` part comes from `walk_st`, whose `refBlocks_st` input is false for
+malformed graphs (`PROOF.md` §7.6), so the hypothesis-free statement is open. -/
 theorem spqrTree_wf (g : Graph) (tern : Bool) (vo eo : List Nat) : (g.spqrTree tern vo eo).WF := by
-  rw [spqrTree_eq]; exact relabelTree_wf g _ (walk_items_wf g tern vo eo) (walk_items_rOriented' g tern vo eo)
+  sorry
 
 theorem spqrTree_represents (g : Graph) (tern : Bool) (vo eo : List Nat) :
     (g.spqrTree tern vo eo).Represents g := by

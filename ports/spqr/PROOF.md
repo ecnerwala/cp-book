@@ -822,7 +822,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 5 relabel, structural part: `relabelTree_own : Items.WF → Items.ROriented → Bijections ∧ Ownership ∧ Twins` (also `relabelTree_bijections`, `relabelTree_twins` from `WF` alone); `layoutNode_edges` | `RelabelOwn.lean` | proved (`RelabelSpec.lean`, sorry); the item-level facts it needs are clauses of `Items.WF` (`nv_nodup`, `q_leaf_of_node`, `q_children`'s `v < nv`, `r_shape`'s child endpoints) |
 | 5 relabel, CSR bounds: `relabelTree_adj : Items.WF → Items.ROriented → (∀ n, adjBounds[2 nvSt n] = 2 neSt n) ∧ adjBounds[2 |nodeVerts|] = |adjDat|` (the statement of `relabel_adj_spec`); `layout_local` (`Layout.Local` for every item's `nodeLayout`) | `RelabelAdj.lean` | proved; `relabel_adj_spec` itself stays admitted in `RelabelSpec.lean` only because that file cannot import its proof |
 | 5 relabel, `WF` assembly: `RelabelAll.wf_tree`, `preorder` (`child_idx`/`subtree_end` chain, `subtree_props`, `parent_eq_iff`), `only_root_F`, `shape` (`skeleton_eq` + `LayoutShape.shape_*`), `adj_bounds_mono`, `adj_dest`, `adj_incident'` (`global_bound`/`global_row`: global CSR rows = `Layout.Local` rows; `foreign_ne`, `row_filter`) | `RelabelWF.lean` | proved (standard axioms) |
-| 2/7 `Items.ROriented` of the walk output: `rOriented_of_stNumbered`, `walk_items_rOriented'` | `StOriented.lean` | proved from `walk_st` (+ `walk_items_wf`); used directly by `spqrTree_wf` |
+| 2/7 `Items.ROriented` of the walk output: `rOriented_of_stNumbered`, `walk_items_rOriented'` | `StOriented.lean` | proved from `walk_st` (+ `walk_items_wf`), under `g.WF`/`OrderOK` like `walk_st`; used by `spqrTree_wf'` (`Correctness.lean`); the hypothesis-free `spqrTree_wf` the planar layer uses is a named admission (§7.6) |
 | 2 walk→relabel interface `walk_items_wf : Items.WF g (g.walk tern (g.dfsForest vo eo)).items`, and `spqrTree_eq` | `WalkWF.lean` (below `StSpec`/`StWalk`/`StOriented` and `Correctness`) | `walk_items_wf` sorry (the sole walk→WF admission); `spqrTree_eq` proved |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
 | 5 relabel per-node interface `RelabelNode`/`RelabelLayout`/`RelabelIdx`, `Items.nvList`/`ordered`/`edgeChildren`/`PosOK`/`hasCap`/`nEdges`/`ROriented` | `RelabelSpec.lean` | def; `relabel_node_spec` proved in `RelabelMain.lean` (`Ghost.relabel_node_spec_proved`) |
@@ -837,7 +837,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 7 walk-side: `finishTstackTop_stItem`; ear lowvals `first_ret_lowval`, `chain_stackDir_step` | `StWalk.lean`, `StEar.lean` | proved |
 | 7 walk-side: `StInv.onSide` field, `chain_stackDir_const` (corrected statement, see 7.4) | `StWalk.lean` | def / proved |
 | 7 walk-side: `StInv.hole` (`StHole`/`HoleClosed`), `stInv_topClosable`, `stInv_finishTstackTop_stItem` (close site, see 7.4) | `StWalk.lean` | def / proved |
-| 7 walk-side: `finishEdge_stInv` (under `FinishGuards`/`EarsOnSide`), `walk_stInv`; `walk_st`, `spqrTree_st` from `walk_stInv`; route changed to the `StRef.lean` reference order (§7.6) | `StWalk.lean`, `StRef.lean` | sorry / proved (`walkTree_stackDir_below` in `StFrame.lean` proved); reference + `VsOriented` + `StBlock.St` tested seeds 0..1000; `walk_st'`, `walk_vsOriented`, `refBlocks_st`, `stItem_of_refOrder` sorry |
+| 7 walk-side: `finishEdge_stInv` (under `FinishGuards`/`EarsOnSide`), `walk_stInv`; `walk_st`, `spqrTree_st` from `walk_stInv`; route changed to the `StRef.lean` reference order (§7.6) | `StWalk.lean`, `StRef.lean` | sorry / proved (`walkTree_stackDir_below` in `StFrame.lean` proved); reference + `VsOriented` + `StBlock.St` tested seeds 0..1000; `refBlocks_st` proved (`StRefEt.lean`, standard axioms); `walk_st'`, `walk_vsOriented`, `stItem_of_refOrder` sorry |
 
 Work packages for child sessions, in dependency order:
 * **DFS**: 1.1, 1.2, no cross edges, `lowpt` characterization of `OutClass`.
@@ -1171,6 +1171,38 @@ hypothesis and splits into `refBlocks_st` (every reference block is st-numbered;
 induction) and the restriction argument, and the walk-side admissions are `walk_st'` and
 `walk_vsOriented` (both to be proved by the same simulation).
 
+**Even–Tarjan on the reference (`StRefEt.lean`).** `refBlocks_st` is proved by the mutual
+induction `refTree_inv`/`refOuts_inv` over `refTree`/`refOuts`. The invariant
+`VInv g anc dirs v vs rets hasVert L` on the item list `L = stNest pieces` of the open ear at
+vertex `v` (ancestor path `anc`, splice sides `dirs`, return depths `rets` so far): `L` consists
+of vertex items (`v` and `vs`, no repetition) and edge items of `g`; every edge item joins a
+vertex item of `L` to another one or to `anc[l]` for a return depth `l` (`edge_mem`); every
+vertex item other than `v` has a neighbour on each side (`Nb`: an edge item of `L` to a vertex
+item before / after it in `L` — `Before`, `Side` — or a back edge to `anc[l]` counted on side
+`dirs[l]`); every vertex other than `v` lies on side `dirs[l]` of `v` for one of the return
+depths (`root_side`); and `v` has a neighbour on the side `dirs[l]` of its lowest return
+(`root_nb`). `VInv.step` inserts one returning piece on side `dirs[l]` of its return depth
+(`VInv.step_back` for a back edge; `VInv.step_tree` for a returning subtree, whose own invariant
+has `v` as the path vertex at depth `anc.length` — `Nb.popV`/`NbV.toNb` transport it when `v`
+becomes an explicit endpoint); boundary edges only add return depths `≥ anc.length`
+(`VInv.extend`); `block_st` turns the invariant of the subtree below a boundary tree edge `(v, w)`
+into `StBlock.St` (sequence `v :: vertices of the pieces`, the returns to `v` being the
+neighbours of the first vertex on the path side), and `root_block_st` is the one-vertex block of
+a DFS root. The DFS facts come from `DfsTree.WF` (`dfsForest_wf`), `DfsForestSpec.joins` /
+`verts_nodup` (`dfsForestSpec_of_dfsForest`) and the vertex bound (`dfsForest_spanning'`), so
+`refBlocks_st` is stated under `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo` — a correction of the
+hypothesis-free admission: without `g.WF` it is false, e.g. for `g = ⟨1, #[(0, 1)]⟩` the DFS
+reaches the non-vertex `1` and `StBlock.seq`/`edges` read `vertItem 1 = 1 + g.nv + 0` as the edge
+item `0`, so the block's edge `(0, 1)` has an endpoint outside `seq` (traced by hand; `#eval`
+aborts on out-of-range endpoints). Accordingly `stItem_of_refOrder` takes the conclusion of
+`refBlocks_st` as the hypothesis `hbl`, and `walk_st`/`spqrTree_st` take `g.WF` and the order
+hypotheses like `dfsForest_spanning`; so do `walk_items_rOriented'` (`StOriented.lean`) and `spqrTree_wf'`
+(`Correctness.lean`). The hypothesis-free `spqrTree_wf` that the planar layer consumes
+(`planarTree_shape`, `planarRelabel_rot_spec`, `neRotAdj_segment'`) is kept as a named admission: it is
+`spqrTree_wf'` under `g.WF`/`OrderOK`, and whether its `ROriented` part holds for malformed graphs is
+open. `#print axioms refBlocks_st`: propext, Classical.choice,
+Quot.sound.
+
 ### 7.5 Work packages
 
 | lemma | file | status |
@@ -1193,13 +1225,14 @@ induction) and the restriction argument, and the walk-side admissions are `walk_
 | `StInv.hole` (`StHole`, `EntryReach`, `HoleClosed`), `idxOf_lt_idxOf_iff`, `stList_of_sorted`, `stInv_topClosable`, `stInv_finishTstackTop_stItem` | `StWalk.lean` | def / proved (replaces `finishEdge_topClosable`, see 7.4) |
 | `EarsOnSide` (named ear-shape hypothesis), `finishEdge_stInv` | `StWalk.lean` | def / sorry (hard; push/merge/fold/close blocks via `Step`/`Sim`) |
 | `walk_stInv` | `StWalk.lean` | sorry (the `walkTree_inv'`-shaped induction; needs `StInv (d+1) → StInv d` at returns) |
-| `walk_st`, `spqrTree_st` | `StWalk.lean` | proved (from `walk_st'`, `stItem_of_refOrder`, `walk_items_wf`, `relabel_st`); `walk_st_of_stInv` is the same from the alternative `walk_stInv` route |
+| `walk_st`, `spqrTree_st` (under `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo`, like `dfsForest_spanning`) | `StWalk.lean` | proved (from `walk_st'`, `stItem_of_refOrder`, `refBlocks_st`, `walk_items_wf`, `relabel_st`); `walk_st_of_stInv` is the same from the alternative `walk_stInv` route |
 | `refTree`/`refOrder`, `restrictCh`, `check_stref` differential test (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..300 (0 mismatches) |
 | `walk_st'` (`ch i = restrictCh … (refOrder …) i` for S/P/R items) | `StRef.lean` | sorry (the simulation) |
 | `StBlock`, `StBlock.seq`/`edges`/`St`, `Precedes`, `Oriented`, `VsOriented`; `check_stref` checks `VsOriented` and `StBlock.St` too (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..1000 (0 mismatches) |
 | `walk_vsOriented` (`VsOriented` for the walk's items and `refBlocks`) | `StRef.lean` | sorry (the simulation, with `walk_st'`) |
-| `refBlocks_st` (every reference block is `StBlock.St`) | `StRef.lean` | sorry (Even–Tarjan on the reference, induction over `refTree`) |
-| `stItem_of_refOrder` (an item with `ch` in reference order and oriented `vs` is in s-t order) | `StRef.lean` | sorry (restriction of `refBlocks_st` to the item) |
+| `refBlocks_st` (every reference block is `StBlock.St`; corrected statement: under `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo`) | `StRefEt.lean` | proved (`refTree_inv`/`refOuts_inv`; axioms propext, Classical.choice, Quot.sound) |
+| `Before`, `Side`, `Nb`, `NbV`, `VInv` (`nil`, `single`, `extend`, `step`, `step_back`, `step_tree`), `block_st`, `root_block_st`, `refOut_boundary_back/tree`, `refOut_ret_back/tree`, `refOuts_nil/cons/zero`, `refTree_node` | `StRefEt.lean` | def / proved |
+| `stItem_of_refOrder` (an item with `ch` in reference order and oriented `vs` is in s-t order; takes `refBlocks_st`'s conclusion as `hbl`) | `StRef.lean` | sorry (restriction of the block's st-order to the item) |
 | reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes) | `StRef.lean` | proved |
 
 ## 8. Planarity

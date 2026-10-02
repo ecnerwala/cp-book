@@ -24,8 +24,9 @@ theorem Items.rOriented_of_stNumbered (g : Graph) {items : Items} (hst : items.S
   rw [← Items.vertList_eq_nvList g h.tree]
   exact hor
 
-theorem walk_items_rOriented' (g : Graph) (tern : Bool) (vo eo : List Nat) :
+theorem walk_items_rOriented' (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
     Items.ROriented g (g.walk tern (g.dfsForest vo eo)).items :=
-  Items.rOriented_of_stNumbered g (walk_st g tern vo eo) (walk_items_wf g tern vo eo)
+  Items.rOriented_of_stNumbered g (walk_st g hg tern vo eo hvo heo) (walk_items_wf g tern vo eo)
 
 end Spqr
