@@ -97,15 +97,6 @@ theorem gluedUpTo_init (g : Graph) : t.GluedUpTo g t.size t.initState where
     by_cases hj : j < t.size <;> by_cases hk' : k < 4 <;>
       simp [initState, Array.getElem?_replicate, hj, hk'] at hk
 
-/-- `F` step: the children are whole components; their exposed ends are closed
-(`disjointUnion_planar`). Admitted. -/
-theorem embedItem_step_F (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
-    (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g)
-    (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .F)
-    (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
-    t.GluedUpTo g i ((t.embedItem i).run s).2 := by
-  sorry
-
 /-- `V` step: the blocks hanging off the vertex are chained through their exposed ends, i.e.
 1-sums at the vertex (`oneSum_planar`), and the two outermost ends stay exposed. Admitted. -/
 theorem embedItem_step_V (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)

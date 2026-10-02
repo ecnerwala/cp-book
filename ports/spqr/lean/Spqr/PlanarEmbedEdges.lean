@@ -64,4 +64,76 @@ theorem edgesBelow_nodup (hwf : t.toSpqrTree.WF) (i : Nat) : (t.edgesBelow i).No
     · cases hk
   · cases hj
 
+theorem child_data (hwf : t.toSpqrTree.WF) {i j : Nat} (hi : i < t.size)
+    (hj : j ∈ t.children i) : j < t.size ∧ t.toSpqrTree.parent j = some i ∧ i < j := by
+  rw [← t.children_eq, hwf.preorder.ch_eq i hi, List.mem_filter] at hj
+  have hjs : j < t.size := List.mem_range.1 hj.1
+  have hjp : t.toSpqrTree.parent j = some i := by simpa using hj.2
+  have hj0 : 0 < j := by
+    by_contra hn
+    have : j = 0 := by omega
+    subst j
+    rw [hwf.preorder.root_par] at hjp
+    cases hjp
+  obtain ⟨p, hp, hpi⟩ := hwf.preorder.par_lt j hj0 hjs
+  have : p = i := Option.some.inj (hp.symm.trans hjp)
+  subst p
+  exact ⟨hjs, hjp, hpi⟩
+
+theorem children_nodup (hwf : t.toSpqrTree.WF) {i : Nat} (hi : i < t.size) :
+    (t.children i).Nodup := by
+  rw [← t.children_eq, hwf.preorder.ch_eq i hi]
+  exact List.nodup_range.filter _
+
+theorem parent_some_iff (j p : Nat) :
+    t.toSpqrTree.parent j = some p ↔ t.par[j]? = some (some p) := by
+  unfold SpqrTree.parent
+  cases t.par[j]? <;> simp
+
+theorem child_maximal_one (hwf : t.toSpqrTree.WF) (hi : 0 < t.size) {j : Nat}
+    (hj : j ∈ t.children 0) : t.Maximal 1 j := by
+  obtain ⟨hjs, hjp, hj0⟩ := t.child_data hwf hi hj
+  refine ⟨hj0, hjs, ?_⟩
+  intro p hp
+  have h0 := (t.parent_some_iff j 0).1 hjp
+  have hp0 : p = 0 := Option.some.inj (Option.some.inj (hp.symm.trans h0))
+  omega
+
+theorem maximal_zero_eq (hwf : t.toSpqrTree.WF) {j : Nat} (h : t.Maximal 0 j) : j = 0 := by
+  by_contra hn
+  obtain ⟨p, hp, _⟩ := hwf.preorder.par_lt j (by omega) h.2.1
+  have := h.2.2 p ((t.parent_some_iff j p).1 hp)
+  omega
+
+theorem mem_pieceBelow_bound (hwf : t.toSpqrTree.WF) (g : Graph) {i q : Nat}
+    (h : (t.pieceBelow g i).Mem q) : q < 4 * t.ne := by
+  have he := t.mem_edgesBelow_lt hwf h
+  unfold QE.edge at he
+  omega
+
+theorem touches_of_hasEdge (hwf : t.toSpqrTree.WF) (g : Graph)
+    (hne : t.ne = g.ne) {i v : Nat} (h : HasEdge (t.pieceBelow g i).es v) :
+    t.toSpqrTree.Touches g i v := by
+  obtain ⟨p, hp, hv⟩ := h
+  obtain ⟨e, he, rfl⟩ := List.mem_map.1 hp
+  refine ⟨e, ?_, t.edgeIn_of_mem_edgesBelow hwf he⟩
+  exact ⟨by rw [← hne]; exact t.mem_edgesBelow_lt hwf he, hv⟩
+
+theorem root_pieces_disjoint (hwf : t.toSpqrTree.WF) (g : Graph)
+    (hne : t.ne = g.ne) (hsep : t.toSpqrTree.PieceSep g)
+    {a b : Nat} (ha : a ∈ t.children 0) (hb : b ∈ t.children 0) (hab : a ≠ b) :
+    List.Disjoint (t.edgesBelow a) (t.edgesBelow b) ∧
+      ∀ v, HasEdge (t.pieceBelow g a).es v → HasEdge (t.pieceBelow g b).es v → False := by
+  have hv : ∀ v, HasEdge (t.pieceBelow g a).es v → HasEdge (t.pieceBelow g b).es v → False := by
+    intro v hva hvb
+    apply hsep.root_disjoint a (by rwa [t.children_eq]) b (by rwa [t.children_eq]) hab v
+    · exact t.touches_of_hasEdge hwf g hne hva
+    · exact t.touches_of_hasEdge hwf g hne hvb
+  refine ⟨?_, hv⟩
+  rw [List.disjoint_left]
+  intro e hea heb
+  exact hv (g.edges[e]!).1
+    ⟨g.edges[e]!, List.mem_map.2 ⟨e, hea, rfl⟩, Or.inl rfl⟩
+    ⟨g.edges[e]!, List.mem_map.2 ⟨e, heb, rfl⟩, Or.inl rfl⟩
+
 end Spqr.PlanarSpqrTree
