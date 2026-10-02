@@ -38,18 +38,25 @@ def stNestR : List StPiece → List ItemId
   | p :: ps => (if p.side then p.items else []) ++ stNestR ps
 def stNest (ps : List StPiece) : List ItemId := stNestL ps ++ stNestR ps
 
+/-- A completed block: `root = some (v, w)` is the block-boundary tree edge it hangs from (`v` the
+cut vertex, `w` its DFS child; the block's node is oriented `(v, w)`), `none` for the one-vertex
+block of a DFS root; `items` is its st-order (vertex and edge items). -/
+structure StBlock where
+  root : Option (Nat × Nat)
+  items : List ItemId
+
 mutual
 /-- The pieces pushed while walking the subtree `t` at depth `d`, with `dirs` the directions
 chosen along the path above `t`; also the st-orders of the blocks completed inside `t`. -/
 def refTree (g : Graph) (t : DfsTree) (d : Nat) (dirs : List Bool) :
-    List StPiece × List (List ItemId) :=
+    List StPiece × List StBlock :=
   match t with
   | .node v outs =>
     let (ps, blocks, hasVert) := refOuts g v d dirs outs false
     (if hasVert then ps else ps ++ [StPiece.mk true [vertItem v]], blocks)
 
 def refOuts (g : Graph) (v d : Nat) (dirs : List Bool) :
-    List DfsOut → Bool → List StPiece × List (List ItemId) × Bool
+    List DfsOut → Bool → List StPiece × List StBlock × Bool
   | [], hasVert => ([], [], hasVert)
   | o :: rest, hasVert =>
     let (ps, blocks, hasVert) := refOut g v d dirs o hasVert
@@ -58,13 +65,13 @@ def refOuts (g : Graph) (v d : Nat) (dirs : List Bool) :
 
 /-- The out-edge `o` of `v`, handled at `v`. -/
 def refOut (g : Graph) (v d : Nat) (dirs : List Bool) (o : DfsOut) (hasVert : Bool) :
-    List StPiece × List (List ItemId) × Bool :=
+    List StPiece × List StBlock × Bool :=
   let l := o.cls.lowval d
   if d ≤ l then
     match o with
     | .tree _ _ child =>
       let (ps, blocks) := refTree g child (d + 1) (dirs ++ [false])
-      ([], blocks ++ [stNest ps], hasVert)
+      ([], blocks ++ [⟨some (v, o.dest), stNest ps⟩], hasVert)
     | .back .. => ([], [], hasVert)
   else
     let lowDir := dirs.getD l false
@@ -83,14 +90,45 @@ def refOut (g : Graph) (v d : Nat) (dirs : List Bool) (o : DfsOut) (hasVert : Bo
 end
 
 /-- The st-orders of all blocks of the forest, in completion order. -/
-def refBlocks (g : Graph) (forest : List DfsTree) : List (List ItemId) :=
+def refBlocks (g : Graph) (forest : List DfsTree) : List StBlock :=
   forest.flatMap fun t =>
     let (ps, blocks) := refTree g t 0 []
-    blocks ++ [stNest ps]
+    blocks ++ [⟨none, stNest ps⟩]
 
 /-- The reference st-order of the leaf items (blocks concatenated; no item lies in two blocks). -/
 def refOrder (g : Graph) (forest : List DfsTree) : List ItemId :=
-  (refBlocks g forest).flatMap id
+  (refBlocks g forest).flatMap StBlock.items
+
+/-! ### Orientation: the block's vertex sequence and `vs` -/
+
+/-- The vertices of a block in st-order: the cut vertex it hangs from, then the vertices of its
+vertex items. -/
+def StBlock.seq (g : Graph) (b : StBlock) : List Nat :=
+  (b.root.map (·.1)).toList ++ b.items.filterMap fun x =>
+    if 1 ≤ x ∧ x < 1 + g.nv then some (x - 1) else none
+
+/-- The edges of a block: the boundary tree edge it hangs from and its edge items. -/
+def StBlock.edges (g : Graph) (b : StBlock) : List (Nat × Nat) :=
+  b.root.toList ++ b.items.filterMap fun x =>
+    if 1 + g.nv ≤ x ∧ x < 1 + g.nv + g.ne then some g.edges[x - (1 + g.nv)]! else none
+
+/-- Even–Tarjan on a block: its vertex sequence is an st-numbering of its edges. -/
+def StBlock.St (g : Graph) (b : StBlock) : Prop := Items.StList (b.seq g) (b.edges g)
+
+/-- `a` comes strictly before `b` in `xs`. -/
+def Precedes (xs : List Nat) (a b : Nat) : Prop := a ∈ xs ∧ b ∈ xs ∧ xs.idxOf a < xs.idxOf b
+
+instance (xs : List Nat) (a b : Nat) : Decidable (Precedes xs a b) := by unfold Precedes; infer_instance
+
+/-- A `vs` pair oriented along `xs`. -/
+def Oriented (xs : List Nat) : Option Nat × Option Nat → Prop
+  | (some a, some b) => Precedes xs a b
+  | _ => False
+
+instance (xs : List Nat) (p : Option Nat × Option Nat) : Decidable (Oriented xs p) := by
+  rcases p with ⟨_ | a, _ | b⟩ <;> simp only [Oriented] <;> infer_instance
+
+instance (g : Graph) (b : StBlock) : Decidable (b.St g) := by unfold StBlock.St Items.StList; infer_instance
 
 /-! ### Reading a tstack as pieces (the simulation relation for `walk_st'`) -/
 
@@ -214,6 +252,17 @@ def restrictCh (items : Items) (fuel : Nat) (order : List ItemId) (i : ItemId) :
   collapseRuns (order.filterMap fun x =>
     (Items.ch items i).find? fun c => x ∈ Items.leaves items fuel c)
 
+/-- The orientation facts the walk provides for every S / P / R item `i`: `i` lies in one block
+`b` of `blocks` (all its leaves are items of `b`), and the `vs` of `i` and of its non-V children
+are oriented along `b.seq` (`makeVs` orients by the same `stackDir` bit as the splice side).
+Differentially tested by `check_stref`. -/
+def VsOriented (g : Graph) (items : Items) (blocks : List StBlock) : Prop :=
+  ∀ i, i < items.size →
+    Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R →
+    ∃ b ∈ blocks, (∀ x ∈ Items.leaves items items.size i, x ∈ b.items) ∧
+      Oriented (b.seq g) (Items.vs items i) ∧
+      ∀ c ∈ Items.ch items i, Items.type items c ≠ .V → Oriented (b.seq g) (Items.vs items c)
+
 /-- The walk lists the children of every S / P / R item in the reference st-order
 (differentially tested by `check_stref`). -/
 theorem walk_st' (g : Graph) (tern : Bool) (vo eo : List Nat) (i : ItemId)
@@ -227,13 +276,22 @@ theorem walk_st' (g : Graph) (tern : Bool) (vo eo : List Nat) (i : ItemId)
         (refOrder g (g.dfsForest vo eo)) i := by
   sorry
 
-/-- Admitted (Even–Tarjan on the reference): an S / P / R item of the walk whose children are
-listed in the reference order is in s-t order. Plan: induction over `refTree`, no tstack — every
-piece spliced at depth `l` joins the open path at depth `l` on side `dirs[l]`, so in the reading of
-a block every vertex other than the block's endpoints has a neighbour on each side, and the
-restriction to an item keeps this (the item's virtual edges are the sub-ears' ends). The
-orientation of the children's `vs` (`makeVs` uses the same `stackDir[d]` as the splice side) is
-the one walk-side fact needed besides `walk_st'`. -/
+/-- The walk's `vs` are oriented along the reference blocks (proved in the same simulation as
+`walk_st'`; differentially tested by `check_stref`). -/
+theorem walk_vsOriented (g : Graph) (tern : Bool) (vo eo : List Nat) :
+    VsOriented g (g.walk tern (g.dfsForest vo eo)).items (refBlocks g (g.dfsForest vo eo)) := by
+  sorry
+
+/-- Even–Tarjan on the reference: every block of `refBlocks` is st-numbered by its sequence
+(induction over `refTree`: every piece spliced at depth `l` joins the open path at depth `l` on
+side `dirs[l]`, so every vertex other than the block's terminals has a neighbour on each side). -/
+theorem refBlocks_st (g : Graph) (vo eo : List Nat) :
+    ∀ b ∈ refBlocks g (g.dfsForest vo eo), b.St g := by
+  sorry
+
+/-- An S / P / R item whose children are listed in the reference order of an st-numbered block,
+with its own and its children's `vs` oriented along that block, is in s-t order (the item's
+virtual edges are the ends of the sub-ears, so the restriction keeps the neighbours). -/
 theorem stItem_of_refOrder (g : Graph) (tern : Bool) (vo eo : List Nat) (i : ItemId)
     (hi : i < (g.walk tern (g.dfsForest vo eo)).items.size)
     (ht : Items.type (g.walk tern (g.dfsForest vo eo)).items i = .S ∨
@@ -243,7 +301,8 @@ theorem stItem_of_refOrder (g : Graph) (tern : Bool) (vo eo : List Nat) (i : Ite
     (hch : Items.ch (g.walk tern (g.dfsForest vo eo)).items i =
       restrictCh (g.walk tern (g.dfsForest vo eo)).items
         (g.walk tern (g.dfsForest vo eo)).items.size
-        (refOrder g (g.dfsForest vo eo)) i) :
+        (refOrder g (g.dfsForest vo eo)) i)
+    (hvs : VsOriented g (g.walk tern (g.dfsForest vo eo)).items (refBlocks g (g.dfsForest vo eo))) :
     Items.StItem (g.walk tern (g.dfsForest vo eo)).items i := by
   sorry
 

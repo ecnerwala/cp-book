@@ -3,7 +3,10 @@ import Spqr.StRef
 
 open Spqr
 
-/-! Differential test of `walk_st'`: the walk's S / P / R child lists equal `restrictCh` of `refOrder`. -/
+/-! Differential test of `walk_st'`, `walk_vsOriented` and `refBlocks_st`: the walk's S / P / R child
+lists equal `restrictCh` of `refOrder`, every S / P / R item lies in one reference block with its
+`vs` and its non-V children's `vs` oriented along the block's sequence, and every reference block
+is st-numbered. -/
 
 def main : IO Unit := do
   let input ← (← IO.getStdin).readToEnd
@@ -25,9 +28,14 @@ def main : IO Unit := do
   let g : Graph := ⟨nv, edges⟩
   let forest := g.dfsForest vertOrder edgeOrder
   let items := (g.walk (tern != 0) forest).items
+  let blocks := refBlocks g forest
   let order := refOrder g forest
   let mut bad := 0
   let mut n := 0
+  for b in blocks do
+    if ¬ b.St g then
+      bad := bad + 1
+      IO.println s!"BLOCK not st: root {repr b.root} seq {b.seq g} edges {b.edges g}"
   for i in [0:items.size] do
     match Items.type items i with
     | .S | .P | .R =>
@@ -36,5 +44,11 @@ def main : IO Unit := do
       if r ≠ Items.ch items i then
         bad := bad + 1
         IO.println s!"MISMATCH item {i}: walk {Items.ch items i} ref {r}"
+      let lv := Items.leaves items items.size i
+      let ok := blocks.any fun b => lv.all (· ∈ b.items) && decide (Oriented (b.seq g) (Items.vs items i)) &&
+        (Items.ch items i).all fun c => Items.type items c = .V || decide (Oriented (b.seq g) (Items.vs items c))
+      if !ok then
+        bad := bad + 1
+        IO.println s!"ORIENT item {i}: vs {repr (Items.vs items i)} ch {(Items.ch items i).map fun c => (c, repr (Items.vs items c))} leaves {lv}"
     | _ => pure ()
-  IO.println s!"items {n} bad {bad}"
+  IO.println s!"items {n} blocks {blocks.length} bad {bad}"

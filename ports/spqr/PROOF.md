@@ -837,7 +837,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 7 walk-side: `finishTstackTop_stItem`; ear lowvals `first_ret_lowval`, `chain_stackDir_step` | `StWalk.lean`, `StEar.lean` | proved |
 | 7 walk-side: `StInv.onSide` field, `chain_stackDir_const` (corrected statement, see 7.4) | `StWalk.lean` | def / proved |
 | 7 walk-side: `StInv.hole` (`StHole`/`HoleClosed`), `stInv_topClosable`, `stInv_finishTstackTop_stItem` (close site, see 7.4) | `StWalk.lean` | def / proved |
-| 7 walk-side: `finishEdge_stInv` (under `FinishGuards`/`EarsOnSide`), `walk_stInv`; `walk_st`, `spqrTree_st` from `walk_stInv`; route changed to the `StRef.lean` reference order (§7.6) | `StWalk.lean`, `StRef.lean` | sorry / proved (`walkTree_stackDir_below` in `StFrame.lean` proved); reference tested, equality proof not started |
+| 7 walk-side: `finishEdge_stInv` (under `FinishGuards`/`EarsOnSide`), `walk_stInv`; `walk_st`, `spqrTree_st` from `walk_stInv`; route changed to the `StRef.lean` reference order (§7.6) | `StWalk.lean`, `StRef.lean` | sorry / proved (`walkTree_stackDir_below` in `StFrame.lean` proved); reference + `VsOriented` + `StBlock.St` tested seeds 0..1000; `walk_st'`, `walk_vsOriented`, `refBlocks_st`, `stItem_of_refOrder` sorry |
 
 Work packages for child sessions, in dependency order:
 * **DFS**: 1.1, 1.2, no cross edges, `lowpt` characterization of `OutClass`.
@@ -1157,6 +1157,20 @@ the walk's items rather than for arbitrary `WF` items with `ch` in reference ord
 `vs` could be flipped). The §7.4 `StInv` route (`finishEdge_stInv`, `walk_stInv`,
 `walk_st_of_stInv`) is kept as a documented alternative and no longer feeds `walk_st`.
 
+**Blocks and orientation.** The reference now also records, per completed block (`StBlock`), the
+block-boundary tree edge `(v, w)` it hangs from (`root = none` for the one-vertex block of a DFS
+root): the block's vertex sequence `StBlock.seq` is the cut vertex `v` followed by the vertices of
+its items, and its edge list `StBlock.edges` is `(v, w)` followed by its edge items. The
+orientation statement is `VsOriented g items blocks`: every S / P / R item `i` lies in one block
+`b` (all its leaves are items of `b`) and its `vs` and the `vs` of its non-V children are
+`Oriented` along `b.seq` — `(some a, some c)` with `a` strictly before `c` (`Precedes`). The
+differential test `check_stref` checks, besides `ch = restrictCh …`, `VsOriented` for the walk's
+items and `StBlock.St` (Even–Tarjan: `Items.StList (b.seq g) (b.edges g)`) for every reference
+block; all three hold on seeds 0..1000. Accordingly `stItem_of_refOrder` takes `VsOriented` as a
+hypothesis and splits into `refBlocks_st` (every reference block is st-numbered; the `refTree`
+induction) and the restriction argument, and the walk-side admissions are `walk_st'` and
+`walk_vsOriented` (both to be proved by the same simulation).
+
 ### 7.5 Work packages
 
 | lemma | file | status |
@@ -1182,7 +1196,10 @@ the walk's items rather than for arbitrary `WF` items with `ch` in reference ord
 | `walk_st`, `spqrTree_st` | `StWalk.lean` | proved (from `walk_st'`, `stItem_of_refOrder`, `walk_items_wf`, `relabel_st`); `walk_st_of_stInv` is the same from the alternative `walk_stInv` route |
 | `refTree`/`refOrder`, `restrictCh`, `check_stref` differential test (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..300 (0 mismatches) |
 | `walk_st'` (`ch i = restrictCh … (refOrder …) i` for S/P/R items) | `StRef.lean` | sorry (the simulation) |
-| `stItem_of_refOrder` (an item listed in the reference order is in s-t order) | `StRef.lean` | sorry (Even–Tarjan on the reference, induction over `refTree`; needs the `makeVs` orientation of the children's `vs`) |
+| `StBlock`, `StBlock.seq`/`edges`/`St`, `Precedes`, `Oriented`, `VsOriented`; `check_stref` checks `VsOriented` and `StBlock.St` too (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..1000 (0 mismatches) |
+| `walk_vsOriented` (`VsOriented` for the walk's items and `refBlocks`) | `StRef.lean` | sorry (the simulation, with `walk_st'`) |
+| `refBlocks_st` (every reference block is `StBlock.St`) | `StRef.lean` | sorry (Even–Tarjan on the reference, induction over `refTree`) |
+| `stItem_of_refOrder` (an item with `ch` in reference order and oriented `vs` is in s-t order) | `StRef.lean` | sorry (restriction of `refBlocks_st` to the item) |
 | reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes) | `StRef.lean` | proved |
 
 ## 8. Planarity

@@ -454,10 +454,12 @@ theorem walk_stInv (g : Graph) (tern : Bool) (vo eo : List Nat) :
   sorry
 
 /-- Phase 2: the walk's children lists are in s-t order (`PROOF.md` §7.6): they are the reference
-order (`walk_st'`), which is an st-order (`stItem_of_refOrder`). -/
+order (`walk_st'`) with oriented `vs` (`walk_vsOriented`), which is an st-order
+(`stItem_of_refOrder`). -/
 theorem walk_st (g : Graph) (tern : Bool) (vo eo : List Nat) :
     Items.StNumbered (g.walk tern (g.dfsForest vo eo)).items :=
-  fun i hi ht => stItem_of_refOrder g tern vo eo i hi ht (walk_items_wf g tern vo eo) (walk_st' g tern vo eo i hi ht)
+  fun i hi ht => stItem_of_refOrder g tern vo eo i hi ht (walk_items_wf g tern vo eo)
+    (walk_st' g tern vo eo i hi ht) (walk_vsOriented g tern vo eo)
 
 /-- The same from the `StInv` route. -/
 theorem walk_st_of_stInv (g : Graph) (tern : Bool) (vo eo : List Nat) :

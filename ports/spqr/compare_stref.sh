@@ -7,7 +7,7 @@ for seed in $(seq $1 $2); do
   python3 gen.py $seed > /tmp/sr_$$.txt
   r=$(./lean/.lake/build/bin/check_stref < /tmp/sr_$$.txt 2>&1)
   case "$r" in
-    *"bad 0") ;;
+    "items "*" bad 0") ;;
     *) echo "MISMATCH seed=$seed: $r" | head -c 400; echo; fails=$((fails+1)); [ $fails -ge 3 ] && break;;
   esac
 done
