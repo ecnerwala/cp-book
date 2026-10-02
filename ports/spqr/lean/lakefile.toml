@@ -44,3 +44,7 @@ root = "CheckRanges"
 [[lean_exe]]
 name = "check_piece_sep"
 root = "CheckPieceSep"
+
+[[lean_exe]]
+name = "check_stsim"
+root = "CheckStSim"
