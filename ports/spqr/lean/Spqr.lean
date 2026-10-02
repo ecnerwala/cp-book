@@ -65,6 +65,7 @@ import Spqr.Proofs.RClose
 import Spqr.RInv
 import Spqr.Proofs.RInv
 import Spqr.Proofs.RInvFrame
+import Spqr.Proofs.RItems
 import Spqr.PlanarGlue
 import Spqr.Proofs.Orbits
 import Spqr.Proofs.PlanarGlue
