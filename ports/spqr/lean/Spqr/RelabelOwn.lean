@@ -14,7 +14,7 @@ and `Items.WF`, plus the extra item-level hypotheses collected in `Items.OwnExtr
 
 namespace Spqr
 
-/-- `iomega` after unfolding the `ItemId` abbreviation (`iomega` does not see through it). -/
+/-- `omega` after unfolding the `ItemId` abbreviation (`omega` does not see through it). -/
 macro "iomega" : tactic => `(tactic| ((try unfold ItemId at *); (try delta ItemId at *); omega))
 
 /-! ### Generic array / list helpers -/
@@ -1209,5 +1209,28 @@ theorem twins (hx : items.OwnExtra g) : t.Twins := by
     omega
 
 end RelabelAll
+
+/-! ### Assembly -/
+
+/-- Phase 3b: the output tree's bijections, ownership, and twin pairing, from `relabel_node_spec`.
+`Bijections` needs only `Items.WF`; `Ownership` and `Twins` need `Items.OwnExtra` (and
+`Ownership.ne_nvs` for R nodes needs `Items.ROriented`). -/
+theorem relabelTree_own (g : Graph) (items : Items) (h : items.WF g) (hx : items.OwnExtra g)
+    (hor : items.ROriented g) :
+    (relabelTree g items).Bijections ∧ (relabelTree g items).Ownership ∧
+      (relabelTree g items).Twins := by
+  obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
+  have H : RelabelAll g items (relabelTree g items) idx := ⟨h, hidx, hnode⟩
+  exact ⟨H.bijections, H.ownership hx hor, H.twins hx⟩
+
+theorem relabelTree_bijections (g : Graph) (items : Items) (h : items.WF g) :
+    (relabelTree g items).Bijections := by
+  obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
+  exact (RelabelAll.mk h hidx hnode).bijections
+
+theorem relabelTree_twins (g : Graph) (items : Items) (h : items.WF g) (hx : items.OwnExtra g) :
+    (relabelTree g items).Twins := by
+  obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
+  exact (RelabelAll.mk h hidx hnode).twins hx
 
 end Spqr
