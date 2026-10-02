@@ -69,7 +69,8 @@ theorem embedItem_step_leaf_of (g : Graph) (i : Nat) (hi : i < t.size)
       · rw [hes]; exact isPlanarEmbedding_nil _
       · intro q _ hm; exact absurd hm (hmem q)
       · intro q hm; exact absurd hm (hmem q)
-      · intro q _ hq; exact absurd hq (houter q)
+      · intro k _
+        exact ⟨fun a ha => absurd ⟨_, ha⟩ (houter a), fun b hb => absurd ⟨_, hb⟩ (houter b)⟩
 
 end PlanarSpqrTree
 
