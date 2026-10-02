@@ -28,6 +28,13 @@ theorem loc_mod_two (h : P.loc q = some l) : l % 2 = q % 2 := by
   obtain ⟨k, _, _, hl⟩ := loc_data h
   omega
 
+theorem loc_xor (h : P.loc q = some l) {c : Nat} (hc : c < 4) :
+    P.loc (q ^^^ c) = some (l ^^^ c) := by
+  obtain ⟨k, hk, rfl⟩ := Option.map_eq_some_iff.1 h
+  unfold QE.edge at hk
+  simp only [loc, QE.edge, xor_div4 q hc, hk, Option.map_some, xor_mod4 q hc,
+    mul4_add_xor k (q % 4) (Nat.mod_lt _ (by decide)) hc]
+
 theorem vert_loc (h : P.loc q = some l) :
     QE.vert P.es l = some (if QE.side q = 0 then (P.ends (QE.edge q)).1
       else (P.ends (QE.edge q)).2) := by
