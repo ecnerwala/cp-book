@@ -355,6 +355,36 @@ sides; and type-2 separation pairs always lie along a single ear (Fact C), so th
 split cuts off is uniformly on one side and its entry has the empty-side shape. Only type-1
 closes / ear boundaries produce genuinely two-sided entries.
 
+**Lean target (`WalkCover.lean`).** The "nothing is dropped" half of `Items.Tree` is proved from a
+single admitted predicate, `walk_sides : SidesForest forest (WalkState.init g tern)` (hypotheses:
+`ForestOK`, `∀ t ∈ forest, t.WF []`). `SidesForest`/`SidesTree`/`SidesOuts`/`SidesOut` mirror the
+walk in the style of `GuardsTree` and assert, at each discard site, one of:
+
+- `MergeOK s` (`2 ≤ s.tstack.length`) before every `mergeTstackTops`, and the `origTstack + 3`
+  shape of the block branch — these are exactly `EarSpec.walkTree_guards` (`FinishGuards`/
+  `GuardsTree`: the popped entries exist);
+- `CloseOK s` before every `finishTstackTop`: the top entry `t` satisfies
+  `t.OnSide s.stackDir[t.topDepth]!`, i.e. the side `getSide t.spans (!topDir)` it discards is `[]`;
+- `UnwrapOK s ty` before `maybeUnwrapNxt ty` (when it may reuse): if the kept side of the entry
+  below the top starts with an item of type `ty`, that entry is `[x]` on its own side;
+- `BoundaryOK d o s` in the block branch: `spans.1 = []` of the top (type-2 close, lowval `= d+1`)
+  resp. `spans.2 = []` of the back-edge entry and `spans.1 = []` of the vertex entry below it;
+- `RootOK s` after `walkTree t 0`: one entry is left, `spans.1 = []`, and `spans.2` consists of
+  `vertItem`s of real vertices (it is `[vertItem t.v]`).
+
+Which ear fact discharges each: an entry closed by `finishTstackTop` is a whole ear (or a type-2
+piece of one, Fact C), so by the paragraph above all its pieces were attached on the side
+`stackDir[topDepth]` — `StWalk.chain_stackDir_const` (one lowval along the ear ⇒ one `stackDir`)
+gives `TEntry.OnSide t stackDir[t.topDepth]!`, which is literally `CloseOK`; `setSides_onSide`,
+`merge_onSide`, `fold_onSide` show `pushVertTstack`/`pushEdgeTstack`/`mergeTstackTops`/the final
+fold preserve `OnSide` for a fixed `dir`, so the per-ear `EarShape` invariant of the ear session
+should carry `OnSide (stackDir[topDepth])` for every entry above the ear's boundary.
+`BoundaryOK` is the same statement at the ear boundary, in the orientation `finishEdge` fixes
+there (`setStackDir d false` for a tree child with lowval `≥ d`, so the vertex ear's entry has
+`spans.1 = []`); `UnwrapOK` is the sub-ear case of `CloseOK` (a finished sub-ear sits alone in
+its entry, on the side it was finished on); `RootOK` is `BoundaryOK` at depth 0 after the root's
+`pushVertTstack` with `stackDir[0] = false`.
+
 ### 4.4b Planar variant: what a tstack entry stores
 
 In the planar variant a tstack entry represents its piece as an interior spine along the ear
