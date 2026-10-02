@@ -546,7 +546,8 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | 7 relabel-side: `relabel_st` | `StSpec.lean` | sorry |
 | 7 walk-side: `WalkState.StInv`, data lemmas `pushTstack_onSide`, `merge_onSide`, `fold_onSide` | `StWalk.lean` | def / proved |
 | 7 walk-side: `finishTstackTop_stItem`; ear lowvals `first_ret_lowval`, `chain_stackDir_step` | `StWalk.lean`, `StEar.lean` | proved |
-| 7 walk-side: `chain_stackDir_const`, `finishEdge_topClosable`, `finishEdge_stInv`, `walk_st` | `StWalk.lean`, `StSpec.lean` | sorry (`walkTree_stackDir_below` in `StFrame.lean` proved) |
+| 7 walk-side: `StInv.onSide` field, `chain_stackDir_const` (corrected statement, see 7.4) | `StWalk.lean` | def / proved |
+| 7 walk-side: `finishEdge_topClosable`, `finishEdge_stInv`, `walk_st` | `StWalk.lean`, `StSpec.lean` | sorry (`walkTree_stackDir_below` in `StFrame.lean` proved) |
 
 Work packages for child sessions, in dependency order:
 * **DFS**: 1.1, 1.2, no cross edges, `lowpt` characterization of `OutClass`.
@@ -669,8 +670,8 @@ the ear's lowval `l` (§4.1), so `stackDir d' = !stackDir l` is constant along t
 piece attached along the ear is pushed on the same side.
 The data half is `merge_onSide` **[proved]**: merging two entries that are on the same side stays
 on that side.
-The semantic half, `chain_stackDir_const` **[sorry]**: an entry whose pieces were all attached
-along a chain of constant `stackDir` is `OnSide` that direction.
+The semantic half, `chain_stackDir_const` **[proved]** from the `StInv.onSide` field: an entry
+finished by an open-path vertex on a chain of constant `stackDir` is `OnSide` that direction.
 Its hypothesis `hchain` (constant `stackDir` along the chain) is the lowval fact, proved in
 `StEar.lean`: `DfsOut.lowval_eq_lmin` (the lowval of a well-formed out-edge is the minimum of its
 return depths, from `DfsOut.WF` = `dfsVisit_spec`'s per-edge classification), `first_ret_lowval`
@@ -683,14 +684,42 @@ Threading these along the chain needs the frame fact `walkTree_stackDir_below` *
 mutual induction over `walkTree`/`walkOuts`/`walkOut` with the block decomposition `finishEdge_eq`:
 the only `stackDir` write inside `finishEdge` is `loop1Type`'s, at the depth of a stack entry
 strictly above `d`.
-What remains of `chain_stackDir_const` is not a frame fact: its conclusion `t.OnSide dir` is a
-history property of how the entry `t` was built (every `pushTstack`/`mergeTstackTops` along the
-chain used the same `edgeDir`), which is not determined by the current state plus `hchain`; it has
-to become a field of the walk invariant (`OnSide` for every entry whose pieces were attached inside
-the current ear), maintained by `pushTstack_onSide`/`merge_onSide`/`fold_onSide`.
-Consequently the spans of an entry are one-sided inside an ear; genuinely two-sided entries arise
-only at ear boundaries, when a finished inner ear (`spans.1`, `spans.2` both non-empty after the
-wrap) is enclosed by pieces from both sides.
+The conclusion `t.OnSide dir` is a history property of how the entry `t` was built (every
+`pushTstack`/`mergeTstackTops` along the chain used the same `edgeDir`), not determined by the
+current state plus `hchain`; it is the field `StInv.onSide`: every entry with `topDepth < d`
+whose `vStart` is an open-path vertex strictly below its top (`stackVerts[j]` for some
+`topDepth < j ≤ d`) is `OnSide stackDir[topDepth]`.  `chain_stackDir_const` is that field
+rewritten along `hchain`.
+Two earlier formulations are **false** (traces of the C++ walk, `gen.py` seeds 0..499):
+
+* `chain_stackDir_const` with the hypothesis "`t.vStart ∉ stackVerts(l, d]`" and
+  `t.topDepth ≤ d` (the entry was *not* finished on the chain) — seed 6, current depth
+  `d = 14`, open path `0, 1, 18, 4, 19, 8, 15, 11, 13, 6, 3, 9, 12, 16, 2`,
+  `stackDir = 0, 1, …, 1, 0`, `l = 13`: the entry `vStart = 10, topDepth = 14` is the back edge
+  `10 → 2` pushed while `stackDir[14] = 1` (first out-edge of `2`, lowval 0), so it sits on
+  `spans.2`; the next out-edge of `2` (lowval 4) reset `stackDir[14] = 0`.  Entries at
+  `topDepth = d` from earlier out-edges of the current vertex are never closed individually
+  (a later entry with `topDepth < d` always sits above them, or they are flattened by the
+  parent's fold), so no clause of `StInv` speaks about them.
+* "every live entry with `topDepth < d` not containing the V item of an open-path vertex is
+  `OnSide stackDir[topDepth]`" — seed 6, `d = 11`, open path
+  `0, 1, 18, 4, 19, 8, 15, 11, 13, 6, 3, 9`: the entry `vStart = 16, topDepth = 0` is two-sided
+  (`spans.1 = Q, V10, S, Q, V2, Q, P, Q, Q`, `spans.2 = Q, Q, P, Q, V12`).  It is the type-2 fold
+  at vertex `16` (depth 13) that then absorbed the eagerly merged vertex entries of `12`
+  (depth 12, first out-edge type 2, `stackDir[12] = 1` vs. the fold side `!edgeDir = 0`); the
+  vertices `16, 2, 10, 12` have since been popped.  Such entries stay two-sided until the first
+  ancestor with `hasVert` folds them (type-2 branch) and are never closed before that.
+
+Entries from the current subtree are one-sided in the way the closes need: at the start of
+`finishEdge` for a returning tree edge (`lowval < d`), every entry above `origTstack` with
+`topDepth ≥ d` is `OnSide stackDir[d]` (3686 checks, 0 violations; the chain fact for the
+`topDepth > d` entries is `chain_stackDir_step`), which is the `CloseOK` of the `loop1`
+closes; the only exception is the component-boundary case `lowval ≥ d`, where the child's
+vertex entry (`topDepth = d + 1`, side `!stackDir[lowval]`) may be on the other side.  This
+segment property is indexed by `origTstack` and belongs to the `FinishGuards`/`EarShape`
+hypotheses of `finishEdge_stInv`, not to the depth-indexed `StInv`.
+Genuinely two-sided entries thus arise only from the eager vertex merge, when a finished inner
+ear is enclosed by pieces from both sides.
 
 **Type-2 entries are one-sided (`type2_entry_one_sided`).** A type-2 separation pair `(a, b)` lies
 along a single ear (`b` is reached from `a`'s child by first children, Fact C), so the piece a
@@ -767,7 +796,7 @@ left to the preservation proof.
 | `WalkState.StSides`, `StEntry`, `StInv`, `TopClosable`, `entryVertList`, `entryEdges` | `StWalk.lean` | def |
 | `DfsOut.lowval_eq_lmin`, `first_ret_lowval`, `chain_stackDir_step` | `StEar.lean` | proved |
 | `walkTree_stackDir_below` (frame: `stackDir` below `d` unchanged by `walkTree _ d`) | `StFrame.lean` | proved |
-| `chain_stackDir_const` (`ear_uniform_side`, semantic half) | `StWalk.lean` | sorry (history fact; needs an `OnSide` field in `StInv`) |
+| `StInv.onSide`, `chain_stackDir_const` (`ear_uniform_side`, semantic half; corrected statement) | `StWalk.lean` | def / proved |
 | `finishTstackTop_items`, `finishTstackTop_stItem` | `StWalk.lean` | proved |
 | `finishEdge_topClosable`, `finishEdge_stInv` | `StWalk.lean` | sorry (hard; needs closability in `StInv`, see 7.4) |
 | `walk_st` | `StSpec.lean` | sorry (from `finishEdge_stInv`) |
