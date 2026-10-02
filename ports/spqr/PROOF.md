@@ -1691,7 +1691,7 @@ On the same star, set `rotAdj=[1,0,3,2,5,4,7,6]` and leave every outer row empty
 Each child has a planar one-edge rotation, so `GluedAttachments 2` holds, but V does
 no linking and leaves eight vertex orbits instead of `2 * 3 = 6`.
 `closedVState_before` and `closedVState_after` prove this failure with only standard
-axioms. `GluedUpTo` now extends `GluedAttachments` with `outer_present`: a processed
+axioms. `GluedOriented` extends `GluedAttachments` with `outer_present`: a processed
 nonempty piece whose parent is V has an exposed end. It also records `outer_dir`,
 the equality of the quarter-edge direction and slot parity needed by the specified
 1-sum transposition. Initialization, leaf, and F preservation are proved; the
@@ -1725,6 +1725,27 @@ and `v_parent_not_v` discharges the attachment/presence conditions for the new V
 The V theorem and every loop/frame helper were audited with `#print axioms`:
 only standard axioms occur. Q, node, and `glued_root` remain admitted.
 
+Q also needs the boundary of a V item itself to be at that item's original vertex.
+On `nv=3, edges=[(0,1),(1,2)]`, the actual tree is the chain
+`F,V(0),Q(0),I,V(1),Q(1),I,V(2)` (Q(1)'s parent is V(1)).
+Set `rotAdj=[-,-,-,-,5,4,-,-]`, expose `[6,7,-,-]` at V item 4,
+`[4,5,-,-]` at Q item 5, and leave all other rows empty. `GluedOriented 3`
+holds, but Q item 2 links quarter-edges 3 and 6, at original vertices 1 and 2.
+`badQState_before`, `badQState_after`, and `badQState_excluded` in
+`Proofs/PlanarEmbedQCounterexample.lean` are kernel proofs with standard axioms only.
+The literal tree's projection matched `pathGraph.planarSpqrTree false [0,1,2] [0,1]`
+by execution; this comparison is empirical, not a kernel proof of well-formedness.
+
+`GluedUpTo` extends `GluedOriented` with `outer_vertex`: a V(v) item's exposed
+ends lie at v, occupy only slots 0/1, and exist whenever the processed piece is
+nonempty. The latter clauses let Q consume the V child's entire open boundary
+and prevent a nonempty closed child from being silently skipped.
+Initialization, leaf, F, and V preservation are proved and re-audited with standard
+axioms only. For V, the fold's `OpenEmbedding.boundary` localizes both outer ends
+at v, and its empty-output case has an empty edge list. All three clauses pass
+the extended `check_piece_sep` on seeds 0..300 and the four tiny cases.
+The capped-node-child case of Q still needs its endpoint/cofacial contract audited.
+
 | statement | file | status |
 |---|---|---|
 | quarter-edges, `RotationSystem`, `IsEmbedding`, `IsPlanarEmbedding`, `Planar` | `Planar.lean` | def |
@@ -1733,6 +1754,7 @@ only standard axioms occur. Q, node, and `glued_root` remain admitted.
 | `IsPlanarEmbedding.oneSum_conj`, `IsPlanarEmbedding.splice` | `Proofs/PlanarOneSum.lean`, `Proofs/PlanarSplice.lean` | **proved** (standard axioms); the specified transposition gives the 1-sum rotation, and `splice` keeps the original vertex numbering when the pieces meet only at the attachment vertex |
 | `Piece.OpenEmbedding.splice`, `OpenEmbedding.frame`, `v_child_boundary` | `Proofs/PieceSplice.lean`, `PlanarEmbedVBoundary.lean` | **proved** (standard axioms); linking the inner ends of two open pieces agrees with the specified conjugated rotation and leaves exactly the two outer ends open; V children supply these open pieces |
 | `embedItem_step_V`, `vLoop_children`, `vLoop_piece`, `vLoop_open_spec`, `embedItem_V`, `vLoop_*` / `setOuterPair_*` frame lemmas | `PlanarEmbedV.lean`, `PlanarEmbedVLoop.lean` | **proved** (standard axioms); all fields of the strengthened `GluedUpTo` are preserved |
+| `pathEdgeRot_planar`, `badQState_before`, `badQState_after`, `badQState_excluded`; `GluedUpTo.outer_vertex` | `Proofs/PlanarEmbedQCounterexample.lean`, `PlanarEmbedSteps.lean` | **proved** (standard axioms) / boundary contract; initialization, leaf, F, V preserve the strengthened invariant |
 | `maximal_not_inSubtree`, `maximal_pieces_disjoint`, `v_children_nonempty`, `v_parent_not_v`, `v_pieces_meet` and tree/localization helpers | `PlanarEmbedTree.lean`, `Proofs/PieceLoc.lean` | **proved** (standard axioms); disjointness of maximal pieces follows from the preorder child partition, and V hypotheses give the shared attachment vertex |
 | `Piece.loc_data`, `mem_of_loc`, `loc_exists`, `loc_lt`, `loc_injective`, `loc_append_left/right`, `agrees_append` | `Proofs/PieceLoc.lean`, `Proofs/PieceAppend.lean` | **proved** |
 | `mem_edgesBelow_data`, `mem_edgesBelow_lt`, `edgeIn_of_mem_edgesBelow`, `edgesBelow_nodup` | `PlanarEmbedEdges.lean` | **proved** |

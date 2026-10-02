@@ -73,12 +73,19 @@ structure GluedAttachments (g : Graph) (i : Nat) (s : EmbedState) : Prop extends
   outer_at_vertex : ∀ j p v q, t.toSpqrTree.parent j = some p → t.toSpqrTree.type p = .V →
     t.origId[p]! = some v → s.exposedAt j q → QE.vert g.edges.toList q = some v
 
-structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) : Prop
+structure GluedOriented (g : Graph) (i : Nat) (s : EmbedState) : Prop
     extends t.GluedAttachments g i s where
   outer_dir : ∀ (j k q : Nat), s.outerE[j]?.bind (fun o => o[k]?) = some (some q) → q % 2 = k % 2
   outer_present : ∀ j, i ≤ j → j < t.size → ∀ p,
     t.toSpqrTree.parent j = some p → t.toSpqrTree.type p = .V →
     t.edgesBelow j ≠ [] → ∃ q, s.exposedAt j q
+
+structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) : Prop
+    extends t.GluedOriented g i s where
+  outer_vertex : ∀ j, j < t.size → t.toSpqrTree.type j = .V → ∀ v, t.origId[j]! = some v →
+    (∀ q, s.exposedAt j q → QE.vert g.edges.toList q = some v) ∧
+    (∀ k q, s.outerE[j]?.bind (fun o => o[k]?) = some (some q) → k < 2) ∧
+    (i ≤ j → t.edgesBelow j ≠ [] → ∃ q, s.exposedAt j q)
 
 /-- The initial state of `planarEmbed`. -/
 def initState : EmbedState :=
@@ -118,6 +125,14 @@ theorem gluedUpTo_init (g : Graph) : t.GluedUpTo g t.size t.initState where
   outer_present := by
     intro j hj hjs
     omega
+  outer_vertex := by
+    intro j hj _ v _
+    refine ⟨?_, ?_, ?_⟩
+    · intro q ⟨k, hk⟩
+      by_cases hk' : k < 4 <;> simp [initState, hj, hk'] at hk
+    · intro k q hk
+      by_cases hk' : k < 4 <;> simp [initState, hj, hk'] at hk
+    · intro hge; omega
 
 /-- `Q` step: the real edge `origId i` is added with its four quarter-edges; the two `I`/`O`
 children (the loops / blocks at its endpoints) are 1-summed at the endpoints. Admitted. -/
