@@ -312,7 +312,8 @@ theorem WF.layout_hyps (hw : items.WF g) (hx : items.OwnExtra g) {i : ItemId} (h
     (items.type i = .S → items.nEdges g i = (items.nvList g i).length) ∧
     (items.type i = .R → 4 ≤ (items.nvList g i).length) ∧
     (items.hasCap i = true → items.type i = .Q ∨ items.type i = .I ∨ items.type i = .P →
-      (items.nvList g i).length ≤ 2) := by
+      (items.nvList g i).length ≤ 2) ∧
+    (items.type i = .O → (items.nvList g i).length = 1) := by
   have ht := hw.tree
   have hlen := nvList_length (g := g) (items := items) i
   have hne := nEdges_eq (g := g) hn
@@ -324,7 +325,7 @@ theorem WF.layout_hyps (hw : items.WF g) (hx : items.OwnExtra g) {i : ItemId} (h
     rcases hw.q_cases hi hty with h0 | ⟨c, hc, h1 | ⟨v, h1⟩⟩
     · simp only [h0, List.countP_nil, List.filter_nil, List.length_nil] at hne hlen
       simp only [Items.hasCap, hty] at hcap ⊢
-      refine ⟨fun _ => by omega, fun _ => by omega, by simp, by simp, fun _ _ => ?_⟩
+      refine ⟨fun _ => by omega, fun _ => by omega, by simp, by simp, fun _ _ => ?_, by simp⟩
       have := Option.toList_length_le (items.vs i).1
       have := Option.toList_length_le (items.vs i).2
       omega
@@ -333,7 +334,7 @@ theorem WF.layout_hyps (hw : items.WF g) (hx : items.OwnExtra g) {i : ItemId} (h
         simp [Items.capCount, Items.hasCap, hty, h1]
       simp only [h1, List.countP_cons, List.countP_nil] at hne
       simp [hcge, hcapv] at hne
-      refine ⟨fun _ => by omega, fun _ => by omega, by simp, by simp, ?_⟩
+      refine ⟨fun _ => by omega, fun _ => by omega, by simp, by simp, ?_, by simp⟩
       intro hcp; simp [Items.hasCap, hty, h1] at hcp
     · have hcge : 1 + g.nv ≤ c := ht.child_ge_of_ne_V (by rw [h1]; simp) (by simp at hc; tauto)
       have hcapv : items.capCount i = 0 := by
@@ -346,18 +347,22 @@ theorem WF.layout_hyps (hw : items.WF g) (hx : items.OwnExtra g) {i : ItemId} (h
       simp [vertItem, hcge] at hlen
       have := Option.toList_length_le (items.vs i).1
       have := hw.one_le_nvList hi (by simp [hty, NodeType.isNode])
-      refine ⟨fun h => by omega, fun _ => by omega, by simp, by simp, ?_⟩
+      refine ⟨fun h => by omega, fun _ => by omega, by simp, by simp, ?_, by simp⟩
       intro hcp; simp [Items.hasCap, hty, h1] at hcp
   · -- I
     have h0 := hw.shapes.i_o_leaf i hi (Or.inl hty)
     obtain ⟨u, v, huv⟩ := hw.vs_two hi (Or.inl hty)
     simp only [h0, List.countP_nil, List.filter_nil, List.length_nil, huv, Option.toList_some,
       List.length_singleton] at hne hlen
-    refine ⟨fun _ => by omega, fun _ => by omega, by simp, by simp, fun _ _ => by omega⟩
+    refine ⟨fun _ => by omega, fun _ => by omega, by simp, by simp, fun _ _ => by omega, by simp⟩
   · -- O
     have h0 := hw.shapes.i_o_leaf i hi (Or.inr hty)
-    simp only [h0, List.countP_nil] at hne
-    refine ⟨fun _ => by omega, by simp, by simp, by simp, by simp⟩
+    have hvs := hw.endpoints.vs_shape i hi
+    simp only [hty] at hvs
+    obtain ⟨v, hv⟩ := hvs
+    simp only [h0, List.countP_nil, List.filter_nil, List.length_nil, hv, Option.toList_some,
+      Option.toList_none, List.length_singleton] at hne hlen
+    refine ⟨fun _ => by omega, by simp, by simp, by simp, by simp, fun _ => by omega⟩
   · -- S
     obtain ⟨u, v, xs, huv, hxs, hk, hperm⟩ := hw.shapes.s_shape i hi hty
     have hcnt := ht.countP_nonV (g := g) i
@@ -368,7 +373,7 @@ theorem WF.layout_hyps (hw : items.WF g) (hx : items.OwnExtra g) {i : ItemId} (h
     have hc1 : items.capCount i = 1 := by
       simp [Items.capCount, Items.hasCap, hty, NodeType.isNode]
     rw [huv] at hlen; simp only [Option.toList_some, List.length_singleton] at hlen
-    refine ⟨fun _ => by omega, by simp, fun _ => by omega, by simp, by simp⟩
+    refine ⟨fun _ => by omega, by simp, fun _ => by omega, by simp, by simp, by simp⟩
   · -- P
     obtain ⟨_, hnoV, _⟩ := hw.shapes.p_shape i hi hty
     obtain ⟨u, v, huv⟩ := hw.vs_two hi (Or.inr (Or.inr (Or.inl hty)))
@@ -376,13 +381,106 @@ theorem WF.layout_hyps (hw : items.WF g) (hx : items.OwnExtra g) {i : ItemId} (h
       rw [← ht.filter_V_eq, List.filter_eq_nil_iff]
       intro c hc; simpa using hnoV c hc
     rw [huv, hV] at hlen; simp only [Option.toList_some, List.length_singleton, List.length_nil] at hlen
-    refine ⟨fun _ => by omega, by simp, by simp, by simp, fun _ _ => by omega⟩
+    refine ⟨fun _ => by omega, by simp, by simp, by simp, fun _ _ => by omega, by simp⟩
   · -- R
     obtain ⟨h2, _, _, _⟩ := hw.shapes.r_shape i hi hty
     obtain ⟨u, v, huv⟩ := hw.vs_two hi (Or.inr (Or.inr (Or.inr hty)))
     rw [ht.filter_V_eq] at h2
     rw [huv] at hlen; simp only [Option.toList_some, List.length_singleton] at hlen
-    refine ⟨fun _ => by omega, by simp, by simp, fun _ => by omega, by simp⟩
+    refine ⟨fun _ => by omega, by simp, by simp, fun _ => by omega, by simp, by simp⟩
+
+/-! ### Positions of V children; `ordered` keeps the V children in `ch` order -/
+
+theorem nvList_getElem?_mid (i : ItemId) {p : Nat}
+    (hp : p < ((items.ch i).filter (· < 1 + g.nv)).length) :
+    (items.nvList g i)[(items.vs i).1.toList.length + p]? =
+      some (((items.ch i).filter (· < 1 + g.nv))[p] - 1) := by
+  unfold Items.nvList
+  rw [List.getElem?_append_left (by simp; omega), List.getElem?_append_right (by simp),
+    Nat.add_sub_cancel_left, List.getElem?_map, List.getElem?_eq_getElem hp, Option.map_some]
+
+theorem idxOf_eq_of_getElem? {l : List Nat} (hnd : l.Nodup) {k u : Nat} (h : l[k]? = some u) :
+    l.idxOf u = k := by
+  obtain ⟨hk, hu⟩ := List.getElem?_eq_some_iff.1 h
+  have hmem : u ∈ l := hu ▸ List.getElem_mem hk
+  have hlt : l.idxOf u < l.length := List.idxOf_lt_length_iff.2 hmem
+  exact (hnd.getElem_inj_iff (hi := hlt) (hj := hk)).1 ((List.getElem_idxOf hlt).trans hu.symm)
+
+theorem PosOK.pos_sub (hnd : (items.nvList g i).Nodup)
+    (hpos : Items.PosOK nvSt (items.nvList g i) pos) {v : Nat} (hv : v ∈ items.nvList g i) :
+    pos v - nvSt = (items.nvList g i).idxOf v :=
+  (idxOf_eq_of_getElem? hnd (hpos v hv).2).symm
+
+theorem PosOK.pos_lt (hpos : Items.PosOK nvSt (items.nvList g i) pos) {v : Nat}
+    (hv : v ∈ items.nvList g i) : pos v - nvSt < (items.nvList g i).length :=
+  (List.getElem?_eq_some_iff.1 (hpos v hv).2).1
+
+/-- Under `PosOK`, the `p`-th V child sits at node-vert `nvSt + |vs.1| + p`. -/
+theorem pos_V_child (hnd : (items.nvList g i).Nodup)
+    (hpos : Items.PosOK nvSt (items.nvList g i) pos) {p : Nat}
+    (hp : p < ((items.ch i).filter (· < 1 + g.nv)).length) :
+    pos (((items.ch i).filter (· < 1 + g.nv))[p] - 1) - nvSt = (items.vs i).1.toList.length + p := by
+  have h := nvList_getElem?_mid (g := g) (items := items) i hp
+  have hmem : ((items.ch i).filter (· < 1 + g.nv))[p] - 1 ∈ items.nvList g i :=
+    List.mem_iff_getElem?.2 ⟨_, h⟩
+  rw [PosOK.pos_sub hnd hpos hmem, idxOf_eq_of_getElem? hnd h]
+
+theorem loc_V {c : ItemId} (hc : c < 1 + g.nv) (nvSt : Nat) (pos : Nat → Nat) :
+    items.loc g nvSt pos c = 2 * (pos (c - 1) - nvSt) := by
+  simp [Items.loc, hc]
+
+theorem ordered_filter_V (ht : items.Tree g) {i : ItemId} (hnd : (items.nvList g i).Nodup)
+    {nvSt : Nat} {pos : Nat → Nat}
+    (hpos : items.type i = .R → Items.PosOK nvSt (items.nvList g i) pos) :
+    (items.ordered g i nvSt pos).filter (· < 1 + g.nv) = (items.ch i).filter (· < 1 + g.nv) := by
+  by_cases hR : items.type i = .R
+  swap
+  · rw [ordered_eq_of_ne_R hR]
+  have hpos := hpos hR
+  have hperm : ((items.ordered g i nvSt pos).filter (· < 1 + g.nv)).Perm
+      ((items.ch i).filter (· < 1 + g.nv)) := (ordered_perm i nvSt pos).filter _
+  have hLpw : ((items.ch i).filter (· < 1 + g.nv)).Pairwise
+      fun a b => items.loc g nvSt pos a < items.loc g nvSt pos b := by
+    rw [List.pairwise_iff_getElem]
+    intro p q hp hq hpq
+    have ha := (List.mem_filter.1 (List.getElem_mem hp)).2
+    have hb := (List.mem_filter.1 (List.getElem_mem hq)).2
+    rw [loc_V (by simpa using ha), loc_V (by simpa using hb), pos_V_child hnd hpos hp,
+      pos_V_child hnd hpos hq]
+    omega
+  have hkey : ∀ a ∈ (items.ch i).filter (· < 1 + g.nv), ∀ b ∈ (items.ch i).filter (· < 1 + g.nv),
+      a ≠ b → items.loc g nvSt pos a ≠ items.loc g nvSt pos b := by
+    intro a ha b hb hab
+    obtain ⟨p, hp, rfl⟩ := List.mem_iff_getElem.1 ha
+    obtain ⟨q, hq, rfl⟩ := List.mem_iff_getElem.1 hb
+    rcases lt_trichotomy p q with h | h | h
+    · exact Nat.ne_of_lt (List.pairwise_iff_getElem.1 hLpw p q hp hq h)
+    · subst h; exact absurd rfl hab
+    · exact Nat.ne_of_gt (List.pairwise_iff_getElem.1 hLpw q p hq hp h)
+  have hMnd : ((items.ordered g i nvSt pos).filter (· < 1 + g.nv)).Nodup :=
+    List.filter_sublist.nodup ((ordered_perm i nvSt pos).nodup_iff.2 (ht.ch_nodup i))
+  have hMle : ((items.ordered g i nvSt pos).filter (· < 1 + g.nv)).Pairwise
+      fun a b => items.loc g nvSt pos a ≤ items.loc g nvSt pos b := by
+    have h2 : items.ordered g i nvSt pos =
+        (items.ch i).mergeSort fun a b => decide (items.loc g nvSt pos a ≤ items.loc g nvSt pos b) := by
+      unfold Items.ordered; simp [hR]
+    rw [h2]
+    refine ((List.pairwise_mergeSort (fun a b c => ?_) (fun a b => ?_) (items.ch i)).filter _).imp ?_
+    · simp only [decide_eq_true_eq]; omega
+    · simp only [Bool.or_eq_true, decide_eq_true_eq]; omega
+    · simp only [decide_eq_true_eq]; exact id
+  have hMpw : ((items.ordered g i nvSt pos).filter (· < 1 + g.nv)).Pairwise
+      fun a b => items.loc g nvSt pos a < items.loc g nvSt pos b := by
+    refine (hMle.and hMnd).imp_of_mem ?_
+    intro a b ha hb ⟨hle, hne⟩
+    exact lt_of_le_of_ne hle (hkey a (hperm.mem_iff.1 ha) b (hperm.mem_iff.1 hb) hne)
+  exact List.Perm.eq_of_pairwise (fun a b _ _ h1 h2 => absurd h2 (not_lt.2 h1.le)) hMpw hLpw hperm
+
+theorem edgeChildren_length (i : ItemId) (nvSt : Nat) (pos : Nat → Nat) :
+    (items.edgeChildren g pos (items.ordered g i nvSt pos)).length =
+      (items.ch i).countP (· ≥ 1 + g.nv) := by
+  unfold Items.edgeChildren
+  rw [List.length_map, ← List.countP_eq_length_filter, (ordered_perm i nvSt pos).countP_eq]
 
 end Items
 
