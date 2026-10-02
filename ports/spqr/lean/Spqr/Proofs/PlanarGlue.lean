@@ -1,6 +1,7 @@
 import Spqr.Proofs.Orbits
 import Spqr.Proofs.OrbitCount
 import Spqr.Proofs.TwoSumCount
+import Spqr.Proofs.TwoSumComp
 
 /-!
 # 2-sum gluing (PROOF.md §8.5)
@@ -1414,12 +1415,6 @@ theorem splice_numVertexOrbits :
     RotationSystem.numVertexOrbits_eq _ W.emb₁.total W.emb₁.involution (T.size₁ W),
     RotationSystem.numVertexOrbits_eq _ W.emb₂.total W.emb₂.involution (T.size₂ W)]
   exact T.count_splice W 1 (by decide) rfl (T.h02_vert W) (T.h13_vert W)
-
-/-- ADMITTED (graph counting): components of the 2-sum, using `conn` (the virtual edge is not a
-bridge on at least one side): `C = C₁ + C₂ − 1`. -/
-theorem numComponents_edges :
-    numComponents T.edges T.nVerts + 1 = numComponents T.es₁ T.n₁ + numComponents T.es₂ T.n₂ := by
-  sorry
 
 /-- PROOF.md §8: the splice of two planar embeddings along the virtual edge is a planar embedding
 of the 2-sum. -/
