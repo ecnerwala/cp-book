@@ -65,6 +65,7 @@ import Spqr.PlanarRotFold
 import Spqr.PlanarEmbedLeaf
 import Spqr.PlanarEmbedFold
 import Spqr.PlanarEmbedLink
+import Spqr.PlanarEmbedBelow
 import Spqr.PlanarShape
 import Spqr.RelabelChildShape
 import Spqr.Proofs.Planar
