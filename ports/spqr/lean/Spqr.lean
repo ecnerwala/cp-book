@@ -11,6 +11,7 @@ import Spqr.Spec
 import Spqr.ItemSpec
 import Spqr.WalkTyping
 import Spqr.GraphLemmas
+import Spqr.WalkPlace
 import Spqr.WalkSpec
 import Spqr.Correctness
 import Spqr.EarSpec
