@@ -1,5 +1,6 @@
 import Mathlib.Tactic.Set
 import Spqr.GraphLemmas
+import Spqr.WalkTyping
 
 /-!
 # The walk invariant: soundness and completeness per step
@@ -42,17 +43,17 @@ theorem ch_modify_of_ne (j : ItemId) (f : Item → Item) {p : ItemId} (h : p ≠
     Items.ch (items.modify j f) p = items.ch p := by
   simp [ch, Array.getElem?_modify, h.symm]
 
-theorem ch_modify_self (j : ItemId) (f : Item → Item) (hj : j < items.size) :
+theorem ch_modify_at (j : ItemId) (f : Item → Item) (hj : j < items.size) :
     Items.ch (items.modify j f) j = (f items[j]).ch := by
   simp [ch, Array.getElem?_modify, Array.getElem?_eq_getElem hj]
+
+theorem vs_modify_at (j : ItemId) (f : Item → Item) (hj : j < items.size) :
+    Items.vs (items.modify j f) j = (f items[j]).vs := by
+  simp [vs, Array.getElem?_modify, Array.getElem?_eq_getElem hj]
 
 theorem vs_modify_of_ne (j : ItemId) (f : Item → Item) {p : ItemId} (h : p ≠ j) :
     Items.vs (items.modify j f) p = items.vs p := by
   simp [vs, Array.getElem?_modify, h.symm]
-
-theorem vs_modify_self (j : ItemId) (f : Item → Item) (hj : j < items.size) :
-    Items.vs (items.modify j f) j = (f items[j]).vs := by
-  simp [vs, Array.getElem?_modify, Array.getElem?_eq_getElem hj]
 
 theorem Below_modify_ch_eq (j : ItemId) (f : Item → Item) (hf : ∀ it, (f it).ch = it.ch) {a i : ItemId} :
     Items.Below (items.modify j f) a i ↔ items.Below a i := by
@@ -60,7 +61,7 @@ theorem Below_modify_ch_eq (j : ItemId) (f : Item → Item) (hf : ∀ it, (f it)
   by_cases h : p = j
   · subst h
     by_cases hj : p < items.size
-    · rw [ch_modify_self p f hj, hf]; simp [ch, Array.getElem?_eq_getElem hj]
+    · rw [ch_modify_at p f hj, hf]; simp [ch, Array.getElem?_eq_getElem hj]
     · simp [ch, Array.getElem?_modify, Array.getElem?_eq_none (Nat.le_of_not_lt hj)]
   · exact ch_modify_of_ne j f h
 
@@ -177,7 +178,7 @@ end WalkState
 
 open WalkM
 
-theorem mergeTstackTops_run (s : WalkState) (cur nxt : TEntry) (rest : List TEntry)
+theorem mergeTstackTops_run_eq (s : WalkState) (cur nxt : TEntry) (rest : List TEntry)
     (hs : s.tstack = cur :: nxt :: rest) :
     mergeTstackTops.run s = ((), { s with tstack :=
       { nxt with topDepth := min nxt.topDepth cur.topDepth,
@@ -203,7 +204,7 @@ theorem mergeTstackTops_sound (s : WalkState) (cur nxt : TEntry) (rest : List TE
   have hs' : s' = { s with tstack :=
       { nxt with topDepth := min nxt.topDepth cur.topDepth,
                  spans := (cur.spans.1 ++ nxt.spans.1, nxt.spans.2 ++ cur.spans.2) } :: rest } := by
-    simp only [s', mergeTstackTops_run s cur nxt rest hs]
+    simp only [s', mergeTstackTops_run_eq s cur nxt rest hs]
   rw [hs'] at ht ⊢
   simp only [List.mem_cons] at ht
   have hcur := h cur (by simp [hs])
@@ -235,7 +236,7 @@ theorem makeVs_run (s : WalkState) (vStart topDepth : Nat) :
     (makeVs vStart topDepth).run s =
       (setSides s.stackDir[topDepth]! (some s.stackVerts[topDepth]!) (some vStart), s) := rfl
 
-theorem finishTstackTop_run (s : WalkState) (item : ItemId) (t : TEntry) (rest : List TEntry)
+theorem finishTstackTop_run_eq (s : WalkState) (item : ItemId) (t : TEntry) (rest : List TEntry)
     (hs : s.tstack = t :: rest) :
     (finishTstackTop item).run s = ((), { s with
       items := s.items.modify item fun it =>
@@ -255,7 +256,7 @@ theorem finishTstackTop_complete (s : WalkState) (item : ItemId) (t : TEntry) (r
     (hfree : ∀ t' ∈ s.tstack, item ∉ t'.spans.1 ++ t'.spans.2)
     (hside : getSide t.spans (!s.stackDir[t.topDepth]!) = []) :
     ((finishTstackTop item).run s).2.Inv := by
-  rw [finishTstackTop_run s item t rest hs]
+  rw [finishTstackTop_run_eq s item t rest hs]
   set dir := s.stackDir[t.topDepth]!
   set f : Item → Item := fun it =>
     { it with vs := setSides dir (some s.stackVerts[t.topDepth]!) (some t.vStart),
@@ -270,7 +271,7 @@ theorem finishTstackTop_complete (s : WalkState) (item : ItemId) (t : TEntry) (r
       (Items.EdgeBelow s.g (s.items.modify item f) item e ↔ t.edges s.g s.items e) := by
     intro e he
     have hch : Items.ch (s.items.modify item f) item = getSide t.spans dir := by
-      rw [Items.ch_modify_self item f hitem]
+      rw [Items.ch_modify_at item f hitem]
     have hne : ∀ c ∈ getSide t.spans dir, c ≠ item := fun c hc hce => by
       subst hce; exact hfree t (by simp [hs]) ((mem_of_getSide_nil dir t.spans hside c).2 hc)
     simp only [TEntry.edges, Items.EdgeBelow, mem_of_getSide_nil dir t.spans hside]
@@ -307,7 +308,7 @@ theorem finishTstackTop_complete (s : WalkState) (item : ItemId) (t : TEntry) (r
     · subst hi'
       refine ⟨(Graph.ConnEdges.congr hsub).2 ht.conn, ?_⟩
       intro u v huv
-      rw [Items.vs_modify_self i f hitem] at huv
+      rw [Items.vs_modify_at i f hitem] at huv
       rcases setSides_eq _ _ _ _ _ huv with ⟨hu, hv⟩ | ⟨hu, hv⟩ <;>
         simp only [Option.some.injEq] at hu hv <;> subst hu hv
       · exact (Graph.TwoAttached.congr hsub).2 ht.attached.comm
@@ -362,7 +363,7 @@ theorem ch_modify_ch_eq (j : ItemId) (f : Item → Item) (hf : ∀ it, (f it).ch
   by_cases h : p = j
   · subst h
     by_cases hj : p < items.size
-    · rw [ch_modify_self p f hj, hf]; simp [ch, Array.getElem?_eq_getElem hj]
+    · rw [ch_modify_at p f hj, hf]; simp [ch, Array.getElem?_eq_getElem hj]
     · simp [ch, Array.getElem?_modify, Array.getElem?_eq_none (Nat.le_of_not_lt hj)]
   · exact ch_modify_of_ne j f h
 
@@ -626,13 +627,13 @@ theorem Step.mergeFinish (s : WalkState) (curV lv fi e item : Nat) (b : TEntry) 
     ⟨_, rfl⟩
   obtain ⟨s₂, hs₂⟩ : ∃ s₂ : WalkState, s₂ = ({ s with tstack := b' :: rest } : WalkState) := ⟨_, rfl⟩
   have hrun : mergeTstackTops.run s = ((), s₂) := by
-    rw [mergeTstackTops_run s q b rest hs, hs₂, hb']
+    rw [mergeTstackTops_run_eq s q b rest hs, hs₂, hb']
   rw [hrun]
   have hinv₂ : s₂.Inv := by
     subst hs₂
     refine ⟨?_, fun i hi hsz => ItemInv.congr (s := s) rfl rfl (fun _ _ => Iff.rfl) (h.nodes i hi hsz)⟩
     have := mergeTstackTops_sound s q b rest hs h.entries ?_ ?_
-    · rwa [mergeTstackTops_run s q b rest hs, ← hb'] at this
+    · rwa [mergeTstackTops_run_eq s q b rest hs, ← hb'] at this
     · intro _ _
       exact ⟨curV, ⟨e, he, (hE e).2 rfl, (Graph.inc_of_pairEq hend).1⟩, htouch⟩
     · simp only [hqdef, TEntry.top, hb1, hb2, Nat.min_self, List.mem_cons,
@@ -656,10 +657,10 @@ theorem Step.mergeFinish (s : WalkState) (curV lv fi e item : Nat) (b : TEntry) 
   have hst : s₂.tstack = b' :: rest := by rw [hs₂]
   refine ⟨finishTstackTop_complete s₂ item b' rest hst hinv₂ (by rw [hs₂]; exact hitem) (by rw [hs₂]; exact hnode)
     (by rw [hs₂]; exact hroot) hfree₂ hside₂, ?_, ?_, ?_⟩
-  · rw [finishTstackTop_run s₂ item b' rest hst, hs₂]
-  · rw [finishTstackTop_run s₂ item b' rest hst, hs₂]
+  · rw [finishTstackTop_run_eq s₂ item b' rest hst, hs₂]
+  · rw [finishTstackTop_run_eq s₂ item b' rest hst, hs₂]
   · intro i
-    rw [finishTstackTop_run s₂ item b' rest hst, hs₂]
+    rw [finishTstackTop_run_eq s₂ item b' rest hst, hs₂]
     refine Items.Below_modify_of_not_below _ _ fun hb => ?_
     have := hb.eq_of_no_parent hroot
     show False
