@@ -34,9 +34,6 @@ noncomputable def orbit (f : Nat → Nat) (S : Finset Nat) (q : Nat) : Finset Na
 noncomputable def orbitCount (f : Nat → Nat) (S : Finset Nat) : Nat :=
   (S.image (orbit f S)).card
 
-/-- Total step of a partial map: unset points are fixed. -/
-def stepFn (step : Nat → Option Nat) (q : Nat) : Nat := (step q).getD q
-
 /-- `f` with `p` skipped: the predecessor of `p` now maps to `f p`, and `p` is fixed. -/
 def delete (f : Nat → Nat) (p a : Nat) : Nat :=
   if a = p then p else if f a = p then f p else f a
