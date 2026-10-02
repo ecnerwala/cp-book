@@ -13,6 +13,12 @@ membership, and the edges with an endpoint in `T_c` are exactly the block of the
 
 namespace Spqr
 
+theorem Laminar.symm {B₁ B₂ : List Nat} (h : Laminar B₁ B₂) : Laminar B₂ B₁ := by
+  rcases h with h | h | h
+  · exact .inr (.inl h)
+  · exact .inl h
+  · exact .inr (.inr fun x hx hx' => h x hx' hx)
+
 namespace DfsData
 
 variable {forest : List DfsTree} (hnd : (forest.flatMap DfsTree.verts).Nodup)
@@ -416,5 +422,226 @@ or disjoint. -/
 theorem type1_classes_laminar {t₁ t₂ : DfsTree} (h₁ : t₁ ∈ forest) (h₂ : t₂ ∈ forest)
     {B₁ B₂ : List Nat} (hB₁ : B₁ ∈ t₁.blocks) (hB₂ : B₂ ∈ t₂.blocks) : Laminar B₁ B₂ :=
   blocks_laminar_forest hs.edges_nodup h₁ h₂ hB₁ hB₂
+
+open DfsData in
+/-- Type-2 vs type-2, `T_{a₂'} ∌ a₁'`: the class of `{a₁, b₁}` is laminar with the block of
+`a₂ → a₂'` (unless `a₂'` is strictly below `a₁'` on the path to `b₁`), and the class of `{a₂, b₂}`
+is contained in that block but the class of `{a₁, b₁}` is not. -/
+theorem type2Block_laminar_type2Block_aux (h2 : g.TwoConnected)
+    {t₁ sa₁ : DfsTree} (ht₁ : t₁ ∈ forest) (hsa₁ : sa₁.Sub t₁)
+    {q₁ : Nat} (hq₁ : (ofForest forest).IsParent q₁ sa₁.v)
+    {e₁ : Nat} {cls₁ : OutClass} {c₁ : DfsTree} (ho₁ : DfsOut.tree e₁ cls₁ c₁ ∈ sa₁.outs)
+    {sb₁ : DfsTree} (hsb₁ : sb₁.Sub c₁)
+    (hsep₁ : ∀ e e', (ofForest forest).Above c₁.v sa₁.v sb₁.v e g →
+      (ofForest forest).Between c₁.v sb₁.v e' g → ¬g.SepClass sa₁.v sb₁.v e e')
+    {t₂ sa₂ : DfsTree} (ht₂ : t₂ ∈ forest) (hsa₂ : sa₂.Sub t₂)
+    {q₂ : Nat} (hq₂ : (ofForest forest).IsParent q₂ sa₂.v)
+    {e₂ : Nat} {cls₂ : OutClass} {c₂ : DfsTree} (ho₂ : DfsOut.tree e₂ cls₂ c₂ ∈ sa₂.outs)
+    {sb₂ : DfsTree} (hsb₂ : sb₂.Sub c₂)
+    (hsep₂ : ∀ e e', (ofForest forest).Above c₂.v sa₂.v sb₂.v e g →
+      (ofForest forest).Between c₂.v sb₂.v e' g → ¬g.SepClass sa₂.v sb₂.v e e')
+    (hchain : ¬((ofForest forest).Anc c₁.v c₂.v ∧ c₂.v ≠ c₁.v ∧ (ofForest forest).Anc c₂.v sb₁.v))
+    (hnot : ¬(ofForest forest).Anc c₂.v c₁.v) :
+    Laminar (DfsTree.type2Block ((ofForest forest).depth sa₁.v) e₁ c₁ sb₁)
+      (DfsTree.type2Block ((ofForest forest).depth sa₂.v) e₂ c₂ sb₂) := by
+  have hnd := hs.verts_nodup
+  have hpre₁ := type2_chain_prefix hs h2 ht₁ hsa₁ hq₁ ho₁ hsb₁ hsep₁
+  have hpre₂ := type2_chain_prefix hs h2 ht₂ hsa₂ hq₂ ho₂ hsb₂ hsep₂
+  have hlam := type2Block_laminar_block hs ht₁ hsa₁ ho₁ hsb₁ hpre₁
+    (l := (ofForest forest).depth sa₁.v) ht₂ hsa₂ ho₂ hchain
+  have hc₂t : c₂.Sub t₂ := (DfsTree.Sub.child ho₂).trans hsa₂
+  have ho₁' : DfsOut.tree e₁ cls₁ c₁ ∈ (ofForest forest).outs sa₁.v := by
+    rw [ofForest_outs hnd ht₁ hsa₁]; exact ho₁
+  have ho₂' : DfsOut.tree e₂ cls₂ c₂ ∈ (ofForest forest).outs sa₂.v := by
+    rw [ofForest_outs hnd ht₂ hsa₂]; exact ho₂
+  have hndc₂ : (c₂.edgePostorder ++ [e₂]).Nodup :=
+    hs.edges_nodup.sublist (block_infix_forest ht₂ hsa₂ ho₂).sublist
+  have hsub : DfsTree.type2Block ((ofForest forest).depth sa₂.v) e₂ c₂ sb₂ ⊆
+      (DfsOut.tree e₂ cls₂ c₂).block := by
+    intro x hx
+    show x ∈ c₂.edgePostorder ++ [e₂]
+    rw [List.mem_append, List.mem_singleton]
+    rcases (DfsTree.mem_type2Block (List.nodup_append.mp hndc₂).1 hpre₂).mp hx with h | ⟨h, -⟩ | h
+    · exact .inr h
+    · exact .inl h
+    · refine .inl (hpre₂.subset ?_)
+      rw [sb₂.edgePostorder_eq]
+      exact DfsOut.edgePostorderList_subset_of_sublist (List.dropWhile_sublist _) h
+  have he₁ : e₁ ∈ DfsTree.type2Block ((ofForest forest).depth sa₁.v) e₁ c₁ sb₁ := by
+    unfold DfsTree.type2Block; simp
+  have hne₁ : e₁ ∉ (DfsOut.tree e₂ cls₂ c₂).block := by
+    intro h
+    rcases List.mem_append.mp h with h | h
+    · exact hnot ((ofForest_anc_of_e_mem_edgePostorder hs ht₂ hc₂t ho₁' h).tail ⟨_, ho₁', rfl, rfl⟩)
+    · obtain ⟨-, heq⟩ := hs.out_inj _ _ _ ho₁' _ ho₂' (List.mem_singleton.mp h)
+      cases heq
+      exact hnot (Anc.refl _)
+  rcases hlam with h | h | h
+  · exact absurd (h he₁) hne₁
+  · exact .inr (.inl fun x hx => h (hsub hx))
+  · exact .inr (.inr fun x hx hx' => h x hx (hsub hx'))
+
+open DfsData in
+/-- Type-2 vs type-2 with the same `a, a'` and `b₂` weakly below `b₁`: the class of `{a, b₁}` is
+contained in the class of `{a, b₂}`. The out-edges of `b₁` sorted after `ret l backEdge` do not
+return above `a`, while `T_{b₂}` does (`subtree_returns_above`), so none of them contains `b₂`. -/
+theorem type2Block_subset_type2Block (h2 : g.TwoConnected)
+    {t₁ sa₁ : DfsTree} (ht₁ : t₁ ∈ forest) (hsa₁ : sa₁.Sub t₁)
+    {q₁ : Nat} (hq₁ : (ofForest forest).IsParent q₁ sa₁.v)
+    {e₁ : Nat} {cls₁ : OutClass} {c₁ : DfsTree} (ho₁ : DfsOut.tree e₁ cls₁ c₁ ∈ sa₁.outs)
+    {sb₁ : DfsTree} (hsb₁ : sb₁.Sub c₁) (hne₁ : c₁.v ≠ sb₁.v)
+    (hsep₁ : ∀ e e', (ofForest forest).Above c₁.v sa₁.v sb₁.v e g →
+      (ofForest forest).Between c₁.v sb₁.v e' g → ¬g.SepClass sa₁.v sb₁.v e e')
+    {t₂ sa₂ : DfsTree} (ht₂ : t₂ ∈ forest) (hsa₂ : sa₂.Sub t₂)
+    {q₂ : Nat} (hq₂ : (ofForest forest).IsParent q₂ sa₂.v)
+    {e₂ : Nat} {cls₂ : OutClass} {c₂ : DfsTree} (ho₂ : DfsOut.tree e₂ cls₂ c₂ ∈ sa₂.outs)
+    {sb₂ : DfsTree} (hsb₂ : sb₂.Sub c₂)
+    (hsep₂ : ∀ e e', (ofForest forest).Above c₂.v sa₂.v sb₂.v e g →
+      (ofForest forest).Between c₂.v sb₂.v e' g → ¬g.SepClass sa₂.v sb₂.v e e')
+    (hvv : c₁.v = c₂.v) (hb : (ofForest forest).Anc sb₁.v sb₂.v) :
+    DfsTree.type2Block ((ofForest forest).depth sa₁.v) e₁ c₁ sb₁ ⊆
+      DfsTree.type2Block ((ofForest forest).depth sa₂.v) e₂ c₂ sb₂ := by
+  have hnd := hs.verts_nodup
+  have hpre₁ := type2_chain_prefix hs h2 ht₁ hsa₁ hq₁ ho₁ hsb₁ hsep₁
+  have hpre₂ := type2_chain_prefix hs h2 ht₂ hsa₂ hq₂ ho₂ hsb₂ hsep₂
+  have ho₁' : DfsOut.tree e₁ cls₁ c₁ ∈ (ofForest forest).outs sa₁.v := by
+    rw [ofForest_outs hnd ht₁ hsa₁]; exact ho₁
+  have ho₂' : DfsOut.tree e₂ cls₂ c₂ ∈ (ofForest forest).outs sa₂.v := by
+    rw [ofForest_outs hnd ht₂ hsa₂]; exact ho₂
+  obtain ⟨hv, rfl, rfl⟩ := tree_out_eq_of_v_eq hs ho₁' ho₂' hvv
+  have hl : (ofForest forest).depth sa₁.v = (ofForest forest).depth sa₂.v := by rw [hv]
+  have hc₁t : c₁.Sub t₁ := (DfsTree.Sub.child ho₁).trans hsa₁
+  have hc₂t : c₁.Sub t₂ := (DfsTree.Sub.child ho₂).trans hsa₂
+  have hb₁t : sb₁.Sub t₁ := hsb₁.trans hc₁t
+  have hb₂t : sb₂.Sub t₂ := hsb₂.trans hc₂t
+  have hpa₂ : (ofForest forest).IsParent sa₂.v c₁.v := ⟨_, ho₂', rfl, rfl⟩
+  have ha'b₁ : (ofForest forest).Anc c₁.v sb₁.v := ofForest_anc_of_sub hnd ht₁ hsb₁ hc₁t
+  have ha'b₂ : (ofForest forest).Anc c₁.v sb₂.v := ofForest_anc_of_sub hnd ht₂ hsb₂ hc₂t
+  have hndc₁ : c₁.edgePostorder.Nodup :=
+    hs.edges_nodup.sublist ((List.prefix_append _ _).isInfix.trans
+      (block_infix_forest ht₁ hsa₁ ho₁)).sublist
+  have hsorted₁ : sb₁.outs.Pairwise fun o o' => o.cls.rank ≤ o'.cls.rank := by
+    rw [← ofForest_outs hnd ht₁ hb₁t]; exact hs.sorted _
+  have hdrop_sub₁ : DfsOut.edgePostorderList (sb₁.outs.dropWhile fun o =>
+      decide (o.cls.rank ≤ (OutClass.ret ((ofForest forest).depth sa₁.v) .backEdge).rank)) ⊆
+        sb₁.edgePostorder := by
+    rw [sb₁.edgePostorder_eq]
+    exact DfsOut.edgePostorderList_subset_of_sublist (List.dropWhile_sublist _)
+  intro x hx
+  rw [DfsTree.mem_type2Block hndc₁ hpre₁] at hx
+  rw [DfsTree.mem_type2Block hndc₁ hpre₂]
+  rcases hx with rfl | ⟨hxc, hxb₁⟩ | hx
+  · exact .inl rfl
+  · exact .inr (.inl ⟨hxc, fun h => hxb₁ (edgePostorder_subset_of_anc hs ht₁ hb₁t ht₂ hb₂t hb h)⟩)
+  by_cases hxb₂ : x ∈ sb₂.edgePostorder
+  · by_cases hbb : sb₁.v = sb₂.v
+    · right; right
+      have houts : sb₁.outs = sb₂.outs := by
+        rw [← ofForest_outs hnd ht₁ hb₁t, ← ofForest_outs hnd ht₂ hb₂t, hbb]
+      rw [← houts, ← hl]; exact hx
+    exfalso
+    rw [DfsOut.edgePostorderList_eq_flatMap] at hx
+    obtain ⟨o, ho, hxo⟩ := List.mem_flatMap.mp hx
+    obtain ⟨ho, hrank⟩ := (List.mem_dropWhile_sorted hsorted₁).mp ho
+    have ho' : o ∈ (ofForest forest).outs sb₁.v := by rw [ofForest_outs hnd ht₁ hb₁t]; exact ho
+    obtain ⟨v, o', ho'', rfl, hb₂v⟩ := (ofForest_mem_edgePostorder_iff hs ht₂ hb₂t).mp hxb₂
+    cases o with
+    | back e dest cls =>
+      obtain ⟨rfl, -⟩ := hs.out_inj _ _ _ ho'' _ ho' (List.mem_singleton.mp hxo)
+      exact hbb (hb.antisymm hs.toSpec hb₂v)
+    | tree e' cls' c' =>
+      rcases List.mem_append.mp hxo with hxc' | hxe
+      · have hc't : c'.Sub t₁ := (DfsTree.Sub.child ho).trans hb₁t
+        have hc'v : (ofForest forest).Anc c'.v v :=
+          ofForest_anc_of_e_mem_edgePostorder hs ht₁ hc't ho'' hxc'
+        have hpc' : (ofForest forest).IsParent sb₁.v c'.v := ⟨_, ho', rfl, rfl⟩
+        have hc'b₂ : (ofForest forest).Anc c'.v sb₂.v := by
+          rcases hc'v.comparable hs.toSpec hb₂v with h | h
+          · exact h
+          · have hd := hs.depth_parent _ _ hpc'
+            have h1 := h.depth_le hs.toSpec
+            have h2 := hb.depth_lt hs.toSpec hbb
+            have heq := h.eq_of_depth_eq hs.toSpec (Anc.refl _) (by omega)
+            rw [heq]
+            exact Anc.refl _
+        obtain ⟨l'', hl'', hret⟩ :=
+          subtree_returns_above hs.toSpec h2 hq₂ hpa₂ ha'b₂ hsep₂ ha'b₂ (Anc.refl _)
+        have hret' : (ofForest forest).Returns c'.v l'' := by
+          obtain ⟨u, o, ho, hu, hback, hl⟩ := hret
+          exact ⟨u, o, ho, hc'b₂.trans hu, hback, hl⟩
+        obtain ⟨p, -, hpb₁⟩ := ha'b₁.cases_tail.resolve_left fun h => hne₁ h.symm
+        obtain ⟨lx, kx, hcx, -⟩ := cls_ret_of_tree hs.toSpec h2 hpb₁ ho' rfl
+        obtain ⟨-, -, hmin⟩ := ret_lowpt hs.toSpec ho' rfl hcx
+        have hk := kx.rank_le
+        rw [hcx] at hrank
+        simp only [OutClass.rank, RetKind.rank] at hrank hk
+        exact hmin l'' (by omega) hret'
+      · obtain ⟨rfl, -⟩ := hs.out_inj _ _ _ ho'' _ ho' (List.mem_singleton.mp hxe)
+        exact hbb (hb.antisymm hs.toSpec hb₂v)
+  · exact .inr (.inl ⟨hpre₁.subset (hdrop_sub₁ hx), hxb₂⟩)
+
+open DfsData in
+/-- Fact D, laminarity (type-2 vs type-2): the type-2 classes of two pairs `{a₁, b₁}`, `{a₂, b₂}`
+(each under the hypotheses of `type2_class_interval`) are nested or disjoint, unless one pair's
+`a'` lies strictly below the other's `a'` on the other's tree path to `b` — the S caveat: both
+pairs then cut the same cycle. -/
+theorem type2Block_laminar_type2Block (h2 : g.TwoConnected)
+    {t₁ sa₁ : DfsTree} (ht₁ : t₁ ∈ forest) (hsa₁ : sa₁.Sub t₁)
+    {q₁ : Nat} (hq₁ : (ofForest forest).IsParent q₁ sa₁.v)
+    {e₁ : Nat} {cls₁ : OutClass} {c₁ : DfsTree} (ho₁ : DfsOut.tree e₁ cls₁ c₁ ∈ sa₁.outs)
+    {sb₁ : DfsTree} (hsb₁ : sb₁.Sub c₁) (hne₁ : c₁.v ≠ sb₁.v)
+    (hsep₁ : ∀ e e', (ofForest forest).Above c₁.v sa₁.v sb₁.v e g →
+      (ofForest forest).Between c₁.v sb₁.v e' g → ¬g.SepClass sa₁.v sb₁.v e e')
+    {t₂ sa₂ : DfsTree} (ht₂ : t₂ ∈ forest) (hsa₂ : sa₂.Sub t₂)
+    {q₂ : Nat} (hq₂ : (ofForest forest).IsParent q₂ sa₂.v)
+    {e₂ : Nat} {cls₂ : OutClass} {c₂ : DfsTree} (ho₂ : DfsOut.tree e₂ cls₂ c₂ ∈ sa₂.outs)
+    {sb₂ : DfsTree} (hsb₂ : sb₂.Sub c₂) (hne₂ : c₂.v ≠ sb₂.v)
+    (hsep₂ : ∀ e e', (ofForest forest).Above c₂.v sa₂.v sb₂.v e g →
+      (ofForest forest).Between c₂.v sb₂.v e' g → ¬g.SepClass sa₂.v sb₂.v e e')
+    (hchain₁ : ¬((ofForest forest).Anc c₁.v c₂.v ∧ c₂.v ≠ c₁.v ∧ (ofForest forest).Anc c₂.v sb₁.v))
+    (hchain₂ : ¬((ofForest forest).Anc c₂.v c₁.v ∧ c₁.v ≠ c₂.v ∧ (ofForest forest).Anc c₁.v sb₂.v)) :
+    Laminar (DfsTree.type2Block ((ofForest forest).depth sa₁.v) e₁ c₁ sb₁)
+      (DfsTree.type2Block ((ofForest forest).depth sa₂.v) e₂ c₂ sb₂) := by
+  by_cases hvv : c₁.v = c₂.v
+  · by_cases hb : (ofForest forest).Anc sb₁.v sb₂.v
+    · exact .inl (type2Block_subset_type2Block hs h2 ht₁ hsa₁ hq₁ ho₁ hsb₁ hne₁ hsep₁
+        ht₂ hsa₂ hq₂ ho₂ hsb₂ hsep₂ hvv hb)
+    by_cases hb' : (ofForest forest).Anc sb₂.v sb₁.v
+    · exact .inr (.inl (type2Block_subset_type2Block hs h2 ht₂ hsa₂ hq₂ ho₂ hsb₂ hne₂ hsep₂
+        ht₁ hsa₁ hq₁ ho₁ hsb₁ hsep₁ hvv.symm hb'))
+    exfalso
+    have hnd := hs.verts_nodup
+    have ho₁' : DfsOut.tree e₁ cls₁ c₁ ∈ (ofForest forest).outs sa₁.v := by
+      rw [ofForest_outs hnd ht₁ hsa₁]; exact ho₁
+    have ho₂' : DfsOut.tree e₂ cls₂ c₂ ∈ (ofForest forest).outs sa₂.v := by
+      rw [ofForest_outs hnd ht₂ hsa₂]; exact ho₂
+    obtain ⟨hv, rfl, rfl⟩ := tree_out_eq_of_v_eq hs ho₁' ho₂' hvv
+    have hc₁t : c₁.Sub t₁ := (DfsTree.Sub.child ho₁).trans hsa₁
+    have hc₂t : c₁.Sub t₂ := (DfsTree.Sub.child ho₂).trans hsa₂
+    have hpa₁ : (ofForest forest).IsParent sa₁.v c₁.v := ⟨_, ho₁', rfl, rfl⟩
+    have hpa₂ : (ofForest forest).IsParent sa₂.v c₁.v := ⟨_, ho₂', rfl, rfl⟩
+    have ha'b₁ : (ofForest forest).Anc c₁.v sb₁.v := ofForest_anc_of_sub hnd ht₁ hsb₁ hc₁t
+    have ha'b₂ : (ofForest forest).Anc c₁.v sb₂.v := ofForest_anc_of_sub hnd ht₂ hsb₂ hc₂t
+    obtain ⟨l'', hl'', u, o, ho, hb₁u, -, hdepth⟩ :=
+      subtree_returns_above hs.toSpec h2 hq₁ hpa₁ ha'b₁ hsep₁ ha'b₁ (Anc.refl _)
+    have hj := hs.joins _ _ ho
+    have hda := hs.depth_parent _ _ hpa₂
+    have hdb₂ := ha'b₂.depth_le hs.toSpec
+    rw [hv] at hl''
+    refine hsep₂ o.e o.e ⟨o.dest, hj.symm.isEnd, ?_, ?_, ?_⟩
+      ⟨u, hj.isEnd, ha'b₁.trans hb₁u, ?_⟩ (.inl rfl)
+    · intro h; rw [h] at hdepth; omega
+    · intro h; rw [h] at hdepth; omega
+    · intro h; have := h.depth_le hs.toSpec; omega
+    · intro h
+      rcases hb₁u.comparable hs.toSpec h with h' | h'
+      · exact hb h'
+      · exact hb' h'
+  · by_cases h21 : (ofForest forest).Anc c₂.v c₁.v
+    · have h12 : ¬(ofForest forest).Anc c₁.v c₂.v := fun h => hvv (h.antisymm hs.toSpec h21)
+      exact (type2Block_laminar_type2Block_aux hs h2 ht₂ hsa₂ hq₂ ho₂ hsb₂ hsep₂
+        ht₁ hsa₁ hq₁ ho₁ hsb₁ hsep₁ hchain₂ h12).symm
+    · exact type2Block_laminar_type2Block_aux hs h2 ht₁ hsa₁ hq₁ ho₁ hsb₁ hsep₁
+        ht₂ hsa₂ hq₂ ho₂ hsb₂ hsep₂ hchain₁ h21
 
 end Spqr

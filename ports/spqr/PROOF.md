@@ -155,11 +155,23 @@ a contiguous interval of σ **up to S/P multiplicity**:
   split at any point, so the maximal pieces of the canonical decomposition, not the individual
   classes, are what is unique; e.g. in a cycle `x – a – v – w – b – x` the type-2 class
   `{a–v, v–w, w–b}` of `{a, b}` and the type-1 class `{v–w, w–b, b–x}` of `{x, v}` overlap.
-* *Nesting, type-2 vs type-2*: **not proved in Lean.** Structurally the two `type2Block`s need
-  not be nested (e.g. same `a, a'`, `b₂` below `b₁`, with out-edges of `b₁` sorted before
-  `ret l backEdge`, or `b₂` in a child of `b₁` sorted after it while `b₂` itself has out-edges
-  sorted before); ruling these out needs the semantic facts of §1 (in a block no child of `b₂`
-  below a non-returning child of `b₁` can return to depth `≤ l`), which were not formalised.
+* *Nesting, type-2 vs type-2* (`type2Block_laminar_type2Block`): the type-2 classes of two
+  pairs `{a₁, b₁}`, `{a₂, b₂}` (each under the hypotheses of `type2_class_interval`) are nested
+  or disjoint **unless** one pair's `a'` lies strictly below the other's `a'` on the other's tree
+  path `a' ⇝ b` (inclusive of `b`) — again the S caveat, and the exception is necessary: in
+  `r → a₁ → a₂ → b₁ → c → b₂` with back edges `b₂ → r`, `b₂ → b₁` (2-connected), `{a₁, b₁}` and
+  `{a₂, b₂}` are both type-2 pairs (`a₂' = b₁`) cutting the cycle `r a₁ a₂ b₁ b₂`, with classes
+  `{a₁–a₂, a₂–b₁}` and `{a₂–b₁, b₁–c, c–b₂, b₂–b₁}` that overlap without nesting. The proof
+  reduces to the structural cases of `type2Block_laminar_block` when `a₁' ≠ a₂'`; for `a₁' = a₂'`
+  (so `a₁ = a₂`) it uses §1: `b₁, b₂` are comparable (otherwise `T_{b₁}` returns above `a` inside
+  the *between* part of `{a, b₂}`, `subtree_returns_above`), and if `b₂` is below `b₁` the child
+  of `b₁` containing `b₂` has `lowpt1 < l`, so it is sorted before `ret l backEdge` and the class
+  of `{a, b₁}` is contained in that of `{a, b₂}` (`type2Block_subset_type2Block`).
+
+What §4.5 needs is only this weaker form: two classes that are *not* cuts of one S cycle (one
+pair's path `a' ⇝ b` is not a proper continuation of the other's) are nested or disjoint, so the
+candidates open at any time form a stack, and the classes of one S cycle are handled by the
+cycle's own frame.
 
 This is the statement that makes a *stack* the right data structure: the open intervals at any
 time are nested.
@@ -384,7 +396,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | 1.1, 1.2 DFS spanning + lowpoints | `Proofs/Dfs.lean` (`dfsForest_spanning`, `dfsForest_wf`, `classify_child_*`) | proved |
 | 2.1 blocks ↔ `lowval ≥ d` branches (`sameBlock_iff`, `blockRoot_cut`, `ret_child_sameBlock`) | `Blocks.lean`, `Proofs/Blocks.lean` | proved |
 | Facts A–C (`sepPair_comparable`, type-1 class / above-between / sorted prefix-suffix, `type2_first_out`) | `SepPair.lean`, `Proofs/SepPair.lean` | proved |
-| Fact D (laminar intervals): `edgePostorder`, type-1 classes are intervals + laminar, `type2_class_interval`, `type2Block_laminar_block` | `Proofs/{Postorder,Interval,Type2}.lean` | proved (type-2 vs type-2 nesting open, see §3) |
+| Fact D (laminar intervals: `type1_class_interval`, `type2_class_interval`, `type2Block_laminar_block`, `type2Block_laminar_type2Block`) | `Proofs/Postorder.lean`, `Proofs/Interval.lean` | proved (S-caveat exceptions) |
 | 4.5 exhaustiveness: separation pairs of a block = type-1 ∪ type-2 pairs (`sepPair_iff`, `three_connected_of_no_split`) | `SepPairExhaust.lean`, `Proofs/SepPairExhaust.lean` | proved |
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
 | `walkEarTree = walkTree` (`walkEarTree_eq_walkTree`, `walkEar_eq_walk`) | `EarSpec.lean` | proved |

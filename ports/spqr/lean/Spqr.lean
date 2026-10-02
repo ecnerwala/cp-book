@@ -34,3 +34,4 @@ import Spqr.PlanarEmbed
 import Spqr.PlanarWalkProj
 import Spqr.PlanarRelabelProj
 import Spqr.PlanarSpec
+import Spqr.Proofs.ForestSpec
