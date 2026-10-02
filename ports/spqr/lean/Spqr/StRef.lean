@@ -255,9 +255,11 @@ def restrictCh (items : Items) (fuel : Nat) (order : List ItemId) (i : ItemId) :
 /-- The orientation facts the walk provides for every S / P / R item `i`: `i` lies in one block
 `b` of `blocks` (all its leaves are items of `b`, and an edge of `b` — an edge item of `b` or an
 edge on `b.root`'s endpoints — that is below `i` is a leaf of `i`, i.e. not in a block hanging
-off a V child of `i`), and the `vs` of `i` and of its non-V children are oriented along `b.seq`
-(`makeVs` orients by the same `stackDir` bit as the splice side). Differentially tested by
-`check_stref`. -/
+off a V child of `i`), the `vs` of `i` and of its non-V children are oriented along `b.seq`
+(`makeVs` orients by the same `stackDir` bit as the splice side), the V children of `i` lie
+strictly between its endpoints in `b.seq`, and the block edges below a non-V child `c` have their
+endpoints between `c`'s endpoints (the items' vertex sets are nested sub-ears). Differentially
+tested by `check_stref`. -/
 def VsOriented (g : Graph) (items : Items) (blocks : List StBlock) : Prop :=
   ∀ i, i < items.size →
     Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R →
@@ -265,7 +267,14 @@ def VsOriented (g : Graph) (items : Items) (blocks : List StBlock) : Prop :=
       (∀ e, e < g.ne → (edgeItem g e ∈ b.items ∨ ∃ r ∈ b.root, Items.PairEq g.edges[e]! r) →
         Items.Below items i (edgeItem g e) → edgeItem g e ∈ Items.leaves items items.size i) ∧
       Oriented (b.seq g) (Items.vs items i) ∧
-      ∀ c ∈ Items.ch items i, Items.type items c ≠ .V → Oriented (b.seq g) (Items.vs items c)
+      (∀ s t, Items.vs items i = (some s, some t) → ∀ c ∈ Items.ch items i, Items.type items c = .V →
+        Precedes (b.seq g) s (c - 1) ∧ Precedes (b.seq g) (c - 1) t) ∧
+      (∀ c ∈ Items.ch items i, Items.type items c ≠ .V → Oriented (b.seq g) (Items.vs items c)) ∧
+      ∀ c ∈ Items.ch items i, Items.type items c ≠ .V → ∀ u v, Items.vs items c = (some u, some v) →
+        ∀ e, e < g.ne → (edgeItem g e ∈ b.items ∨ ∃ r ∈ b.root, Items.PairEq g.edges[e]! r) →
+        Items.Below items c (edgeItem g e) →
+        ∀ y, (g.edges[e]!).1 = y ∨ (g.edges[e]!).2 = y →
+          (u = y ∨ Precedes (b.seq g) u y) ∧ (y = v ∨ Precedes (b.seq g) y v)
 
 /-- The walk lists the children of every S / P / R item in the reference st-order
 (differentially tested by `check_stref`). -/
