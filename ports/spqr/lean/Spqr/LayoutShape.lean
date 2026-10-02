@@ -1265,6 +1265,184 @@ theorem local_R_sizes (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (
             exact List.getElem_mem _)
       simp only; omega
 
+/-! #### R: the `ne` field of the fill entries
+
+`LayoutR.FillInv` tracks only `destNv`; `NeInv` tracks the `ne` written into the `k`-th fill
+slot of bound row `i`: it is a child edge (`neSt + 1 ≤ ne < neEn`) hitting row `i` whose other
+endpoint is the stored `destNv`, and the `ne`s of a row strictly decrease (the fill runs the
+cursor down from `neEn`). -/
+
+section RNe
+open LayoutR
+
+/-- Slot (relative to `2 neSt`) of the `k`-th fill entry of bound row `i`. -/
+def slot (nvSt nvEn neSt : Nat) (E : List (Nat × Nat)) (i k : Nat) : Nat :=
+  start nvSt neSt (allE nvSt nvEn E) i + bump nvSt i + k - 2 * neSt
+
+/-- The child edge of node-edge `ne` (`neSt + 1 ≤ ne`). -/
+def chEdge (neSt : Nat) (E : List (Nat × Nat)) (ne : Nat) : Nat × Nat :=
+  E.getD (ne - 1 - neSt) default
+
+structure NeInv (nvSt nvEn neSt neEn : Nat) (E P : List (Nat × Nat)) (c : Nat) (l : Layout) :
+    Prop where
+  dat : ∀ i, 2 * nvSt + 1 ≤ i → i ≤ 2 * nvEn → ∀ k, k < cnt i P →
+    c ≤ (l.adjDat[slot nvSt nvEn neSt E i k]!).ne ∧
+    (l.adjDat[slot nvSt nvEn neSt E i k]!).ne < neEn ∧
+    hits i (chEdge neSt E (l.adjDat[slot nvSt nvEn neSt E i k]!).ne) = true ∧
+    (l.adjDat[slot nvSt nvEn neSt E i k]!).destNv =
+      other i (chEdge neSt E (l.adjDat[slot nvSt nvEn neSt E i k]!).ne)
+  dec : ∀ i, 2 * nvSt + 1 ≤ i → i ≤ 2 * nvEn → ∀ k k', k' < k → k < cnt i P →
+    (l.adjDat[slot nvSt nvEn neSt E i k]!).ne < (l.adjDat[slot nvSt nvEn neSt E i k']!).ne
+
+theorem fillStep_neInv (nvSt nvEn neSt neEn node : Nat) (E P R : List (Nat × Nat)) (p : Nat × Nat)
+    (l : Layout) (hv : nvSt + 2 ≤ nvEn)
+    (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn) (hne : neEn = neSt + E.length + 1)
+    (hPR : P ++ p :: R = E.reverse) (h : FillInv nvSt nvEn neSt E P l)
+    (hn : NeInv nvSt nvEn neSt neEn E P (neEn - P.length) l) :
+    NeInv nvSt nvEn neSt neEn E (P ++ [p]) (neEn - (P ++ [p]).length)
+      (fillStep nvSt neSt node (l, neEn - P.length) p).1 := by
+  have hlen : P.length + R.length + 1 = E.length := by
+    have := congrArg List.length hPR; simp at this; omega
+  have hp : nvSt ≤ p.1 ∧ p.1 < p.2 ∧ p.2 < nvEn := hE p (by
+    have : p ∈ E.reverse := by rw [← hPR]; simp
+    simpa using this)
+  have hpE : chEdge neSt E (neEn - P.length - 1) = p := by
+    unfold chEdge
+    have h1 : E.reverse[P.length]? = some p := by
+      rw [← hPR, List.getElem?_append_right (Nat.le_refl _), Nat.sub_self, List.getElem?_cons_zero]
+    rw [List.getElem?_reverse (by omega)] at h1
+    rw [List.getD_eq_getElem?_getD,
+      show neEn - P.length - 1 - 1 - neSt = E.length - 1 - P.length by omega, h1, Option.getD_some]
+  have hcntP : ∀ i, cnt i (P ++ [p]) ≤ cnt i E := by
+    intro i
+    have := cnt_split i P (p :: R) E hPR
+    rw [cnt_cons] at this
+    rw [cnt_append, cnt_cons, cnt_nil]
+    omega
+  have hcntA : ∀ i, bump nvSt i + cnt i E ≤ cnt i (allE nvSt nvEn E) := by
+    intro i; rw [cnt_allE _ _ _ hv]; omega
+  have hits0 : hits (2 * p.1 + 2) p = true := by simp [hits]
+  have hits1 : hits (2 * p.2 + 1) p = true := by simp [hits]
+  have hs0lt : bump nvSt (2 * p.1 + 2) + cnt (2 * p.1 + 2) P < cnt (2 * p.1 + 2) (allE nvSt nvEn E) := by
+    have h1 := hcntP (2 * p.1 + 2)
+    rw [cnt_append, cnt_cons, cnt_nil, hits0] at h1
+    have h2 := hcntA (2 * p.1 + 2)
+    simp at h1; omega
+  have hs1lt : bump nvSt (2 * p.2 + 1) + cnt (2 * p.2 + 1) P < cnt (2 * p.2 + 1) (allE nvSt nvEn E) := by
+    have h1 := hcntP (2 * p.2 + 1)
+    rw [cnt_append, cnt_cons, cnt_nil, hits1] at h1
+    have h2 := hcntA (2 * p.2 + 1)
+    simp at h1; omega
+  have hb0 := h.bounds (2 * p.1 + 2) (by omega) (by omega)
+  have hb1 := h.bounds (2 * p.2 + 1) (by omega) (by omega)
+  have hge0 := start_ge nvSt neSt (allE nvSt nvEn E) (2 * p.1 + 2)
+  have hge1 := start_ge nvSt neSt (allE nvSt nvEn E) (2 * p.2 + 1)
+  have hne01 := slot_ne nvSt neSt (allE nvSt nvEn E) (i := 2 * p.1 + 2) (j := 2 * p.2 + 1)
+    (by omega) (by omega) (by omega) hs0lt hs1lt
+  have hlt0 := slot_lt_top nvSt nvEn neSt E hv hE (i := 2 * p.1 + 2) (by omega) (by omega) hs0lt
+  have hlt1 := slot_lt_top nvSt nvEn neSt E hv hE (i := 2 * p.2 + 1) (by omega) (by omega) hs1lt
+  have hkA : ∀ i k, k < cnt i P → bump nvSt i + k < cnt i (allE nvSt nvEn E) := by
+    intro i k hk
+    have h1 := hcntP i; have h2 := hcntA i
+    rw [cnt_append] at h1
+    omega
+  have key : ∀ i k, 2 * nvSt + 1 ≤ i → k < cnt i P →
+      (fillStep nvSt neSt node (l, neEn - P.length) p).1.adjDat[slot nvSt nvEn neSt E i k]! =
+        l.adjDat[slot nvSt nvEn neSt E i k]! := by
+    intro i k hi1 hk
+    have hgei := start_ge nvSt neSt (allE nvSt nvEn E) i
+    have hkA' := hkA i k hk
+    simp only [fillStep, Layout.setNe, countStep_adjDat, hb0, hb1]
+    rw [Array.getElem!_set!_ne _ _ _ _ (by
+        unfold slot
+        by_cases hi : i = 2 * p.2 + 1
+        · subst hi; omega
+        · have := slot_ne nvSt neSt (allE nvSt nvEn E) (i := 2 * p.2 + 1) (j := i)
+            (by omega) hi1 (Ne.symm hi) hs1lt hkA'
+          omega),
+      Array.getElem!_set!_ne _ _ _ _ (by
+        unfold slot
+        by_cases hi : i = 2 * p.1 + 2
+        · subst hi; omega
+        · have := slot_ne nvSt neSt (allE nvSt nvEn E) (i := 2 * p.1 + 2) (j := i)
+            (by omega) hi1 (Ne.symm hi) hs0lt hkA'
+          omega)]
+  have new0 : (fillStep nvSt neSt node (l, neEn - P.length) p).1.adjDat[
+      slot nvSt nvEn neSt E (2 * p.1 + 2) (cnt (2 * p.1 + 2) P)]! = ⟨neEn - P.length - 1, p.2⟩ := by
+    simp only [fillStep, Layout.setNe, countStep_adjDat, hb0, hb1, slot]
+    rw [Array.getElem!_set!_ne _ _ _ _ (by omega),
+      Array.getElem!_set!_self _ _ _ (by rw [h.size_d]; omega)]
+  have new1 : (fillStep nvSt neSt node (l, neEn - P.length) p).1.adjDat[
+      slot nvSt nvEn neSt E (2 * p.2 + 1) (cnt (2 * p.2 + 1) P)]! = ⟨neEn - P.length - 1, p.1⟩ := by
+    simp only [fillStep, Layout.setNe, countStep_adjDat, hb0, hb1, slot]
+    rw [Array.getElem!_set!_self _ _ _ (by rw [Array.size_set!, h.size_d]; omega)]
+  have hc : neEn - (P ++ [p]).length = neEn - P.length - 1 := by
+    rw [List.length_append, List.length_singleton]; omega
+  rw [hc]
+  refine ⟨fun i hi1 hi2 k hk => ?_, fun i hi1 hi2 k k' hkk' hk => ?_⟩
+  · rw [cnt_append, cnt_cons, cnt_nil] at hk
+    by_cases hk' : k < cnt i P
+    · rw [key i k hi1 hk']
+      obtain ⟨h1, h2, h3, h4⟩ := hn.dat i hi1 hi2 k hk'
+      exact ⟨by omega, h2, h3, h4⟩
+    · have hhit : hits i p = true := by
+        by_contra hh
+        rw [if_neg hh] at hk; omega
+      have hkeq : k = cnt i P := by rw [if_pos hhit] at hk; omega
+      subst hkeq
+      rcases (hits_iff i p).1 hhit with hi0 | hi1'
+      · subst hi0
+        rw [new0]
+        refine ⟨Nat.le_refl _, show neEn - P.length - 1 < neEn by omega, ?_, ?_⟩
+        · simp only [hpE]; exact hits0
+        · simp only [hpE]; exact (other_even _ _ (by omega)).symm
+      · subst hi1'
+        rw [new1]
+        refine ⟨Nat.le_refl _, show neEn - P.length - 1 < neEn by omega, ?_, ?_⟩
+        · simp only [hpE]; exact hits1
+        · simp only [hpE]; exact (other_odd _ _ (by omega)).symm
+  · rw [cnt_append, cnt_cons, cnt_nil] at hk
+    by_cases hk2 : k < cnt i P
+    · rw [key i k hi1 hk2, key i k' hi1 (by omega)]
+      exact hn.dec i hi1 hi2 k k' hkk' hk2
+    · have hhit : hits i p = true := by
+        by_contra hh
+        rw [if_neg hh] at hk; omega
+      have hkeq : k = cnt i P := by rw [if_pos hhit] at hk; omega
+      subst hkeq
+      rw [key i k' hi1 (by omega)]
+      have hold := (hn.dat i hi1 hi2 k' (by omega)).1
+      have hlt : neEn - P.length - 1 < (l.adjDat[slot nvSt nvEn neSt E i k']!).ne := by omega
+      rcases (hits_iff i p).1 hhit with hi0 | hi1'
+      · subst hi0; rw [new0]; exact hlt
+      · subst hi1'; rw [new1]; exact hlt
+
+theorem foldl_fillStep_neInv (nvSt nvEn neSt neEn node : Nat) (E : List (Nat × Nat))
+    (hv : nvSt + 2 ≤ nvEn) (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn)
+    (hne : neEn = neSt + E.length + 1) :
+    ∀ (P R : List (Nat × Nat)) (l : Layout), P ++ R = E.reverse →
+      FillInv nvSt nvEn neSt E P l → NeInv nvSt nvEn neSt neEn E P (neEn - P.length) l →
+      NeInv nvSt nvEn neSt neEn E (P ++ R) (neEn - (P ++ R).length)
+        (R.foldl (fillStep nvSt neSt node) (l, neEn - P.length)).1 := by
+  intro P R
+  induction R generalizing P with
+  | nil => intro l _ _ hn; simpa using hn
+  | cons p R ih =>
+    intro l hPR h hn
+    rw [List.foldl_cons]
+    have hstep := fillStep_neInv nvSt nvEn neSt neEn node E P R p l hv hE hne hPR h hn
+    have hfi := fillStep_inv nvSt nvEn neSt node E P R p l (neEn - P.length) hv hE hPR h
+    have hc : (fillStep nvSt neSt node (l, neEn - P.length) p).2 = neEn - (P ++ [p]).length := by
+      rw [fillStep_snd, List.length_append, List.length_singleton]; omega
+    have heq : fillStep nvSt neSt node (l, neEn - P.length) p =
+        ((fillStep nvSt neSt node (l, neEn - P.length) p).1, neEn - (P ++ [p]).length) :=
+      Prod.ext rfl hc
+    rw [heq]
+    have := ih (P ++ [p]) _ (by simpa using hPR) hfi hstep
+    simpa using this
+
+end RNe
+
 end LayoutShape
 
 end Spqr
