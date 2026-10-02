@@ -91,6 +91,21 @@ theorem arm_pure (k : RelabelM Unit) (s : RelabelState) :
 
 theorem arm_id (k : RelabelM Unit) (s : RelabelState) : (k.run s).2 = (k.run s).2 := rfl
 
+/-- Abstract the current state behind a predicate it satisfies. -/
+theorem wp_abs {Q : α → RelabelState → Prop} (m : RelabelM α) (P : RelabelState → Prop) (s : RelabelState)
+    (hP : P s) (hk : ∀ s', P s' → wp m Q s') : wp m Q s := hk s hP
+
+/-- Join point with the intermediate state only known up to a relation to the current one. -/
+theorem wp_jpR {Q : Unit → RelabelState → Prop} (m k : RelabelM Unit) (R : RelabelState → RelabelState → Prop)
+    (s : RelabelState) (h : ∃ σ, R s σ ∧ (m.run s).2 = (k.run σ).2) (hk : ∀ σ, R s σ → wp k Q σ) :
+    wp m Q s := by
+  obtain ⟨σ, hR, he⟩ := h
+  exact wp_jp m k σ s he (hk σ hR)
+
+theorem wp_orderedChildren' {Q : List ItemId → RelabelState → Prop} (it : Item) (n : Nat)
+    (h : ∀ children, children = orderedList it n s → Q children s) : wp (orderedChildren it n) Q s :=
+  wp_orderedChildren it n (h _ rfl)
+
 end Spqr.Ghost.RelabelM
 
 /-- Discharge one arm of a `match` / `if` against the shared continuation. -/

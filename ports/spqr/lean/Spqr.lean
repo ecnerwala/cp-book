@@ -13,6 +13,7 @@ import Spqr.Ear
 import Spqr.Relabel
 import Spqr.RelabelFast
 import Spqr.RelabelCost
+import Spqr.RelabelProof
 import Spqr.Build
 import Spqr.Spec
 import Spqr.ItemSpec
