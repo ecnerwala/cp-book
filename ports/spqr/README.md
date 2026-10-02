@@ -283,8 +283,13 @@ derived from `walk_st` and `relabel_st`, both `sorry`; proved there are `vchildr
 `merge_onSide`, `fold_onSide`, `finishTstackTop_stItem`, and the ear lowval lemmas
 `first_ret_lowval`, `chain_stackDir_step` (`StEar.lean`) and the frame fact
 `walkTree_stackDir_below` (`StFrame.lean`), `chain_stackDir_const`, and the close-site result
-`stInv_topClosable`/`stInv_finishTstackTop_stItem` (`StInv.hole`); admitted are `relabel_st`,
-`finishEdge_stInv`, `walk_stInv` (so `#print axioms Spqr.spqrTree_st` reports `sorryAx`).
+`stInv_topClosable`/`stInv_finishTstackTop_stItem` (`StInv.hole`), and the tstack-reading lemmas
+`readStack_*` (`StRef.lean`). `walk_st` is derived from the st-order reference `StRef.lean`
+(`refOrder`, an edge-level Even–Tarjan order over the lowval-sorted DFS tree, differentially tested
+against the walk by `lake build check_stref && ./compare_stref.sh 0 300`): admitted are
+`walk_st'` (walk order = reference, the simulation), `stItem_of_refOrder` (the reference is an
+st-order), `relabel_st`, and the alternative-route `finishEdge_stInv`, `walk_stInv` (so
+`#print axioms Spqr.spqrTree_st` reports `sorryAx`).
 
 reports `sorryAx`).
 
