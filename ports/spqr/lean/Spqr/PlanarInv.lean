@@ -111,10 +111,11 @@ structure InvariantP (nv : Nat) (qem : Qem) (e : TEntry) (pe : PlEntry) (p : Pla
   spans_mem : ∀ it ∈ e.spans.1 ++ e.spans.2, it - (1 + nv) ∈ P.ves
   flips_len : pe.flips.1.length = e.spans.1.length ∧ pe.flips.2.length = e.spans.2.length
 
-/-- Every tstack entry of a planar walk state that is still flagged planar satisfies Invariant P
-for some piece, embedding and outer face. -/
+/-- Every tstack entry of a planar walk state that is still flagged planar and has an exposed end
+(i.e. a nonempty piece; a fresh vertex entry has none) satisfies Invariant P for some piece,
+embedding and outer face. -/
 def StackInv (s : PlanarWalkState) : Prop :=
-  ∀ x ∈ s.base.tstack.zip s.aux.plStack, ∀ p, x.2.pl = some p →
+  ∀ x ∈ s.base.tstack.zip s.aux.plStack, ∀ p, x.2.pl = some p → p.ends ≠ [] →
     ∃ P ρ f, InvariantP s.base.g.nv s.aux.qem x.1 x.2 p P ρ f
 
 /-! ### Gluing two embedded graphs -/
