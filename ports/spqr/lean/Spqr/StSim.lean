@@ -181,7 +181,70 @@ def DirsOf (s : WalkState) (d : Nat) : List Bool := (List.range d).map fun k => 
 
 /-- The stack segment `new` reads, up to expansion, as the pieces `ps`. -/
 def StRead (items : Items) (new : List TEntry) (ps : List StPiece) : Prop :=
-  ExpandsList items (readStack new) (stNest ps)
+  ExpandsList items (readL new) (stNestL ps) ∧ ExpandsList items (readR new) (stNestR ps)
+
+theorem StRead.flat {items : Items} {new : List TEntry} {ps : List StPiece} (h : StRead items new ps) :
+    ExpandsList items (readStack new) (stNest ps) :=
+  h.1.append h.2
+
+theorem StRead.congr {items items' : Items} {new : List TEntry} {ps : List StPiece}
+    (H : ∀ x ∈ readStack new, ∀ y, Items.Below items x y →
+      Items.type items' y = Items.type items y ∧ Items.ch items' y = Items.ch items y)
+    (h : StRead items new ps) : StRead items' new ps :=
+  ⟨h.1.congr fun x hx => H x (List.mem_append_left _ hx),
+    h.2.congr fun x hx => H x (List.mem_append_right _ hx)⟩
+
+theorem mem_readStack_of_readL {x : ItemId} {ts : List TEntry} (h : x ∈ readL ts) : x ∈ readStack ts :=
+  List.mem_append_left _ h
+
+theorem mem_readStack_of_readR {x : ItemId} {ts : List TEntry} (h : x ∈ readR ts) : x ∈ readStack ts :=
+  List.mem_append_right _ h
+
+theorem readL_cons_setSides (v d idx : Nat) (dir : Bool) (items : List ItemId) (ts : List TEntry) :
+    readL (⟨v, d, idx, setSides dir items []⟩ :: ts) = stNestL [⟨dir, items⟩] ++ readL ts := by
+  cases dir <;> simp [readL, setSides, stNestL]
+
+theorem readR_cons_setSides (v d idx : Nat) (dir : Bool) (items : List ItemId) (ts : List TEntry) :
+    readR (⟨v, d, idx, setSides dir items []⟩ :: ts) = readR ts ++ stNestR [⟨dir, items⟩] := by
+  cases dir <;> simp [readR, setSides, stNestR]
+
+theorem expandItem_cons_self (i : ItemId) (ch l : List ItemId) :
+    expandItem i ch (i :: l) = ch ++ expandItem i ch l := by
+  simp [expandItem]
+
+theorem expandItem_nil (i : ItemId) (ch : List ItemId) : expandItem i ch [] = [] := rfl
+
+theorem readL_close (dir : Bool) (item : ItemId) (t : TEntry) (rest : List TEntry)
+    (hside : getSide t.spans (!dir) = []) (hnew : item ∉ readL rest) :
+    expandItem item (getSide t.spans dir) (readL ({ t with spans := setSides dir [item] [] } :: rest)) =
+      readL (t :: rest) := by
+  cases dir <;> simp [getSide] at hside ⊢ <;>
+    simp [readL, setSides, expandItem_append, expandItem_cons_self, expandItem_nil, expandItem_of_not_mem _ _ _ hnew, hside]
+
+theorem readR_close (dir : Bool) (item : ItemId) (t : TEntry) (rest : List TEntry)
+    (hside : getSide t.spans (!dir) = []) (hnew : item ∉ readR rest) :
+    expandItem item (getSide t.spans dir) (readR ({ t with spans := setSides dir [item] [] } :: rest)) =
+      readR (t :: rest) := by
+  cases dir <;> simp [getSide] at hside ⊢ <;>
+    simp [readR, setSides, expandItem_append, expandItem_cons_self, expandItem_nil, expandItem_of_not_mem _ _ _ hnew, hside]
+
+theorem readL_reopen (a b : TEntry) (rest : List TEntry) (dir : Bool) (i : ItemId) (ch : List ItemId)
+    (hb : b.spans = setSides dir [i] []) (ha : i ∉ a.spans.1 ++ a.spans.2) (hrest : i ∉ readStack rest) :
+    readL (a :: { b with spans := setSides dir ch [] } :: rest) = expandItem i ch (readL (a :: b :: rest)) := by
+  have h1 : i ∉ a.spans.1 := fun h => ha (List.mem_append_left _ h)
+  have h2 : i ∉ readL rest := fun h => hrest (mem_readStack_of_readL h)
+  cases dir <;> simp [setSides] at hb <;>
+    simp [readL, setSides, hb, expandItem_append, expandItem_cons_self, expandItem_of_not_mem _ _ _ h1,
+      expandItem_of_not_mem _ _ _ h2]
+
+theorem readR_reopen (a b : TEntry) (rest : List TEntry) (dir : Bool) (i : ItemId) (ch : List ItemId)
+    (hb : b.spans = setSides dir [i] []) (ha : i ∉ a.spans.1 ++ a.spans.2) (hrest : i ∉ readStack rest) :
+    readR (a :: { b with spans := setSides dir ch [] } :: rest) = expandItem i ch (readR (a :: b :: rest)) := by
+  have h1 : i ∉ a.spans.2 := fun h => ha (List.mem_append_right _ h)
+  have h2 : i ∉ readR rest := fun h => hrest (mem_readStack_of_readR h)
+  cases dir <;> simp [setSides] at hb <;>
+    simp [readR, setSides, hb, expandItem_append, expandItem_cons_self, expandItem_of_not_mem _ _ _ h1,
+      expandItem_of_not_mem _ _ _ h2]
 
 /-! ### Items against blocks -/
 

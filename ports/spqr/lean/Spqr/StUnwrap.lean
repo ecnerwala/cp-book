@@ -86,6 +86,14 @@ theorem readStack_mergeInto_cons (c t : TEntry) (R : List TEntry) :
     readStack (TEntry.mergeInto c t :: R) = readStack (c :: t :: R) :=
   readStack_mergeTops c t R
 
+theorem readL_mergeInto_cons (c t : TEntry) (R : List TEntry) :
+    readL (TEntry.mergeInto c t :: R) = readL (c :: t :: R) := by
+  simp [readL, TEntry.mergeInto]
+
+theorem readR_mergeInto_cons (c t : TEntry) (R : List TEntry) :
+    readR (TEntry.mergeInto c t :: R) = readR (c :: t :: R) := by
+  simp [readR, TEntry.mergeInto]
+
 theorem TEntry.mergeInto_side_nil (dir : Bool) (c t : TEntry) (hc : getSide c.spans dir = [])
     (ht : getSide t.spans dir = []) : getSide (TEntry.mergeInto c t).spans dir = [] := by
   cases dir <;> simp_all [TEntry.mergeInto, getSide]
@@ -151,8 +159,9 @@ theorem StSim.allocMergeClose {g : Graph} (s : WalkState) (ty : NodeType) (c t :
     intro j hj; rw [hitems₂, Items.type_push, ite_eq_right_iff.2 (fun e => absurd e hj)]
   have hR₂ : StRead s₂.items (TEntry.mergeInto c t :: new) ps := by
     unfold StRead at hR ⊢
-    rw [readStack_mergeInto_cons, hitems₂]
-    exact hR.push _ (fun x hx y hy => hI.bounded x (hsub x hx) y hy)
+    rw [readL_mergeInto_cons, readR_mergeInto_cons, hitems₂]
+    exact ⟨hR.1.push _ (fun x hx y hy => hI.bounded x (hsub x (mem_readStack_of_readL hx)) y hy),
+      hR.2.push _ (fun x hx y hy => hI.bounded x (hsub x (mem_readStack_of_readR hx)) y hy)⟩
   have hnb : ∀ x ∈ readStack (TEntry.mergeInto c t :: new), ¬ Items.Below s₂.items x s.items.size := by
     intro x hx h
     rw [readStack_mergeInto_cons] at hx
@@ -265,6 +274,14 @@ theorem StSim.reopenMergeClose {g : Graph} (s : WalkState) (c t : TEntry) (h : I
       expandItem h (Items.ch s.items h) (readStack (c :: t :: new)) := by
     rw [readStack_mergeInto_cons]
     exact readStack_reopen c t new dir h _ htsp ha hnew
+  have hreadsegL : readL (TEntry.mergeInto c t' :: new) =
+      expandItem h (Items.ch s.items h) (readL (c :: t :: new)) := by
+    rw [readL_mergeInto_cons]
+    exact readL_reopen c t new dir h _ htsp ha hnew
+  have hreadsegR : readR (TEntry.mergeInto c t' :: new) =
+      expandItem h (Items.ch s.items h) (readR (c :: t :: new)) := by
+    rw [readR_mergeInto_cons]
+    exact readR_reopen c t new dir h _ htsp ha hnew
   have hmem₂ : ∀ x, x ∈ readStack s₂.tstack ↔
       (x ∈ readStack s.tstack ∧ x ≠ h) ∨ x ∈ Items.ch s.items h := by
     intro x; rw [hread₂, mem_expandItem]
@@ -286,8 +303,8 @@ theorem StSim.reopenMergeClose {g : Graph} (s : WalkState) (c t : TEntry) (h : I
   have hdir₂ : s₂.stackDir[(TEntry.mergeInto c t').topDepth]! = dir := by rw [hsd₂, htop, hdir]
   have hR₂ : StRead s₂.items (TEntry.mergeInto c t' :: new) ps := by
     unfold StRead at hR ⊢
-    rw [hitems₂, hreadseg]
-    exact (ExpandsList.expandItem_self_iff hty).2 hR
+    rw [hitems₂, hreadsegL, hreadsegR]
+    exact ⟨(ExpandsList.expandItem_self_iff hty).2 hR.1, (ExpandsList.expandItem_self_iff hty).2 hR.2⟩
   have hnb : ∀ x ∈ readStack (TEntry.mergeInto c t' :: new), ¬ Items.Below s₂.items x h := by
     intro x hx
     rw [hitems₂]

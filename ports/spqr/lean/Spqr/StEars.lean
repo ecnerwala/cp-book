@@ -46,7 +46,7 @@ theorem StRead.pushEntry {items : Items} (v d idx : Nat) (dir : Bool) (q : ItemI
     (h : StRead items new ps) :
     StRead items (⟨v, d, idx, setSides dir [q] []⟩ :: new) (ps ++ [⟨dir, [q]⟩]) := by
   unfold StRead at h ⊢
-  rw [readStack_cons_setSides, stNest_append]
+  rw [readL_cons_setSides, readR_cons_setSides, stNestL_append, stNestR_append]
   have hl : ExpandsList items (stNestL [⟨dir, [q]⟩]) (stNestL [⟨dir, [q]⟩]) := by
     cases dir
     · exact .leaf hq .nil
@@ -55,7 +55,7 @@ theorem StRead.pushEntry {items : Items} (v d idx : Nat) (dir : Bool) (q : ItemI
     cases dir
     · exact .nil
     · exact .leaf hq .nil
-  exact (hl.append h).append hr
+  exact ⟨hl.append h.1, h.2.append hr⟩
 
 theorem StItems.modify_root {g : Graph} {s : WalkState} {blocks : List StBlock} (j : ItemId)
     (f : Item → Item) (hf : ∀ it, (f it).type = it.type) (hfc : ∀ it, (f it).ch = it.ch)

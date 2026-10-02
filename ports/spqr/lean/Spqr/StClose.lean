@@ -94,11 +94,20 @@ theorem StRead.finishTstackTop (s : WalkState) (item : ItemId) (t : TEntry) (new
         ({ t with spans := setSides s.stackDir[t.topDepth]! [item] [] } :: new) ps := by
   refine ⟨run_finishTstackTop_tstack s item t (new ++ base) hts, ?_⟩
   rw [finishTstackTop_items s item t (new ++ base) hts]
-  exact ExpandsList.close
-    (f := fun it => { it with
-      vs := setSides s.stackDir[t.topDepth]! (some (t.top s)) (some t.vStart),
-      ch := getSide t.spans s.stackDir[t.topDepth]! })
-    (fun _ => rfl) hi hty (hl := readStack_close _ item t new hside hnew) rfl hnb h
+  exact ⟨ExpandsList.close
+      (f := fun it => { it with
+        vs := setSides s.stackDir[t.topDepth]! (some (t.top s)) (some t.vStart),
+        ch := getSide t.spans s.stackDir[t.topDepth]! })
+      (fun _ => rfl) hi hty
+      (hl := readL_close _ item t new hside fun h => hnew (mem_readStack_of_readL h)) rfl
+      (fun x hx => hnb x (mem_readStack_of_readL hx)) h.1,
+    ExpandsList.close
+      (f := fun it => { it with
+        vs := setSides s.stackDir[t.topDepth]! (some (t.top s)) (some t.vStart),
+        ch := getSide t.spans s.stackDir[t.topDepth]! })
+      (fun _ => rfl) hi hty
+      (hl := readR_close _ item t new hside fun h => hnew (mem_readStack_of_readR h)) rfl
+      (fun x hx => hnb x (mem_readStack_of_readR hx)) h.2⟩
 
 
 /-! ### `StItems` through the close -/

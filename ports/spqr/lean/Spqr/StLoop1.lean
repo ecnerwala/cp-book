@@ -169,7 +169,7 @@ theorem l1St_step {D d : Nat} {o : DfsOut} {s st : WalkState} {hi lo base : List
         · exact hroots i hi
         · exact Or.inr ⟨t, htS, hi⟩
     have hR₁ : StRead st₁.items (TEntry.mergeInto c t :: t' :: (rest'' ++ lo ++ pre)) ps := by
-      unfold StRead; rw [readStack_mergeInto_cons, hitems₁]; exact hRd
+      unfold StRead; rw [readL_mergeInto_cons, readR_mergeInto_cons, hitems₁]; exact hRd
     have hI₁ : StItems g st₁ blocks :=
       StItems.congr hJ.items (by rw [hts₁', hts, readStack_mergeInto_cons]; rfl) hitems₁
     have res := StSim.unwrapMergeClose st₁ .S (TEntry.mergeInto c t) t' (rest'' ++ lo ++ pre) B ps blocks
