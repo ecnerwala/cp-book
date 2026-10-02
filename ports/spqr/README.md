@@ -219,6 +219,8 @@ flattened state machine:
     Spqr/Correctness.lean  top-level theorems spqrTree_wf / spqrTree_represents, assembled from
                          one theorem per phase
     Spqr/EarSpec.lean    walkEarTree = walkTree, tstack frame rule, per-ear lemmas
+    Spqr/SepPair.lean    separation pairs / classes / DFS ancestry definitions (PROOF.md §3)
+    Spqr/Proofs/SepPair.lean  Facts A–C proved (no sorry)
     DumpLean.lean        dump harness (SPQR_EAR=1 switches to walkEarTree)
 
 Proof status: the specification and theorem statements are complete; the phase theorems

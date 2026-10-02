@@ -310,9 +310,11 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | phase-2 contract `Items.WF` | `ItemSpec.lean` | def |
 | 1.1, 1.2 DFS spanning + lowpoints | `Correctness.lean` (`dfsForest_spanning`) | sorry |
 | 2.1 blocks ↔ `lowval ≥ d` branches | — | to state |
-| Facts A–D | — (pure graph theory over the sorted DFS tree) | to state |
+| Facts A–C (`sepPair_comparable`, type-1 class / above-between / sorted prefix-suffix, `type2_first_out`) | `SepPair.lean`, `Proofs/SepPair.lean` | proved |
+| Fact D (laminar intervals) | — | to state |
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
-| `walkEarTree = walkTree`, frame rule `walkTree_local` | `EarSpec.lean` | sorry |
+| `walkEarTree = walkTree` (`walkEarTree_eq_walkTree`, `walkEar_eq_walk`) | `EarSpec.lean` | proved |
+| frame rule `walkTree_local` | `EarSpec.lean` | sorry |
 | §4.2b walk invariant (`EntryInv`, `Inv`), `mergeTstackTops_sound`, `finishEdge_inv`, `walkTree_inv` | `WalkSpec.lean` | sorry |
 | Invariant W, Lemmas 4.3/4.4 (`earOut_one_entry`, `ascend_frame_one_entry`) | `EarSpec.lean` | sorry / hard |
 | 4.5 maximality / R 3-connected | `spqrTree_r_three_connected` | hard |
