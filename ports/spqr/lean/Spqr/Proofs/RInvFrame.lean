@@ -273,7 +273,8 @@ theorem loop1_rBranch {D nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv D) (hs : S
   sorry
 
 /-- The R skeleton closed at any R branch of Loop 1 is 3-connected (modulo `loop1_rBranch`): the
-walk at depth `d` runs under `Inv (d+1)`, and `Step` keeps `g` and `stackVerts`. -/
+walk at depth `d` runs under `Inv (d+1)` (via `Step`; `RBranch.threeConnected` itself only needs
+`Inv' (d+1)`), and `Step` keeps `g` and `stackVerts`. -/
 theorem loop1_r_threeConnected {nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv (d + 1)) (hs : Shape s)
     (hok : CloseEarsOk (d + 1) nxtV d e edgeDir s) (hv : nxtV < s.g.nv)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
@@ -289,7 +290,7 @@ theorem loop1_r_threeConnected {nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv (d 
   have st := closeEars_iter_step (v := nxtV) hi hs hv hok k hk
   have hg : sk.g = s.g := st.g
   exact ⟨cur, nxt, rest, hb,
-    hb.threeConnected st.inv (hg ▸ h2) (hg ▸ hsp) (hg ▸ hrt) hR'⟩
+    hb.threeConnected (.of_inv st.inv) (hg ▸ h2) (hg ▸ hsp) (hg ▸ hrt) hR'⟩
 
 end WalkState
 

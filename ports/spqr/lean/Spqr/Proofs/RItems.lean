@@ -88,7 +88,7 @@ theorem rU_iff_rItems {e : Nat} :
 
 /-- The item closed at Loop 1's R branch has a 3-connected skeleton. -/
 theorem RBranch.rSkel3 (hsh : Shape s) (hb : s.RBranch d cur nxt rest) (hR : s.RTop dfs cur nxt)
-    (h : s.Inv (d + 1)) (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
+    (h : s.Inv' (d + 1)) (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (dir : Bool) (hside : getSide (TEntry.mergeInto cur nxt).spans (!dir) = []) :
     Items.RSkel3 s.g (s.rCloseItems d cur nxt dir) s.items.size := by
   unfold rCloseItems
