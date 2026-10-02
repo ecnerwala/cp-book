@@ -30,6 +30,10 @@ def ConnEdges (E : Nat → Prop) : Prop :=
 def TwoAttached (E : Nat → Prop) (a b : Nat) : Prop :=
   ∀ v e e', e < g.ne → e' < g.ne → E e → ¬ E e' → g.Inc e v → g.Inc e' v → v = a ∨ v = b
 
+/-- Every vertex incident to both an edge in `E` and an edge outside `E` satisfies `S`. -/
+def AttachedIn (E : Nat → Prop) (S : Nat → Prop) : Prop :=
+  ∀ v e e', e < g.ne → e' < g.ne → E e → ¬ E e' → g.Inc e v → g.Inc e' v → S v
+
 /-- Every edge at `v` is in `E`. -/
 def Interior (E : Nat → Prop) (v : Nat) : Prop := ∀ e, e < g.ne → g.Inc e v → E e
 
@@ -155,6 +159,38 @@ theorem TwoAttached.union {a₁ b₁ a₂ b₂ a b : Nat}
   · rcases h₂ v e e' he he' hE (fun h => hE' (.inr h)) hv' hv'' with h | h
     · exact key _ (by simp) h
     · exact key _ (by simp) h
+
+theorem twoAttached_iff {a b : Nat} : g.TwoAttached E a b ↔ g.AttachedIn E fun v => v = a ∨ v = b := Iff.rfl
+
+theorem AttachedIn.congr (h : ∀ e, e < g.ne → (E₁ e ↔ E₂ e)) {S : Nat → Prop} :
+    g.AttachedIn E₁ S ↔ g.AttachedIn E₂ S := by
+  constructor <;> intro ha v e e' he he' hE hE' hv hv'
+  · exact ha v e e' he he' ((h e he).2 hE) (fun h' => hE' ((h e' he').1 h')) hv hv'
+  · exact ha v e e' he he' ((h e he).1 hE) (fun h' => hE' ((h e' he').2 h')) hv hv'
+
+theorem AttachedIn.mono {S₁ S₂ : Nat → Prop} (h : ∀ v, S₁ v → S₂ v) (ha : g.AttachedIn E S₁) :
+    g.AttachedIn E S₂ :=
+  fun v e e' he he' hE hE' hv hv' => h v (ha v e e' he he' hE hE' hv hv')
+
+theorem AttachedIn.empty {S : Nat → Prop} (h : ∀ e, e < g.ne → ¬ E e) : g.AttachedIn E S :=
+  fun _ e _ he _ hE _ _ _ => absurd hE (h e he)
+
+/-- An attachment vertex of the union is an attachment vertex of a part that is not interior to
+the union. -/
+theorem AttachedIn.union {S₁ S₂ : Nat → Prop} (h₁ : g.AttachedIn E₁ S₁) (h₂ : g.AttachedIn E₂ S₂) :
+    g.AttachedIn (fun e => E₁ e ∨ E₂ e)
+      fun v => (S₁ v ∨ S₂ v) ∧ ¬ g.Interior (fun e => E₁ e ∨ E₂ e) v := by
+  intro v e e' he he' hE hE' hv hv'
+  refine ⟨?_, fun hi => hE' (hi e' he' hv')⟩
+  rcases hE with hE | hE
+  · exact .inl (h₁ v e e' he he' hE (fun h => hE' (.inl h)) hv hv')
+  · exact .inr (h₂ v e e' he he' hE (fun h => hE' (.inr h)) hv hv')
+
+/-- Attachment vertices touch `E` and are not interior to it. -/
+theorem AttachedIn.strengthen {S : Nat → Prop} (h : g.AttachedIn E S) :
+    g.AttachedIn E fun v => S v ∧ g.Touches E v ∧ ¬ g.Interior E v :=
+  fun v e e' he he' hE hE' hv hv' =>
+    ⟨h v e e' he he' hE hE' hv hv', ⟨e, he, hE, hv⟩, fun hi => hE' (hi e' he' hv')⟩
 
 end Graph
 
