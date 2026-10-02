@@ -115,10 +115,16 @@ structure Spec (g : Graph) : Prop where
 block, whose DFS forest is a single tree. -/
 def Rooted (g : Graph) : Prop := ∀ e x, g.IsEnd e x → d.Anc d.root x
 
+/-- `e` has an endpoint in `T_c`. -/
+def EndIn (c e : Nat) (g : Graph) : Prop := ∃ x, g.IsEnd e x ∧ d.Anc c x
+
 /-- Edges of the *above* part of `E − {a, b}` for `a = anc b l` with child `a'` toward `b`: those
 with an endpoint outside `T_{a'} ∪ {a}` (`b`'s own back edges above `a` included). -/
 def Above (a' a b e : Nat) (g : Graph) : Prop :=
   ∃ x, g.IsEnd e x ∧ x ≠ a ∧ x ≠ b ∧ ¬d.Anc a' x
+
+/-- Edges of the *between* part: those with an endpoint in `T_{a'} − T_b`. -/
+def Between (a' b e : Nat) (g : Graph) : Prop := ∃ x, g.IsEnd e x ∧ d.Anc a' x ∧ ¬d.Anc b x
 
 end DfsData
 

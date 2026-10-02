@@ -342,6 +342,309 @@ theorem sepPair_comparable (hr : d.Rooted g) (h2 : g.TwoConnected) {a b : Nat}
   obtain ⟨y, hy, hya, hyb⟩ := ends e' he'
   exact hsep (.of_reach hx hy ((key x (hr _ _ hx) hxa hxb).trans (key y (hr _ _ hy) hya hyb).symm))
 
+/-! ### Fact B: the classes at `a = anc b l` -/
+
+theorem edge_out_cases {e y z : Nat} (hj : g.Joins e y z) :
+    ∃ v, ∃ o ∈ d.outs v, o.e = e ∧ ((v = y ∧ o.dest = z) ∨ (v = z ∧ o.dest = y)) := by
+  obtain ⟨v, o, ho, rfl⟩ := hs.edge_out e hj.lt
+  exact ⟨v, o, ho, rfl, (hs.joins v o ho).eq_or hj⟩
+
+omit hs in
+theorem isParent_of_tree {v : Nat} {o : DfsOut} (ho : o ∈ d.outs v) (ht : o.isTree = true) :
+    d.IsParent v o.dest := ⟨o, ho, ht, rfl⟩
+
+/-- An edge from `u` to a proper ancestor `v` is a back edge out of `u`, unless `v` is `u`'s
+parent. -/
+theorem edge_up {e u v : Nat} (hj : g.Joins e u v) (hv : d.Anc v u) (hne : v ≠ u) :
+    d.IsParent v u ∨ ∃ o ∈ d.outs u, o.e = e ∧ o.isTree = false ∧ o.dest = v := by
+  obtain ⟨w, o, ho, rfl, ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩⟩ := edge_out_cases hs hj
+  · cases ht : o.isTree
+    · exact .inr ⟨o, ho, rfl, ht, rfl⟩
+    · exact absurd (hv.antisymm hs (isParent_of_tree ho ht).anc) hne
+  · cases ht : o.isTree
+    · exact absurd (hv.antisymm hs (hs.back_anc _ o ho ht)) hne
+    · exact .inl (isParent_of_tree ho ht)
+
+/-- A tree edge into `T_c` from outside `T_c` enters at `c`. -/
+theorem IsParent.eq_of_anc {c z y : Nat} (hcy : d.Anc c y) (hzy : d.IsParent z y)
+    (hz : ¬d.Anc c z) : y = c := by
+  rcases hcy.cases_tail with h | ⟨q, hq, hqy⟩
+  · exact h
+  · exact absurd (hs.parent_unique _ _ _ hqy hzy ▸ hq) hz
+
+theorem subtree_ok {a b c w : Nat} (hab : d.Anc a b) (hp : d.IsParent b c) (hw : d.Anc c w) :
+    w ≠ a ∧ w ≠ b := by
+  have h1 := hs.depth_parent _ _ hp
+  have h2 := hw.depth_le hs
+  have h3 := hab.depth_le hs
+  exact ⟨fun h => by subst h; omega, fun h => by subst h; omega⟩
+
+/-- If `T_c` (child of `b`) returns only to `a` and below `b`, walks avoiding `{a, b}` cannot
+leave `T_c`. -/
+theorem reach_stays_in_subtree {a b c x y : Nat} (hab : d.Anc a b) (hp : d.IsParent b c)
+    (hlo : ∀ l, l < d.depth a → ¬d.Returns c l)
+    (hmid : ∀ l, d.depth a < l → l < d.depth b → ¬d.Returns c l)
+    (hx : d.Anc c x) (h : g.Reach (fun w => w ≠ a ∧ w ≠ b) x y) : d.Anc c y := by
+  induction h with
+  | refl => exact hx
+  | tail _ hadj hok ih =>
+    rename_i y z _
+    rcases adj_comparable hs hadj with hyz | hzy
+    · exact ih.trans hyz
+    by_contra hcz
+    have hne : z ≠ y := fun h => hcz (h ▸ ih)
+    obtain ⟨e, he⟩ := hadj
+    rcases edge_up hs he hzy hne with hpar | ⟨o, ho, -, hback, rfl⟩
+    · obtain rfl := IsParent.eq_of_anc hs ih hpar hcz
+      exact hok.2 (hs.parent_unique _ _ _ hpar hp)
+    · have hret : d.Returns c (d.depth o.dest) := ⟨y, o, ho, ih, hback, rfl⟩
+      have hzc : d.Anc o.dest c := (hzy.comparable hs ih).resolve_right hcz
+      have hzb : d.Anc o.dest b := hzc.to_parent hs (fun h => hcz (h ▸ .refl _)) hp
+      have hd := hzb.depth_le hs
+      rcases Nat.lt_trichotomy (d.depth o.dest) (d.depth a) with hl | hl | hl
+      · exact hlo _ hl hret
+      · exact hok.1 (hzb.eq_of_depth_eq hs hab hl)
+      · rcases Nat.lt_or_ge (d.depth o.dest) (d.depth b) with hl' | hl'
+        · exact hmid _ hl hl' hret
+        · exact hok.2 (hzb.eq_of_depth_eq hs (.refl _) (by omega))
+
+/-- Fact B, type-1 children: if `b → c` is classified `ret (depth a) type1Child` then the edges
+with an endpoint in `T_c` (`b–c`, `E(T_c)`, back edges out of `T_c`) form one separation class of
+`{a, b}`. -/
+theorem type1_class {a b : Nat} {o : DfsOut} (hab : d.Anc a b) (ho : o ∈ d.outs b)
+    (hcls : o.cls = .ret (d.depth a) .type1Child) {e e' : Nat} (he : d.EndIn o.dest e g) :
+    g.SepClass a b e e' ↔ d.EndIn o.dest e' g := by
+  obtain ⟨ht, -, -, hlo, hmid⟩ := (hs.cls_type1 b o ho _).mp hcls
+  have hp : d.IsParent b o.dest := isParent_of_tree ho ht
+  obtain ⟨x, hx, hcx⟩ := he
+  constructor
+  · rintro (rfl | ⟨y, z, hy, hz, hr⟩)
+    · exact ⟨x, hx, hcx⟩
+    · obtain ⟨x', hx'⟩ := hx
+      obtain ⟨y', hy'⟩ := hy
+      have hcy : d.Anc o.dest y := by
+        rcases hx'.eq_or hy' with ⟨h, -⟩ | ⟨-, h⟩
+        · exact h ▸ hcx
+        · exact reach_stays_in_subtree hs hab hp hlo hmid hcx
+            (Graph.Reach.tail (.refl (subtree_ok hs hab hp hcx)) (h ▸ hx'.adj) hr.ok_left)
+      exact ⟨z, hz, reach_stays_in_subtree hs hab hp hlo hmid hcy hr⟩
+  · rintro ⟨y, hy, hcy⟩
+    exact .of_reach hx hy (reach_in_subtree hs hcx hcy fun w hw => subtree_ok hs hab hp hw)
+
+/-- A child `c` of `b` returning above `a` attaches to the *above* part. -/
+theorem attaches_above {a a' b c l : Nat} (hab : d.Anc a b) (hpa : d.IsParent a a')
+    (h : d.Returns c l) (hl : l < d.depth a) :
+    ∃ e, d.EndIn c e g ∧ d.Above a' a b e g := by
+  obtain ⟨u, o, ho, hcu, -, rfl⟩ := h
+  have hj := hs.joins u o ho
+  have hd := hab.depth_le hs
+  refine ⟨o.e, ⟨u, hj.isEnd, hcu⟩, o.dest, hj.symm.isEnd, ?_, ?_, ?_⟩
+  · exact fun h => by rw [h] at hl; omega
+  · exact fun h => by rw [h] at hl; omega
+  · exact fun h => h.ne_of_depth_lt hs (by rw [hs.depth_parent _ _ hpa]; omega)
+
+/-- A child `c` of `b` returning strictly between `a` and `b` attaches to the *between* part. -/
+theorem attaches_between {a a' b c l : Nat} (hab : d.Anc a b) (hpa : d.IsParent a a')
+    (ha'b : d.Anc a' b) (hp : d.IsParent b c) (h : d.Returns c l) (hl : d.depth a < l)
+    (hl' : l < d.depth b) : ∃ e, d.EndIn c e g ∧ d.Between a' b e g := by
+  obtain ⟨u, o, ho, hcu, hback, rfl⟩ := h
+  have hj := hs.joins u o ho
+  have hwu : d.Anc o.dest u := hs.back_anc u o ho hback
+  have hbu : d.Anc b u := hp.anc.trans hcu
+  have hwb : d.Anc o.dest b :=
+    (hwu.comparable hs hbu).resolve_right fun h => h.ne_of_depth_lt hs hl'
+  have haw : d.Anc a o.dest :=
+    (hab.comparable hs hwb).resolve_right fun h => h.ne_of_depth_lt hs hl
+  obtain ⟨c', hc', hc'w⟩ := haw.child fun h => by rw [h] at hl; omega
+  obtain rfl : c' = a' := (hc'w.trans hwb).eq_of_depth_eq hs ha'b
+    (by rw [hs.depth_parent _ _ hc', hs.depth_parent _ _ hpa])
+  exact ⟨o.e, ⟨u, hj.isEnd, hcu⟩, o.dest, hj.symm.isEnd, hc'w,
+    fun h => h.ne_of_depth_lt hs hl'⟩
+
+/-- The *between* part `T_{a'} − T_b` is connected avoiding `{a, b}`. -/
+theorem between_reach {a a' b x y : Nat} (hpa : d.IsParent a a') (hx : d.Anc a' x)
+    (hbx : ¬d.Anc b x) (hy : d.Anc a' y) (hby : ¬d.Anc b y) :
+    g.Reach (fun w => w ≠ a ∧ w ≠ b) x y := by
+  have hok : ∀ z, ¬d.Anc b z → ∀ w, d.Anc a' w → d.Anc w z → w ≠ a ∧ w ≠ b :=
+    fun z hz w hw hwz =>
+      ⟨fun h => hw.ne_of_depth_lt hs (by subst h; rw [hs.depth_parent _ _ hpa]; omega),
+        fun h => hz (h ▸ hwz)⟩
+  exact (hx.reach_up hs (hok x hbx)).trans (hy.reach_down hs (hok y hby))
+
+/-- In a block, every child subtree of a non-root vertex `b` returns strictly above `b`
+(`lowpt1 c < depth b`). -/
+theorem child_returns_above (h2 : g.TwoConnected) {p b c : Nat} (hpb : d.IsParent p b)
+    (hp : d.IsParent b c) : ∃ l, l < d.depth b ∧ d.Returns c l := by
+  obtain ⟨e', he'⟩ := hpb.joins hs
+  have hdb := hs.depth_parent _ _ hpb
+  have hdc := hs.depth_parent _ _ hp
+  obtain ⟨u, v, hcu, huv, hvb, hvb'⟩ := exists_edge_above hs h2 hp he'.isEnd
+    (fun h => h.ne_of_depth_lt hs (by omega)) (fun h => by subst h; omega)
+  have hbu : d.Anc b u := hp.anc.trans hcu
+  have hvu : d.Anc v u := hvb.trans hbu
+  have hne : v ≠ u := fun h => hvb' (hvb.antisymm hs (h ▸ hbu))
+  obtain ⟨e, he⟩ := huv
+  rcases edge_up hs he hvu hne with hpar | ⟨o, ho, -, hback, rfl⟩
+  · have hcv : ¬d.Anc c v := fun h =>
+      h.ne_of_depth_lt hs (by have := hvb.depth_lt hs hvb'; omega)
+    obtain rfl := IsParent.eq_of_anc hs hcu hpar hcv
+    exact absurd (hs.parent_unique _ _ _ hpar hp) hvb'
+  · exact ⟨_, hvb.depth_lt hs hvb', u, o, ho, hcu, hback, rfl⟩
+
+/-- In a block, every tree out-edge of a non-root vertex is a `ret` edge. -/
+theorem cls_ret_of_tree (h2 : g.TwoConnected) {p b : Nat} {o : DfsOut} (hpb : d.IsParent p b)
+    (ho : o ∈ d.outs b) (ht : o.isTree = true) : ∃ l k, o.cls = .ret l k ∧ k ≠ .backEdge := by
+  obtain ⟨l, hl, hret⟩ := child_returns_above hs h2 hpb (isParent_of_tree ho ht)
+  cases hcls : o.cls with
+  | bridge => exact absurd hret (((hs.cls_bridge b o ho).mp hcls).2 l (Nat.le_of_lt hl))
+  | component => exact absurd hret (((hs.cls_component b o ho).mp hcls).2.2 l hl)
+  | selfLoop => exact absurd ht (by rw [((hs.cls_selfLoop b o ho).mp hcls).1]; decide)
+  | ret l' k =>
+    refine ⟨l', k, rfl, fun h => ?_⟩
+    subst h
+    exact absurd ht (by rw [((hs.cls_backEdge b o ho l').mp hcls).1]; decide)
+
+/-- The lowpoint data of a `ret` tree edge. -/
+theorem ret_lowpt {v l : Nat} {k : RetKind} {o : DfsOut} (ho : o ∈ d.outs v)
+    (ht : o.isTree = true) (hc : o.cls = .ret l k) :
+    l < d.depth v ∧ d.Returns o.dest l ∧ ∀ l', l' < l → ¬d.Returns o.dest l' := by
+  cases k with
+  | type1Child =>
+    obtain ⟨-, h1, h2, h3, -⟩ := (hs.cls_type1 v o ho l).mp hc
+    exact ⟨h1, h2, h3⟩
+  | type2Child =>
+    obtain ⟨-, h1, h2, h3, -⟩ := (hs.cls_type2 v o ho l).mp hc
+    exact ⟨h1, h2, h3⟩
+  | backEdge => exact absurd ht (by rw [((hs.cls_backEdge v o ho l).mp hc).1]; decide)
+
+theorem rank_le_of_sublist {v : Nat} {o o' : DfsOut} (h : [o, o'].Sublist (d.outs v)) :
+    o.cls.rank ≤ o'.cls.rank :=
+  (List.pairwise_cons.mp ((hs.sorted v).sublist h)).1 o' (List.mem_singleton.mpr rfl)
+
+end Spec
+
+end DfsData
+
+namespace RetKind
+
+theorem rank_le (k : RetKind) : k.rank ≤ 2 := by cases k <;> decide
+
+end RetKind
+
+namespace OutClass
+
+theorem AttachesAbove.ret {l : Nat} {c : OutClass} (h : c.AttachesAbove l) :
+    ∃ l' k, c = .ret l' k ∧ l' < l := by
+  cases c with
+  | ret l' k => exact ⟨l', k, rfl, h⟩
+  | bridge => exact h.elim
+  | component => exact h.elim
+  | selfLoop => exact h.elim
+
+theorem AttachesBetween.ret {l : Nat} {c : OutClass} (h : c.AttachesBetween l) :
+    ∃ l' k, c = .ret l' k ∧ l ≤ l' ∧ (l = l' → k = .type2Child) := by
+  cases c with
+  | ret l' k =>
+    cases k with
+    | type2Child => exact ⟨l', _, rfl, h, fun _ => rfl⟩
+    | type1Child =>
+      exact ⟨l', _, rfl, Nat.le_of_lt h, fun h' => by subst h'; exact absurd h (Nat.lt_irrefl _)⟩
+    | backEdge =>
+      exact ⟨l', _, rfl, Nat.le_of_lt h, fun h' => by subst h'; exact absurd h (Nat.lt_irrefl _)⟩
+  | bridge => exact h.elim
+  | component => exact h.elim
+  | selfLoop => exact h.elim
+
+theorem attachesBetween_of_lt {l l' : Nat} {k : RetKind} (h : l < l') :
+    (ret l' k).AttachesBetween l := by
+  cases k
+  · exact h
+  · exact h
+  · exact Nat.le_of_lt h
+
+end OutClass
+
+namespace DfsData
+
+variable {g : Graph} {d : DfsData}
+
+section Spec
+
+variable (hs : d.Spec g)
+include hs
+
+/-- Fact B, the sorted out-list: before a child attaching *above*, every tree edge attaches
+*above* (the *above* children form a prefix). -/
+theorem above_prefix (h2 : g.TwoConnected) {p b l : Nat} {o o' : DfsOut} (hpb : d.IsParent p b)
+    (h : [o, o'].Sublist (d.outs b)) (ht : o.isTree = true) (h' : o'.cls.AttachesAbove l) :
+    o.cls.AttachesAbove l := by
+  have hr := rank_le_of_sublist hs h
+  obtain ⟨l₁, k₁, hc, -⟩ := cls_ret_of_tree hs h2 hpb (h.subset (by simp)) ht
+  obtain ⟨l₂, k₂, hc', hl⟩ := h'.ret
+  rw [hc, hc'] at hr
+  have hr' : 3 * (l₁ + 2) + k₁.rank ≤ 3 * (l₂ + 2) + k₂.rank := hr
+  have := k₁.rank_le
+  have := k₂.rank_le
+  rw [hc]
+  show l₁ < l
+  omega
+
+/-- Fact B, the sorted out-list: after a child attaching *between*, every tree edge attaches
+*between* (the *between* children form a suffix). -/
+theorem between_suffix (h2 : g.TwoConnected) {p b l : Nat} {o o' : DfsOut}
+    (hpb : d.IsParent p b) (h : [o, o'].Sublist (d.outs b)) (ht' : o'.isTree = true)
+    (h' : o.cls.AttachesBetween l) : o'.cls.AttachesBetween l := by
+  have hr := rank_le_of_sublist hs h
+  obtain ⟨l₂, k₂, hc', hk⟩ := cls_ret_of_tree hs h2 hpb (h.subset (by simp)) ht'
+  obtain ⟨l₁, k₁, hc, hl, hk₁⟩ := h'.ret
+  rw [hc, hc'] at hr
+  have hr' : 3 * (l₁ + 2) + k₁.rank ≤ 3 * (l₂ + 2) + k₂.rank := hr
+  have := k₁.rank_le
+  have := k₂.rank_le
+  rw [hc']
+  rcases Nat.lt_or_ge l l₂ with hlt | hge
+  · exact OutClass.attachesBetween_of_lt hlt
+  obtain rfl : l₂ = l := by omega
+  obtain rfl : l₁ = l₂ := by omega
+  obtain rfl := hk₁ rfl
+  have e1 : RetKind.rank .type2Child = 2 := rfl
+  cases k₂ with
+  | type2Child => exact Nat.le_refl _
+  | type1Child => have e2 : RetKind.rank .type1Child = 0 := rfl; omega
+  | backEdge => exact absurd rfl hk
+
+/-- Every tree out-edge of `b` attaches above, is a type-1 edge to `l`, or attaches between. -/
+theorem tree_out_trichotomy (h2 : g.TwoConnected) {p b : Nat} (l : Nat) {o : DfsOut}
+    (hpb : d.IsParent p b) (ho : o ∈ d.outs b) (ht : o.isTree = true) :
+    o.cls.AttachesAbove l ∨ o.cls.IsType1To l ∨ o.cls.AttachesBetween l := by
+  obtain ⟨l', k, hc, hk⟩ := cls_ret_of_tree hs h2 hpb ho ht
+  rw [hc]
+  rcases Nat.lt_trichotomy l' l with h | rfl | h
+  · exact .inl h
+  · cases k with
+    | type1Child => exact .inr (.inl rfl)
+    | type2Child => exact .inr (.inr (Nat.le_refl _))
+    | backEdge => exact absurd rfl hk
+  · exact .inr (.inr (OutClass.attachesBetween_of_lt h))
+
+/-- A tree edge classified *above* `l` has `lowpt1 < l`. -/
+theorem AttachesAbove.returns {b l : Nat} {o : DfsOut} (ho : o ∈ d.outs b) (ht : o.isTree = true)
+    (h : o.cls.AttachesAbove l) : ∃ l', l' < l ∧ d.Returns o.dest l' := by
+  obtain ⟨l', k, hc, hl⟩ := h.ret
+  exact ⟨l', hl, (ret_lowpt hs ho ht hc).2.1⟩
+
+/-- A tree edge classified *between* `l` and `b` has a return in `(l, depth b)`. -/
+theorem AttachesBetween.returns {b l : Nat} {o : DfsOut} (ho : o ∈ d.outs b)
+    (ht : o.isTree = true) (h : o.cls.AttachesBetween l) :
+    ∃ l', l < l' ∧ l' < d.depth b ∧ d.Returns o.dest l' := by
+  obtain ⟨l', k, hc, hl, hk⟩ := h.ret
+  obtain ⟨hd, hret, -⟩ := ret_lowpt hs ho ht hc
+  rcases Nat.lt_or_eq_of_le hl with hlt | rfl
+  · exact ⟨l', hlt, hd, hret⟩
+  · obtain ⟨-, -, -, -, l'', h1, h2, h3⟩ :=
+      (hs.cls_type2 b o ho _).mp (by rw [hk rfl] at hc; exact hc)
+    exact ⟨l'', h1, h2, h3⟩
+
 end Spec
 
 end DfsData
