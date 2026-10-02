@@ -55,7 +55,18 @@ vertex as `vStart`), `touch_top` for every entry with `topDepth ≤ d + 1` (buri
 block `Q` items not at `stackVerts[topDepth]`), `vert`/`vert_free` with `vStart = curV` (after a
 late merge the entry holding `V curV` has a chain vertex as `vStart`), `loop1_side` without
 `lowval < d`, and the candidates "loop 1's range has one entry / entries of depth `≤ d+1` only /
-`firstIdx`-ordered". Still missing: the `firstIdx` order behind loop 2's `MergeOk`.
+`firstIdx`-ordered".
+
+Ear session 5 (`late`, `close`, `sv_d`, `sv_child`, `path_child`, `dir_d`): loop 2 is read at `feS₁`
+(`EarLate`: `MergeOk` at every split the loop reaches, i.e. while every merged entry has
+`firstIdx > firstOccurrence[d]`, plus pairwise edge-disjointness there); the state after loops 1–2
+is described by `EarClose` (`c :: mid ++ [py, vy]` over the untouched `base`, span ownership of the
+sub-ear edges, every edge at the chain bottom `y` is a sub-ear edge, `FoldSpec`: `MergeOk` at every
+step of folding the child's entries top-down — loop 3 and the two merges of the vertex close, or the
+`!hasVert` merge — and for type 1 the touch set `{curV, stackVerts[lowval]} ∪ interior`); all fields
+0 violations on 3000 random multigraphs (`checks/EarCheck.lean`, `closeCheck`). `vy.vStart` is
+*not* `o.dest` in general (type-2 chain), so `RetargetOk.old`/`MergeOk.bottom` go through
+`Interior` (`y_edges`), never through the path.
 -/
 
 namespace Spqr
@@ -135,6 +146,58 @@ structure EarBottom (d l : Nat) (s : WalkState) (py vy : TEntry) : Prop where
   py_item : ∃ i, py.spans = setSides s.stackDir[l]! [i] [] ∧ ∀ p, ¬ Items.IsParent s.items p i
   py_touch : s.g.Touches (py.edges s.g s.items) vy.vStart ∧ s.g.Touches (py.edges s.g s.items) s.stackVerts[l]!
 
+/-- The piece obtained by merging the entries `done` (top first) one by one into `c₀`
+(`mergeTstackTops` folded: `cur := mergeInto cur t`). -/
+def l2Cur (c₀ : TEntry) (done : List TEntry) : TEntry := done.foldl TEntry.mergeInto c₀
+
+/-- Merging the entries `R` (top first) one by one into the piece `c₀`: `MergeOk` at every split. -/
+def FoldSpec (D : Nat) (st : WalkState) (c₀ : TEntry) (R : List TEntry) : Prop :=
+  ∀ done t rest, R = done ++ t :: rest → MergeOk D st (l2Cur c₀ done) t
+
+/-- Loop 2 (`mergeLate`), read at `feS₁` (after loop 1): the stack is `c₀ :: R`, pairwise
+edge-disjoint, and merging `R` into `c₀` is `MergeOk` (at depth bound `d + 1`) at every split the
+loop reaches, i.e. while `c₀` and every merged entry were opened after `firstOccurrence[d]`
+(`loop2Cond`: `cur.firstIdx > fo`, and `mergeInto` keeps `nxt.firstIdx`). -/
+structure EarLate (d : Nat) (st : WalkState) (c₀ : TEntry) (R : List TEntry) : Prop where
+  tstack : st.tstack = c₀ :: R
+  disj : st.tstack.Pairwise fun t t' => ∀ e, e < st.g.ne → t.edges st.g st.items e → ¬ t'.edges st.g st.items e
+  merge : ∀ done t rest, R = done ++ t :: rest → st.firstOccurrence[d]! < c₀.firstIdx →
+    (∀ u ∈ done, st.firstOccurrence[d]! < u.firstIdx) → MergeOk (d + 1) st (l2Cur c₀ done) t
+
+/-- The stack after loops 1–2 (`st = feS₂ d o s`, `l = lowval`): the child's entries are
+`c :: mid ++ [py, vy]` over the untouched `base`; they hold exactly the sub-ear edges, every edge at
+the chain bottom `y = vy.vStart` is one of them, and folding them top-down (loop 3, then the two
+merges of the vertex close, or the single `!hasVert` merge) is `MergeOk` at every step. For a type-1
+edge the three entries touch only `curV`, `stackVerts[l]` and interior vertices
+(`FinishTopOk.mid`/`RetargetOk.old` of the vertex close and the P-check). When the vertex item of
+`curV` is not on the stack yet, its edges are on no entry and it touches `curV` if non-empty
+(`ear_tail_tree`). -/
+structure EarClose (curV d l : Nat) (o : DfsOut) (hasVert : Bool) (base : List TEntry) (s st : WalkState)
+    (c : TEntry) (mid : List TEntry) (py vy : TEntry) : Prop where
+  tstack : st.tstack = c :: mid ++ [py, vy] ++ base
+  g : st.g = s.g
+  sv : st.stackVerts = s.stackVerts
+  dir_l : st.stackDir[l]! = s.stackDir[l]!
+  c_top : l ≤ c.topDepth ∧ c.topDepth ≤ d
+  base_edges : ∀ t ∈ base, ∀ e, t.edges s.g st.items e ↔ t.edges s.g s.items e
+  disj : st.tstack.Pairwise fun t t' => ∀ e, e < s.g.ne → t.edges s.g st.items e → ¬ t'.edges s.g st.items e
+  span_disj : st.tstack.Pairwise fun t t' => ∀ i ∈ t.spans.1 ++ t.spans.2, i ∉ t'.spans.1 ++ t'.spans.2
+  sub_edges : ∀ t ∈ c :: mid ++ [py, vy], ∀ e, e < s.g.ne → t.edges s.g st.items e → subEdges o e
+  sub_cover : ∀ e, e < s.g.ne → subEdges o e → ∃ t ∈ c :: mid ++ [py, vy], t.edges s.g st.items e
+  y_edges : ∀ e, e < s.g.ne → s.g.Inc e vy.vStart → subEdges o e
+  py_item : ∃ i, py.spans = setSides s.stackDir[l]! [i] [] ∧ ∀ p, ¬ Items.IsParent st.items p i
+  py_bot : py.vStart = vy.vStart
+  py_top : py.topDepth = l
+  fold : FoldSpec (d + 1) st c (mid ++ [py, vy])
+  type1 : o.cls.isType1 = true → mid = [] ∧
+    ∀ v, s.g.Touches (fun e => c.edges s.g st.items e ∨ py.edges s.g st.items e ∨ vy.edges s.g st.items e) v →
+      v = curV ∨ v = s.stackVerts[l]! ∨
+      s.g.Interior (fun e => c.edges s.g st.items e ∨ py.edges s.g st.items e ∨ vy.edges s.g st.items e) v
+  vert_disj : hasVert = false → ∀ t ∈ st.tstack, ∀ e, e < s.g.ne → t.edges s.g st.items e →
+    ¬ Items.EdgeBelow s.g st.items (vertItem curV) e
+  vert_touch : hasVert = false → (∃ e, e < s.g.ne ∧ Items.EdgeBelow s.g st.items (vertItem curV) e) →
+    s.g.Touches (Items.EdgeBelow s.g st.items (vertItem curV)) curV
+
 /-- Ear content of the tstack `sub ++ base` when `finishEdge curV d o _ hasVert` runs (`o` an
 out-edge of `curV` at depth `d`, `stackVerts[d] = curV`, and `stackVerts[d+1] = o.dest` for a tree
 edge). -/
@@ -197,6 +260,16 @@ structure EarFinish (curV d : Nat) (o : DfsOut) (hasVert : Bool) (sub base : Lis
         ∀ e, e < s.g.ne → subEdges o e →
           c.edges (feS₂ d o s).g (feS₂ d o s).items e ∨ py.edges (feS₂ d o s).g (feS₂ d o s).items e ∨
           vy.edges (feS₂ d o s).g (feS₂ d o s).items e)
+  /-- Loop 2 read after loop 1 (`EarLate`), and the stack after loops 1–2 (`EarClose`). -/
+  late : o.cls.isTree = true → o.cls.lowval d < d → ∃ c₀ R, EarLate d (feS₁ d o s) c₀ R
+  close : o.cls.isTree = true → o.cls.lowval d < d →
+    ∃ c mid py vy, EarClose curV d (o.cls.lowval d) o hasVert base s (feS₂ d o s) c mid py vy
+  /-- The open path: `stackVerts[d] = curV`, `stackVerts[d+1]` is the child (not on the path up to
+  `d`), and the ear's side `stackDir[d]` is opposite to `stackDir[lowval]` (`finishSetup`). -/
+  sv_d : s.stackVerts[d]! = curV
+  sv_child : o.cls.isTree = true → s.stackVerts[d + 1]! = o.dest
+  path_child : o.cls.isTree = true → ∀ k, k ≤ d → s.stackVerts[k]! ≠ o.dest
+  dir_d : o.cls.lowval d < d → s.stackDir[d]! = !s.stackDir[o.cls.lowval d]!
   /-- A block boundary: the child's block meets the rest only at the articulation vertex `curV`. -/
   boundary : d ≤ o.cls.lowval d → ∀ t ∈ sub, ∀ u ∈ base, ∀ v,
     s.g.Touches (t.edges s.g s.items) v → s.g.Touches (u.edges s.g s.items) v → v = curV
