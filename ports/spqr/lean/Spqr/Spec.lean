@@ -83,7 +83,7 @@ structure Preorder : Prop where
   ch_eq : ∀ i, i < t.size → t.children i = (List.range t.size).filter fun j => t.parent j = some i
   ch_monotone : ∀ i, i + 1 < t.chBounds.size → t.chBounds[i]! ≤ t.chBounds[i + 1]!
   subtree_eq : ∀ i, i < t.size → t.subtreeEnd[i]! = i + 1 + ((t.children i).map fun c => t.subtreeEnd[c]! - c).sum
-  only_root_F : ∀ i, 0 < i → t.type i ≠ .F
+  only_root_F : ∀ i, 0 < i → i < t.size → t.type i ≠ .F
 
 /-- V items ↔ vertices and Q items ↔ edges, via `vertIndex` / `edgeIndex` / `origId`. -/
 structure Bijections : Prop where
@@ -161,12 +161,15 @@ structure WF : Prop where
   shape : ∀ i, i < t.size → t.Shape i
   adj_bounds_mono : ∀ i, i + 1 < t.adjBounds.size → t.adjBounds[i]! ≤ t.adjBounds[i + 1]!
   adj_last : t.adjBounds[2 * t.nodeVerts.size]! = t.adjDat.size
-  /-- Rows `2 nv` and `2 nv + 1` of `adjDat` hold exactly the incidences of node-vertex `nv`. -/
+  /-- Rows `2 nv` and `2 nv + 1` of `adjDat` hold exactly the incidences of node-vertex `nv`:
+  the node-edges ending at `nv`, then those starting at `nv`. A loop `(nv, nv)` occurs in both
+  rows, so this coincides with `filter (nvs.1 = nv ∨ nvs.2 = nv)` exactly when no node-edge is a
+  loop. -/
   adj_incident : ∀ nv, nv < t.nodeVerts.size →
     ((List.range (t.adjBounds[2 * nv + 2]! - t.adjBounds[2 * nv]!)).map fun k =>
         (t.adjDat[t.adjBounds[2 * nv]! + k]!).ne).Perm
-      ((List.range t.nodeEdges.size).filter fun ne =>
-        t.nodeEdges[ne]!.nvs.1 = nv ∨ t.nodeEdges[ne]!.nvs.2 = nv)
+      (((List.range t.nodeEdges.size).filter fun ne => t.nodeEdges[ne]!.nvs.2 = nv) ++
+       ((List.range t.nodeEdges.size).filter fun ne => t.nodeEdges[ne]!.nvs.1 = nv))
   adj_dest : ∀ k, k < t.adjDat.size → ∀ nvs, t.nvsOf t.adjDat[k]!.ne = some nvs →
     t.adjDat[k]!.destNv = nvs.1 ∨ t.adjDat[k]!.destNv = nvs.2
 

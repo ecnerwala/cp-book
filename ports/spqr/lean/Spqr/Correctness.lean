@@ -3,6 +3,7 @@ import Spqr.Spec
 import Spqr.ItemSpec
 import Spqr.Proofs.Dfs
 import Spqr.RelabelRep
+import Spqr.RelabelWF
 
 /-!
 # Correctness theorems
@@ -30,10 +31,19 @@ theorem walk_items_wf (g : Graph) (tern : Bool) (vo eo : List Nat) :
     Items.WF g (g.walk tern (g.dfsForest vo eo)).items := by
   sorry
 
-/-- Phase 3: relabelling a well-formed item tree gives a well-formed output ... -/
-theorem relabelTree_wf (g : Graph) (items : Items) (h : items.WF g) :
-    (relabelTree g items).WF := by
+/-- Phase 2, st side: the walk orients every R item's edge children along its node-vertex order
+(`Items.ROriented` follows from `Items.StNumbered`). `StOriented.walk_items_rOriented'` proves
+this from `walk_st`; it cannot be imported here since `StSpec` imports this file. -/
+theorem walk_items_rOriented (g : Graph) (tern : Bool) (vo eo : List Nat) :
+    Items.ROriented g (g.walk tern (g.dfsForest vo eo)).items := by
   sorry
+
+/-- Phase 3: relabelling a well-formed, R-oriented item tree gives a well-formed output ...
+(`RelabelWF.lean`, modulo `relabel_node_spec`). -/
+theorem relabelTree_wf (g : Graph) (items : Items) (h : items.WF g) (hor : items.ROriented g) :
+    (relabelTree g items).WF := by
+  obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
+  exact RelabelAll.wf_tree ⟨h, hidx, hnode⟩ hor
 
 /-- ... that represents `g`. The one hypothesis beyond `Items.WF` is the item-level 3-connectivity
 of the R items' skeletons (`Items.RThreeConnected`, `RelabelRep.lean`), the walk-side statement of
@@ -55,7 +65,7 @@ theorem spqrTree_eq (g : Graph) (tern : Bool) (vo eo : List Nat) :
   simp [Graph.spqrTree, Graph.dfsForestFast_eq, Graph.walkFast_items, Fast.relabelTreeFast_eq]
 
 theorem spqrTree_wf (g : Graph) (tern : Bool) (vo eo : List Nat) : (g.spqrTree tern vo eo).WF := by
-  rw [spqrTree_eq]; exact relabelTree_wf g _ (walk_items_wf g tern vo eo)
+  rw [spqrTree_eq]; exact relabelTree_wf g _ (walk_items_wf g tern vo eo) (walk_items_rOriented g tern vo eo)
 
 theorem spqrTree_represents (g : Graph) (tern : Bool) (vo eo : List Nat) :
     (g.spqrTree tern vo eo).Represents g := by

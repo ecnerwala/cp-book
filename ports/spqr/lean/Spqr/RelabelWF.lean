@@ -243,8 +243,7 @@ theorem parent_eq_iff {i : ItemId} (hi : i < items.size) (j : Nat) :
 theorem root_lt : rootItem < items.size := by
   have := H.tree.size; simp only [rootItem]; iomega
 
-/-- `Preorder.only_root_F` with the bound it needs: `t.type n = .F` for every `n ≥ t.size`
-(`type` defaults to `F`), so the unbounded clause of `Spec.lean` is false. -/
+/-- `Preorder.only_root_F`: non-root nodes are not F (`Items.Tree.type_F_iff` via `idx`). -/
 theorem only_root_F : ∀ n, 0 < n → n < t.size → t.type n ≠ .F := by
   intro n hn0 hn
   obtain ⟨c, hc, rfl⟩ := H.idx_surj hn
@@ -253,10 +252,9 @@ theorem only_root_F : ∀ n, 0 < n → n < t.size → t.type n ≠ .F := by
   rw [H.type hc]
   exact fun h => hc0 ((H.tree.type_F_iff hc).1 h)
 
-/-- `Preorder` modulo its false clause `only_root_F` (see `RelabelAll.only_root_F`). -/
-theorem preorder (hF : ∀ n, 0 < n → t.type n ≠ .F) : t.Preorder := by
+theorem preorder : t.Preorder := by
   have hroot := H.gl.root
-  refine ⟨?_, H.gl.root_par, ?_, ?_, ?_, H.ch_mono, ?_, hF⟩
+  refine ⟨?_, H.gl.root_par, ?_, ?_, ?_, H.ch_mono, ?_, H.only_root_F⟩
   · have := H.type H.root_lt
     rw [hroot] at this; rw [this]; exact H.tree.root
   · intro n hn0 hn
@@ -666,9 +664,8 @@ theorem foreign_ne (hor : items.ROriented g) {i : ItemId} (hi : i < items.size) 
     exact H.nv_disjoint (H.idx_lt hj) (H.idx_lt hi) hij ⟨by omega, hb.2.2⟩ ⟨h1, h2⟩
 
 open LayoutR (row rowBound) in
-/-- `WF.adj_incident` with multiplicity: rows `2 nv` and `2 nv + 1` list the node-edges ending,
-respectively starting, at `nv`. A loop `(nv, nv)` therefore occurs twice on the left, so the
-`Spec.lean` clause (whose right side lists it once) is false; this is the corrected statement. -/
+/-- `WF.adj_incident`: rows `2 nv` and `2 nv + 1` list the node-edges ending, respectively
+starting, at `nv`. -/
 theorem adj_incident' (hor : items.ROriented g) : ∀ nv, nv < t.nodeVerts.size →
     ((List.range (t.adjBounds[2 * nv + 2]! - t.adjBounds[2 * nv]!)).map fun k =>
         (t.adjDat[t.adjBounds[2 * nv]! + k]!).ne).Perm
@@ -704,53 +701,11 @@ theorem adj_incident' (hor : items.ROriented g) : ∀ nv, nv < t.nodeVerts.size 
     H.row_filter hi hl hloc Prod.fst nv (fun ne h hn => (H.foreign_ne hor hi h1 h2 ne h hn).1)]
   exact (hloc.adj_incident_lo nv h1 h2).append (hloc.adj_incident_hi nv h1 h2)
 
-/-- `SpqrTree.WF` modulo its two false clauses (`only_root_F`, `adj_incident`), taken as
-hypotheses; see `only_root_F` and `adj_incident'` for the corrected, proved forms. -/
-theorem wf_of (hor : items.ROriented g) (hF : ∀ n, 0 < n → t.type n ≠ .F)
-    (hinc : ∀ nv, nv < t.nodeVerts.size →
-      ((List.range (t.adjBounds[2 * nv + 2]! - t.adjBounds[2 * nv]!)).map fun k =>
-          (t.adjDat[t.adjBounds[2 * nv]! + k]!).ne).Perm
-        ((List.range t.nodeEdges.size).filter fun ne =>
-          t.nodeEdges[ne]!.nvs.1 = nv ∨ t.nodeEdges[ne]!.nvs.2 = nv)) :
-    t.WF :=
-  ⟨H.gl.sizes, H.preorder hF, H.bijections, H.ownership hor, H.twins,
+theorem wf_tree (hor : items.ROriented g) : t.WF :=
+  ⟨H.gl.sizes, H.preorder, H.bijections, H.ownership hor, H.twins,
     fun n hn => by obtain ⟨i, hi, rfl⟩ := H.idx_surj hn; exact H.shape hor hi,
-    H.adj_bounds_mono hor, (H.adj_spec hor).2, hinc, H.adj_dest hor⟩
+    H.adj_bounds_mono hor, (H.adj_spec hor).2, H.adj_incident' hor, H.adj_dest hor⟩
 
 end RelabelAll
-
-/-- `SpqrTree.WF` of the relabelled tree, modulo the two false `Spec.lean` clauses taken as
-hypotheses (`relabelTree_only_root_F`/`relabelTree_adj_incident'` are their corrected forms). -/
-theorem relabelTree_wf_of (g : Graph) (items : Items) (h : items.WF g)
-    (hor : items.ROriented g)
-    (hF : ∀ n, 0 < n → (relabelTree g items).type n ≠ .F)
-    (hinc : ∀ nv, nv < (relabelTree g items).nodeVerts.size →
-      ((List.range ((relabelTree g items).adjBounds[2 * nv + 2]! -
-          (relabelTree g items).adjBounds[2 * nv]!)).map fun k =>
-          ((relabelTree g items).adjDat[(relabelTree g items).adjBounds[2 * nv]! + k]!).ne).Perm
-        ((List.range (relabelTree g items).nodeEdges.size).filter fun ne =>
-          (relabelTree g items).nodeEdges[ne]!.nvs.1 = nv ∨
-          (relabelTree g items).nodeEdges[ne]!.nvs.2 = nv)) :
-    (relabelTree g items).WF := by
-  obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
-  exact RelabelAll.wf_of ⟨h, hidx, hnode⟩ hor hF hinc
-
-theorem relabelTree_only_root_F (g : Graph) (items : Items) (h : items.WF g) :
-    ∀ n, 0 < n → n < (relabelTree g items).size → (relabelTree g items).type n ≠ .F := by
-  obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
-  exact RelabelAll.only_root_F ⟨h, hidx, hnode⟩
-
-theorem relabelTree_adj_incident' (g : Graph) (items : Items) (h : items.WF g)
-    (hor : items.ROriented g) :
-    ∀ nv, nv < (relabelTree g items).nodeVerts.size →
-      ((List.range ((relabelTree g items).adjBounds[2 * nv + 2]! -
-          (relabelTree g items).adjBounds[2 * nv]!)).map fun k =>
-          ((relabelTree g items).adjDat[(relabelTree g items).adjBounds[2 * nv]! + k]!).ne).Perm
-        (((List.range (relabelTree g items).nodeEdges.size).filter fun ne =>
-            (relabelTree g items).nodeEdges[ne]!.nvs.2 = nv) ++
-         ((List.range (relabelTree g items).nodeEdges.size).filter fun ne =>
-            (relabelTree g items).nodeEdges[ne]!.nvs.1 = nv)) := by
-  obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
-  exact RelabelAll.adj_incident' ⟨h, hidx, hnode⟩ hor
 
 end Spqr
