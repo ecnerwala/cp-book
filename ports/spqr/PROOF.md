@@ -234,20 +234,44 @@ the induction go through: an ear's walk is self-contained.
 ### 4.2b Proof architecture: soundness and completeness per step
 
 The decomposition theorems do not need the full interval structure. The per-step invariant on the
-global tstack has two local parts per entry `E = (vStart, topDepth, …)` with edge set `edges(E)`:
+global tstack (`WalkSpec.Inv D`, with `D` the current depth bound: `d + 1` while a tree edge's
+subtree is being walked, `d` for a back edge) has two local parts per entry `t = (vStart, topDepth, …)`
+with edge set `edges(t)` (`WalkSpec.EntryInv D`):
 
-* **connected**: `edges(E)` is connected, and so is each item already closed;
-* **2-attached**: every edge of the block not in `edges(E)` meets `edges(E)` only at
-  `{vStart, stackVerts[topDepth]}`.
+* **connected**: `edges(t)` is connected (`Graph.ConnEdges`), and so is each item already closed;
+* **attached at the open path**: every vertex incident to an edge of `edges(t)` and to an edge
+  outside it is `vStart` or `stackVerts[k]` for some `topDepth ≤ k ≤ D` (`Graph.AttachedIn` at
+  `TEntry.Term D`).
+
+The second part is deliberately weaker than "2-attached at `{vStart, stackVerts[topDepth]}`":
+strict 2-attachment is *false* mid-walk for a type-2 entry. After the type-2 first edge `u→c` of a
+vertex `u` at depth `d` with lowpoint `l` has been finished (loop 1 closed the ears of the subtree
+and loop 2 merged the late entries), the top entry `(u, l, …)` still contains the chain vertices at
+depths in `(l, d)`, whose remaining out-edges have not been processed, so it is attached at
+`u`, at `stackVerts[l]` *and* at those intermediate chain vertices (this is exactly the attachment
+set §4.3 describes: `u`, `anc l`, and the depths in `(l, d)`). Only once the vertex close
+(`closeVert`/the `!hasVert` push) has absorbed the chain does the entry become two-terminal. Closed
+items, by contrast, are strictly connected and 2-attached (`WalkSpec.ItemInv`): `finishTstackTop`
+closes an entry `t` only under the extra hypothesis that `edges(t)` has **no attachment at
+`stackVerts[k]` for `topDepth < k ≤ D`** other than `vStart` (`FinishTopOk.mid`: every such
+vertex is `vStart`, interior to `edges(t)`, or untouched), which collapses `Term D` to the two
+terminals `{vStart, stackVerts[topDepth]}` (`TwoAttached.of_term`). This hypothesis is vacuous for
+the loop-1 closures (`topDepth ≥ d`, the sub-ear is finished) and is the type-1 condition for the
+vertex close and the P-check.
 
 *Soundness*: every `mergeTstackTops` joins two entries sharing a terminal, so the union is again
-connected and 2-attached (with the terminals computed by the `min topDepth` rule). *Completeness*:
-every item that `finishEdge` closes (S/P/R, or the single entry handed up as a virtual edge) is a
-2-attached connected edge set, i.e. cut off by a genuine 2-vertex separation of the block, and the
-closed items partition the edges. This gives `Items.Tree`, `Items.Endpoints` and the S/P/Q/I/O shapes
-without ears. The ear view (§4.1–4.3) is used only for the *stack-shape* facts these steps rely on
-(`size ≥ origTstack + 3`, `nxt` is the chain/vertex entry, the merge loops never cross a frame) and
-for maximality (§4.5), where Facts C–D are needed.
+connected and attached inside the union of the two `Term` sets, which the `min topDepth` rule
+re-expresses as `Term` of the merged entry (`mergeTstackTops_sound`, hypotheses `MergeOk`).
+*Completeness*: every item that `finishEdge` closes (S/P/R, or the single entry handed up as a
+virtual edge) is a 2-attached connected edge set, i.e. cut off by a genuine 2-vertex separation of
+the block (`finishTstackTop_complete`), and the closed items partition the edges. This gives
+`Items.Tree`, `Items.Endpoints` and the S/P/Q/I/O shapes without ears. `finishEdge_inv` proves
+the step for all returning out-edges (type-1 child with/without the vertex entry, type-2 child
+with its three loops, back edge) under the per-block stack-shape hypotheses `FinishOk` (which
+entries are on top, their terminals, `topDepth` relations, the one-sided spans the C++ asserts).
+The ear view (§4.1–4.3) is used only to discharge those (`walkTree_guards`/`EarShape`: `size ≥
+origTstack + 3`, `nxt` is the chain/vertex entry, the merge loops never cross a frame) and for
+maximality (§4.5), where Facts C–D are needed.
 
 ### 4.3 Lemma (ear collapse) [hard, the inductive step]
 
@@ -440,7 +464,8 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | span discipline / placement (`Place`: each item id placed ≤ 1 time over spans + ch lists; `walk_place`, `walk_ch_nodup`, `walk_parent_unique`, `root_no_parent`) | `WalkPlace.lean` | proved; `walk_tstack_nil`, `walk_covered`, `walk_root_children`, `walk_reach` admitted pending the ear-orientation fact (discarded span side is empty) |
 | frame rule `walkTree_local` via `Lifts`/`Sim` simulation (`Sim.closeEars`, `Sim.mergeLate`, `Sim.finishRest`, `Sim.finishBoundary` proved) | `Sim.lean`, `Frame.lean`, `EarSpec.lean` | `Sim.closeVert`, `Sim.finishEdge`, `Sim.walkTree` proved; `walkTree_local` reduces to the stack-shape invariant `walkTree_guards` (admitted, with `earOut_one_entry` / `ascend_frame_one_entry`) |
 | typing/allocation part of `Items.WF` (`Items.Tree` sizes/types, I/O leaves, `vs_shape`, `vs_lt`): `walk_typing` | `WalkTyping.lean` | proved (`walk_q_children` sorry: needs span shape) |
-| §4.2b walk invariant (`EntryInv`, `Inv`): closure lemmas (`GraphLemmas.lean`), `mergeTstackTops_sound`, `finishTstackTop_complete`, `finishEdge_back_inv` (under explicit stack-shape hyps `BackCheckOk`) | `GraphLemmas.lean`, `WalkSpec.lean` | proved; `finishEdge_inv` (remaining branches), `walkTree_inv`, `walk_nodes_partition` sorry |
+| §4.2b walk invariant `Inv D` (`EntryInv D`: connected + attached at `vStart`/`stackVerts[topDepth..D]`; closed items 2-attached): closure lemmas (`GraphLemmas.lean`: `AttachedIn`, `twoAttached_iff`), `mergeTstackTops_sound`, `finishTstackTop_complete`, `Shape`/`Step` infrastructure, per-block lemmas `Step.closeEars`/`mergeLate`/`closeVert'`/`finishRest` under `CloseEarsOk`/`MergeLateOk`/`CloseVertOk`/`FinishRestOk` | `GraphLemmas.lean`, `WalkSpec.lean` | proved |
+| §4.2b `finishEdge_inv` (type-1 ± vertex entry, type-2 three loops, back edge) under `FinishOk`; `finishEdge_back_inv` corollary | `WalkSpec.lean` | proved; `FinishOk ← FinishGuards`/`EarShape`, `walkTree_inv`, `walk_nodes_partition` sorry |
 | Invariant W, Lemmas 4.3/4.4 (`earOut_one_entry`, `ascend_frame_one_entry`) | `EarSpec.lean` | sorry / hard |
 | 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; the walk producing an `RCloseShape` (`single`/`maximal`/`bond`/`type1`/`type2`) and `spqrTree_r_three_connected` itself: hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
