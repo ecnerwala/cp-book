@@ -635,7 +635,7 @@ and ends at `2·neEn`).
 | 7 walk-side: `finishTstackTop_stItem`; ear lowvals `first_ret_lowval`, `chain_stackDir_step` | `StWalk.lean`, `StEar.lean` | proved |
 | 7 walk-side: `StInv.onSide` field, `chain_stackDir_const` (corrected statement, see 7.4) | `StWalk.lean` | def / proved |
 | 7 walk-side: `StInv.hole` (`StHole`/`HoleClosed`), `stInv_topClosable`, `stInv_finishTstackTop_stItem` (close site, see 7.4) | `StWalk.lean` | def / proved |
-| 7 walk-side: `finishEdge_stInv` (under `FinishGuards`/`EarsOnSide`), `walk_stInv`; `walk_st`, `spqrTree_st` from `walk_stInv` | `StWalk.lean` | sorry / proved (`walkTree_stackDir_below` in `StFrame.lean` proved) |
+| 7 walk-side: `finishEdge_stInv` (under `FinishGuards`/`EarsOnSide`), `walk_stInv`; `walk_st`, `spqrTree_st` from `walk_stInv`; route changed to the `StRef.lean` reference order (§7.6) | `StWalk.lean`, `StRef.lean` | sorry / proved (`walkTree_stackDir_below` in `StFrame.lean` proved); reference tested, equality proof not started |
 
 Work packages for child sessions, in dependency order:
 * **DFS**: 1.1, 1.2, no cross edges, `lowpt` characterization of `OutClass`.
@@ -893,6 +893,46 @@ The hole must be modelled as the path itself, ordered by `stackDir` per depth; `
 `EntryReach`/`HoleClosed` above do this by allowing edge ends on the open path and closing only
 when the path segment of the hole has been absorbed.
 
+### 7.6 The st-order reference (`StRef.lean`)
+
+Instead of carrying `StInv` through `finishEdge`, the walk-side proof goes through a *reference
+order*: an Even–Tarjan style description of the order in which the walk lists the children of its
+S / P / R items, stated directly on the lowval-sorted DFS tree, without the tstack. Item
+boundaries (which edges form which S / P / R item, `maybeUnwrapNxt` reuse) are taken from the
+walk's `Items`; the reference recomputes only the order.
+
+Every edge is handled at its deeper endpoint, in that vertex's sorted out-edge order (exactly where
+`walkOut` / `finishEdge` see it). `refTree g t d dirs` walks the subtree `t` at depth `d` with
+`dirs : List Bool` the directions chosen along the path above (`walkOut`'s `setStackDir`: `false`
+for a block-boundary edge, otherwise `!dirs[lowval]`) and a `hasVert` flag, and produces the list
+of *pieces* `⟨side, items⟩` in push order:
+
+* the vertex item `V v` is a piece on side `!dirs[l]` at `v`'s first returning out-edge of lowval
+  `l` (before the sub-walk if it is type 1, after the child and the tree edge if it is a type-2
+  child — `finishTail`), on side `true` at the end of `v` if `v` has no returning edge;
+* a back edge to depth `l` is a piece on side `dirs[l]`;
+* a returning tree edge `(v, c)` of lowval `l` contributes the child's pieces followed by the tree
+  edge `Q e` on side `!dirs[l]`; if `v` already has its vertex item (the `closeVert` case of
+  `finishEdge`) the whole sub-ear is *folded* into the single piece `⟨dirs[l], stNest sub⟩`;
+* an edge with `lowval ≥ d` starts a new block (its pieces are read separately).
+
+`stNest` reads a block's pieces bottom-up as `L ++ R`: a piece on side `false` is prepended to `L`,
+one on side `true` appended to `R`, so later pieces lie outside earlier ones (the walk's
+`mergeTstackTops` puts the top entry's spans outside the next entry's: `(b.1 ++ a.1, a.2 ++ b.2)`).
+The folds are the only non-flat ingredient: without them (pure nesting) the order is wrong on
+143 of the seeds 0..300 (the sub-ear's right pieces would end up outside the parent's items);
+with them `refOrder` restricted to an item's subtree equals the walk's `ch` on every S / P / R
+item for seeds 0..300 (`check_stref`, `compare_stref.sh`) and, for the same rule prototyped in
+Python, on seeds 301..1000. (`finishTstackTop`'s re-siding of a closed entry, `maybeUnwrapNxt`'s
+unwrapping and the P-closes do not move items relative to each other, which is why they do not
+appear in the reference.)
+
+Plan for the proof: `walk_st'` — for every S / P / R item, `ch i` is the restriction of
+`refOrder` — by simulation in the style of `Sim.lean`, relating each live tstack entry's `spans`
+to `stNest` of the pieces pushed since it; then `Items.StNumbered` from properties of the reference
+(every interior vertex of an ear has a neighbour on each side), where the proved `onSide` /
+hole lemmas of §7.4 can be reused.
+
 ### 7.5 Work packages
 
 | lemma | file | status |
@@ -916,6 +956,7 @@ when the path segment of the hole has been absorbed.
 | `EarsOnSide` (named ear-shape hypothesis), `finishEdge_stInv` | `StWalk.lean` | def / sorry (hard; push/merge/fold/close blocks via `Step`/`Sim`) |
 | `walk_stInv` | `StWalk.lean` | sorry (the `walkTree_inv'`-shaped induction; needs `StInv (d+1) → StInv d` at returns) |
 | `walk_st`, `spqrTree_st` | `StWalk.lean` | proved (from `walk_stInv`, `relabel_st`, `walk_items_wf`) |
+| `refTree`/`refOrder`, `check_stref` differential test (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..300 (0 mismatches); `walk_st'` (walk order = reference) not started |
 
 ## 8. Planarity
 
