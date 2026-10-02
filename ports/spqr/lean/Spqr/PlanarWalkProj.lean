@@ -4,7 +4,7 @@ import Lean
 /-!
 # The planar walk projects to the ordinary walk
 
-`Lifts f m m'` says that the planar computation `m` is the ordinary computation `m'` on the
+`PlanarLifts f m m'` says that the planar computation `m` is the ordinary computation `m'` on the
 base component (returning `f` of its result), and `AuxOnly m` that `m` leaves the base component
 alone. Every planar step is either a lifted base step or an auxiliary step, so `planarFinishEdge`
 lifts `finishEdge` and `planarWalkForest` lifts `walkForest`.
@@ -12,47 +12,47 @@ lifts `finishEdge` and `planarWalkForest` lifts `walkForest`.
 
 namespace Spqr
 
-def Lifts (m : PlanarWalkM α) (m' : WalkM α) : Prop :=
+def PlanarLifts (m : PlanarWalkM α) (m' : WalkM α) : Prop :=
   ∀ s, m' s.base = ((m s).1, (m s).2.base)
 
 def AuxOnly (m : PlanarWalkM α) : Prop := ∀ s, (m s).2.base = s.base
 
-namespace Lifts
+namespace PlanarLifts
 
-theorem liftW (m : WalkM α) : Lifts (PlanarWalkM.liftW m) m := fun _ => rfl
+theorem liftW (m : WalkM α) : PlanarLifts (PlanarWalkM.liftW m) m := fun _ => rfl
 
-theorem pure (a : α) : Lifts (Pure.pure a) (Pure.pure a) := fun _ => rfl
+theorem pure (a : α) : PlanarLifts (Pure.pure a) (Pure.pure a) := fun _ => rfl
 
 theorem bind {m : PlanarWalkM α} {m' : WalkM α} {k : α → PlanarWalkM γ} {k' : α → WalkM γ}
-    (h : Lifts m m') (hk : ∀ a, Lifts (k a) (k' a)) : Lifts (m >>= k) (m' >>= k') := by
+    (h : PlanarLifts m m') (hk : ∀ a, PlanarLifts (k a) (k' a)) : PlanarLifts (m >>= k) (m' >>= k') := by
   intro s
   show k' (m' s.base).1 (m' s.base).2 = _
   rw [h s]
   exact hk _ _
 
 theorem auxBind {m : PlanarWalkM α} {k : α → PlanarWalkM γ} {m' : WalkM γ}
-    (h : AuxOnly m) (hk : ∀ a, Lifts (k a) m') : Lifts (m >>= k) m' := by
+    (h : AuxOnly m) (hk : ∀ a, PlanarLifts (k a) m') : PlanarLifts (m >>= k) m' := by
   intro s
   show m' s.base = ((k (m s).1 (m s).2).1, (k (m s).1 (m s).2).2.base)
   rw [← h s]
   exact hk _ _
 
 theorem auxThen {m : PlanarWalkM Unit} {k : PlanarWalkM γ} {m' : WalkM γ}
-    (h : AuxOnly m) (hk : Lifts k m') : Lifts (m *> k) m' := by
+    (h : AuxOnly m) (hk : PlanarLifts k m') : PlanarLifts (m *> k) m' := by
   intro s
   show m' s.base = ((k (m s).2).1, (k (m s).2).2.base)
   rw [← h s]
   exact hk _
 
 theorem ite (c : Prop) [Decidable c] {t e : PlanarWalkM α} {t' e' : WalkM α}
-    (ht : c → Lifts t t') (he : ¬c → Lifts e e') :
-    Lifts (if c then t else e) (if c then t' else e') := by
+    (ht : c → PlanarLifts t t') (he : ¬c → PlanarLifts e e') :
+    PlanarLifts (if c then t else e) (if c then t' else e') := by
   split
   · exact ht ‹_›
   · exact he ‹_›
 
 
-end Lifts
+end PlanarLifts
 
 namespace AuxOnly
 
@@ -107,16 +107,16 @@ theorem AuxOnly.forM (l : List α) (f : α → PlanarWalkM Unit) (h : ∀ x, Aux
   | nil => exact AuxOnly.pure _
   | cons x rest ih => exact AuxOnly.bind (h x) fun _ => ih
 
-theorem Lifts.fmap {m : PlanarWalkM α} {m' : WalkM α} (h : Lifts m m') (g : α → β) :
-    Lifts (g <$> m) (g <$> m') := fun s => by
+theorem PlanarLifts.fmap {m : PlanarWalkM α} {m' : WalkM α} (h : PlanarLifts m m') (g : α → β) :
+    PlanarLifts (g <$> m) (g <$> m') := fun s => by
   show (g (m' s.base).1, (m' s.base).2) = (g (m s).1, (m s).2.base)
   rw [h s]
 
-theorem Lifts.forM (l : List α) {f : α → PlanarWalkM Unit} {f' : α → WalkM Unit}
-    (h : ∀ x, Lifts (f x) (f' x)) : Lifts (l.forM f) (l.forM f') := by
+theorem PlanarLifts.forM (l : List α) {f : α → PlanarWalkM Unit} {f' : α → WalkM Unit}
+    (h : ∀ x, PlanarLifts (f x) (f' x)) : PlanarLifts (l.forM f) (l.forM f') := by
   induction l with
-  | nil => exact Lifts.pure _
-  | cons x rest ih => exact Lifts.bind (h x) fun _ => ih
+  | nil => exact PlanarLifts.pure _
+  | cons x rest ih => exact PlanarLifts.bind (h x) fun _ => ih
 
 syntax "aux_only0" : tactic
 macro_rules
@@ -172,60 +172,60 @@ end Spqr
 
 namespace Spqr
 
-theorem Lifts.bindAux {m : PlanarWalkM Unit} {m' : WalkM Unit} (h : Lifts m m')
-    {k : Unit → PlanarWalkM Unit} (hk : ∀ a, AuxOnly (k a)) : Lifts (m >>= k) m' := by
+theorem PlanarLifts.bindAux {m : PlanarWalkM Unit} {m' : WalkM Unit} (h : PlanarLifts m m')
+    {k : Unit → PlanarWalkM Unit} (hk : ∀ a, AuxOnly (k a)) : PlanarLifts (m >>= k) m' := by
   intro s
   show m' s.base = ((k (m s).1 (m s).2).1, (k (m s).1 (m s).2).2.base)
   rw [hk _ _, h s]
 
-theorem Lifts.loop (fuel : Nat) {c : PlanarWalkM Bool} {c' : WalkM Bool} {b : PlanarWalkM Unit} {b' : WalkM Unit}
-    (hc : Lifts c c') (hb : Lifts b b') :
-    Lifts (PlanarWalkM.loop fuel c b) (WalkM.loop fuel c' b') := by
+theorem PlanarLifts.loop (fuel : Nat) {c : PlanarWalkM Bool} {c' : WalkM Bool} {b : PlanarWalkM Unit} {b' : WalkM Unit}
+    (hc : PlanarLifts c c') (hb : PlanarLifts b b') :
+    PlanarLifts (PlanarWalkM.loop fuel c b) (WalkM.loop fuel c' b') := by
   induction fuel with
-  | zero => exact Lifts.pure _
+  | zero => exact PlanarLifts.pure _
   | succ n ih =>
     unfold PlanarWalkM.loop WalkM.loop
-    exact Lifts.bind hc fun a => Lifts.ite _ (fun _ => Lifts.bind hb fun _ => ih) (fun _ => Lifts.pure _)
+    exact PlanarLifts.bind hc fun a => PlanarLifts.ite _ (fun _ => PlanarLifts.bind hb fun _ => ih) (fun _ => PlanarLifts.pure _)
 
-theorem Lifts.loopFirst (fuel : Nat) {c : PlanarWalkM Bool} {c' : WalkM Bool} {b : Bool → PlanarWalkM Unit}
-    {b' : WalkM Unit} (hc : Lifts c c') (hb : ∀ x, Lifts (b x) b') (first : Bool) :
-    Lifts (PlanarWalkM.loopFirst fuel c b first) (WalkM.loop fuel c' b') := by
+theorem PlanarLifts.loopFirst (fuel : Nat) {c : PlanarWalkM Bool} {c' : WalkM Bool} {b : Bool → PlanarWalkM Unit}
+    {b' : WalkM Unit} (hc : PlanarLifts c c') (hb : ∀ x, PlanarLifts (b x) b') (first : Bool) :
+    PlanarLifts (PlanarWalkM.loopFirst fuel c b first) (WalkM.loop fuel c' b') := by
   induction fuel generalizing first with
-  | zero => exact Lifts.pure _
+  | zero => exact PlanarLifts.pure _
   | succ n ih =>
     unfold PlanarWalkM.loopFirst WalkM.loop
-    exact Lifts.bind hc fun a => Lifts.ite _ (fun _ => Lifts.bind (hb _) fun _ => ih _) (fun _ => Lifts.pure _)
+    exact PlanarLifts.bind hc fun a => PlanarLifts.ite _ (fun _ => PlanarLifts.bind (hb _) fun _ => ih _) (fun _ => PlanarLifts.pure _)
 
 namespace PlanarWalkM
 
-theorem lifts_allocItem (type) : Lifts (allocItem type) (WalkM.allocItem type) := fun _ => rfl
-theorem lifts_pushTstack (v d item pl) : Lifts (pushTstack v d item pl) (WalkM.pushTstack v d item) := fun _ => rfl
-theorem lifts_pushVertTstack (v d) : Lifts (pushVertTstack v d) (WalkM.pushVertTstack v d) := fun _ => rfl
-theorem lifts_pushEdgeTstack (v d e b) : Lifts (pushEdgeTstack v d e b) (WalkM.pushEdgeTstack v d e) := fun _ => rfl
-theorem lifts_mergeTstackTops : Lifts mergeTstackTops WalkM.mergeTstackTops := fun _ => rfl
+theorem lifts_allocItem (type) : PlanarLifts (allocItem type) (WalkM.allocItem type) := fun _ => rfl
+theorem lifts_pushTstack (v d item pl) : PlanarLifts (pushTstack v d item pl) (WalkM.pushTstack v d item) := fun _ => rfl
+theorem lifts_pushVertTstack (v d) : PlanarLifts (pushVertTstack v d) (WalkM.pushVertTstack v d) := fun _ => rfl
+theorem lifts_pushEdgeTstack (v d e b) : PlanarLifts (pushEdgeTstack v d e b) (WalkM.pushEdgeTstack v d e) := fun _ => rfl
+theorem lifts_mergeTstackTops : PlanarLifts mergeTstackTops WalkM.mergeTstackTops := fun _ => rfl
 
 end PlanarWalkM
 
 syntax "lifts0" : tactic
 macro_rules
   | `(tactic| lifts0) => `(tactic| first
-    | with_reducible exact Lifts.pure _
-    | with_reducible exact Lifts.liftW _
+    | with_reducible exact PlanarLifts.pure _
+    | with_reducible exact PlanarLifts.liftW _
     | with_reducible first
       | exact PlanarWalkM.lifts_allocItem _ | exact PlanarWalkM.lifts_pushVertTstack _ _
       | exact PlanarWalkM.lifts_pushEdgeTstack _ _ _ _ | exact PlanarWalkM.lifts_mergeTstackTops
-    | (with_reducible refine Lifts.auxBind ?_ fun _ => ?_
+    | (with_reducible refine PlanarLifts.auxBind ?_ fun _ => ?_
        · aux_only
        · lifts0)
-    | (with_reducible refine Lifts.auxThen ?_ ?_
+    | (with_reducible refine PlanarLifts.auxThen ?_ ?_
        · aux_only
        · lifts0)
-    | (with_reducible refine Lifts.bind ?_ fun _ => ?_ <;> lifts0)
-    | (with_reducible refine Lifts.ite _ (fun _ => ?_) (fun _ => ?_) <;> lifts0)
-    | (with_reducible refine Lifts.fmap ?_ _; lifts0)
-    | (with_reducible refine Lifts.loop _ ?_ ?_ <;> lifts0)
-    | (with_reducible refine Lifts.loopFirst _ ?_ (fun _ => ?_) _ <;> lifts0)
-    | (with_reducible refine Lifts.bindAux ?_ fun _ => ?_
+    | (with_reducible refine PlanarLifts.bind ?_ fun _ => ?_ <;> lifts0)
+    | (with_reducible refine PlanarLifts.ite _ (fun _ => ?_) (fun _ => ?_) <;> lifts0)
+    | (with_reducible refine PlanarLifts.fmap ?_ _; lifts0)
+    | (with_reducible refine PlanarLifts.loop _ ?_ ?_ <;> lifts0)
+    | (with_reducible refine PlanarLifts.loopFirst _ ?_ (fun _ => ?_) _ <;> lifts0)
+    | (with_reducible refine PlanarLifts.bindAux ?_ fun _ => ?_
        · lifts0
        · aux_only)
     | (split <;> lifts0)
@@ -234,45 +234,45 @@ macro_rules
 
 namespace PlanarWalkM
 
-theorem lifts_maybeUnwrapNxt (type b) : Lifts (maybeUnwrapNxt type b) (WalkM.maybeUnwrapNxt type) := by
+theorem lifts_maybeUnwrapNxt (type b) : PlanarLifts (maybeUnwrapNxt type b) (WalkM.maybeUnwrapNxt type) := by
   unfold maybeUnwrapNxt WalkM.maybeUnwrapNxt
   lifts0
 
-theorem lifts_finishTstackTop (item b) : Lifts (finishTstackTop item b) (WalkM.finishTstackTop item) := by
+theorem lifts_finishTstackTop (item b) : PlanarLifts (finishTstackTop item b) (WalkM.finishTstackTop item) := by
   unfold finishTstackTop; lifts0
 
 end PlanarWalkM
 
 set_option linter.deprecated false in
-theorem Lifts.haveVal {β : Sort u} (v : β) {rest : β → PlanarWalkM α} {rest' : β → WalkM α}
-    (h : Lifts (rest v) (rest' v)) : Lifts (letFun v rest) (letFun v rest') := h
+theorem PlanarLifts.haveVal {β : Sort u} (v : β) {rest : β → PlanarWalkM α} {rest' : β → WalkM α}
+    (h : PlanarLifts (rest v) (rest' v)) : PlanarLifts (letFun v rest) (letFun v rest') := h
 
 set_option linter.deprecated false in
-theorem Lifts.haveJp1 {β : Sort u} {f : β → PlanarWalkM γ} {f' : β → WalkM γ}
+theorem PlanarLifts.haveJp1 {β : Sort u} {f : β → PlanarWalkM γ} {f' : β → WalkM γ}
     {rest : (β → PlanarWalkM γ) → PlanarWalkM α} {rest' : (β → WalkM γ) → WalkM α}
-    (hf : ∀ x, Lifts (f x) (f' x))
-    (h : ∀ jp jp', (∀ x, Lifts (jp x) (jp' x)) → Lifts (rest jp) (rest' jp')) :
-    Lifts (letFun f rest) (letFun f' rest') := h f f' hf
+    (hf : ∀ x, PlanarLifts (f x) (f' x))
+    (h : ∀ jp jp', (∀ x, PlanarLifts (jp x) (jp' x)) → PlanarLifts (rest jp) (rest' jp')) :
+    PlanarLifts (letFun f rest) (letFun f' rest') := h f f' hf
 
 set_option linter.deprecated false in
-theorem Lifts.haveJp2 {β₁ : Sort u} {β₂ : Sort v} {f : β₁ → β₂ → PlanarWalkM γ} {f' : β₁ → β₂ → WalkM γ}
+theorem PlanarLifts.haveJp2 {β₁ : Sort u} {β₂ : Sort v} {f : β₁ → β₂ → PlanarWalkM γ} {f' : β₁ → β₂ → WalkM γ}
     {rest : (β₁ → β₂ → PlanarWalkM γ) → PlanarWalkM α} {rest' : (β₁ → β₂ → WalkM γ) → WalkM α}
-    (hf : ∀ x y, Lifts (f x y) (f' x y))
-    (h : ∀ jp jp', (∀ x y, Lifts (jp x y) (jp' x y)) → Lifts (rest jp) (rest' jp')) :
-    Lifts (letFun f rest) (letFun f' rest') := h f f' hf
+    (hf : ∀ x y, PlanarLifts (f x y) (f' x y))
+    (h : ∀ jp jp', (∀ x y, PlanarLifts (jp x y) (jp' x y)) → PlanarLifts (rest jp) (rest' jp')) :
+    PlanarLifts (letFun f rest) (letFun f' rest') := h f f' hf
 
 set_option linter.deprecated false in
-theorem Lifts.haveJpOnly1 {β : Sort u} {f : β → PlanarWalkM α} {rest : (β → PlanarWalkM α) → PlanarWalkM α}
-    {m' : WalkM α} (hf : ∀ x, Lifts (f x) m')
-    (h : ∀ jp, (∀ x, Lifts (jp x) m') → Lifts (rest jp) m') : Lifts (letFun f rest) m' := h f hf
+theorem PlanarLifts.haveJpOnly1 {β : Sort u} {f : β → PlanarWalkM α} {rest : (β → PlanarWalkM α) → PlanarWalkM α}
+    {m' : WalkM α} (hf : ∀ x, PlanarLifts (f x) m')
+    (h : ∀ jp, (∀ x, PlanarLifts (jp x) m') → PlanarLifts (rest jp) m') : PlanarLifts (letFun f rest) m' := h f hf
 
 set_option linter.deprecated false in
-theorem Lifts.haveJpOnly2 {β₁ : Sort u} {β₂ : Sort v} {f : β₁ → β₂ → PlanarWalkM α}
-    {rest : (β₁ → β₂ → PlanarWalkM α) → PlanarWalkM α} {m' : WalkM α} (hf : ∀ x y, Lifts (f x y) m')
-    (h : ∀ jp, (∀ x y, Lifts (jp x y) m') → Lifts (rest jp) m') : Lifts (letFun f rest) m' := h f hf
+theorem PlanarLifts.haveJpOnly2 {β₁ : Sort u} {β₂ : Sort v} {f : β₁ → β₂ → PlanarWalkM α}
+    {rest : (β₁ → β₂ → PlanarWalkM α) → PlanarWalkM α} {m' : WalkM α} (hf : ∀ x y, PlanarLifts (f x y) m')
+    (h : ∀ jp, (∀ x y, PlanarLifts (jp x y) m') → PlanarLifts (rest jp) m') : PlanarLifts (letFun f rest) m' := h f hf
 
-theorem Lifts.iteAux (c : Prop) [Decidable c] {t e : PlanarWalkM α} {m' : WalkM α}
-    (ht : c → Lifts t m') (he : ¬c → Lifts e m') : Lifts (if c then t else e) m' := by
+theorem PlanarLifts.iteAux (c : Prop) [Decidable c] {t e : PlanarWalkM α} {m' : WalkM α}
+    (ht : c → PlanarLifts t m') (he : ¬c → PlanarLifts e m') : PlanarLifts (if c then t else e) m' := by
   split
   · exact ht ‹_›
   · exact he ‹_›
@@ -280,8 +280,8 @@ theorem Lifts.iteAux (c : Prop) [Decidable c] {t e : PlanarWalkM α} {m' : WalkM
 open Lean Elab Tactic Meta in
 /-- `lift_have R jp1 jp2 only1 only2` peels one `have` off a goal `R m m'`. A `have` present on
 both sides: a pure value is zeta-substituted, a join point (function-typed `have`) is abstracted via
-`jp1` / `jp2` (the `Lifts.haveJp1` / `Lifts.haveJp2` shapes). A `have` present only in `m`: a value
-is zeta-substituted, a join point is abstracted via `only1` / `only2` (`Lifts.haveJpOnly1/2`). -/
+`jp1` / `jp2` (the `PlanarLifts.haveJp1` / `PlanarLifts.haveJp2` shapes). A `have` present only in `m`: a value
+is zeta-substituted, a join point is abstracted via `only1` / `only2` (`PlanarLifts.haveJpOnly1/2`). -/
 elab "lift_have" rel:ident jp1:ident jp2:ident only1:ident only2:ident : tactic => do
   let relName ← realizeGlobalConstNoOverloadWithInfo rel
   let jp1Name ← realizeGlobalConstNoOverloadWithInfo jp1
@@ -324,28 +324,28 @@ elab "lift_have" rel:ident jp1:ident jp2:ident only1:ident only2:ident : tactic 
 syntax "lifts" : tactic
 macro_rules
   | `(tactic| lifts) => `(tactic| first
-    | with_reducible exact Lifts.pure _
-    | with_reducible exact Lifts.liftW _
+    | with_reducible exact PlanarLifts.pure _
+    | with_reducible exact PlanarLifts.liftW _
     | with_reducible first
       | exact PlanarWalkM.lifts_allocItem _ | exact PlanarWalkM.lifts_pushVertTstack _ _
       | exact PlanarWalkM.lifts_pushEdgeTstack _ _ _ _ | exact PlanarWalkM.lifts_mergeTstackTops
       | exact PlanarWalkM.lifts_maybeUnwrapNxt _ _ | exact PlanarWalkM.lifts_finishTstackTop _ _
-    | (with_reducible refine Lifts.bind (Lifts.liftW _) fun _ => ?_; lifts)
-    | (with_reducible refine Lifts.auxBind ?_ fun _ => ?_
+    | (with_reducible refine PlanarLifts.bind (PlanarLifts.liftW _) fun _ => ?_; lifts)
+    | (with_reducible refine PlanarLifts.auxBind ?_ fun _ => ?_
        · aux_only
        · lifts)
-    | (with_reducible refine Lifts.auxThen ?_ ?_
+    | (with_reducible refine PlanarLifts.auxThen ?_ ?_
        · aux_only
        · lifts)
     | with_reducible solve_by_elim only [*]
-    | (lift_have Lifts Lifts.haveJp1 Lifts.haveJp2 Lifts.haveJpOnly1 Lifts.haveJpOnly2 <;> lifts)
-    | (with_reducible refine Lifts.bind ?_ fun _ => ?_ <;> lifts)
-    | (with_reducible refine Lifts.ite _ (fun _ => ?_) (fun _ => ?_) <;> lifts)
-    | (with_reducible refine Lifts.iteAux _ (fun _ => ?_) (fun _ => ?_) <;> lifts)
-    | (with_reducible refine Lifts.fmap ?_ _; lifts)
-    | (with_reducible refine Lifts.loop _ ?_ ?_ <;> lifts)
-    | (with_reducible refine Lifts.loopFirst _ ?_ (fun _ => ?_) _ <;> lifts)
-    | (with_reducible refine Lifts.bindAux ?_ fun _ => ?_
+    | (lift_have PlanarLifts PlanarLifts.haveJp1 PlanarLifts.haveJp2 PlanarLifts.haveJpOnly1 PlanarLifts.haveJpOnly2 <;> lifts)
+    | (with_reducible refine PlanarLifts.bind ?_ fun _ => ?_ <;> lifts)
+    | (with_reducible refine PlanarLifts.ite _ (fun _ => ?_) (fun _ => ?_) <;> lifts)
+    | (with_reducible refine PlanarLifts.iteAux _ (fun _ => ?_) (fun _ => ?_) <;> lifts)
+    | (with_reducible refine PlanarLifts.fmap ?_ _; lifts)
+    | (with_reducible refine PlanarLifts.loop _ ?_ ?_ <;> lifts)
+    | (with_reducible refine PlanarLifts.loopFirst _ ?_ (fun _ => ?_) _ <;> lifts)
+    | (with_reducible refine PlanarLifts.bindAux ?_ fun _ => ?_
        · lifts
        · aux_only)
     | (rename_i h1 _ h2; cases h1.symm.trans h2)
@@ -360,31 +360,31 @@ namespace Spqr
 namespace PlanarWalkM
 
 theorem lifts_planarFinishEdge (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool) :
-    Lifts (planarFinishEdge curV d o origTstack hasVert) (finishEdge curV d o origTstack hasVert) := by
+    PlanarLifts (planarFinishEdge curV d o origTstack hasVert) (finishEdge curV d o origTstack hasVert) := by
   unfold planarFinishEdge finishEdge; lifts
 
 end PlanarWalkM
 
 mutual
-theorem lifts_planarWalkTree (t : DfsTree) (d : Nat) : Lifts (planarWalkTree t d) (walkTree t d) := by
+theorem lifts_planarWalkTree (t : DfsTree) (d : Nat) : PlanarLifts (planarWalkTree t d) (walkTree t d) := by
   unfold planarWalkTree walkTree
   match t with
   | .node v outs =>
-    with_reducible refine Lifts.bind (Lifts.liftW _) fun _ => ?_
-    with_reducible refine Lifts.bind (lifts_planarWalkOuts v d outs false) fun _ => ?_
+    with_reducible refine PlanarLifts.bind (PlanarLifts.liftW _) fun _ => ?_
+    with_reducible refine PlanarLifts.bind (lifts_planarWalkOuts v d outs false) fun _ => ?_
     lifts
 
 theorem lifts_planarWalkOuts (v d : Nat) (outs : List DfsOut) (hasVert : Bool) :
-    Lifts (planarWalkOuts v d outs hasVert) (walkOuts v d outs hasVert) := by
+    PlanarLifts (planarWalkOuts v d outs hasVert) (walkOuts v d outs hasVert) := by
   unfold planarWalkOuts walkOuts
   match outs with
   | [] => lifts
   | o :: rest =>
-    with_reducible refine Lifts.bind (lifts_planarWalkOut v d o hasVert) fun _ => ?_
+    with_reducible refine PlanarLifts.bind (lifts_planarWalkOut v d o hasVert) fun _ => ?_
     exact lifts_planarWalkOuts v d rest _
 
 theorem lifts_planarWalkOut (v d : Nat) (o : DfsOut) (hasVert : Bool) :
-    Lifts (planarWalkOut v d o hasVert) (walkOut v d o hasVert) := by
+    PlanarLifts (planarWalkOut v d o hasVert) (walkOut v d o hasVert) := by
   unfold planarWalkOut walkOut
   match o with
   | .tree a b child =>
@@ -397,10 +397,10 @@ theorem lifts_planarWalkOut (v d : Nat) (o : DfsOut) (hasVert : Bool) :
     all_goals exact PlanarWalkM.lifts_planarFinishEdge _ _ _ _ _
 end
 
-theorem lifts_planarWalkForest (forest : List DfsTree) : Lifts (planarWalkForest forest) (walkForest forest) := by
+theorem lifts_planarWalkForest (forest : List DfsTree) : PlanarLifts (planarWalkForest forest) (walkForest forest) := by
   unfold planarWalkForest walkForest
-  refine Lifts.forM _ fun t => ?_
-  with_reducible refine Lifts.bind (lifts_planarWalkTree t 0) fun _ => ?_
+  refine PlanarLifts.forM _ fun t => ?_
+  with_reducible refine PlanarLifts.bind (lifts_planarWalkTree t 0) fun _ => ?_
   lifts
 
 /-- The planar walk is the ordinary walk plus auxiliary state. -/

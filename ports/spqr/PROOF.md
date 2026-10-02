@@ -408,6 +408,7 @@ Work packages for child sessions, in dependency order:
 * **Walk invariant**: Invariant W + Lemma 4.3 on `walkEar`, giving `Items.Tree`, `Endpoints`.
 * **Shapes / maximality**: `Items.Shapes`, R 3-connectivity via 4.5.
 * **st-order**: §7, `StSpec.lean` / `StWalk.lean`; relabel side first, then the walk invariant.
+* **planarity**: §8, `Planar.lean` / `PlanarWalk.lean` / `PlanarRelabel.lean` / `PlanarEmbed.lean` / `PlanarSpec.lean`; projection theorems proved, embedding soundness/completeness admitted.
 
 ## 7. st-ordering
 
