@@ -20,3 +20,7 @@ root = "DumpPlanarLean"
 [[lean_exe]]
 name = "check_planar_lean"
 root = "CheckPlanarLean"
+
+[[lean_exe]]
+name = "prof_lean"
+root = "ProfLean"
