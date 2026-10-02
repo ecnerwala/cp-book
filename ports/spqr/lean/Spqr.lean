@@ -26,3 +26,4 @@ import Spqr.Frame
 import Spqr.SepPairExhaust
 import Spqr.Proofs.SepPairExhaust
 import Spqr.StSpec
+import Spqr.StWalk
