@@ -514,6 +514,47 @@ cap edge of the child. Everything in `Spec.lean`'s `WF` is a statement about thi
 relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical` are
 `Items.Shapes` transported.
 
+**Per-node characterization (`RelabelSpec.lean`, proved in `RelabelMain.lean`).**
+`relabel_node_spec : items.WF g → ∃ idx, idx rootItem = 0 ∧ RelabelIdx g items t idx ∧
+∀ i < items.size, RelabelNode g items t idx i` (`t = relabelTree g items`) is the shared
+foundation of everything below: `idx` is the preorder numbering (a bijection onto `[0, t.size)`,
+`RelabelIdx`), and `RelabelNode` says, for item `i` numbered `idx i`, that `type`/`par`/`origId`
+/`vertIndex`/`edgeIndex` are the item's, that `chRange`/`nvRange`/`neRange` have the item's
+lengths (`|ch|`, `|nvList|`, `nEdges`), that `nodeVerts[nvSt + k]` is `nvList[k]` re-indexed
+through `vertIndex`, and (`RelabelLayout`, for *some* `pos`, the `vertPos` scratch at the time
+the node was laid out) that the children are `(ordered g i nvSt pos).map idx`, the node-edges and
+the two adjacency rows of each node-vert are those of
+`layoutNode (type i) (idx i) nvSt nvEn neSt neEn (edgeChildren g pos (ordered …))`, the k-th
+V child gets `vertParNv = some (nvSt + |vs.1| + k)`, the parent's k-th virtual edge has
+`twin = some (neSt of the k-th non-V child)`, the child's cap points back **when
+`items.hasCap child`**, and children occupy contiguous preorder ranges
+(`child_idx`, `subtree_end`).
+The proof (`RelabelGhost.lean` … `RelabelProof.lean`) is a `wp` induction over `relabel`
+on a ghost copy carrying the numbering `order`, with the per-call contract
+`CallPre`/`CallPost` (append-only prefix agreement `Agree`, `Consistent` sizes, and
+`NodeS`/`LowB` for every descendant), the children loop by `wp_forIn_inv` with `LoopInv`,
+and one abstract `Step*` lemma per primitive of the node body (`entry_of_steps`).
+
+Two facts about the inputs that `Items.WF` does *not* give, found while stating this:
+
+* **Orientation of R children (`Items.ROriented`).** `layoutNode .R` counts an edge child
+  `(a, c)` at bounds slots `2 a + 2` and `2 c + 1` (and the cap at `2 nvSt + 2`, `2 nvEn - 1`),
+  so each node's rows start at `2 neSt` and the last bound equals `adjDat.size` only if every
+  edge child has `pos a < pos c`, i.e. is oriented along the node-vert order.
+  `Items.WF` only has `q.1 ≠ q.2`, so `relabel_adj_spec` (and `SpqrTree.WF`'s `adj_bounds`
+  clauses / `Shape .R`'s `p.1 < p.2`) take `items.ROriented g` as an explicit hypothesis;
+  it is discharged by the ST layer's `Items.StNumbered` (`StSpec.lean`, every edge oriented
+  low → high in `vertList` order).
+  The C++ (`spqr_tree.hpp`, the `nvs[0]`/`nvs[1]` counting loop) relies on exactly the same
+  orientation: it sets `nvs = {vert_pos[vs[0]], vert_pos[vs[1]]}`, `assert(nvs[0] < nvs[1])`,
+  and increments `bounds[2 * nvs[0] + 2]` / `bounds[2 * nvs[1] + 1]`.
+* **Q block-roots as children of S/P/R.** `Items.WF` allows a Q item with children
+  (`Shapes.q_children`) whose parent is an S/P/R node; then `hasCap Q = false`, the parent's
+  virtual edge gets `twin = some neSt_Q`, but `nodeEdges[neSt_Q]` is the Q's own first child
+  edge, so the back-pointer (and `SpqrTree.WF.twin_invol`) fails.
+  `RelabelLayout.twin` therefore guards the child side by `hasCap`; `relabelTree_wf` as stated
+  needs `Shapes` to exclude this (a Q with children has a V/F parent) or the same hypothesis.
+
 ## 6. Lean plan (what is proved where)
 
 | statement | file | status |
@@ -541,6 +582,12 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | Invariant W, Lemmas 4.3/4.4 (`earOut_one_entry`, `ascend_frame_one_entry`) | `EarSpec.lean` | sorry / hard |
 | 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape`/`RStep.threeConnected` (`Proofs/RClose.lean`) give it for Loop 1's R step from `Inv d` + `RStep` + `RContent`; `RContent` (content fields) and `RStep` from the ear invariant, and `spqrTree_r_three_connected` itself: hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
+| 5 relabel per-node interface `RelabelNode`/`RelabelLayout`/`RelabelIdx`, `Items.nvList`/`ordered`/`edgeChildren`/`PosOK`/`hasCap`/`nEdges`/`ROriented` | `RelabelSpec.lean` | def; `relabel_node_spec` stated there (admitted, import order) and proved as `Ghost.relabel_node_spec_proved` in `RelabelMain.lean` |
+| 5 relabel ghost (`order` field) + refinement `relabelTree_eq : relabelTree g items = ofRelabelState (relabelRun g items)` | `RelabelGhost.lean` | proved (`sim_relabel` at `maxHeartbeats 4000000`) |
+| 5 relabel state invariants `Consistent`, `Agree` (append-only prefixes), `NodeS`, `LowB`, transport `NodeS.mono`/`LowB.agree`, `RelabelLayout.congr` | `RelabelInv.lean`, `RelabelMono.lean` | proved |
+| 5 relabel per-call contract `CallPre`/`CallPost`, node-body `Step*` lemmas, `entry_of_steps`, children loop `LoopInv.pre`/`loop_init`/`LoopInv.step`/`LoopInv.fin` | `RelabelLoop.lean`, `RelabelWp.lean` | proved |
+| 5 relabel `relabel_spec` (wp induction over `relabel`), `relabel_node_spec_proved` | `RelabelProof.lean`, `RelabelMain.lean` | proved, standard axioms |
+| 5 relabel adjacency CSR `relabel_adj_spec` (needs `ROriented`) | `RelabelSpec.lean` | admitted here; proved on the integration branch as `RelabelAdj.relabelTree_adj` |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean` | def / proved split |
 | 7 relabel-side: `vchildren_nv_increasing`, `orderedChildren_sorted`, `edgeChildren_dominance`, `layoutNode_r_bracket` | `StSpec.lean`, `StLayout.lean` | proved |
 | 7 relabel-side: `relabel_st` | `StSpec.lean` | sorry |
