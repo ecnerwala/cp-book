@@ -277,6 +277,29 @@ structure EarFinish (curV d : Nat) (o : DfsOut) (hasVert : Bool) (sub base : Lis
   /-- A block boundary: the child's block meets the rest only at the articulation vertex `curV`. -/
   boundary : d ≤ o.cls.lowval d → ∀ t ∈ sub, ∀ u ∈ base, ∀ v,
     s.g.Touches (t.edges s.g s.items) v → s.g.Touches (u.edges s.g s.items) v → v = curV
+  /-- Every edge at the child is a sub-ear edge. -/
+  dest_edges : o.cls.isTree = true → ∀ e, e < s.g.ne → s.g.Inc e o.dest → subEdges o e
+  /-- A boundary edge (`d ≤ lowval`) comes before the vertex entry of `curV`; the child's entries are
+  the block `(o.dest, d + 1)` (bridge) or `[(o.dest, lowval), (o.dest, d + 1)]` (component: the block
+  on the child's vertex entry); an entry under the top one touching `curV` has it as a terminal. -/
+  bd_noVert : d ≤ o.cls.lowval d → hasVert = false
+  bd_bridge : o.cls.isTree = true → o.cls.lowval d = d + 1 →
+    ∃ t, sub = [t] ∧ t.vStart = o.dest ∧ t.topDepth = d + 1
+  bd_comp : o.cls.isTree = true → d ≤ o.cls.lowval d → o.cls.lowval d ≠ d + 1 →
+    ∃ t₁ t₂, sub = [t₁, t₂] ∧ t₁.vStart = o.dest ∧ t₁.topDepth = o.cls.lowval d ∧
+      t₂.vStart = o.dest ∧ t₂.topDepth = d + 1
+  bd_term : o.cls.isTree = true → d ≤ o.cls.lowval d → ∀ u ∈ s.tstack.tail,
+    s.g.Touches (u.edges s.g s.items) curV → u.vStart = curV ∨ u.topDepth ≤ d
+  /-- After a tree edge the child is attached only as a bottom: an entry of the final stack touching
+  `o.dest` has it interior, or as its `vStart` or that of an entry above it (`ear_lower'`); the
+  frame facts are included until the preservation induction supplies them. -/
+  lower : o.cls.isTree = true →
+    (after (finishEdge curV d o base.length hasVert) s).g = s.g ∧
+    (after (finishEdge curV d o base.length hasVert) s).stackVerts = s.stackVerts ∧
+    ∀ above t below, (after (finishEdge curV d o base.length hasVert) s).tstack = above ++ t :: below →
+      s.g.Touches (t.edges s.g (after (finishEdge curV d o base.length hasVert) s).items) o.dest →
+      s.g.Interior (t.edges s.g (after (finishEdge curV d o base.length hasVert) s).items) o.dest ∨
+      o.dest = t.vStart ∨ ∃ t' ∈ above, o.dest = t'.vStart
 
 /-- `EarFinish` with the split existentially quantified; `origTstack` is the size of `base`. -/
 def EarAt (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool) (s : WalkState) : Prop :=

@@ -515,7 +515,39 @@ theorem ear_lower' {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Boo
     (hs : Shape s) (hb : FinishBook curV d o origTstack hasVert s)
     (hpost : (after (finishEdge curV d o origTstack hasVert) s).Inv' (d + 1)) :
     (after (finishEdge curV d o origTstack hasVert) s).Inv' d := by
-  sorry
+  obtain ⟨sub, base, hlen, hE⟩ := hb.ear
+  subst hlen
+  obtain ⟨hg', hsv, hlow⟩ := hE.lower ht
+  have hchild := hE.sv_child ht
+  set fe := after (finishEdge curV d o base.length hasVert) s with hfe
+  refine ⟨fun above t below hts => ?_, hpost.nodes⟩
+  have h := hpost.entries above t below hts
+  refine ⟨h.conn, fun v e e' he he' hEe hEe' hv hv' => ?_⟩
+  have hT := h.attached v e e' he he' hEe hEe' hv hv'
+  rw [hg'] at he he' hEe hEe' hv hv'
+  have hdest : v = o.dest → t.Term' d fe above v := by
+    rintro rfl
+    rcases hlow above t below hts ⟨e, he, hEe, hv⟩ with hint | hb | ⟨t', ht', hb⟩
+    · exact absurd (hint e' he' hv') hEe'
+    · exact .inl (.inl hb)
+    · exact .inr ⟨t', ht', .inl hb⟩
+  have hk : ∀ k, k ≤ d + 1 → v = fe.stackVerts[k]! → k ≤ d ∨ v = o.dest := by
+    intro k hk hvk
+    rcases Nat.lt_or_ge k (d + 1) with h | h
+    · exact .inl (Nat.le_of_lt_succ h)
+    · right
+      have : k = d + 1 := by omega
+      subst this
+      rw [hvk, hsv, hchild]
+  rcases hT with (hvS | ⟨k, hk1, hk2, hk3⟩) | ⟨t', ht', (hvS | ⟨k, hk1, hk2, hk3⟩)⟩
+  · exact .inl (.inl hvS)
+  · rcases hk k hk2 hk3 with hkd | hvd
+    · exact .inl (.inr ⟨k, hk1, hkd, hk3⟩)
+    · exact hdest hvd
+  · exact .inr ⟨t', ht', .inl hvS⟩
+  · rcases hk k hk2 hk3 with hkd | hvd
+    · exact .inr ⟨t', ht', .inr ⟨k, hk1, hkd, hk3⟩⟩
+    · exact hdest hvd
 
 /-! ### Boundary edges -/
 
@@ -563,9 +595,10 @@ structure BoundaryOk (D curV d : Nat) (o : DfsOut) (s : WalkState) : Prop where
   /-- Popping the top entry (bridge: the child's block; component: the child's block, then the
   vertex entry of `curV`) loses no attachment of the entries below: a remaining entry touching a
   terminal of the popped entry has it as its own terminal. -/
-  gone : ∀ t rest, s.tstack = t :: rest → ∀ u ∈ rest, ∀ v, t.Term D s v →
+  gone : o.cls.isTree = true → ∀ t rest, s.tstack = t :: rest → ∀ u ∈ rest, ∀ v, t.Term D s v →
     s.g.Touches (u.edges s.g s.items) v → u.Term D s v
-  gone₂ : ∀ t₁ t₂ rest, s.tstack = t₁ :: t₂ :: rest → ∀ u ∈ rest, ∀ v, t₂.Term D s v →
+  gone₂ : o.cls.isTree = true → o.cls.lowval d ≠ d + 1 →
+    ∀ t₁ t₂ rest, s.tstack = t₁ :: t₂ :: rest → ∀ u ∈ rest, ∀ v, t₂.Term D s v →
     s.g.Touches (u.edges s.g s.items) v → u.Term D s v
   q_root : ∀ p, ¬ Items.IsParent s.items p (edgeItem s.g o.e)
   q_free : ∀ t ∈ s.tstack, edgeItem s.g o.e ∉ t.spans.1 ++ t.spans.2
@@ -577,8 +610,80 @@ the vertex item only after the boundary edges; the popped block is separated fro
 by the articulation vertex `curV`, so its terminals are touched by none of them). -/
 theorem ear_boundary {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
     (hge : d ≤ o.cls.lowval d) (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv' D)
-    (hs : Shape s) (hb : FinishBook curV d o origTstack hasVert s) : BoundaryOk D curV d o s := by
-  sorry
+    (hs : Shape s) (hb : FinishBook curV d o origTstack hasVert s)
+    (hD : D = if o.cls.isTree then d + 1 else d) : BoundaryOk D curV d o s := by
+  obtain ⟨sub, base, hlen, hE⟩ := hb.ear
+  have hts := hE.tstack
+  have hnd : o.cls.isTree = true → ∀ u ∈ base, ¬ s.g.Touches (u.edges s.g s.items) o.dest := by
+    intro ht u hu ⟨e, he, hue, hinc⟩
+    exact hE.base_disj u hu e he hue (hE.dest_edges ht e he hinc)
+  have hvf : ∀ t ∈ s.tstack, vertItem curV ∉ t.spans.1 ++ t.spans.2 := by
+    intro t ht hmem
+    have := (hE.vert_free t ht hmem).1
+    rw [hE.bd_noVert hge] at this
+    exact Bool.false_ne_true this
+  refine ⟨?pops, ?gone, ?gone₂, hE.q_root, hE.q_free, hE.v_root, hvf⟩
+  case pops =>
+    intro ht
+    rw [hts]
+    split
+    · rename_i hL
+      obtain ⟨t, hsub, -, -⟩ := hE.bd_bridge ht (by simpa using hL)
+      rw [hsub]; simp
+    · rename_i hL
+      obtain ⟨t₁, t₂, hsub, -, -, -, -⟩ := hE.bd_comp ht hge (by simpa using hL)
+      rw [hsub]; simp
+  case gone =>
+    intro ht t rest hts' u hu v hT htouch
+    rw [if_pos ht] at hD; subst hD
+    have hu' : u ∈ s.tstack.tail := by rw [hts']; exact hu
+    by_cases hL : o.cls.lowval d = d + 1
+    · obtain ⟨t', hsub, hbot, htop⟩ := hE.bd_bridge ht hL
+      rw [hts, hsub] at hts'
+      simp only [List.singleton_append, List.cons.injEq] at hts'
+      obtain ⟨rfl, hrest⟩ := hts'
+      subst hrest
+      rcases hT with hv | ⟨k, hk1, hk2, hk3⟩
+      · subst hv; rw [hbot] at htouch; exact absurd htouch (hnd ht u hu)
+      · subst hk3; rw [htop] at hk1
+        have : k = d + 1 := by omega
+        subst this
+        rw [hE.sv_child ht] at htouch; exact absurd htouch (hnd ht u hu)
+    · obtain ⟨t₁, t₂, hsub, hbot₁, htop₁, hbot₂, htop₂⟩ := hE.bd_comp ht hge hL
+      rw [hts, hsub] at hts'
+      simp only [List.cons_append, List.nil_append, List.cons.injEq] at hts'
+      obtain ⟨rfl, hrest⟩ := hts'
+      subst hrest
+      rcases hT with hv | ⟨k, hk1, hk2, hk3⟩
+      · subst hv
+        rcases List.mem_cons.1 hu with rfl | hu
+        · exact .inl (by rw [hbot₁, hbot₂])
+        · rw [hbot₁] at htouch; exact absurd htouch (hnd ht u hu)
+      · subst hk3; rw [htop₁] at hk1
+        have : k = d ∨ k = d + 1 := by omega
+        rcases this with hkd | hkd
+        · rw [hkd, hE.sv_d] at htouch
+          rcases hE.bd_term ht hge u hu' htouch with h | h
+          · exact .inl (by rw [hkd, hE.sv_d, h])
+          · exact .inr ⟨d, h, Nat.le_succ d, by rw [hkd]⟩
+        · rw [hkd, hE.sv_child ht] at htouch
+          rcases List.mem_cons.1 hu with rfl | hu
+          · exact .inl (by rw [hkd, hE.sv_child ht, hbot₂])
+          · exact absurd htouch (hnd ht u hu)
+  case gone₂ =>
+    intro ht hL t₁ t₂ rest hts' u hu v hT htouch
+    rw [if_pos ht] at hD; subst hD
+    obtain ⟨t₁', t₂', hsub, hbot₁, htop₁, hbot₂, htop₂⟩ := hE.bd_comp ht hge hL
+    rw [hts, hsub] at hts'
+    simp only [List.cons_append, List.nil_append, List.cons.injEq] at hts'
+    obtain ⟨rfl, rfl, hrest⟩ := hts'
+    subst hrest
+    rcases hT with hv | ⟨k, hk1, hk2, hk3⟩
+    · subst hv; rw [hbot₂] at htouch; exact absurd htouch (hnd ht u hu)
+    · subst hk3; rw [htop₂] at hk1
+      have : k = d + 1 := by omega
+      subst this
+      rw [hE.sv_child ht] at htouch; exact absurd htouch (hnd ht u hu)
 
 section Boundary
 
@@ -729,7 +834,7 @@ theorem finishBoundary_inv {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVe
             (fun it => { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) }) fun _ => rfl).trans
           ((Items.Below_push_nil ⟨.I, (none, none), []⟩ rfl).trans
             (Items.Below_modify_ch_eq (edgeItem s.g o.e) (fun it => { it with vs := (some curV, none) }) fun _ => rfl)))
-        (hok.gone t rest hts))
+        (hok.gone hT t rest hts))
       have hsz₄ : ((s₁.items.push ⟨.I, (none, none), []⟩).modify s₁.items.size fun it =>
           { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) }).size = s.items.size + 1 := by
         simp [hs₁, hs₀]
@@ -765,9 +870,9 @@ theorem finishBoundary_inv {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVe
       have hB₁ : ∀ a i, Items.Below s₁.items a i ↔ Items.Below s.items a i :=
         fun a i => Items.Below_modify_ch_eq (edgeItem s.g o.e) (fun it => { it with vs := (some curV, none) }) fun _ => rfl
       have b₂ := b₁.trans (BStep.pop' b₁.inv b₁.shape (s₀ := s) t₁ (t₂ :: rest) hts rfl rfl hB₁
-        (hok.gone t₁ (t₂ :: rest) hts))
+        (hok.gone hT t₁ (t₂ :: rest) hts))
       have b₃ := b₂.trans (BStep.pop' b₂.inv b₂.shape (s₀ := s) t₂ rest
-        (by show s.tstack.tail = _; rw [hts, List.tail_cons]) rfl rfl hB₁ (hok.gone₂ t₁ t₂ rest hts))
+        (by show s.tstack.tail = _; rw [hts, List.tail_cons]) rfl rfl hB₁ (hok.gone₂ hT (fun h => hL (by simp [h])) t₁ t₂ rest hts))
       have b₄ := b₃.trans (BStep.modifyCh b₃.inv b₃.shape (edgeItem s.g o.e)
         (fun it => { it with ch := s.tstack.head!.spans.1 ++ s.tstack.tail.head!.spans.2 }) hqlt (fun _ => rfl) hq_root₁
         (fun t' ht' => hok.q_free t' (List.mem_of_mem_tail (List.mem_of_mem_tail ht')))
@@ -833,7 +938,7 @@ theorem finishEdge_step {v d : Nat} {o : DfsOut} {n : Nat} {hasVert : Bool} {D :
   have hdD : d ≤ D := by split at hD <;> omega
   have hst : (after (finishEdge v d o n hasVert) s).Inv' D ∧ Shape (after (finishEdge v d o n hasVert) s) := by
     by_cases hge : d ≤ o.cls.lowval d
-    · exact finishBoundary_inv (origTstack := n) hge hi hs hb (ear_boundary hge hg hi hs hb)
+    · exact finishBoundary_inv (origTstack := n) hge hi hs hb (ear_boundary hge hg hi hs hb hD)
     · obtain ⟨lv, kind, ho, hl⟩ := ret_of_lowval_lt (Nat.lt_of_not_le hge)
       obtain ⟨sub, base, hlen, hE⟩ := hb.ear
       have st := finishEdge_inv v d lv kind o n hasVert ho hl hb.v_lt hi hs

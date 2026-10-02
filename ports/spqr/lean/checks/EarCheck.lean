@@ -113,6 +113,32 @@ def earCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : Walk
         for v in List.range s.g.nv do
           if touches s (E t) v && touches s (E u) v && v ≠ curV then
             out := bad "boundary" s!"{showT t} {showT u} v={v}" :: out
+  if hv && d ≤ lowval then out := bad "bd_noVert" "" :: out
+  if o.cls.isTree then
+    for e in List.range s.g.ne do
+      if inc s e o.dest && !SE.contains e then out := bad "dest_edges" s!"e={e}" :: out
+    if d ≤ lowval then
+      if lowval == d + 1 then
+        match sub with
+        | [t] => if t.vStart ≠ o.dest || t.topDepth ≠ d + 1 then out := bad "bd_bridge" (showT t) :: out
+        | _ => out := bad "bd_bridge" (toString (sub.map showT)) :: out
+      else
+        match sub with
+        | [t₁, t₂] =>
+          if t₁.vStart ≠ o.dest || t₁.topDepth ≠ lowval || t₂.vStart ≠ o.dest || t₂.topDepth ≠ d + 1 then
+            out := bad "bd_comp" (toString (sub.map showT)) :: out
+        | _ => out := bad "bd_comp" (toString (sub.map showT)) :: out
+      for u in s.tstack.tail do
+        if touches s (E u) curV && u.vStart ≠ curV && d < u.topDepth then out := bad "bd_term" (showT u) :: out
+    let fe := WalkState.after (finishEdge curV d o orig hv) s
+    if fe.g.ne ≠ s.g.ne || fe.g.edges ≠ s.g.edges || fe.stackVerts ≠ s.stackVerts then out := bad "lower_frame" "" :: out
+    for i in List.range fe.tstack.length do
+      let t := fe.tstack[i]!
+      let above := fe.tstack.take i
+      let Et := entryEdges fe t
+      if touches fe Et o.dest && !(List.range s.g.ne).all (fun e => !inc fe e o.dest || Et.contains e) &&
+          t.vStart ≠ o.dest && !above.any (fun t' => t'.vStart == o.dest) then
+        out := bad "lower" s!"{showT t} final={fe.tstack.map showT}" :: out
   return out
 
 /-! ### Loop 1: `Loop1BodyOk` (D = d+1) at every iterate -/
