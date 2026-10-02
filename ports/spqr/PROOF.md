@@ -354,15 +354,22 @@ vertex entry `V 1`, not `(curV, d)`). `BoundaryOk.gone`/`gone₂` are now stated
 them: for a back edge at the boundary (a self-loop, `lowval = d`) the top entry is an arbitrary
 `base` entry and nothing separates it from the ones below. All 0 violations on 3000 random multigraphs.
 
-**Export to the range layer: `WalkState.Frontier` (`EarInv.lean`).** The one positional fact the
-R/Ranges sessions take as a hypothesis, stated without reference to `EarFinish`:
-`Frontier d o origTstack s` (tree edge, `lowval < d`) says the stack is `sub ++ base` with
-`base.length = origTstack`, loops 1–2 leave `base` as the bottom of `feS₂` with the same entries and
-edge sets, the first-occurrence walk never runs past the ear's bottom two entries (`sub = mid₀ ++
-[py, vy]` and `feS₂.tstack = c :: mid ++ [py, vy] ++ base`), and the child's entries hold exactly
-the sub-ear edges (`subEdges o` minus `o.e` before `finishEdge`, with `o.e` at `feS₂`); loop 3 stays
-above `origTstack + 3` by its condition. `finishEdge_frontier` derives it from `EarAt`
-(`tstack`/`loops`/`close`/`sub_edges`/`sub_cover`/`q_free`/`q_root`; standard axioms).
+**Export to the range layer: `WalkState.Frontier` (`Proofs/RInvFrame.lean`, stated by the R
+session; derived in `EarFrontier.lean`).** The one positional fact crossing into the range/saturation
+layer, stated with no reference to `EarFinish`: for `finishEdge _ d o origTstack _` at `s`, the
+entries strictly above the `origTstack` enclosing ones (`tstack.take (length - origTstack)`) plus
+the pending `o.e` own exactly `subEdges o` (`owns`), the enclosing entries own none of them
+(`base_disj`), and at every iterate of loops 1–3 reached by the loop condition `FrontierOwns` holds
+(the same `base` is the bottom, the entries above it own exactly `subEdges o`) with enough entries
+strictly above the boundary for the next body (`loop1`/`loop2`/`loop3`). `finishEdge_frontier`
+derives it from `FinishBook.ear` (`EarAt`) + `Inv'`/`Shape`: `owns`/`base_disj` from
+`sub_edges`/`sub_cover`/`base_disj`; `loop1` by following the loop-1 iterates through `L1Inv`
+(`L1Ctx.ofEar`, `l1_init`, `l1_iter`: the kept/closed pieces own `subEdges o`, the `d`-or-deeper
+part of `sub` bounds the iterate count); `loop2` by placing the loop-2 iterates between `EarLate`
+(`feS₁`, via `iter_merge_eq`) and `EarClose` (`feS₂`), merges preserving ownership (`l2Cur_edges`);
+`loop3` by folding the `feS₂` shape `c :: mid ++ [py, vy] ++ base`. `walkTree_frontiers` gives
+`FrontiersTree` by the walk induction (same hypotheses as `walkTree_inv'`: `Inv'`, `Shape`,
+`GuardsTree`, `BookTree`). Standard axioms.
 
 *Derivations (`EarLoop2.lean`)*: `ear_mergeLate` from `late` (`mergeLateOk_of_late`: `iter
 mergeTstackTops k` on `c₀ :: R` is `l2Cur c₀ (R.take k) :: R.drop k`, the loop-2 condition at every
@@ -966,7 +973,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 R skeleton persistence: `Pieces.contract_congr`, `Items.RSkel3.congr`, `.modify_of_not_below`, `.push_nil` | `Proofs/RItems.lean` | proved (standard axioms); walk-level ownership of later writes remains open |
 | 4.5 HT-to-cut transport: `Graph.ThreeConnected.relabel` | `Proofs/ThreeConnected.lean` | proved (standard axioms), assuming a block and its active vertex list; item-level hypotheses remain open |
 | 4.5 Item/contract edge correspondence: `Pieces.ofItems_addParent_edges`, `Items.rSkeleton_perm_contract` | `Proofs/RItems.lean` | proved (standard axioms), under non-V-child edge coverage; deriving coverage for completed R items remains open |
-| 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
+| 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean`, `EarFrontier.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export proved: `finishEdge_frontier` (from `FinishBook.ear` + `Inv'`/`Shape`), `walkTree_frontiers` (`FrontiersTree` under the `walkTree_inv'` hypotheses), standard axioms; R interval/saturation preservation remains open |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
