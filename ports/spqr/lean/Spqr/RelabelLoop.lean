@@ -554,6 +554,15 @@ theorem LoopInv.pre (hwf : items.WF g) (hpre : CallPre g items cur s)
 
 /-- One iteration of the children loop: the slot write (and twin for a non-V child of a node),
 then the recursive call for `c`. -/
+theorem NodeS.neSt_lt {B : Bounds} {i : ItemId} (hn : NodeS g items σ i) (hl : LowB items B σ i)
+    (hcap : items.hasCap i = true) : σ.neBounds[σ.idx i]! < σ.nodeEdges.size := by
+  have h1 := hn.node.ne_range
+  rw [tree_neRange_fst, tree_neRange_snd] at h1
+  have h2 := hl.nodeEdges_le
+  have h3 := Items.one_le_nEdges_of_hasCap (g := g) hcap
+  omega
+
+/-- After the loop, writing `subtreeEnd[curIdx]` finishes the call. -/
 theorem LoopInv.step (hwf : items.WF g) (hpre : CallPre g items cur s)
     (he : Entry g items cur p pn ct curIdx chSt nvSt neSt pos children s s7)
     (hi : LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children done (c :: rest) b σ)
@@ -566,17 +575,302 @@ theorem LoopInv.step (hwf : items.WF g) (hpre : CallPre g items cur s)
     (h1 : StepSlotT (chSt + b.2.2) σ.types.size tw σ σ1)
     (h3 : CallPost g items c (some curIdx) pn' ct' σ1 σ3) :
     LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children (done ++ [c]) rest b' σ3 := by
-  sorry
+  have hcc : c ∈ items.ch cur := hi.mem_ch he
+  have hclt : c < items.size := hwf.tree.ch_lt cur c hcc
+  have hcs := hi.cons
+  have hc1 : Consistent g items σ1 := h1.cons hcs
+  have hc3 := h3.cons
+  have hce := he.curIdx_eq
+  have hcse := he.chSt_eq
+  have hnese := he.neSt_eq
+  have hs7size : s7.types.size = curIdx + 1 := by rw [he.types, Array.size_push, hce]
+  have hs7ch : s7.chDat.size = chSt + children.length := by rw [he.chDat]; simp [hcse]
+  have hs7ne := he.nodeEdges_size
+  have hlenc : done.length < children.length := by
+    rw [hi.split, List.length_append, List.length_cons]; omega
+  have hord1 : σ1.order = σ.order := h1.order
+  have hidx1 : ∀ j, σ1.idx j = σ.idx j := fun j => by unfold RelabelState.idx; rw [hord1]
+  have hs1 : σ1.types.size = σ.types.size := by rw [h1.types]
+  have hne1 : σ1.nodeEdges.size = σ.nodeEdges.size := h1.nodeEdges_size
+  have hidx3 : ∀ j ∈ σ.order.toList, σ3.idx j = σ.idx j := fun j hj => by
+    rw [h3.agree.idx_eq (by rw [hord1]; exact hj), hidx1]
+  have hidxc : σ3.idx c = σ.types.size := by rw [h3.idx_cur, hs1]
+  have hcur7 : cur ∈ s7.order.toList := by rw [he.order]; simp
+  have hcurσ : cur ∈ σ.order.toList := (hi.mem cur).2 (Or.inl hcur7)
+  have hdone_mem : ∀ d ∈ done, d ∈ σ.order.toList := fun d hd =>
+    (hi.mem d).2 (Or.inr ⟨d, hd, Items.mem_desc_self (hwf.tree.ch_lt cur d (hi.mem_ch_done he hd))⟩)
+  have hdlt : ∀ d ∈ done, σ.idx d < σ.types.size := fun d hd => hcs.idx_lt (hdone_mem d hd)
+  have hb22 : b'.2.2 = b.2.2 + 1 := by
+    rcases hcase with ⟨_, _, _, _, rfl⟩ | ⟨_, _, _, _, _, rfl⟩ | ⟨_, _, _, _, _, rfl⟩ <;> rfl
+  have hb1 : b'.1 = b.1 + if c < 1 + g.nv then 1 else 0 := by
+    rcases hcase with ⟨hV, _, _, _, rfl⟩ | ⟨hV, _, _, _, _, rfl⟩ | ⟨hV, _, _, _, _, rfl⟩ <;> simp [hV]
+  have hb21 : b'.2.1 = b.2.1 + if ¬ c < 1 + g.nv ∧ (items.type cur).isNode = true then 1 else 0 := by
+    rcases hcase with ⟨hV, _, _, _, rfl⟩ | ⟨hV, hn, _, _, _, rfl⟩ | ⟨hV, hn, _, _, _, rfl⟩
+    · simp [hV]
+    · simp [hV, hn]
+    · simp [hV, hn]
+  have hpn' : pn' = if c < 1 + g.nv then some b.1 else none := by
+    rcases hcase with ⟨hV, _, rfl, _⟩ | ⟨hV, hn, _, rfl, _⟩ | ⟨hV, hn, _, rfl, _⟩
+    · simp [hV]
+    · simp [hV]
+    · simp [hV]
+  have hct' : ct' = if ¬ c < 1 + g.nv ∧ (items.type cur).isNode = true then some b.2.1 else none := by
+    rcases hcase with ⟨hV, _, _, rfl, _⟩ | ⟨hV, hn, _, _, rfl, _⟩ | ⟨hV, hn, _, _, rfl, _⟩
+    · simp [hV]
+    · simp [hV, hn]
+    · simp [hV, hn]
+  have htwj : ∀ j, tw = some j → ¬ c < 1 + g.nv ∧ (items.type cur).isNode = true ∧ j = b.2.1 := by
+    intro j hj
+    rcases hcase with ⟨hV, rfl, _⟩ | ⟨hV, hn, rfl, _⟩ | ⟨hV, hn, rfl, _⟩
+    · cases hj
+    · cases hj; exact ⟨hV, hn, rfl⟩
+    · cases hj
+  have htw' : ¬ c < 1 + g.nv → (items.type cur).isNode = true → tw = some b.2.1 := by
+    intro hV hn
+    rcases hcase with ⟨hV', _⟩ | ⟨_, _, rfl, _⟩ | ⟨_, hn', _⟩
+    · exact absurd hV' hV
+    · rfl
+    · exact absurd hn hn'
+  have hcount : done.countP (· ≥ 1 + g.nv) = (done.filter (· ≥ 1 + g.nv)).length :=
+    List.countP_eq_length_filter
+  have hkord : ∀ k, k < (done.filter (· ≥ 1 + g.nv)).length →
+      k < ((items.ordered g cur nvSt pos).filter (· ≥ 1 + g.nv)).length := by
+    intro k hk
+    rw [← he.children_eq, hi.split, List.filter_append, List.length_append]; omega
+  have hkord2 : ¬ c < 1 + g.nv → (done.filter (· ≥ 1 + g.nv)).length <
+      ((items.ordered g cur nvSt pos).filter (· ≥ 1 + g.nv)).length := by
+    intro hV
+    rw [← he.children_eq, hi.split, List.filter_append, List.length_append,
+      List.filter_cons_of_pos (by simpa using Nat.le_of_not_lt hV), List.length_cons]; omega
+  have hbj : ∀ j, tw = some j → j < s7.nodeEdges.size := by
+    intro j hj
+    obtain ⟨hV, hn, rfl⟩ := htwj j hj
+    have := Items.capCount_add_lt_nEdges hn (hkord2 hV)
+    rw [hi.ne_cur, if_pos hn, hcount, hs7ne]; omega
+  have hA7 : Agree (Bounds.of s7) σ σ3 :=
+    (h1.agree Agree.refl (Or.inl (by show chSt + b.2.2 < s7.chDat.size; rw [hs7ch, hi.ch_cur]; omega))
+      (fun j hj => Or.inl (hbj j hj))).trans (h3.agree.mono (Bounds.zero_le _))
+  have hA0 : Agree Bounds.zero s σ3 :=
+    (h1.agree hi.agree0 (Or.inr (by rw [hcse]; exact Nat.le_add_right _ _))
+      (fun j hj => Or.inr (by
+        obtain ⟨hV, hn, rfl⟩ := htwj j hj
+        have h := hi.ne_cur; rw [if_pos hn] at h; omega))).trans h3.agree
+  have hne3 : ∀ m, m < σ.nodeEdges.size → (∀ j, tw = some j → m ≠ j) →
+      σ3.nodeEdges[m]! = σ.nodeEdges[m]! := by
+    intro m hm hj
+    rw [h3.agree.nodeEdges.get! (Nat.zero_le _) (by rw [hne1]; exact hm), h1.nodeEdges]
+    cases tw with
+    | none => rfl
+    | some j => exact modify_get!_ne _ _ (hj j rfl).symm
+  have hne3' : σ.nodeEdges.size ≤ σ3.nodeEdges.size := by
+    have := h3.agree.nodeEdges.size_le; omega
+  have htwin_eq : ∀ (τ : RelabelState) m, m < τ.nodeEdges.size →
+      (τ.tree g).twin m = τ.nodeEdges[m]!.twin := by
+    intro τ m hm; rw [tree_twin, Array.getElem?_eq_getElem hm, getElem!_pos τ.nodeEdges m hm]; rfl
+  have htw3 : ∀ m, m < σ.nodeEdges.size → (∀ j, tw = some j → m ≠ j) →
+      (σ3.tree g).twin m = (σ.tree g).twin m := by
+    intro m hm hj
+    rw [htwin_eq σ3 m (by omega), htwin_eq σ m hm, hne3 m hm hj]
+  have htwj3 : ∀ j, tw = some j → j < σ.nodeEdges.size → (σ3.tree g).twin j = some σ.nodeEdges.size := by
+    intro j hj hlt
+    rw [htwin_eq σ3 j (by omega), h3.agree.nodeEdges.get! (Nat.zero_le _) (by rw [hne1]; exact hlt),
+      h1.nodeEdges, hj]
+    show (σ.nodeEdges.modify j _)[j]!.twin = _
+    rw [modify_get!_self _ _ hlt]
+  have hneB3 : ∀ m, m ≤ σ.types.size → σ3.neBounds[m]! = σ.neBounds[m]! := fun m hm => by
+    rw [h3.agree.neBounds.get! (Nat.zero_le _) (by rw [hc1.neBounds_size, hs1]; omega), h1.neBounds]
+  have hsub3 : ∀ m, m < σ.types.size → σ3.subtreeEnd[m]! = σ.subtreeEnd[m]! := fun m hm => by
+    rw [h3.agree.subtreeEnd.get! (Nat.zero_le _) (by rw [hc1.subtreeEnd_size, hs1]; exact hm), h1.subtreeEnd]
+  have hpar3 : ∀ m, m < σ.types.size → σ3.par[m]! = σ.par[m]! := fun m hm => by
+    rw [h3.agree.par.get! (Nat.zero_le _) (by rw [hc1.par_size, hs1]; exact hm), h1.par]
+  have hvpn3 : ∀ m, m < σ.types.size → σ3.vertParNv[m]! = σ.vertParNv[m]! := fun m hm => by
+    rw [h3.agree.vertParNv.get! (Nat.zero_le _) (by rw [hc1.vertParNv_size, hs1]; exact hm), h1.vertParNv]
+  have hch3 : ∀ m, m < σ.chDat.size → m ≠ chSt + b.2.2 → σ3.chDat[m]! = σ.chDat[m]! := fun m hm hne => by
+    rw [h3.agree.chDat.get! (Nat.zero_le _) (by rw [h1.chDat, Array.size_set!]; exact hm), h1.chDat,
+      set!_get!_ne _ _ hne.symm]
+  have hchsz : s7.chDat.size ≤ σ.chDat.size := hi.agree7.chDat.size_le
+  refine {
+    split := by rw [hi.split, List.append_assoc, List.singleton_append]
+    cons := hc3
+    agree0 := hA0
+    agree7 := hi.agree7.trans hA7
+    idx_cur := by rw [hidx3 cur hcurσ, hi.idx_cur]
+    ch_cur := by rw [hb22, hi.ch_cur, List.length_append, List.length_singleton]
+    nv_cur := by
+      rw [hb1, hi.nv_cur, List.countP_append, List.countP_cons, List.countP_nil]
+      by_cases hV : c < 1 + g.nv <;> simp [hV] <;> omega
+    ne_cur := by
+      rw [hb21, hi.ne_cur, List.countP_append, List.countP_cons, List.countP_nil]
+      by_cases hV : c < 1 + g.nv
+      · have hge : ¬ 1 + g.nv ≤ c := Nat.not_le.2 hV
+        by_cases hn : (items.type cur).isNode = true <;> simp [hV, hn, hge] <;> omega
+      · have hge : 1 + g.nv ≤ c := Nat.le_of_not_lt hV
+        by_cases hn : (items.type cur).isNode = true <;> simp [hV, hn, hge] <;> omega
+    mem := fun j => by
+      rw [h3.mem j, hord1, hi.mem j]
+      constructor
+      · rintro ((h | ⟨d, hd, hj⟩) | hj)
+        · exact Or.inl h
+        · exact Or.inr ⟨d, List.mem_append_left _ hd, hj⟩
+        · exact Or.inr ⟨c, List.mem_append_right _ (List.mem_singleton_self c), hj⟩
+      · rintro (h | ⟨d, hd, hj⟩)
+        · exact Or.inl (Or.inl h)
+        · rcases List.mem_append.1 hd with hd | hd
+          · exact Or.inl (Or.inr ⟨d, hd, hj⟩)
+          · rw [List.mem_singleton] at hd; rw [hd] at hj; exact Or.inr hj
+    size := by
+      have hl : (done ++ [c]).getLast? = some c := by simp
+      rw [hl]; show σ3.types.size = σ3.subtreeEnd[σ3.idx c]!
+      rw [h3.idx_cur]; exact h3.subtree_end.symm
+    slots := by
+      intro k hk
+      rcases Nat.lt_or_ge k done.length with hlt | hge
+      · rw [← List.getElem_append_left' hlt [c], hidx3 _ (hdone_mem _ (List.getElem_mem _)),
+          hch3 _ (by omega) (by rw [hi.ch_cur]; omega)]
+        exact hi.slots k hlt
+      · have hk' : k = done.length := by rw [List.length_append, List.length_singleton] at hk; omega
+        subst hk'
+        rw [List.getElem_concat_length rfl, hidxc,
+          h3.agree.chDat.get! (Nat.zero_le _) (by rw [h1.chDat, Array.size_set!]; omega), h1.chDat, hi.ch_cur,
+          set!_get!_self _ _ (by omega)]
+    child_idx := by
+      intro k hk
+      rcases Nat.lt_or_ge k done.length with hlt | hge
+      · rw [← List.getElem_append_left' hlt [c], hidx3 _ (hdone_mem _ (List.getElem_mem _)), hi.child_idx k hlt]
+        by_cases h0 : k = 0
+        · simp only [if_pos h0]
+        · rw [if_neg h0, if_neg h0, ← List.getElem_append_left' (by omega) [c],
+            hidx3 _ (hdone_mem _ (List.getElem_mem _)), hsub3 _ (hdlt _ (List.getElem_mem _))]
+      · have hk' : k = done.length := by rw [List.length_append, List.length_singleton] at hk; omega
+        subst hk'
+        rw [List.getElem_concat_length rfl, hidxc]
+        have hsz := hi.size
+        rw [List.getLast?_eq_getElem?] at hsz
+        by_cases h0 : done.length = 0
+        · rw [if_pos h0]; rw [List.getElem?_eq_none (by omega)] at hsz; exact hsz
+        · rw [if_neg h0, ← List.getElem_append_left' (by omega) [c], hidx3 _ (hdone_mem _ (List.getElem_mem _)),
+            hsub3 _ (hdlt _ (List.getElem_mem _))]
+          rw [List.getElem?_eq_getElem (by omega)] at hsz; exact hsz
+    par := by
+      intro d hd
+      rcases List.mem_append.1 hd with hd | hd
+      · rw [hidx3 d (hdone_mem d hd), hpar3 _ (hdlt d hd)]; exact hi.par d hd
+      · rw [List.mem_singleton] at hd; rw [hd, h3.idx_cur]; exact h3.par
+    par_nv := by
+      by_cases hV : c < 1 + g.nv
+      · have hf : (done ++ [c]).filter (· < 1 + g.nv) = done.filter (· < 1 + g.nv) ++ [c] := by simp [hV]
+        rw [hf]
+        intro k hk
+        rcases Nat.lt_or_ge k (done.filter (· < 1 + g.nv)).length with hlt | hge
+        · rw [← List.getElem_append_left' hlt [c],
+            hidx3 _ (hdone_mem _ (List.mem_of_mem_filter (List.getElem_mem _))),
+            hvpn3 _ (hdlt _ (List.mem_of_mem_filter (List.getElem_mem _)))]
+          exact hi.par_nv k hlt
+        · have hk' : k = (done.filter (· < 1 + g.nv)).length := by
+            rw [List.length_append, List.length_singleton] at hk; omega
+          subst hk'
+          rw [List.getElem_concat_length rfl, h3.idx_cur, h3.par_nv, hpn', if_pos hV, hi.nv_cur,
+            List.countP_eq_length_filter]
+      · have hf : (done ++ [c]).filter (· < 1 + g.nv) = done.filter (· < 1 + g.nv) := by simp [hV]
+        rw [hf]
+        intro k hk
+        rw [hidx3 _ (hdone_mem _ (List.mem_of_mem_filter (List.getElem_mem _))),
+          hvpn3 _ (hdlt _ (List.mem_of_mem_filter (List.getElem_mem _)))]
+        exact hi.par_nv k hk
+    par_nv_none := by
+      intro d hd hge
+      rcases List.mem_append.1 hd with hd | hd
+      · rw [hidx3 d (hdone_mem d hd), hvpn3 _ (hdlt d hd)]; exact hi.par_nv_none d hd hge
+      · rw [List.mem_singleton] at hd; rw [hd] at hge ⊢
+        rw [h3.idx_cur, h3.par_nv, hpn', if_neg (Nat.not_lt.2 hge)]
+    twin := by
+      intro hn
+      have hne_cur : b.2.1 = neSt + items.capCount cur + (done.filter (· ≥ 1 + g.nv)).length := by
+        rw [hi.ne_cur, if_pos hn, hcount]
+      have hold : ∀ k (hk : k < (done.filter (· ≥ 1 + g.nv)).length),
+          (σ3.tree g).twin (neSt + items.capCount cur + k) =
+            some σ3.neBounds[σ3.idx (done.filter (· ≥ 1 + g.nv))[k]]! ∧
+          (items.hasCap (done.filter (· ≥ 1 + g.nv))[k] →
+            (σ3.tree g).twin σ3.neBounds[σ3.idx (done.filter (· ≥ 1 + g.nv))[k]]! =
+              some (neSt + items.capCount cur + k)) := by
+        intro k hk
+        have hdm : (done.filter (· ≥ 1 + g.nv))[k] ∈ done := List.mem_of_mem_filter (List.getElem_mem _)
+        have hdesc := hi.nodes _ hdm _ (Items.mem_desc_self (hwf.tree.ch_lt cur _ (hi.mem_ch_done he hdm)))
+        have hlt1 : neSt + items.capCount cur + k < σ.nodeEdges.size := by
+          have := Items.capCount_add_lt_nEdges hn (hkord k hk)
+          have := hi.agree7.nodeEdges.size_le; omega
+        have hne1' : ∀ j, tw = some j → neSt + items.capCount cur + k ≠ j := fun j hj => by
+          obtain ⟨-, -, rfl⟩ := htwj j hj; omega
+        have hge7 : s7.nodeEdges.size ≤ σ.neBounds[σ.idx (done.filter (· ≥ 1 + g.nv))[k]]! :=
+          hdesc.2.nodeEdges
+        rw [hidx3 _ (hdone_mem _ hdm), hneB3 _ (Nat.le_of_lt (hdlt _ hdm)), htw3 _ hlt1 hne1']
+        refine ⟨(hi.twin hn k hk).1, fun hcap => ?_⟩
+        rw [htw3 _ (hdesc.1.neSt_lt hdesc.2 hcap) (fun j hj => by
+          have := hbj j hj; obtain ⟨-, -, rfl⟩ := htwj j hj; omega)]
+        exact (hi.twin hn k hk).2 hcap
+      by_cases hV : c < 1 + g.nv
+      · have hf : (done ++ [c]).filter (· ≥ 1 + g.nv) = done.filter (· ≥ 1 + g.nv) := by
+          simp [Nat.not_le.2 hV]
+        rw [hf]; exact hold
+      · have hf : (done ++ [c]).filter (· ≥ 1 + g.nv) = done.filter (· ≥ 1 + g.nv) ++ [c] := by
+          simp [Nat.le_of_not_lt hV]
+        rw [hf]
+        intro k hk
+        rcases Nat.lt_or_ge k (done.filter (· ≥ 1 + g.nv)).length with hlt | hge
+        · rw [← List.getElem_append_left' hlt [c]]; exact hold k hlt
+        · have hk' : k = (done.filter (· ≥ 1 + g.nv)).length := by
+            rw [List.length_append, List.length_singleton] at hk; omega
+          subst hk'
+          have hj := htw' hV hn
+          have hblt : b.2.1 < σ.nodeEdges.size := by
+            have := hbj _ hj; have := hi.agree7.nodeEdges.size_le; omega
+          rw [List.getElem_concat_length rfl, h3.idx_cur, h3.ne_st, hne1, ← hne_cur]
+          refine ⟨htwj3 _ hj hblt, fun hcap => ?_⟩
+          have hn3 := h3.nodes c (Items.mem_desc_self hclt)
+          have hlt3 := hn3.1.neSt_lt hn3.2 hcap
+          rw [h3.idx_cur, h3.ne_st, hne1] at hlt3
+          rw [htwin_eq σ3 _ hlt3]
+          have := h3.cap hcap
+          rw [hne1] at this
+          rw [this, hct', if_pos (And.intro hV hn)]
+    cap_none := by
+      intro hn d hd hcap
+      have hnone : ∀ j, tw = some j → False := fun j hj => hn (htwj j hj).2.1
+      rcases List.mem_append.1 hd with hd | hd
+      · have hdesc := hi.nodes d hd d (Items.mem_desc_self (hwf.tree.ch_lt cur d (hi.mem_ch_done he hd)))
+        rw [hidx3 d (hdone_mem d hd), hneB3 _ (Nat.le_of_lt (hdlt d hd)),
+          htw3 _ (hdesc.1.neSt_lt hdesc.2 hcap) (fun j hj => (hnone j hj).elim)]
+        exact hi.cap_none hn d hd hcap
+      · rw [List.mem_singleton] at hd; rw [hd] at hcap ⊢
+        have hn3 := h3.nodes c (Items.mem_desc_self hclt)
+        have hlt3 := hn3.1.neSt_lt hn3.2 hcap
+        rw [h3.idx_cur, h3.ne_st, hne1] at hlt3 ⊢
+        rw [htwin_eq σ3 _ hlt3]
+        have := h3.cap hcap
+        rw [hne1] at this
+        rw [this, hct', if_neg (fun h : ¬ c < 1 + g.nv ∧ (items.type cur).isNode = true => hn h.2)]
+    cap := by
+      intro h
+      have hcap1 : items.capCount cur = 1 := by unfold Items.capCount; rw [if_pos h]
+      have hlt : neSt < σ.nodeEdges.size := by
+        have := Items.one_le_nEdges_of_hasCap (g := g) h
+        have := hi.agree7.nodeEdges.size_le; omega
+      rw [hne3 neSt hlt (fun j hj => by
+        obtain ⟨-, hn, rfl⟩ := htwj j hj
+        have := hi.ne_cur; rw [if_pos hn] at this; omega)]
+      exact hi.cap h
+    nodes := by
+      intro d hd j hj
+      rcases List.mem_append.1 hd with hd | hd
+      · obtain ⟨hn, hl⟩ := hi.nodes d hd j hj
+        exact ⟨hn.mono hcs hl hA7, hl.agree hcs hA7⟩
+      · rw [List.mem_singleton] at hd; rw [hd] at hj
+        obtain ⟨hn, hl⟩ := h3.nodes j hj
+        refine ⟨hn, hl.mono ⟨?_, ?_, ?_⟩⟩
+        · show s7.chDat.size ≤ σ1.chDat.size; rw [h1.chDat, Array.size_set!]; exact hi.agree7.chDat.size_le
+        · show s7.nodeEdges.size ≤ σ1.nodeEdges.size; rw [hne1]; exact hi.agree7.nodeEdges.size_le
+        · show s7.types.size ≤ σ1.types.size; rw [hs1]; exact hi.agree7.types.size_le }
 
-theorem NodeS.neSt_lt {B : Bounds} {i : ItemId} (hn : NodeS g items σ i) (hl : LowB items B σ i)
-    (hcap : items.hasCap i = true) : σ.neBounds[σ.idx i]! < σ.nodeEdges.size := by
-  have h1 := hn.node.ne_range
-  rw [tree_neRange_fst, tree_neRange_snd] at h1
-  have h2 := hl.nodeEdges_le
-  have h3 := Items.one_le_nEdges_of_hasCap (g := g) hcap
-  omega
-
-/-- After the loop, writing `subtreeEnd[curIdx]` finishes the call. -/
 theorem LoopInv.fin (hwf : items.WF g) (hpre : CallPre g items cur s)
     (he : Entry g items cur p pn ct curIdx chSt nvSt neSt pos children s s7)
     (hi : LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children done [] b σ)
