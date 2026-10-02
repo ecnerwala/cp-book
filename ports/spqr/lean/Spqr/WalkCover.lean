@@ -41,7 +41,9 @@ def BoundaryOK (d : Nat) (o : DfsOut) (s : WalkState) : Prop :=
     else (∀ b ∈ s.tstack.head?, b.spans.2 = []) ∧ ∀ t ∈ s.tstack.tail.head?, t.spans.1 = []
 
 /-- `walkForest`, after `walkTree t 0`: one entry is left, with everything on its second side. -/
-def RootOK (s : WalkState) : Prop := s.tstack.tail = [] ∧ ∀ t ∈ s.tstack.head?, t.spans.1 = []
+def RootOK (s : WalkState) : Prop :=
+  s.tstack.tail = [] ∧
+  ∀ t ∈ s.tstack.head?, t.spans.1 = [] ∧ ∀ c ∈ t.spans.2, ∃ v, v < s.g.nv ∧ c = vertItem v
 
 /-! ### The sites, following the blocks of `finishEdge'` -/
 
@@ -163,6 +165,15 @@ structure Full (g : Graph) (P X : ItemId → Prop) (s : WalkState) : Prop where
   pushed : ∀ i, P i → 0 < s.cnt i
   placed : ∀ i, 1 + g.nv + g.ne ≤ i → i < s.items.size → ¬ X i → 0 < s.cnt i
   qch : ∀ e, e < g.ne → ¬ P (edgeItem g e) → Items.ch s.items (edgeItem g e) = []
+  rootch : ∀ c ∈ Items.ch s.items rootItem, ∃ v, v < g.nv ∧ c = vertItem v
+
+/-- The root-children side of `Full`. -/
+abbrev RootCh (g : Graph) (items : Items) : Prop :=
+  ∀ c ∈ Items.ch items rootItem, ∃ v, v < g.nv ∧ c = vertItem v
+
+theorem RootCh.of_ch_eq {g : Graph} {items items' : Items} (h : RootCh g items)
+    (he : Items.ch items' rootItem = Items.ch items rootItem) : RootCh g items' :=
+  fun c hc => h c (he ▸ hc)
 
 namespace Full
 
@@ -174,6 +185,7 @@ theorem mono (h : s.Full g P X) (hP : ∀ i, P i ↔ P' i) (hX : ∀ i, X i ↔ 
   pushed i hi := h.pushed i ((hP i).2 hi)
   placed i hn hi hx := h.placed i hn hi fun h' => hx ((hX i).1 h')
   qch e he hP' := h.qch e he fun h' => hP' ((hP _).1 h')
+  rootch := h.rootch
 
 theorem monoP (h : s.Full g P X) (hP : ∀ i, P i ↔ P' i) : s.Full g P' X := h.mono hP fun _ => Iff.rfl
 theorem monoX (h : s.Full g P X) (hX : ∀ i, X i ↔ X' i) : s.Full g P X' := h.mono (fun _ => Iff.rfl) hX
@@ -183,27 +195,30 @@ theorem edgeItem_g (h : s.Full g P X) (e : Nat) : edgeItem s.g e = edgeItem g e 
 /-- A step that places nothing new and changes no child list of an unfinished edge. -/
 theorem of_cnt (h : s.Full g P X) (hp : s'.Place g P X) (hsz : s'.items.size = s.items.size)
     (hq : ∀ e, e < g.ne → ¬ P (edgeItem g e) → Items.ch s'.items (edgeItem g e) = Items.ch s.items (edgeItem g e))
-    (hc : ∀ i, s'.cnt i = s.cnt i) : s'.Full g P X where
+    (hc : ∀ i, s'.cnt i = s.cnt i) (hr : RootCh g s'.items) : s'.Full g P X where
   place := hp
   fixedP := h.fixedP
   pushed i hi := hc i ▸ h.pushed i hi
   placed i hn hi hx := hc i ▸ h.placed i hn (hsz ▸ hi) hx
   qch e he hP := (hq e he hP).trans (h.qch e he hP)
+  rootch := hr
 
 theorem of_eq (h : s.Full g P X) (hg : s'.g = s.g) (hi : s'.items = s.items) (ht : s'.tstack = s.tstack) :
     s'.Full g P X :=
-  h.of_cnt (h.place.of_eq hg hi ht) (by rw [hi]) (fun _ _ _ => by rw [hi]) fun i => by simp [cnt, hi, ht]
+  h.of_cnt (h.place.of_eq hg hi ht) (by rw [hi]) (fun _ _ _ => by rw [hi]) (fun i => by simp [cnt, hi, ht])
+    (by rw [hi]; exact h.rootch)
 
 theorem tstack (h : s.Full g P X) {ts : List TEntry} (hts : ∀ i, spansCount ts i = spansCount s.tstack i) :
     ({ s with tstack := ts }).Full g P X :=
   h.of_cnt (h.place.tstack_le fun i => Nat.le_of_eq (hts i)) rfl (fun _ _ _ => rfl)
-    fun i => by simp only [cnt, hts]
+    (fun i => by simp only [cnt, hts]) h.rootch
 
 /-- Placing the node `x` (loose before). -/
 theorem step_node (h : s.Full g P X) {x : Nat}
     (hp : s'.Place g P (fun i => X i ∧ i ≠ x)) (hsz : s'.items.size = s.items.size)
     (hq : ∀ e, e < g.ne → ¬ P (edgeItem g e) → Items.ch s'.items (edgeItem g e) = Items.ch s.items (edgeItem g e))
-    (hc : ∀ i, s'.cnt i = s.cnt i + if i = x then 1 else 0) : s'.Full g P (fun i => X i ∧ i ≠ x) where
+    (hc : ∀ i, s'.cnt i = s.cnt i + if i = x then 1 else 0) (hr : RootCh g s'.items) :
+    s'.Full g P (fun i => X i ∧ i ≠ x) where
   place := hp
   fixedP := h.fixedP
   pushed i hi := by have := h.pushed i hi; rw [hc]; omega
@@ -213,13 +228,15 @@ theorem step_node (h : s.Full g P X) {x : Nat}
     · simp [hix]
     · have := h.placed i hn (hsz ▸ hi) fun h' => hx' ⟨h', hix⟩; omega
   qch e he hP := (hq e he hP).trans (h.qch e he hP)
+  rootch := hr
 
 /-- Placing the fixed item `x` (not pushed before). -/
 theorem step_fixed (h : s.Full g P X) {x : Nat} (hx0 : 0 < x) (hxlt : x < 1 + g.nv + g.ne)
     (hp : s'.Place g (fun i => P i ∨ i = x) X) (hsz : s'.items.size = s.items.size)
     (hq : ∀ e, e < g.ne → ¬ (P (edgeItem g e) ∨ edgeItem g e = x) →
       Items.ch s'.items (edgeItem g e) = Items.ch s.items (edgeItem g e))
-    (hc : ∀ i, s'.cnt i = s.cnt i + if i = x then 1 else 0) : s'.Full g (fun i => P i ∨ i = x) X where
+    (hc : ∀ i, s'.cnt i = s.cnt i + if i = x then 1 else 0) (hr : RootCh g s'.items) :
+    s'.Full g (fun i => P i ∨ i = x) X where
   place := hp
   fixedP i hi := hi.elim (h.fixedP i) fun h' => h' ▸ ⟨hx0, hxlt⟩
   pushed i hi := by
@@ -229,6 +246,7 @@ theorem step_fixed (h : s.Full g P X) {x : Nat} (hx0 : 0 < x) (hxlt : x < 1 + g.
     · simp
   placed i hn hi hx' := by have := h.placed i hn (hsz ▸ hi) hx'; rw [hc]; omega
   qch e he hP := (hq e he hP).trans (h.qch e he fun h' => hP (Or.inl h'))
+  rootch := hr
 
 theorem set_stackDir (h : s.Full g P X) (a : Array Bool) : ({ s with stackDir := a }).Full g P X :=
   h.of_eq rfl rfl rfl
@@ -251,13 +269,19 @@ theorem push (h : s.Full g P X) (ty : NodeType) :
   qch e he hP := by
     show Items.ch (s.items.push _) _ = []
     rw [Items.ch_push_nil (hx := rfl)]; exact h.qch e he hP
+  rootch := by
+    show ∀ c ∈ Items.ch (s.items.push _) rootItem, _
+    rw [Items.ch_push]; split
+    · exact fun c hc => (List.not_mem_nil hc).elim
+    · exact h.rootch
 
 theorem modify_vs (h : s.Full g P X) (x : ItemId) (vs : Option Nat × Option Nat) :
     ({ s with items := s.items.modify x fun it => { it with vs := vs } }).Full g P X :=
   h.of_cnt (h.place.modify_vs x vs) (by simp) (fun _ _ _ => Items.ch_modify_of_ch _ _ _ _ fun _ => rfl)
-    fun i => by
+    (fun i => by
       simp only [cnt]
-      rw [Items.chCount_modify_of_ch _ x (fun it => { it with vs := vs }) (fun _ => rfl)]
+      rw [Items.chCount_modify_of_ch _ x (fun it => { it with vs := vs }) (fun _ => rfl)])
+    (RootCh.of_ch_eq h.rootch (Items.ch_modify_of_ch _ _ _ _ fun _ => rfl))
 
 theorem mergeTop (h : s.Full g P X) (hm : MergeOK s) :
     ({ s with tstack := WalkM.mergeTop s.tstack }).Full g P X := by
@@ -284,11 +308,11 @@ theorem fold (h : s.Full g P X) (curV : Nat) (edgeDir : Bool) :
 theorem cons (h : s.Full g P X) {x : Nat} (hx0 : 0 < x) (hxlt : x < 1 + g.nv + g.ne) (hP : ¬ P x)
     (vS tD fI : Nat) (dir : Bool) :
     ({ s with tstack := ⟨vS, tD, fI, setSides dir [x] []⟩ :: s.tstack }).Full g (fun i => P i ∨ i = x) X :=
-  h.step_fixed hx0 hxlt (h.place.cons_fixed hx0 hxlt hP vS tD fI dir) rfl (fun _ _ _ => rfl) fun i => by
+  h.step_fixed hx0 hxlt (h.place.cons_fixed hx0 hxlt hP vS tD fI dir) rfl (fun _ _ _ => rfl) (fun i => by
     simp only [cnt, spansCount_cons, count_setSides, List.append_nil]
     by_cases hix : i = x
     · subst hix; simp only [List.count_singleton, beq_self_eq_true, ite_true]; omega
-    · simp [Ne.symm hix, hix]
+    · simp [Ne.symm hix, hix]) h.rootch
 
 theorem count_getSide_of_onSide (p : List ItemId × List ItemId) (dir : Bool) (h : getSide p (!dir) = [])
     (i : ItemId) : (getSide p dir).count i = (p.1 ++ p.2).count i := by
@@ -300,14 +324,15 @@ theorem dropCh_cnt (s : WalkState) {x : Nat} (hx : x < s.items.size) (i : ItemId
   simp only [List.count_nil, Nat.add_zero] at this
   simp only [cnt, WalkState.dropCh]; omega
 
-theorem dropCh_fresh (h : s.Full g P X) {x : Nat} (hlt : x < s.items.size) (hx : Items.ch s.items x = []) :
-    (s.dropCh x).Full g P X := by
-  refine h.of_cnt (h.place.dropCh x) (by simp [WalkState.dropCh]) (fun e _ _ => ?_) fun i => ?_
+theorem dropCh_fresh (h : s.Full g P X) {x : Nat} (hlt : x < s.items.size) (hx : Items.ch s.items x = [])
+    (hx0 : x ≠ rootItem) : (s.dropCh x).Full g P X := by
+  refine h.of_cnt (h.place.dropCh x) (by simp [WalkState.dropCh]) (fun e _ _ => ?_) (fun i => ?_) ?_
   · simp only [WalkState.dropCh]
     by_cases hxe : x = edgeItem g e
     · subst hxe; rw [Items.ch_modify_self _ _ _ hlt, hx]
     · rw [Items.ch_modify_ne _ _ _ _ hxe]
   · have := dropCh_cnt s hlt i; rw [hx] at this; simpa using this
+  · exact RootCh.of_ch_eq h.rootch (Items.ch_modify_ne _ _ _ _ hx0)
 
 theorem head!_spans1_nil {ts : List TEntry} (hb : ∀ t ∈ ts.head?, t.spans.1 = []) : ts.head!.spans.1 = [] := by
   cases ts with
@@ -331,7 +356,8 @@ theorem finishTop {x : Nat} (h : (s.dropCh x).Full g P X) (hx : X x) {a : TEntry
   have hlt : x < s.items.size := by simpa [WalkState.dropCh] using hn.2
   have hp := h.place.finishTop hx dir vs
   rw [hts] at hp
-  refine h.step_node hp (by simp [WalkState.dropCh]) (fun e he _ => ?_) fun i => ?_
+  have hx0 : x ≠ rootItem := by show x ≠ 0; omega
+  refine h.step_node hp (by simp [WalkState.dropCh]) (fun e he _ => ?_) (fun i => ?_) ?_
   · simp only [WalkState.dropCh]
     rw [Items.ch_modify_ne _ _ _ _ (node_ne_edgeItem hn.1 he), Items.ch_modify_ne _ _ _ _ (node_ne_edgeItem hn.1 he)]
   · simp only [cnt, WalkState.dropCh, hts, spansCount_cons, count_setSides, List.append_nil]
@@ -342,6 +368,7 @@ theorem finishTop {x : Nat} (h : (s.dropCh x).Full g P X) (hx : X x) {a : TEntry
     by_cases hix : i = x
     · subst hix; simp only [List.count_singleton, beq_self_eq_true, ite_true]; omega
     · simp only [List.count_singleton, hix, Ne.symm hix, beq_iff_eq, ite_false]; omega
+  · exact RootCh.of_ch_eq (RootCh.of_ch_eq h.rootch (Items.ch_modify_ne _ _ _ _ hx0).symm) (Items.ch_modify_ne _ _ _ _ hx0)
 
 /-- `maybeUnwrapNxt` reusing `x`, the single item of `nxt`. -/
 theorem unwrap (h : s.Full g P X) {a t : TEntry} {rest : List TEntry} (hts : s.tstack = a :: t :: rest)
@@ -370,14 +397,16 @@ theorem unwrap (h : s.Full g P X) {a t : TEntry} {rest : List TEntry} (hts : s.t
       rw [key i hx'.2]; exact h.placed i hn' (by simpa [WalkState.dropCh] using hi) hx'.1
     qch := fun e he hP => by
       simp only [WalkState.dropCh]
-      rw [Items.ch_modify_ne _ _ _ _ (node_ne_edgeItem hn he)]; exact h.qch e he hP }
+      rw [Items.ch_modify_ne _ _ _ _ (node_ne_edgeItem hn he)]; exact h.qch e he hP
+    rootch := RootCh.of_ch_eq h.rootch (Items.ch_modify_ne _ _ _ _ (by show x ≠ 0; omega)) }
 
 /-- Placing node `x` and fixed item `q` at once. -/
 theorem step_node_fixed (h : s.Full g P X) {x q : Nat} (hq0 : 0 < q) (hqlt : q < 1 + g.nv + g.ne)
     (hp : s'.Place g (fun i => P i ∨ i = q) (fun i => X i ∧ i ≠ x)) (hsz : s'.items.size = s.items.size)
     (hqc : ∀ e, e < g.ne → ¬ P (edgeItem g e) → edgeItem g e ≠ q →
       Items.ch s'.items (edgeItem g e) = Items.ch s.items (edgeItem g e))
-    (hc : ∀ i, s'.cnt i = s.cnt i + (if i = x then 1 else 0) + if i = q then 1 else 0) :
+    (hc : ∀ i, s'.cnt i = s.cnt i + (if i = x then 1 else 0) + if i = q then 1 else 0)
+    (hr : RootCh g s'.items) :
     s'.Full g (fun i => P i ∨ i = q) (fun i => X i ∧ i ≠ x) where
   place := hp
   fixedP i hi := hi.elim (h.fixedP i) fun h' => h' ▸ ⟨hq0, hqlt⟩
@@ -394,11 +423,13 @@ theorem step_node_fixed (h : s.Full g P X) {x q : Nat} (hq0 : 0 < q) (hqlt : q <
   qch e he hP := by
     rw [not_or] at hP
     exact (hqc e he hP.1 hP.2).trans (h.qch e he hP.1)
+  rootch := hr
 
 /-- The bridge case of the block branch: `q` gets `x :: top.spans.2`, then goes under `vertItem curV`. -/
 theorem q_cons (h : s.Full g P X) {x q j : Nat} (hx : X x) (hq0 : 0 < q) (hqlt : q < 1 + g.nv + g.ne)
     (hP : ¬ P q) (hqch : Items.ch s.items q = []) (hj : j < s.items.size)
-    (hjne : ∀ e, e < g.ne → j ≠ edgeItem g e) (hb : ∀ t ∈ s.tstack.head?, t.spans.1 = []) :
+    (hjne : ∀ e, e < g.ne → j ≠ edgeItem g e) (hj0 : j ≠ rootItem)
+    (hb : ∀ t ∈ s.tstack.head?, t.spans.1 = []) :
     ({ s with
         items := (s.items.modify q fun it => { it with ch := x :: s.tstack.head!.spans.2 }).modify j
           fun it => { it with ch := it.ch ++ [q] },
@@ -407,7 +438,8 @@ theorem q_cons (h : s.Full g P X) {x q j : Nat} (hx : X x) (hq0 : 0 < q) (hqlt :
   have hn := h.place.loose_node x hx
   have hxq : x ≠ q := by omega
   refine h.step_node_fixed hq0 hqlt
-    ((h.place.q_cons hx hq).append_fixed (by simpa using hj) hq0 hqlt hP) (by simp) (fun e he _ hne => ?_) fun i => ?_
+    ((h.place.q_cons hx hq).append_fixed (by simpa using hj) hq0 hqlt hP) (by simp) (fun e he _ hne => ?_)
+    (fun i => ?_) (RootCh.of_ch_eq (RootCh.of_ch_eq h.rootch (Items.ch_modify_ne _ _ _ _ (Nat.ne_of_gt hq0))) (Items.ch_modify_ne _ _ _ _ hj0))
   · rw [Items.ch_modify_ne _ _ _ _ (hjne e he), Items.ch_modify_ne _ _ _ _ hne.symm]
   · have hb' := head!_spans1_nil hb
     simp only [cnt]
@@ -428,6 +460,7 @@ theorem q_cons (h : s.Full g P X) {x q j : Nat} (hx : X x) (hq0 : 0 < q) (hqlt :
 /-- The block branch without a bridge: `q` gets `backedge.spans.1 ++ t.spans.2`, then goes under `j`. -/
 theorem q_merge (h : s.Full g P X) {q j : Nat} (hq0 : 0 < q) (hqlt : q < 1 + g.nv + g.ne) (hP : ¬ P q)
     (hqch : Items.ch s.items q = []) (hj : j < s.items.size) (hjne : ∀ e, e < g.ne → j ≠ edgeItem g e)
+    (hj0 : j ≠ rootItem)
     (hb : ∀ b ∈ s.tstack.head?, b.spans.2 = []) (ht : ∀ t ∈ s.tstack.tail.head?, t.spans.1 = []) :
     ({ s with
         items := (s.items.modify q fun it =>
@@ -436,7 +469,8 @@ theorem q_merge (h : s.Full g P X) {q j : Nat} (hq0 : 0 < q) (hqlt : q < 1 + g.n
         tstack := s.tstack.tail.tail }).Full g (fun i => P i ∨ i = q) X := by
   have hq : q < s.items.size := Nat.lt_of_lt_of_le hqlt h.place.size
   refine h.step_fixed hq0 hqlt ((h.place.q_merge hq).append_fixed (by simpa using hj) hq0 hqlt hP) (by simp)
-    (fun e he hP' => ?_) fun i => ?_
+    (fun e he hP' => ?_) (fun i => ?_)
+    (RootCh.of_ch_eq (RootCh.of_ch_eq h.rootch (Items.ch_modify_ne _ _ _ _ (Nat.ne_of_gt hq0))) (Items.ch_modify_ne _ _ _ _ hj0))
   · rw [not_or] at hP'
     rw [Items.ch_modify_ne _ _ _ _ (hjne e he), Items.ch_modify_ne _ _ _ _ (Ne.symm hP'.2)]
   · have hb' := head!_spans2_nil hb
@@ -460,7 +494,7 @@ theorem q_merge (h : s.Full g P X) {q j : Nat} (hq0 : 0 < q) (hqlt : q < 1 + g.n
 /-- The self-loop case: `q` gets `[x]`, then goes under `j`. -/
 theorem q_single (h : s.Full g P X) {x q j : Nat} (hx : X x) (hq0 : 0 < q) (hqlt : q < 1 + g.nv + g.ne)
     (hP : ¬ P q) (hqch : Items.ch s.items q = []) (hj : j < s.items.size)
-    (hjne : ∀ e, e < g.ne → j ≠ edgeItem g e) :
+    (hjne : ∀ e, e < g.ne → j ≠ edgeItem g e) (hj0 : j ≠ rootItem) :
     ({ s with
         items := (s.items.modify q fun it => { it with ch := [x] }).modify j
           fun it => { it with ch := it.ch ++ [q] } }).Full g (fun i => P i ∨ i = q) (fun i => X i ∧ i ≠ x) := by
@@ -468,7 +502,8 @@ theorem q_single (h : s.Full g P X) {x q j : Nat} (hx : X x) (hq0 : 0 < q) (hqlt
   have hn := h.place.loose_node x hx
   have hxq : x ≠ q := by omega
   refine h.step_node_fixed hq0 hqlt
-    ((h.place.q_single hx hq).append_fixed (by simpa using hj) hq0 hqlt hP) (by simp) (fun e he _ hne => ?_) fun i => ?_
+    ((h.place.q_single hx hq).append_fixed (by simpa using hj) hq0 hqlt hP) (by simp) (fun e he _ hne => ?_)
+    (fun i => ?_) (RootCh.of_ch_eq (RootCh.of_ch_eq h.rootch (Items.ch_modify_ne _ _ _ _ (Nat.ne_of_gt hq0))) (Items.ch_modify_ne _ _ _ _ hj0))
   · rw [Items.ch_modify_ne _ _ _ _ (hjne e he), Items.ch_modify_ne _ _ _ _ hne.symm]
   · simp only [cnt]
     have h1 := Items.chCount_modify s.items hq (fun it => { it with ch := [x] }) i
@@ -484,12 +519,13 @@ theorem q_single (h : s.Full g P X) {x q j : Nat} (hx : X x) (hq0 : 0 < q) (hqlt
         at h1 h2 ⊢; omega
 
 /-- `walkForest`: the last entry's second side goes under the root. -/
-theorem root_append (h : s.Full g P X) (hb : ∀ t ∈ s.tstack.head?, t.spans.1 = []) :
+theorem root_append (h : s.Full g P X) (hb : ∀ t ∈ s.tstack.head?, t.spans.1 = [])
+    (hb2 : ∀ c ∈ s.tstack.head!.spans.2, ∃ v, v < g.nv ∧ c = vertItem v) :
     ({ s with
         items := s.items.modify rootItem fun it => { it with ch := it.ch ++ s.tstack.head!.spans.2 },
         tstack := s.tstack.tail }).Full g P X := by
   have h0 : rootItem < s.items.size := Nat.lt_of_lt_of_le (show (0 : Nat) < 1 + g.nv + g.ne by omega) h.place.size
-  refine h.of_cnt h.place.root_append (by simp) (fun e _ _ => ?_) fun i => ?_
+  refine h.of_cnt h.place.root_append (by simp) (fun e _ _ => ?_) (fun i => ?_) ?_
   · exact Items.ch_modify_ne _ _ _ _ (by show (0 : Nat) ≠ 1 + g.nv + e; omega)
   · have hb' := head!_spans1_nil hb
     simp only [cnt]
@@ -497,6 +533,10 @@ theorem root_append (h : s.Full g P X) (hb : ∀ t ∈ s.tstack.head?, t.spans.1
     have h2 := spansCount_head_tail s.tstack i
     simp only [List.count_append, hb', List.nil_append, ← Place.ch_eq_getElem s.items h0] at h1 h2
     omega
+  · intro c hc
+    rw [Items.ch_modify_self _ _ _ h0] at hc
+    simp only [← Place.ch_eq_getElem s.items h0, List.mem_append] at hc
+    exact hc.elim (h.rootch c) (hb2 c)
 
 theorem dropCh_mergeTop {x : Nat} (h : (s.dropCh x).Full g P X) (hm : MergeOK s) :
     (({ s with tstack := WalkM.mergeTop s.tstack }).dropCh x).Full g P X := h.mergeTop hm
@@ -549,7 +589,8 @@ theorem maybeUnwrapNxt_full (h : s.Full g P X) (ty : NodeType) (hty : ty ∈ [No
       (fun item s' => (s'.dropCh item).Full g P (fun i => X i ∨ i = item) ∧ ¬ X item) s := by
   have halloc : wp (allocItem ty)
       (fun item s' => (s'.dropCh item).Full g P (fun i => X i ∨ i = item) ∧ ¬ X item) s :=
-    ⟨(h.push ty).dropCh_fresh (x := s.items.size) (by simp) (Items.ch_push_size _ rfl),
+    ⟨(h.push ty).dropCh_fresh (x := s.items.size) (by simp) (Items.ch_push_size _ rfl)
+      (by have := h.place.size; show s.items.size ≠ 0; omega),
       fun hx => Nat.lt_irrefl _ (h.place.loose_node _ hx).2⟩
   have hroot : Items.type s.items 0 ≠ ty := by
     have hr : Items.type s.items 0 = .F := h.place.root_type
@@ -821,6 +862,7 @@ theorem finishEdge_full (h : s.Full g P X) {curV d : Nat} {o : DfsOut} {origTsta
   have hq0 : 0 < edgeItem s.g o.e := by show 0 < 1 + s.g.nv + o.e; omega
   have hqlt : edgeItem s.g o.e < 1 + s.g.nv + s.g.ne := by show 1 + s.g.nv + o.e < _; omega
   have hvne : ∀ e, e < s.g.ne → vertItem curV ≠ edgeItem s.g e := fun e _ => vertItem_ne_edgeItem hv e
+  have hvr : vertItem curV ≠ rootItem := by show 1 + curV ≠ 0; omega
   have hvlt : ∀ {X' : ItemId → Prop} (s' : WalkState), s'.Full s.g P X' → vertItem curV < s'.items.size :=
     fun s' h' =>
     Nat.lt_of_lt_of_le (by show 1 + curV < _; omega) h'.place.size
@@ -858,7 +900,7 @@ theorem finishEdge_full (h : s.Full g P X) {curV d : Nat} {o : DfsOut} {origTsta
         rintro _ _ ⟨rfl, rfl⟩
         simp only [wp_bind, wp_modifyItem, wp_pure]
         refine ⟨(h₄.q_cons (Or.inr rfl) hq0 hqlt hPe (h₄.qch o.e he hPe)
-          (hvlt _ h₄) hvne (ht₄ ▸ hb)).mono hPc fun i => ?_, fun hh => hh⟩
+          (hvlt _ h₄) hvne hvr (ht₄ ▸ hb)).mono hPc fun i => ?_, fun hh => hh⟩
         constructor
         · rintro ⟨hx | rfl, hne⟩
           · exact hx
@@ -871,7 +913,7 @@ theorem finishEdge_full (h : s.Full g P X) {curV d : Nat} {o : DfsOut} {origTsta
         refine bind_spec popTstack_spec' ?_
         rintro _ _ ⟨rfl, rfl⟩
         simp only [wp_bind, wp_modifyItem, wp_pure]
-        exact ⟨(h₂.q_merge hq0 hqlt hPe hqch (hvlt _ h₂) hvne (ht₂ ▸ hb.1) (ht₂ ▸ hb.2)).monoP hPc,
+        exact ⟨(h₂.q_merge hq0 hqlt hPe hqch (hvlt _ h₂) hvne hvr (ht₂ ▸ hb.1) (ht₂ ▸ hb.2)).monoP hPc,
           fun hh => hh⟩
     · refine bind_spec (modify_spec' _) ?_
       rintro _ _ rfl
@@ -879,7 +921,7 @@ theorem finishEdge_full (h : s.Full g P X) {curV d : Nat} {o : DfsOut} {origTsta
       simp only [wp_bind, wp_allocItem, wp_modifyItem, wp_pure]
       have h₄ := (h₃.push .O).modify_vs s₂.items.size (some curV, none)
       refine ⟨(h₄.q_single (Or.inr rfl) hq0 hqlt hPe (h₄.qch o.e he hPe)
-        (hvlt _ h₄) hvne).mono hPc fun i => ?_, fun hh => hh⟩
+        (hvlt _ h₄) hvne hvr).mono hPc fun i => ?_, fun hh => hh⟩
       constructor
       · rintro ⟨hx | rfl, hne⟩
         · exact hx
