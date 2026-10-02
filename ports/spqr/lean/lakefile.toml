@@ -1,0 +1,14 @@
+name = "spqr"
+defaultTargets = ["Spqr"]
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "master"
+
+[[lean_lib]]
+name = "Spqr"
+
+[[lean_exe]]
+name = "dump_lean"
+root = "DumpLean"
