@@ -1,5 +1,5 @@
 use spqr::spqr_tree::{PlanarSpqrTree, SpqrTree};
-use spqr::spqr_tree::{Csr, NodeAdj, NodeEdge, NodeType, NodeVert};
+use spqr::spqr_tree::{Csr, CsrIndex, NodeAdj, NodeEdge, NodeType, NodeVert, PlanarEmbedding};
 use spqr::spqr_tree_fast;
 use spqr::spqr_tree_idiomatic as idiom;
 use std::fmt::Write as _;
@@ -49,6 +49,11 @@ fn main() {
 	};
 	dump(&mut out, "vert_index", &t.vert_index);
 	dump(&mut out, "edge_index", &t.edge_index);
+	out.push_str("edge_flipped:");
+	for x in &t.edge_flipped {
+		write!(out, " {}", *x as i32).unwrap();
+	}
+	out.push('\n');
 	dump(&mut out, "par", &t.par);
 	dump(&mut out, "subtree_end", &t.subtree_end);
 	out.push_str("types:");
@@ -59,16 +64,16 @@ fn main() {
 	dump(&mut out, "orig_id", &t.orig_id);
 	dump(&mut out, "ch.bounds", &t.ch.bounds);
 	dump(&mut out, "ch.dat", &t.ch.dat);
-	dump(&mut out, "node_verts.bounds", &t.node_verts.bounds);
+	dump(&mut out, "node_verts.bounds", &t.node_nvs.bounds);
 	out.push_str("node_verts.dat:");
-	for x in &t.node_verts.dat {
+	for x in &t.node_verts {
 		write!(out, " {},{}", x.node, x.vert).unwrap();
 	}
 	out.push('\n');
 	dump(&mut out, "vert_par_nv", &t.vert_par_nv);
-	dump(&mut out, "node_edges.bounds", &t.node_edges.bounds);
+	dump(&mut out, "node_edges.bounds", &t.node_nes.bounds);
 	out.push_str("node_edges.dat:");
-	for x in &t.node_edges.dat {
+	for x in &t.node_edges {
 		write!(out, " {},{},{},{}", x.node, x.twin_ne, x.nvs[0], x.nvs[1]).unwrap();
 	}
 	out.push('\n');
@@ -83,7 +88,7 @@ fn main() {
 		write!(out, " {}", *x as i32).unwrap();
 	}
 	out.push('\n');
-	dump(&mut out, "ne_rot_adj", &t.ne_rot_adj);
+	dump(&mut out, "ne_rot_adj", &t.ne_embedding.rot_adj);
 
 	writeln!(out, "nonplanar_build_same: {}", (s == t.tree) as i32).unwrap();
 	std::io::stdout().write_all(out.as_bytes()).unwrap();
@@ -97,6 +102,9 @@ fn o(x: Option<idiom::Idx>) -> i32 {
 }
 fn csr<A, B>(c: &idiom::Csr<A>, f: impl Fn(&A) -> B) -> Csr<B> {
 	Csr { bounds: c.bounds.iter().map(|&b| b as i32).collect(), dat: c.dat.iter().map(f).collect() }
+}
+fn csr_index(c: &idiom::CsrIndex) -> CsrIndex {
+	CsrIndex { bounds: c.bounds.iter().map(|&b| b as i32).collect() }
 }
 fn from_idiomatic(t: &idiom::SpqrTree) -> SpqrTree {
 	let ty = |t: idiom::NodeType| match t {
@@ -112,17 +120,24 @@ fn from_idiomatic(t: &idiom::SpqrTree) -> SpqrTree {
 	SpqrTree {
 		vert_index: t.vert_index.iter().copied().map(i).collect(),
 		edge_index: t.edge_index.iter().copied().map(i).collect(),
+		edge_flipped: t.edge_flipped.clone(),
 		par: t.par.iter().copied().map(o).collect(),
 		subtree_end: t.subtree_end.iter().copied().map(i).collect(),
 		types: t.types.iter().copied().map(ty).collect(),
 		orig_id: t.orig_id.iter().copied().map(o).collect(),
 		ch: csr(&t.ch, |&x| i(x)),
-		node_verts: csr(&t.node_verts, |x| NodeVert { node: i(x.node), vert: i(x.vert) }),
+		node_verts: t.node_verts.iter().map(|x| NodeVert { node: i(x.node), vert: i(x.vert) }).collect(),
+		node_nvs: csr_index(&t.node_nvs),
 		vert_par_nv: t.vert_par_nv.iter().copied().map(o).collect(),
-		node_edges: csr(&t.node_edges, |x| NodeEdge { node: i(x.node), twin_ne: i(x.twin_ne), nvs: x.nvs.map(i) }),
+		node_edges: t.node_edges.iter().map(|x| NodeEdge { node: i(x.node), twin_ne: i(x.twin_ne), nvs: x.nvs.map(i) }).collect(),
+		node_nes: csr_index(&t.node_nes),
 		node_adj: csr(&t.node_adj, |x| NodeAdj { ne: i(x.ne), dest_nv: i(x.dest_nv) }),
 	}
 }
 fn from_idiomatic_planar(t: &idiom::PlanarSpqrTree) -> PlanarSpqrTree {
-	PlanarSpqrTree { tree: from_idiomatic(&t.tree), node_planar: t.node_planar.clone(), ne_rot_adj: t.ne_rot_adj.iter().copied().map(o).collect() }
+	PlanarSpqrTree {
+		tree: from_idiomatic(&t.tree),
+		node_planar: t.node_planar.clone(),
+		ne_embedding: PlanarEmbedding { rot_adj: t.ne_embedding.rot_adj.iter().copied().map(o).collect() },
+	}
 }

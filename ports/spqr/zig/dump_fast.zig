@@ -13,12 +13,12 @@ fn bytesEql(a: anytype, b: @TypeOf(a)) bool {
 
 fn treesEqual(a: spqr.SpqrTree, b: spqr.SpqrTree) bool {
     return bytesEql(a.vert_index, b.vert_index) and bytesEql(a.edge_index, b.edge_index) and
-        bytesEql(a.par, b.par) and bytesEql(a.subtree_end, b.subtree_end) and
+        bytesEql(a.edge_flipped, b.edge_flipped) and bytesEql(a.par, b.par) and bytesEql(a.subtree_end, b.subtree_end) and
         bytesEql(a.types, b.types) and bytesEql(a.orig_id, b.orig_id) and
         bytesEql(a.ch.bounds, b.ch.bounds) and bytesEql(a.ch.dat, b.ch.dat) and
-        bytesEql(a.node_verts.bounds, b.node_verts.bounds) and bytesEql(a.node_verts.dat, b.node_verts.dat) and
+        bytesEql(a.node_nvs.bounds, b.node_nvs.bounds) and bytesEql(a.node_verts, b.node_verts) and
         bytesEql(a.vert_par_nv, b.vert_par_nv) and
-        bytesEql(a.node_edges.bounds, b.node_edges.bounds) and bytesEql(a.node_edges.dat, b.node_edges.dat) and
+        bytesEql(a.node_nes.bounds, b.node_nes.bounds) and bytesEql(a.node_edges, b.node_edges) and
         bytesEql(a.node_adj.bounds, b.node_adj.bounds) and bytesEql(a.node_adj.dat, b.node_adj.dat);
 }
 
@@ -59,6 +59,9 @@ pub fn main(init: std.process.Init) !void {
     const w = &stdout.interface;
     try dumpInts(w, "vert_index", t.tree.vert_index);
     try dumpInts(w, "edge_index", t.tree.edge_index);
+    try w.writeAll("edge_flipped:");
+    for (t.tree.edge_flipped) |x| try w.print(" {d}", .{@intFromBool(x)});
+    try w.writeAll("\n");
     try dumpInts(w, "par", t.tree.par);
     try dumpInts(w, "subtree_end", t.tree.subtree_end);
     try w.writeAll("types:");
@@ -67,14 +70,14 @@ pub fn main(init: std.process.Init) !void {
     try dumpInts(w, "orig_id", t.tree.orig_id);
     try dumpInts(w, "ch.bounds", t.tree.ch.bounds);
     try dumpInts(w, "ch.dat", t.tree.ch.dat);
-    try dumpInts(w, "node_verts.bounds", t.tree.node_verts.bounds);
+    try dumpInts(w, "node_verts.bounds", t.tree.node_nvs.bounds);
     try w.writeAll("node_verts.dat:");
-    for (t.tree.node_verts.dat) |x| try w.print(" {d},{d}", .{ x.node, x.vert });
+    for (t.tree.node_verts) |x| try w.print(" {d},{d}", .{ x.node, x.vert });
     try w.writeAll("\n");
     try dumpInts(w, "vert_par_nv", t.tree.vert_par_nv);
-    try dumpInts(w, "node_edges.bounds", t.tree.node_edges.bounds);
+    try dumpInts(w, "node_edges.bounds", t.tree.node_nes.bounds);
     try w.writeAll("node_edges.dat:");
-    for (t.tree.node_edges.dat) |x| try w.print(" {d},{d},{d},{d}", .{ x.node, x.twin_ne, x.nvs[0], x.nvs[1] });
+    for (t.tree.node_edges) |x| try w.print(" {d},{d},{d},{d}", .{ x.node, x.twin_ne, x.nvs[0], x.nvs[1] });
     try w.writeAll("\n");
     try dumpInts(w, "node_adj.bounds", t.tree.node_adj.bounds);
     try w.writeAll("node_adj.dat:");
@@ -83,7 +86,7 @@ pub fn main(init: std.process.Init) !void {
     try w.writeAll("node_planar:");
     for (t.node_planar) |x| try w.print(" {d}", .{@intFromBool(x)});
     try w.writeAll("\n");
-    try dumpInts(w, "ne_rot_adj", t.ne_rot_adj);
+    try dumpInts(w, "ne_rot_adj", t.ne_embedding.rot_adj);
 
     var s = try spqr.SpqrTree.build(gpa, NV, edges, ternarize, vert_order, edge_order);
     defer s.deinit(gpa);

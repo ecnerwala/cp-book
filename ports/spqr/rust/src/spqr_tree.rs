@@ -10,6 +10,26 @@ use std::fmt;
 use std::ops::{Deref, DerefMut, Index, IndexMut, Range};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CsrIndex {
+	pub bounds: Vec<i32>,
+}
+
+impl CsrIndex {
+	pub fn indices(&self, i: i32) -> Range<i32> {
+		self.bounds[i as usize]..self.bounds[i as usize + 1]
+	}
+	pub fn slice<'a, T>(&self, i: i32, base: &'a [T]) -> &'a [T] {
+		&base[self.bounds[i as usize] as usize..self.bounds[i as usize + 1] as usize]
+	}
+	pub fn num_rows(&self) -> i32 {
+		if self.bounds.is_empty() { 0 } else { self.bounds.len() as i32 - 1 }
+	}
+	pub fn num_entries(&self) -> i32 {
+		self.bounds.last().copied().unwrap_or(0)
+	}
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Csr<T> {
 	pub bounds: Vec<i32>,
 	pub dat: Vec<T>,
@@ -126,6 +146,9 @@ impl<T: Copy + Default> CsrBuilder<T> {
 pub struct SpqrTree {
 	pub vert_index: Vec<i32>,
 	pub edge_index: Vec<i32>,
+	/// Whether edge e is stored in its node with its endpoints swapped
+	/// (`item_vs[edge_item(e)][0] != edges[e][0]`).
+	pub edge_flipped: Vec<bool>,
 
 	pub par: Vec<i32>,
 	pub subtree_end: Vec<i32>,
@@ -133,11 +156,13 @@ pub struct SpqrTree {
 	pub orig_id: Vec<i32>,
 
 	pub ch: Csr<i32>,
-	pub node_verts: Csr<NodeVert>,
+	pub node_verts: Vec<NodeVert>,
+	pub node_nvs: CsrIndex,
 	/// The nv index of a vertex within its parent node
 	pub vert_par_nv: Vec<i32>,
 	// TODO: Should we store a vert_nodes CSR?
-	pub node_edges: Csr<NodeEdge>,
+	pub node_edges: Vec<NodeEdge>,
+	pub node_nes: CsrIndex,
 	pub node_adj: Csr<NodeAdj>,
 }
 
@@ -195,14 +220,33 @@ impl SpqrTree {
 	}
 }
 
+/// Quarter-edges are indexed according to 4 * edge + 2 * side + dir, where side is v0 vs v1, and dir is cw vs ccw:
+///
+///       1     2
+///    v0 ---e--- v1
+///       0     3
+///
+/// A planar embedding is 3 involutions on quarter-edges:
+/// * qe <-> qe ^ 1 maps quarter edges to their opposite side around the endpoint vertex.
+/// * qe <-> qe ^ 3 maps quarter edges to their opposite side along the edge (around the face).
+/// * qe <-> rot_adj[qe] maps quarter edges to their facing pair.
+///
+/// Walking around a vertex is alternating qe ^ 1 and rot_adj[qe], and walking around a face is qe ^ 3 and rot_adj[qe].
+///
+/// Partial embeddings are represented with -1's in the rot_adj array.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PlanarEmbedding {
+	pub rot_adj: Vec<i32>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PlanarSpqrTree {
 	pub tree: SpqrTree,
 	pub node_planar: Vec<bool>,
-	/// Planarity adjacencies: ne_rot_adj is an involution of facing quarter-edges, indexed according to:
-	/// ne_rot_adj[4 * node_edge + 2 * side + dir]
+	/// Planarity adjacencies: ne_embedding.rot_adj is an involution of facing quarter-edges, indexed according to:
+	/// ne_embedding.rot_adj[4 * node_edge + 2 * side + dir]
 	/// Nonplanar nodes have all entries -1.
-	pub ne_rot_adj: Vec<i32>,
+	pub ne_embedding: PlanarEmbedding,
 }
 
 impl Deref for PlanarSpqrTree {
@@ -1076,19 +1120,23 @@ struct RelabelStack {
 	cur_ne: i32,
 }
 
-struct Relabel<const WP: bool> {
+struct Relabel<'a, const WP: bool> {
 	b: Builder<WP>,
+	edges: &'a [[i32; 2]],
 
 	vert_index: Vec<i32>,
 	edge_index: Vec<i32>,
+	edge_flipped: Vec<bool>,
 	par: Vec<i32>,
 	subtree_end: Vec<i32>,
 	types: Vec<NodeType>,
 	orig_id: Vec<i32>,
 	ch: Csr<i32>,
-	node_verts: Csr<NodeVert>,
+	node_verts: Vec<NodeVert>,
+	node_nvs: CsrIndex,
 	vert_par_nv: Vec<i32>,
-	node_edges: Csr<NodeEdge>,
+	node_edges: Vec<NodeEdge>,
+	node_nes: CsrIndex,
 	node_adj: Csr<NodeAdj>,
 	node_planar: Vec<bool>,
 	ne_rot_adj: Vec<i32>,
@@ -1102,10 +1150,10 @@ struct Relabel<const WP: bool> {
 	stk: Vec<RelabelStack>,
 }
 
-impl<const WP: bool> Relabel<WP> {
+impl<const WP: bool> Relabel<'_, WP> {
 	fn set_ne(&mut self, cur_idx: i32, ne: i32, nvs: [i32; 2], nds: [i32; 2], rot_adjs: [i32; 4]) {
-		self.node_edges.dat[ne as usize].node = cur_idx;
-		self.node_edges.dat[ne as usize].nvs = nvs;
+		self.node_edges[ne as usize].node = cur_idx;
+		self.node_edges[ne as usize].nvs = nvs;
 		self.node_adj.dat[nds[0] as usize] = NodeAdj { ne, dest_nv: nvs[1] };
 		self.node_adj.dat[nds[1] as usize] = NodeAdj { ne, dest_nv: nvs[0] };
 		if WP {
@@ -1151,6 +1199,8 @@ impl<const WP: bool> Relabel<WP> {
 			let orig_edge = cur_item - 1 - nv;
 			self.orig_id[cur_idx as usize] = orig_edge;
 			self.edge_index[orig_edge as usize] = cur_idx;
+			debug_assert!(self.b.item_vs[cur_item as usize][0] != -1);
+			self.edge_flipped[orig_edge as usize] = self.b.item_vs[cur_item as usize][0] != self.edges[orig_edge as usize][0];
 		} else {
 			debug_assert!(1 + nv + ne <= cur_item);
 			if WP {
@@ -1183,12 +1233,12 @@ impl<const WP: bool> Relabel<WP> {
 		// because we don't have the final item id's yet.
 		let ch_st = self.ch.bounds[cur_idx as usize];
 		let mut ch_en = ch_st;
-		let nv_st = self.node_verts.bounds[cur_idx as usize];
+		let nv_st = self.node_nvs.bounds[cur_idx as usize];
 		let mut nv_en = nv_st;
 		let mut n_edges = 0;
 		let cur_item_vs = self.b.item_vs[cur_item as usize];
 		if cur_item_vs[0] != -1 {
-			self.node_verts.dat[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[0] };
+			self.node_verts[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[0] };
 			nv_en += 1;
 		}
 		let cur_item_ch = self.b.item_ch[cur_item as usize];
@@ -1200,7 +1250,7 @@ impl<const WP: bool> Relabel<WP> {
 				ch_en += 1;
 				debug_assert!(ch_item >= 1);
 				if ch_item < 1 + nv {
-					self.node_verts.dat[nv_en as usize] = NodeVert { node: cur_idx, vert: ch_item - 1 };
+					self.node_verts[nv_en as usize] = NodeVert { node: cur_idx, vert: ch_item - 1 };
 					nv_en += 1;
 				} else {
 					if WP {
@@ -1230,11 +1280,11 @@ impl<const WP: bool> Relabel<WP> {
 			debug_assert!(!planarity_flip);
 		}
 		if cur_item_vs[1] != -1 {
-			self.node_verts.dat[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[1] };
+			self.node_verts[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[1] };
 			nv_en += 1;
 		}
 		self.ch.bounds[cur_idx as usize + 1] = ch_en;
-		self.node_verts.bounds[cur_idx as usize + 1] = nv_en;
+		self.node_nvs.bounds[cur_idx as usize + 1] = nv_en;
 
 		let n_verts = nv_en - nv_st;
 
@@ -1248,9 +1298,9 @@ impl<const WP: bool> Relabel<WP> {
 			n_edges += 1;
 		}
 
-		let ne_st = self.node_edges.bounds[cur_idx as usize];
+		let ne_st = self.node_nes.bounds[cur_idx as usize];
 		let ne_en = ne_st + n_edges;
-		self.node_edges.bounds[cur_idx as usize + 1] = ne_en;
+		self.node_nes.bounds[cur_idx as usize + 1] = ne_en;
 
 		if cur_type == NodeType::F {
 			// Just set node_adj bounds and we're good
@@ -1313,7 +1363,7 @@ impl<const WP: bool> Relabel<WP> {
 		} else if cur_type == NodeType::R {
 			// Bucketsort the children by the midpoint
 			for nv_ in nv_st..nv_en {
-				self.vert_pos_buf[self.node_verts.dat[nv_ as usize].vert as usize] = nv_;
+				self.vert_pos_buf[self.node_verts[nv_ as usize].vert as usize] = nv_;
 			}
 			self.cnts_buf.clear();
 			self.cnts_buf.resize((n_verts * 2 - 1) as usize, 0);
@@ -1424,13 +1474,13 @@ impl<const WP: bool> Relabel<WP> {
 		let nxt_idx = self.nxt_unassigned_idx;
 		self.ch.dat[ch_idx as usize] = nxt_idx;
 		self.par[nxt_idx as usize] = cur_idx;
-		let nxt_ne = self.node_edges.bounds[nxt_idx as usize];
+		let nxt_ne = self.node_nes.bounds[nxt_idx as usize];
 		if nxt_item < 1 + self.b.nv {
 			self.vert_par_nv[nxt_idx as usize] = cur_nv;
 			self.stk[si].cur_nv += 1;
 		} else if self.types[cur_idx as usize] != NodeType::F && self.types[cur_idx as usize] != NodeType::V {
-			self.node_edges.dat[cur_ne as usize].twin_ne = nxt_ne;
-			self.node_edges.dat[nxt_ne as usize].twin_ne = cur_ne;
+			self.node_edges[cur_ne as usize].twin_ne = nxt_ne;
+			self.node_edges[nxt_ne as usize].twin_ne = cur_ne;
 			self.stk[si].cur_ne += 1;
 		}
 
@@ -1596,16 +1646,20 @@ fn build_impl<const WP: bool>(nv: i32, edges: &[[i32; 2]], ternarize: bool, vert
 
 	let mut r = Relabel::<WP> {
 		b,
+		edges,
 		vert_index: vec![-1; nv as usize],
 		edge_index: vec![-1; ne as usize],
+		edge_flipped: vec![false; ne as usize],
 		par: vec![-1; tot_items as usize],
 		subtree_end: vec![-1; tot_items as usize],
 		types: vec![NodeType::F; tot_items as usize],
 		orig_id: vec![-1; tot_items as usize],
 		ch: Csr { bounds: vec![0; tot_items as usize + 1], dat: vec![0; (tot_items - 1) as usize] },
-		node_verts: Csr { bounds: vec![0; tot_items as usize + 1], dat: vec![NodeVert::default(); tot_node_verts as usize] },
+		node_verts: vec![NodeVert::default(); tot_node_verts as usize],
+		node_nvs: CsrIndex { bounds: vec![0; tot_items as usize + 1] },
 		vert_par_nv: vec![-1; tot_items as usize],
-		node_edges: Csr { bounds: vec![0; tot_items as usize + 1], dat: vec![NodeEdge::default(); tot_node_edges as usize] },
+		node_edges: vec![NodeEdge::default(); tot_node_edges as usize],
+		node_nes: CsrIndex { bounds: vec![0; tot_items as usize + 1] },
 		node_adj: Csr { bounds: vec![0; (tot_node_verts * 2 + 1) as usize], dat: vec![NodeAdj::default(); (tot_node_edges * 2) as usize] },
 		node_planar: vec![false; if WP { tot_items as usize } else { 0 }],
 		ne_rot_adj: vec![-1; if WP { (4 * tot_node_edges) as usize } else { 0 }],
@@ -1634,12 +1688,12 @@ fn build_impl<const WP: bool>(nv: i32, edges: &[[i32; 2]], ternarize: bool, vert
 
 	debug_assert!(r.nxt_unassigned_idx == tot_items);
 	debug_assert!(*r.ch.bounds.last().unwrap() == r.ch.dat.len() as i32);
-	debug_assert!(*r.node_verts.bounds.last().unwrap() == r.node_verts.dat.len() as i32);
-	debug_assert!(*r.node_edges.bounds.last().unwrap() == r.node_edges.dat.len() as i32);
+	debug_assert!(*r.node_nvs.bounds.last().unwrap() == r.node_verts.len() as i32);
+	debug_assert!(*r.node_nes.bounds.last().unwrap() == r.node_edges.len() as i32);
 	debug_assert!(*r.node_adj.bounds.last().unwrap() == r.node_adj.dat.len() as i32);
 
 	// Rewrite node_vertices to the correct index
-	for v in r.node_verts.dat.iter_mut() {
+	for v in r.node_verts.iter_mut() {
 		v.vert = r.vert_index[v.vert as usize];
 	}
 
@@ -1647,17 +1701,20 @@ fn build_impl<const WP: bool>(nv: i32, edges: &[[i32; 2]], ternarize: bool, vert
 		tree: SpqrTree {
 			vert_index: r.vert_index,
 			edge_index: r.edge_index,
+			edge_flipped: r.edge_flipped,
 			par: r.par,
 			subtree_end: r.subtree_end,
 			types: r.types,
 			orig_id: r.orig_id,
 			ch: r.ch,
 			node_verts: r.node_verts,
+			node_nvs: r.node_nvs,
 			vert_par_nv: r.vert_par_nv,
 			node_edges: r.node_edges,
+			node_nes: r.node_nes,
 			node_adj: r.node_adj,
 		},
 		node_planar: r.node_planar,
-		ne_rot_adj: r.ne_rot_adj,
+		ne_embedding: PlanarEmbedding { rot_adj: r.ne_rot_adj },
 	}
 }

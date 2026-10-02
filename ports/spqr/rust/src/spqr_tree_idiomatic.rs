@@ -78,6 +78,27 @@ fn u32_of(i: usize) -> u32 {
 // ---------------------------------------------------------------------------------------------
 // CSR (jagged array)
 
+/// The row bounds of a jagged array (n + 1 offsets) whose entries live in a separate flat `Vec`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CsrIndex {
+	pub bounds: Vec<usize>,
+}
+
+impl CsrIndex {
+	pub fn len(&self) -> usize {
+		self.bounds.len().saturating_sub(1)
+	}
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
+	}
+	pub fn range(&self, i: usize) -> Range<usize> {
+		self.bounds[i]..self.bounds[i + 1]
+	}
+	pub fn slice<'a, T>(&self, i: usize, base: &'a [T]) -> &'a [T] {
+		&base[self.range(i)]
+	}
+}
+
 /// A jagged array stored as `bounds` (n + 1 offsets) into `dat`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Csr<T> {
@@ -218,6 +239,8 @@ pub struct SpqrTree {
 	/// item of each original vertex / edge
 	pub vert_index: Vec<Idx>,
 	pub edge_index: Vec<Idx>,
+	/// whether edge e is stored in its node with its endpoints swapped (`node_verts[..].vert` of its first nv != `edges[e][0]`)
+	pub edge_flipped: Vec<bool>,
 
 	pub par: Vec<Option<Idx>>,
 	/// preorder end of each item's subtree
@@ -227,10 +250,14 @@ pub struct SpqrTree {
 	pub orig_id: Vec<Option<Idx>>,
 
 	pub ch: Csr<Idx>,
-	pub node_verts: Csr<NodeVert>,
+	/// nv's of each node: `node_nvs.slice(i, &node_verts)`
+	pub node_verts: Vec<NodeVert>,
+	pub node_nvs: CsrIndex,
 	/// The nv index of a vertex within its parent node
 	pub vert_par_nv: Vec<Option<Idx>>,
-	pub node_edges: Csr<NodeEdge>,
+	/// ne's of each node: `node_nes.slice(i, &node_edges)`
+	pub node_edges: Vec<NodeEdge>,
+	pub node_nes: CsrIndex,
 	pub node_adj: Csr<NodeAdj>,
 }
 
@@ -250,12 +277,20 @@ impl SpqrTree {
 	}
 }
 
+/// Quarter-edges are indexed by `4 * edge + 2 * side + dir` (side: v0 vs v1, dir: cw vs ccw); `qe ^ 1` is the
+/// other side around the endpoint, `qe ^ 3` the other side along the edge, and `rot_adj[qe]` the facing quarter-edge.
+/// `None` entries mark non-embedded edges (a partial embedding).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PlanarEmbedding {
+	pub rot_adj: Vec<Option<Idx>>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PlanarSpqrTree {
 	pub tree: SpqrTree,
 	pub node_planar: Vec<bool>,
-	/// Involution of facing quarter-edges, indexed by `4 * ne + 2 * side + dir`; `None` for nonplanar nodes.
-	pub ne_rot_adj: Vec<Option<Idx>>,
+	/// Embedding of each node's vedges, indexed by `4 * ne + 2 * side + dir`; `None` for nonplanar nodes.
+	pub ne_embedding: PlanarEmbedding,
 }
 
 impl Deref for PlanarSpqrTree {
@@ -1309,20 +1344,24 @@ struct RelabelFrame {
 
 /// Preorder numbering + CSR layout. Output arrays are preallocated to their exact final sizes and filled in
 /// as items are numbered (`ch.dat` / `node_verts.dat[..].vert` temporarily hold item / original-vertex ids).
-struct Relabel<const WP: bool> {
+struct Relabel<'a, const WP: bool> {
 	items: Items,
 	planarity: Planarity,
+	edges: &'a [[usize; 2]],
 
 	vert_index: Vec<Option<Idx>>,
 	edge_index: Vec<Option<Idx>>,
+	edge_flipped: Vec<bool>,
 	par: Vec<Option<Idx>>,
 	subtree_end: Vec<Idx>,
 	types: Vec<NodeType>,
 	orig_id: Vec<Option<Idx>>,
 	ch: Csr<Idx>,
-	node_verts: Csr<NodeVert>,
+	node_verts: Vec<NodeVert>,
+	node_nvs: CsrIndex,
 	vert_par_nv: Vec<Option<Idx>>,
-	node_edges: Csr<NodeEdge>,
+	node_edges: Vec<NodeEdge>,
+	node_nes: CsrIndex,
 	node_adj: Csr<NodeAdj>,
 	node_planar: Vec<bool>,
 	ne_rot_adj: Vec<Option<Idx>>,
@@ -1338,8 +1377,8 @@ struct Relabel<const WP: bool> {
 	stk: Vec<RelabelFrame>,
 }
 
-impl<const WP: bool> Relabel<WP> {
-	fn new(b: Builder<WP>) -> Self {
+impl<'a, const WP: bool> Relabel<'a, WP> {
+	fn new(b: Builder<WP>, edges: &'a [[usize; 2]]) -> Self {
 		let Builder { items, planarity, tot_blocks, tot_self_loops, .. } = b;
 		let (nv, ne) = (items.nv, items.ne);
 		let tot_items = items.len();
@@ -1353,16 +1392,20 @@ impl<const WP: bool> Relabel<WP> {
 		Relabel {
 			items,
 			planarity,
+			edges,
 			vert_index: vec![None; nv],
 			edge_index: vec![None; ne],
+			edge_flipped: vec![false; ne],
 			par: vec![None; tot_items],
 			subtree_end: vec![ZERO; tot_items],
 			types: vec![NodeType::F; tot_items],
 			orig_id: vec![None; tot_items],
 			ch: csr(tot_items, tot_items - 1, ZERO),
-			node_verts: csr(tot_items, tot_node_verts, NodeVert { node: ZERO, vert: ZERO }),
+			node_verts: vec![NodeVert { node: ZERO, vert: ZERO }; tot_node_verts],
+			node_nvs: CsrIndex { bounds: vec![0; tot_items + 1] },
 			vert_par_nv: vec![None; tot_items],
-			node_edges: csr(tot_items, tot_node_edges, NodeEdge { node: ZERO, twin_ne: ZERO, nvs: [ZERO; 2] }),
+			node_edges: vec![NodeEdge { node: ZERO, twin_ne: ZERO, nvs: [ZERO; 2] }; tot_node_edges],
+			node_nes: CsrIndex { bounds: vec![0; tot_items + 1] },
 			node_adj: csr(2 * tot_node_verts, 2 * tot_node_edges, NodeAdj { ne: ZERO, dest_nv: ZERO }),
 			node_planar: vec![false; wp(tot_items)],
 			ne_rot_adj: vec![None; wp(4 * tot_node_edges)],
@@ -1377,8 +1420,8 @@ impl<const WP: bool> Relabel<WP> {
 
 	fn set_ne(&mut self, cur_idx: usize, ne: usize, nvs: [usize; 2], nds: [usize; 2], rot_adjs: [Option<Idx>; 4]) {
 		let nvs = nvs.map(idx);
-		self.node_edges.dat[ne].node = idx(cur_idx);
-		self.node_edges.dat[ne].nvs = nvs;
+		self.node_edges[ne].node = idx(cur_idx);
+		self.node_edges[ne].nvs = nvs;
 		self.node_adj.dat[nds[0]] = NodeAdj { ne: idx(ne), dest_nv: nvs[1] };
 		self.node_adj.dat[nds[1]] = NodeAdj { ne: idx(ne), dest_nv: nvs[0] };
 		if WP {
@@ -1415,6 +1458,8 @@ impl<const WP: bool> Relabel<WP> {
 				let orig_edge = self.items.vedge(cur_item);
 				self.orig_id[cur_idx] = Some(idx(orig_edge));
 				self.edge_index[orig_edge] = Some(idx(cur_idx));
+				let v0 = self.items.vs[cur_item][0].expect("edge endpoint");
+				self.edge_flipped[orig_edge] = v0.usize() != self.edges[orig_edge][0];
 			}
 			NodeType::I | NodeType::O => {
 				// No planarity data was set up
@@ -1441,11 +1486,11 @@ impl<const WP: bool> Relabel<WP> {
 		// Fill ch and node_verts with items / original verts for now, since the children aren't numbered yet.
 		let ch_st = self.ch.bounds[cur_idx];
 		let mut ch_en = ch_st;
-		let nv_st = self.node_verts.bounds[cur_idx];
+		let nv_st = self.node_nvs.bounds[cur_idx];
 		let mut nv_en = nv_st;
 		let mut n_edges = 0;
-		let mut push_nv = |node_verts: &mut Csr<NodeVert>, vert: usize| {
-			node_verts.dat[nv_en] = NodeVert { node: idx(cur_idx), vert: idx(vert) };
+		let mut push_nv = |node_verts: &mut Vec<NodeVert>, vert: usize| {
+			node_verts[nv_en] = NodeVert { node: idx(cur_idx), vert: idx(vert) };
 			nv_en += 1;
 		};
 		let cur_vs = self.items.vs[cur_item];
@@ -1489,7 +1534,7 @@ impl<const WP: bool> Relabel<WP> {
 			push_nv(&mut self.node_verts, v.usize());
 		}
 		self.ch.bounds[cur_idx + 1] = ch_en;
-		self.node_verts.bounds[cur_idx + 1] = nv_en;
+		self.node_nvs.bounds[cur_idx + 1] = nv_en;
 
 		let n_verts = nv_en - nv_st;
 		let is_node = cur_type.is_node();
@@ -1502,9 +1547,9 @@ impl<const WP: bool> Relabel<WP> {
 			n_edges += 1;
 		}
 
-		let ne_st = self.node_edges.bounds[cur_idx];
+		let ne_st = self.node_nes.bounds[cur_idx];
 		let ne_en = ne_st + n_edges;
-		self.node_edges.bounds[cur_idx + 1] = ne_en;
+		self.node_nes.bounds[cur_idx + 1] = ne_en;
 
 		let adj_bounds = |this: &mut Self, bounds: [usize; 4]| {
 			this.node_adj.bounds[2 * nv_st + 1..2 * nv_st + 5].copy_from_slice(&bounds);
@@ -1573,7 +1618,7 @@ impl<const WP: bool> Relabel<WP> {
 				debug_assert!(has_cap);
 				// Bucketsort the children by the midpoint
 				for nv_ in nv_st..nv_en {
-					self.vert_pos_buf[self.node_verts.dat[nv_].vert.usize()] = nv_;
+					self.vert_pos_buf[self.node_verts[nv_].vert.usize()] = nv_;
 				}
 				self.cnts_buf.clear();
 				self.cnts_buf.resize(n_verts * 2 - 1, 0);
@@ -1674,9 +1719,9 @@ impl<const WP: bool> Relabel<WP> {
 			self.vert_par_nv[nxt_idx] = Some(idx(s.cur_nv as usize));
 			s.cur_nv += 1;
 		} else if self.types[cur_idx].is_node() {
-			let (cur_ne, nxt_ne) = (s.cur_ne as usize, self.node_edges.bounds[nxt_idx]);
-			self.node_edges.dat[cur_ne].twin_ne = idx(nxt_ne);
-			self.node_edges.dat[nxt_ne].twin_ne = idx(cur_ne);
+			let (cur_ne, nxt_ne) = (s.cur_ne as usize, self.node_nes.bounds[nxt_idx]);
+			self.node_edges[cur_ne].twin_ne = idx(nxt_ne);
+			self.node_edges[nxt_ne].twin_ne = idx(cur_ne);
 			s.cur_ne += 1;
 		}
 		nxt_item
@@ -1701,14 +1746,14 @@ impl<const WP: bool> Relabel<WP> {
 
 		debug_assert!(self.nxt_idx == self.items.len());
 		debug_assert!(self.ch.bounds.last() == Some(&self.ch.dat.len()));
-		debug_assert!(self.node_verts.bounds.last() == Some(&self.node_verts.dat.len()));
-		debug_assert!(self.node_edges.bounds.last() == Some(&self.node_edges.dat.len()));
+		debug_assert!(self.node_nvs.bounds.last() == Some(&self.node_verts.len()));
+		debug_assert!(self.node_nes.bounds.last() == Some(&self.node_edges.len()));
 		debug_assert!(self.node_adj.bounds.last() == Some(&self.node_adj.dat.len()));
 
 		let vert_index: Vec<Idx> = self.vert_index.into_iter().map(|i| i.expect("every vertex is an item")).collect();
 		let edge_index = self.edge_index.into_iter().map(|i| i.expect("every edge is an item")).collect();
 		// Rewrite node_verts to item indices
-		for v in &mut self.node_verts.dat {
+		for v in &mut self.node_verts {
 			v.vert = vert_index[v.vert.usize()];
 		}
 
@@ -1716,18 +1761,21 @@ impl<const WP: bool> Relabel<WP> {
 			tree: SpqrTree {
 				vert_index,
 				edge_index,
+				edge_flipped: self.edge_flipped,
 				par: self.par,
 				subtree_end: self.subtree_end,
 				types: self.types,
 				orig_id: self.orig_id,
 				ch: self.ch,
 				node_verts: self.node_verts,
+				node_nvs: self.node_nvs,
 				vert_par_nv: self.vert_par_nv,
 				node_edges: self.node_edges,
+				node_nes: self.node_nes,
 				node_adj: self.node_adj,
 			},
 			node_planar: self.node_planar,
-			ne_rot_adj: self.ne_rot_adj,
+			ne_embedding: PlanarEmbedding { rot_adj: self.ne_rot_adj },
 		}
 	}
 }
@@ -1743,5 +1791,5 @@ fn build<const WP: bool>(nv: usize, edges: &[[usize; 2]], ternarize: bool, vert_
 		b.run(rt);
 	}
 
-	Relabel::new(b).run()
+	Relabel::new(b, edges).run()
 }

@@ -83,6 +83,27 @@ fn fill(s: anytype, val: anytype) void {
     }
 }
 
+/// The row bounds of a jagged array whose entries live in a separate flat slice.
+pub const CsrIndex = struct {
+    bounds: []i32,
+
+    pub fn size(self: CsrIndex) i32 {
+        return @intCast(self.bounds.len - 1);
+    }
+    /// Equivalent of `csr_index[i]`: the half-open range of row `i`.
+    pub fn range(self: CsrIndex, i: i32) [2]i32 {
+        return .{ self.bounds[ix(i)], self.bounds[ix(i) + 1] };
+    }
+    /// Row `i` of `base`.
+    pub fn slice(self: CsrIndex, i: i32, base: anytype) @TypeOf(base) {
+        return base[ix(self.bounds[ix(i)])..ix(self.bounds[ix(i) + 1])];
+    }
+    pub fn deinit(self: *CsrIndex, gpa: Allocator) void {
+        gpa.free(self.bounds);
+        self.* = undefined;
+    }
+};
+
 pub fn Csr(comptime T: type) type {
     return struct {
         const Self = @This();
@@ -194,6 +215,8 @@ pub fn CsrBuilder(comptime T: type) type {
 pub const SpqrTree = struct {
     vert_index: []i32,
     edge_index: []i32,
+    /// Whether edge e is stored in its Q node with its endpoints swapped: `node_verts[node_nvs.bounds[edge_index[e]]].vert != edges[e][0]`
+    edge_flipped: []bool,
 
     par: []i32,
     subtree_end: []i32,
@@ -201,11 +224,15 @@ pub const SpqrTree = struct {
     orig_id: []i32,
 
     ch: Csr(i32),
-    node_verts: Csr(NodeVert),
+    /// nv's of each node: `node_nvs.slice(i, node_verts)`
+    node_verts: []NodeVert,
+    node_nvs: CsrIndex,
     /// The nv index of a vertex within its parent node
     vert_par_nv: []i32,
     // TODO: Should we store a vert_nodes CSR?
-    node_edges: Csr(NodeEdge),
+    /// ne's of each node: `node_nes.slice(i, node_edges)`
+    node_edges: []NodeEdge,
+    node_nes: CsrIndex,
     node_adj: Csr(NodeAdj),
 
     pub fn size(self: SpqrTree) i32 {
@@ -219,21 +246,24 @@ pub const SpqrTree = struct {
     pub fn build(gpa: Allocator, NV: i32, edges: []const [2]i32, ternarize: bool, vert_order: []const i32, edge_order: []const i32) Allocator.Error!SpqrTree {
         const t = try buildImpl(false, gpa, NV, edges, ternarize, vert_order, edge_order);
         gpa.free(t.node_planar);
-        gpa.free(t.ne_rot_adj);
+        gpa.free(t.ne_embedding.rot_adj);
         return t.tree;
     }
 
     pub fn deinit(self: *SpqrTree, gpa: Allocator) void {
         gpa.free(self.vert_index);
         gpa.free(self.edge_index);
+        gpa.free(self.edge_flipped);
         gpa.free(self.par);
         gpa.free(self.subtree_end);
         gpa.free(self.types);
         gpa.free(self.orig_id);
         self.ch.deinit(gpa);
-        self.node_verts.deinit(gpa);
+        gpa.free(self.node_verts);
+        self.node_nvs.deinit(gpa);
         gpa.free(self.vert_par_nv);
-        self.node_edges.deinit(gpa);
+        gpa.free(self.node_edges);
+        self.node_nes.deinit(gpa);
         self.node_adj.deinit(gpa);
         self.* = undefined;
     }
@@ -271,13 +301,21 @@ pub const NodeAdj = struct {
     dest_nv: i32,
 };
 
+/// A planar embedding of a graph, as the rotation system of its quarter-edges.
+/// Quarter-edges are indexed by 4 * edge + 2 * side + dir (side: v0 vs v1, dir: cw vs ccw):
+/// qe ^ 1 is the other side around the endpoint, qe ^ 3 the other side along the edge, and rot_adj[qe] the facing quarter-edge.
+/// Partial embeddings are represented with -1's in rot_adj.
+pub const PlanarEmbedding = struct {
+    rot_adj: []i32,
+};
+
 pub const PlanarSpqrTree = struct {
     tree: SpqrTree,
     node_planar: []bool,
-    /// Planarity adjacencies: ne_rot_adj is an involution of facing quarter-edges, indexed according to:
-    /// ne_rot_adj[4 * node_edge + 2 * side + dir]
+    /// Planarity adjacencies of each node's vedges, indexed according to:
+    /// ne_embedding.rot_adj[4 * node_edge + 2 * side + dir]
     /// Nonplanar nodes have all entries -1.
-    ne_rot_adj: []i32,
+    ne_embedding: PlanarEmbedding,
 
     pub fn build(gpa: Allocator, NV: i32, edges: []const [2]i32, ternarize: bool, vert_order: []const i32, edge_order: []const i32) Allocator.Error!PlanarSpqrTree {
         return buildImpl(true, gpa, NV, edges, ternarize, vert_order, edge_order);
@@ -286,7 +324,7 @@ pub const PlanarSpqrTree = struct {
     pub fn deinit(self: *PlanarSpqrTree, gpa: Allocator) void {
         self.tree.deinit(gpa);
         gpa.free(self.node_planar);
-        gpa.free(self.ne_rot_adj);
+        gpa.free(self.ne_embedding.rot_adj);
         self.* = undefined;
     }
 };
@@ -1141,17 +1179,21 @@ fn Relabel(comptime WP: bool) type {
 
         gpa: Allocator,
         b: *Builder(WP),
+        edges: []const [2]i32,
 
         vert_index: []i32,
         edge_index: []i32,
+        edge_flipped: []bool,
         par: []i32,
         subtree_end: []i32,
         types: []NodeType,
         orig_id: []i32,
         ch: Csr(i32),
-        node_verts: Csr(NodeVert),
+        node_verts: []NodeVert,
+        node_nvs: CsrIndex,
         vert_par_nv: []i32,
-        node_edges: Csr(NodeEdge),
+        node_edges: []NodeEdge,
+        node_nes: CsrIndex,
         node_adj: Csr(NodeAdj),
         node_planar: []bool,
         ne_rot_adj: []i32,
@@ -1165,8 +1207,8 @@ fn Relabel(comptime WP: bool) type {
         stk: Stack(RelabelStack),
 
         fn setNe(self: *Self, cur_idx: i32, ne: i32, nvs: [2]i32, nds: [2]i32, rot_adjs: [4]i32) void {
-            self.node_edges.dat[ix(ne)].node = cur_idx;
-            self.node_edges.dat[ix(ne)].nvs = nvs;
+            self.node_edges[ix(ne)].node = cur_idx;
+            self.node_edges[ix(ne)].nvs = nvs;
             self.node_adj.dat[ix(nds[0])] = .{ .ne = ne, .dest_nv = nvs[1] };
             self.node_adj.dat[ix(nds[1])] = .{ .ne = ne, .dest_nv = nvs[0] };
             if (WP) {
@@ -1208,6 +1250,8 @@ fn Relabel(comptime WP: bool) type {
                 const orig_edge = cur_item - 1 - NV;
                 self.orig_id[ix(cur_idx)] = orig_edge;
                 self.edge_index[ix(orig_edge)] = cur_idx;
+                assert(self.b.item_vs.buf[ix(cur_item)][0] != -1);
+                self.edge_flipped[ix(orig_edge)] = self.b.item_vs.buf[ix(cur_item)][0] != self.edges[ix(orig_edge)][0];
             } else {
                 assert(1 + NV + NE <= cur_item);
                 if (WP) {
@@ -1239,12 +1283,12 @@ fn Relabel(comptime WP: bool) type {
             // because we don't have the final item id's yet.
             const ch_st = self.ch.bounds[ix(cur_idx)];
             var ch_en = ch_st;
-            const nv_st = self.node_verts.bounds[ix(cur_idx)];
+            const nv_st = self.node_nvs.bounds[ix(cur_idx)];
             var nv_en = nv_st;
             var n_edges: i32 = 0;
             const cur_item_vs = self.b.item_vs.buf[ix(cur_item)];
             if (cur_item_vs[0] != -1) {
-                self.node_verts.dat[ix(nv_en)] = .{ .node = cur_idx, .vert = cur_item_vs[0] };
+                self.node_verts[ix(nv_en)] = .{ .node = cur_idx, .vert = cur_item_vs[0] };
                 nv_en += 1;
             }
             const cur_item_ch = self.b.item_ch.buf[ix(cur_item)];
@@ -1256,7 +1300,7 @@ fn Relabel(comptime WP: bool) type {
                     ch_en += 1;
                     assert(ch_item >= 1);
                     if (ch_item < 1 + NV) {
-                        self.node_verts.dat[ix(nv_en)] = .{ .node = cur_idx, .vert = ch_item - 1 };
+                        self.node_verts[ix(nv_en)] = .{ .node = cur_idx, .vert = ch_item - 1 };
                         nv_en += 1;
                     } else {
                         if (WP) {
@@ -1287,11 +1331,11 @@ fn Relabel(comptime WP: bool) type {
                 assert(!planarity_flip);
             }
             if (cur_item_vs[1] != -1) {
-                self.node_verts.dat[ix(nv_en)] = .{ .node = cur_idx, .vert = cur_item_vs[1] };
+                self.node_verts[ix(nv_en)] = .{ .node = cur_idx, .vert = cur_item_vs[1] };
                 nv_en += 1;
             }
             self.ch.bounds[ix(cur_idx) + 1] = ch_en;
-            self.node_verts.bounds[ix(cur_idx) + 1] = nv_en;
+            self.node_nvs.bounds[ix(cur_idx) + 1] = nv_en;
 
             const n_verts = nv_en - nv_st;
 
@@ -1305,9 +1349,9 @@ fn Relabel(comptime WP: bool) type {
                 n_edges += 1;
             }
 
-            const ne_st = self.node_edges.bounds[ix(cur_idx)];
+            const ne_st = self.node_nes.bounds[ix(cur_idx)];
             const ne_en = ne_st + n_edges;
-            self.node_edges.bounds[ix(cur_idx) + 1] = ne_en;
+            self.node_nes.bounds[ix(cur_idx) + 1] = ne_en;
 
             const nab = self.node_adj.bounds;
             if (cur_type == .F) {
@@ -1379,7 +1423,7 @@ fn Relabel(comptime WP: bool) type {
                 {
                     var nv_ = nv_st;
                     while (nv_ < nv_en) : (nv_ += 1) {
-                        self.vert_pos_buf[ix(self.node_verts.dat[ix(nv_)].vert)] = nv_;
+                        self.vert_pos_buf[ix(self.node_verts[ix(nv_)].vert)] = nv_;
                     }
                 }
                 self.cnts_buf.len = 0;
@@ -1504,13 +1548,13 @@ fn Relabel(comptime WP: bool) type {
             const nxt_idx = self.nxt_unassigned_idx;
             self.ch.dat[ix(s.ch_idx)] = nxt_idx;
             self.par[ix(nxt_idx)] = cur_idx;
-            const nxt_ne = self.node_edges.bounds[ix(nxt_idx)];
+            const nxt_ne = self.node_nes.bounds[ix(nxt_idx)];
             if (nxt_item < 1 + self.b.NV) {
                 self.vert_par_nv[ix(nxt_idx)] = s.cur_nv;
                 s.cur_nv += 1;
             } else if (self.types[ix(cur_idx)] != .F and self.types[ix(cur_idx)] != .V) {
-                self.node_edges.dat[ix(s.cur_ne)].twin_ne = nxt_ne;
-                self.node_edges.dat[ix(nxt_ne)].twin_ne = s.cur_ne;
+                self.node_edges[ix(s.cur_ne)].twin_ne = nxt_ne;
+                self.node_edges[ix(nxt_ne)].twin_ne = s.cur_ne;
                 s.cur_ne += 1;
             }
 
@@ -1671,16 +1715,20 @@ fn buildImpl(comptime WP: bool, gpa: Allocator, NV: i32, edges: []const [2]i32, 
     var r: Relabel(WP) = .{
         .gpa = gpa,
         .b = &b,
+        .edges = edges,
         .vert_index = try allocFilled(gpa, i32, ix(NV), -1),
         .edge_index = try allocFilled(gpa, i32, ix(NE), -1),
+        .edge_flipped = try allocFilled(gpa, bool, ix(NE), false),
         .par = try allocFilled(gpa, i32, ix(tot_items), -1),
         .subtree_end = try allocFilled(gpa, i32, ix(tot_items), -1),
         .types = try allocFilled(gpa, NodeType, ix(tot_items), .F),
         .orig_id = try allocFilled(gpa, i32, ix(tot_items), -1),
         .ch = .{ .bounds = try allocFilled(gpa, i32, ix(tot_items) + 1, 0), .dat = try allocFilled(gpa, i32, ix(tot_items - 1), 0) },
-        .node_verts = .{ .bounds = try allocFilled(gpa, i32, ix(tot_items) + 1, 0), .dat = try allocFilled(gpa, NodeVert, ix(tot_node_verts), .{ .node = 0, .vert = 0 }) },
+        .node_verts = try allocFilled(gpa, NodeVert, ix(tot_node_verts), .{ .node = 0, .vert = 0 }),
+        .node_nvs = .{ .bounds = try allocFilled(gpa, i32, ix(tot_items) + 1, 0) },
         .vert_par_nv = try allocFilled(gpa, i32, ix(tot_items), -1),
-        .node_edges = .{ .bounds = try allocFilled(gpa, i32, ix(tot_items) + 1, 0), .dat = try allocFilled(gpa, NodeEdge, ix(tot_node_edges), .{ .node = 0, .twin_ne = 0, .nvs = .{ 0, 0 } }) },
+        .node_edges = try allocFilled(gpa, NodeEdge, ix(tot_node_edges), .{ .node = 0, .twin_ne = 0, .nvs = .{ 0, 0 } }),
+        .node_nes = .{ .bounds = try allocFilled(gpa, i32, ix(tot_items) + 1, 0) },
         .node_adj = .{ .bounds = try allocFilled(gpa, i32, ix(tot_node_verts * 2 + 1), 0), .dat = try allocFilled(gpa, NodeAdj, ix(tot_node_edges * 2), .{ .ne = 0, .dest_nv = 0 }) },
         .node_planar = try allocFilled(gpa, bool, if (WP) ix(tot_items) else 0, false),
         .ne_rot_adj = try allocFilled(gpa, i32, if (WP) ix(4 * tot_node_edges) else 0, -1),
@@ -1711,12 +1759,12 @@ fn buildImpl(comptime WP: bool, gpa: Allocator, NV: i32, edges: []const [2]i32, 
 
     assert(r.nxt_unassigned_idx == tot_items);
     assert(r.ch.bounds[r.ch.bounds.len - 1] == @as(i32, @intCast(r.ch.dat.len)));
-    assert(r.node_verts.bounds[r.node_verts.bounds.len - 1] == @as(i32, @intCast(r.node_verts.dat.len)));
-    assert(r.node_edges.bounds[r.node_edges.bounds.len - 1] == @as(i32, @intCast(r.node_edges.dat.len)));
+    assert(r.node_nvs.bounds[r.node_nvs.bounds.len - 1] == @as(i32, @intCast(r.node_verts.len)));
+    assert(r.node_nes.bounds[r.node_nes.bounds.len - 1] == @as(i32, @intCast(r.node_edges.len)));
     assert(r.node_adj.bounds[r.node_adj.bounds.len - 1] == @as(i32, @intCast(r.node_adj.dat.len)));
 
     // Rewrite node_vertices to the correct index
-    for (r.node_verts.dat) |*v| {
+    for (r.node_verts) |*v| {
         v.vert = r.vert_index[ix(v.vert)];
     }
 
@@ -1724,17 +1772,20 @@ fn buildImpl(comptime WP: bool, gpa: Allocator, NV: i32, edges: []const [2]i32, 
         .tree = .{
             .vert_index = r.vert_index,
             .edge_index = r.edge_index,
+            .edge_flipped = r.edge_flipped,
             .par = r.par,
             .subtree_end = r.subtree_end,
             .types = r.types,
             .orig_id = r.orig_id,
             .ch = r.ch,
             .node_verts = r.node_verts,
+            .node_nvs = r.node_nvs,
             .vert_par_nv = r.vert_par_nv,
             .node_edges = r.node_edges,
+            .node_nes = r.node_nes,
             .node_adj = r.node_adj,
         },
         .node_planar = r.node_planar,
-        .ne_rot_adj = r.ne_rot_adj,
+        .ne_embedding = .{ .rot_adj = r.ne_rot_adj },
     };
 }

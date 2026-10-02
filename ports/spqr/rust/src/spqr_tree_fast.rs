@@ -3,7 +3,7 @@
 //! and asserted in debug builds. Stack tops/pops are unchecked too. Everything else is the same code.
 #![allow(clippy::identity_op, clippy::erasing_op, clippy::int_plus_one, clippy::needless_range_loop)]
 
-use crate::spqr_tree::{Csr, NodeAdj, NodeEdge, NodeType, NodeVert, PlanarSpqrTree, SpqrTree};
+use crate::spqr_tree::{Csr, CsrIndex, NodeAdj, NodeEdge, NodeType, NodeVert, PlanarEmbedding, PlanarSpqrTree, SpqrTree};
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 /// `UVec<T>` with unchecked indexing. Every index in this file is derived from sizes we computed
@@ -102,6 +102,17 @@ impl<'a, T> IntoIterator for &'a UVec<T> {
 	type IntoIter = std::slice::Iter<'a, T>;
 	fn into_iter(self) -> Self::IntoIter {
 		self.0.iter()
+	}
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct UCsrIndex {
+	pub bounds: UVec<i32>,
+}
+
+impl From<UCsrIndex> for CsrIndex {
+	fn from(c: UCsrIndex) -> CsrIndex {
+		CsrIndex { bounds: c.bounds.0 }
 	}
 }
 
@@ -1029,19 +1040,23 @@ struct RelabelStack {
 	cur_ne: i32,
 }
 
-struct Relabel<const WP: bool> {
+struct Relabel<'a, const WP: bool> {
 	b: Builder<WP>,
+	edges: &'a [[i32; 2]],
 
 	vert_index: UVec<i32>,
 	edge_index: UVec<i32>,
+	edge_flipped: UVec<bool>,
 	par: UVec<i32>,
 	subtree_end: UVec<i32>,
 	types: UVec<NodeType>,
 	orig_id: UVec<i32>,
 	ch: UCsr<i32>,
-	node_verts: UCsr<NodeVert>,
+	node_verts: UVec<NodeVert>,
+	node_nvs: UCsrIndex,
 	vert_par_nv: UVec<i32>,
-	node_edges: UCsr<NodeEdge>,
+	node_edges: UVec<NodeEdge>,
+	node_nes: UCsrIndex,
 	node_adj: UCsr<NodeAdj>,
 	node_planar: UVec<bool>,
 	ne_rot_adj: UVec<i32>,
@@ -1055,10 +1070,10 @@ struct Relabel<const WP: bool> {
 	stk: UVec<RelabelStack>,
 }
 
-impl<const WP: bool> Relabel<WP> {
+impl<const WP: bool> Relabel<'_, WP> {
 	fn set_ne(&mut self, cur_idx: i32, ne: i32, nvs: [i32; 2], nds: [i32; 2], rot_adjs: [i32; 4]) {
-		self.node_edges.dat[ne as usize].node = cur_idx;
-		self.node_edges.dat[ne as usize].nvs = nvs;
+		self.node_edges[ne as usize].node = cur_idx;
+		self.node_edges[ne as usize].nvs = nvs;
 		self.node_adj.dat[nds[0] as usize] = NodeAdj { ne, dest_nv: nvs[1] };
 		self.node_adj.dat[nds[1] as usize] = NodeAdj { ne, dest_nv: nvs[0] };
 		if WP {
@@ -1104,6 +1119,8 @@ impl<const WP: bool> Relabel<WP> {
 			let orig_edge = cur_item - 1 - nv;
 			self.orig_id[cur_idx as usize] = orig_edge;
 			self.edge_index[orig_edge as usize] = cur_idx;
+			debug_assert!(self.b.item_vs[cur_item as usize][0] != -1);
+			self.edge_flipped[orig_edge as usize] = self.b.item_vs[cur_item as usize][0] != self.edges[orig_edge as usize][0];
 		} else {
 			debug_assert!(1 + nv + ne <= cur_item);
 			if WP {
@@ -1136,12 +1153,12 @@ impl<const WP: bool> Relabel<WP> {
 		// because we don't have the final item id's yet.
 		let ch_st = self.ch.bounds[cur_idx as usize];
 		let mut ch_en = ch_st;
-		let nv_st = self.node_verts.bounds[cur_idx as usize];
+		let nv_st = self.node_nvs.bounds[cur_idx as usize];
 		let mut nv_en = nv_st;
 		let mut n_edges = 0;
 		let cur_item_vs = self.b.item_vs[cur_item as usize];
 		if cur_item_vs[0] != -1 {
-			self.node_verts.dat[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[0] };
+			self.node_verts[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[0] };
 			nv_en += 1;
 		}
 		let cur_item_ch = self.b.item_ch[cur_item as usize];
@@ -1153,7 +1170,7 @@ impl<const WP: bool> Relabel<WP> {
 				ch_en += 1;
 				debug_assert!(ch_item >= 1);
 				if ch_item < 1 + nv {
-					self.node_verts.dat[nv_en as usize] = NodeVert { node: cur_idx, vert: ch_item - 1 };
+					self.node_verts[nv_en as usize] = NodeVert { node: cur_idx, vert: ch_item - 1 };
 					nv_en += 1;
 				} else {
 					if WP {
@@ -1184,11 +1201,11 @@ impl<const WP: bool> Relabel<WP> {
 			debug_assert!(!planarity_flip);
 		}
 		if cur_item_vs[1] != -1 {
-			self.node_verts.dat[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[1] };
+			self.node_verts[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[1] };
 			nv_en += 1;
 		}
 		self.ch.bounds[cur_idx as usize + 1] = ch_en;
-		self.node_verts.bounds[cur_idx as usize + 1] = nv_en;
+		self.node_nvs.bounds[cur_idx as usize + 1] = nv_en;
 
 		let n_verts = nv_en - nv_st;
 
@@ -1202,9 +1219,9 @@ impl<const WP: bool> Relabel<WP> {
 			n_edges += 1;
 		}
 
-		let ne_st = self.node_edges.bounds[cur_idx as usize];
+		let ne_st = self.node_nes.bounds[cur_idx as usize];
 		let ne_en = ne_st + n_edges;
-		self.node_edges.bounds[cur_idx as usize + 1] = ne_en;
+		self.node_nes.bounds[cur_idx as usize + 1] = ne_en;
 
 		if cur_type == NodeType::F {
 			// Just set node_adj bounds and we're good
@@ -1267,7 +1284,7 @@ impl<const WP: bool> Relabel<WP> {
 		} else if cur_type == NodeType::R {
 			// Bucketsort the children by the midpoint
 			for nv_ in nv_st..nv_en {
-				self.vert_pos_buf[self.node_verts.dat[nv_ as usize].vert as usize] = nv_;
+				self.vert_pos_buf[self.node_verts[nv_ as usize].vert as usize] = nv_;
 			}
 			self.cnts_buf.assign((n_verts * 2 - 1) as usize, 0);
 			self.ch_buf.clear();
@@ -1377,13 +1394,13 @@ impl<const WP: bool> Relabel<WP> {
 		let nxt_idx = self.nxt_unassigned_idx;
 		self.ch.dat[ch_idx as usize] = nxt_idx;
 		self.par[nxt_idx as usize] = cur_idx;
-		let nxt_ne = self.node_edges.bounds[nxt_idx as usize];
+		let nxt_ne = self.node_nes.bounds[nxt_idx as usize];
 		if nxt_item < 1 + self.b.nv {
 			self.vert_par_nv[nxt_idx as usize] = cur_nv;
 			self.stk[si].cur_nv += 1;
 		} else if self.types[cur_idx as usize] != NodeType::F && self.types[cur_idx as usize] != NodeType::V {
-			self.node_edges.dat[cur_ne as usize].twin_ne = nxt_ne;
-			self.node_edges.dat[nxt_ne as usize].twin_ne = cur_ne;
+			self.node_edges[cur_ne as usize].twin_ne = nxt_ne;
+			self.node_edges[nxt_ne as usize].twin_ne = cur_ne;
 			self.stk[si].cur_ne += 1;
 		}
 
@@ -1554,16 +1571,20 @@ fn build_impl<const WP: bool>(nv: i32, edges: &[[i32; 2]], ternarize: bool, vert
 
 	let mut r = Relabel::<WP> {
 		b,
+		edges,
 		vert_index: uvec![-1; nv as usize],
 		edge_index: uvec![-1; ne as usize],
+		edge_flipped: uvec![false; ne as usize],
 		par: uvec![-1; tot_items as usize],
 		subtree_end: uvec![-1; tot_items as usize],
 		types: uvec![NodeType::F; tot_items as usize],
 		orig_id: uvec![-1; tot_items as usize],
 		ch: UCsr { bounds: uvec![0; tot_items as usize + 1], dat: uvec![0; (tot_items - 1) as usize] },
-		node_verts: UCsr { bounds: uvec![0; tot_items as usize + 1], dat: uvec![NodeVert::default(); tot_node_verts as usize] },
+		node_verts: uvec![NodeVert::default(); tot_node_verts as usize],
+		node_nvs: UCsrIndex { bounds: uvec![0; tot_items as usize + 1] },
 		vert_par_nv: uvec![-1; tot_items as usize],
-		node_edges: UCsr { bounds: uvec![0; tot_items as usize + 1], dat: uvec![NodeEdge::default(); tot_node_edges as usize] },
+		node_edges: uvec![NodeEdge::default(); tot_node_edges as usize],
+		node_nes: UCsrIndex { bounds: uvec![0; tot_items as usize + 1] },
 		node_adj: UCsr { bounds: uvec![0; (tot_node_verts * 2 + 1) as usize], dat: uvec![NodeAdj::default(); (tot_node_edges * 2) as usize] },
 		node_planar: uvec![false; if WP { tot_items as usize } else { 0 }],
 		ne_rot_adj: uvec![-1; if WP { (4 * tot_node_edges) as usize } else { 0 }],
@@ -1592,12 +1613,12 @@ fn build_impl<const WP: bool>(nv: i32, edges: &[[i32; 2]], ternarize: bool, vert
 
 	debug_assert!(r.nxt_unassigned_idx == tot_items);
 	debug_assert!(*r.ch.bounds.last().unwrap() == r.ch.dat.len() as i32);
-	debug_assert!(*r.node_verts.bounds.last().unwrap() == r.node_verts.dat.len() as i32);
-	debug_assert!(*r.node_edges.bounds.last().unwrap() == r.node_edges.dat.len() as i32);
+	debug_assert!(*r.node_nvs.bounds.last().unwrap() == r.node_verts.len() as i32);
+	debug_assert!(*r.node_nes.bounds.last().unwrap() == r.node_edges.len() as i32);
 	debug_assert!(*r.node_adj.bounds.last().unwrap() == r.node_adj.dat.len() as i32);
 
 	// Rewrite node_vertices to the correct index
-	for v in r.node_verts.dat.iter_mut() {
+	for v in r.node_verts.iter_mut() {
 		v.vert = r.vert_index[v.vert as usize];
 	}
 
@@ -1605,17 +1626,20 @@ fn build_impl<const WP: bool>(nv: i32, edges: &[[i32; 2]], ternarize: bool, vert
 		tree: SpqrTree {
 			vert_index: r.vert_index.0,
 			edge_index: r.edge_index.0,
+			edge_flipped: r.edge_flipped.0,
 			par: r.par.0,
 			subtree_end: r.subtree_end.0,
 			types: r.types.0,
 			orig_id: r.orig_id.0,
 			ch: r.ch.into(),
-			node_verts: r.node_verts.into(),
+			node_verts: r.node_verts.0,
+			node_nvs: r.node_nvs.into(),
 			vert_par_nv: r.vert_par_nv.0,
-			node_edges: r.node_edges.into(),
+			node_edges: r.node_edges.0,
+			node_nes: r.node_nes.into(),
 			node_adj: r.node_adj.into(),
 		},
 		node_planar: r.node_planar.0,
-		ne_rot_adj: r.ne_rot_adj.0,
+		ne_embedding: PlanarEmbedding { rot_adj: r.ne_rot_adj.0 },
 	}
 }
