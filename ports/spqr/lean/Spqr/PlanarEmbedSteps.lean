@@ -42,7 +42,7 @@ embedding `ρ` of that piece; exactly the exposed ends `outerE[j]` are still uns
 exposed pair `outerE[j][2k], outerE[j][2k+1]` is a facing pair of `ρ` (so that a `link` is a
 transposition conjugation of `ρ`). Quarter-edges of edges not below any processed item are unset,
 and unprocessed items have no exposed ends yet. -/
-structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) : Prop where
+structure GluedPieces (g : Graph) (i : Nat) (s : EmbedState) : Prop where
   rot_size : s.rotAdj.size = 4 * t.ne
   outer_size : s.outerE.size = t.size
   outer_unprocessed : ∀ j, j < i → ∀ q, ¬ s.exposedAt j q
@@ -61,6 +61,13 @@ structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) : Prop where
             ρ.get la = some lb) ∧
       (∀ b, s.outerE[j]?.bind (fun o => o[2 * k + 1]?) = some (some b) →
         ∃ a, s.outerE[j]?.bind (fun o => o[2 * k]?) = some (some a)))
+
+structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) extends t.GluedPieces g i s : Prop where
+  outer_row_size : ∀ j, j < t.size → s.outerE[j]!.size = 4
+  outer_slots : ∀ j k q, s.outerE[j]?.bind (fun o => o[k]?) = some (some q) →
+    k < 4 ∧ t.toSpqrTree.type j ≠ .F ∧
+      ∀ p, t.toSpqrTree.parent j = some p →
+        (t.toSpqrTree.type p = .F ∨ t.toSpqrTree.type p = .V) → k < 2
 
 /-- The initial state of `planarEmbed`. -/
 def initState : EmbedState :=
@@ -82,6 +89,13 @@ theorem gluedUpTo_init (g : Graph) : t.GluedUpTo g t.size t.initState where
     intro j hj
     obtain ⟨h1, h2, _⟩ := hj
     omega
+  outer_row_size := by
+    intro j hj
+    simp [initState, getElem!_pos, hj]
+  outer_slots := by
+    intro j k q hk
+    by_cases hj : j < t.size <;> by_cases hk' : k < 4 <;>
+      simp [initState, Array.getElem?_replicate, hj, hk'] at hk
 
 /-- `F` step: the children are whole components; their exposed ends are closed
 (`disjointUnion_planar`). Admitted. -/

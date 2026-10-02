@@ -1,4 +1,5 @@
 import Spqr.PlanarEmbedLeaf
+import Spqr.PlanarEmbedEdges
 
 /-!
 # Assembling the per-item steps of `planarEmbed`
@@ -14,11 +15,6 @@ namespace Spqr
 namespace PlanarSpqrTree
 
 variable (t : PlanarSpqrTree)
-
-theorem type_eq_of_lt (i : Nat) (hi : i < t.size) : t.toSpqrTree.type i = t.types[i]! := by
-  unfold SpqrTree.type
-  rw [Array.getElem?_eq_getElem hi, getElem!_pos t.types i hi]
-  rfl
 
 /-- `O`/`I` items have nothing below them. -/
 theorem subtreeEnd_leaf (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape) (i : Nat)
