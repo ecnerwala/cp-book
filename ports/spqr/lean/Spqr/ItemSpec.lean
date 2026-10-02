@@ -40,7 +40,7 @@ structure Tree : Prop where
   ch_nodup : ∀ p, (items.ch p).Nodup
   reach : ∀ i, i < items.size → items.Below rootItem i
   /-- V items have only Q children; the root has V and Q children only. -/
-  v_children : ∀ v c, items.IsParent (vertItem v) c → items.type c = .Q
+  v_children : ∀ v c, v < g.nv → items.IsParent (vertItem v) c → items.type c = .Q
   root_children : ∀ c, items.IsParent rootItem c → items.type c = .V ∨ items.type c = .Q
 
 /-- Original edge `e` is below item `i`. -/

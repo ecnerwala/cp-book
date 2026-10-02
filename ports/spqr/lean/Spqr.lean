@@ -12,6 +12,7 @@ import Spqr.ItemSpec
 import Spqr.WalkTyping
 import Spqr.GraphLemmas
 import Spqr.WalkPlace
+import Spqr.WalkCover
 import Spqr.WalkSpec
 import Spqr.WalkInv
 import Spqr.Correctness
