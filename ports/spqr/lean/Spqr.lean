@@ -40,6 +40,7 @@ import Spqr.PlanarRelabelProj
 import Spqr.Proofs.Planar
 import Spqr.PlanarLayout
 import Spqr.PlanarInv
+import Spqr.PlanarEmbedSteps
 import Spqr.PlanarSpec
 import Spqr.Proofs.ForestSpec
 import Spqr.Contract

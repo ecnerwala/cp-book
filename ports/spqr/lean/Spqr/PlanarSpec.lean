@@ -3,6 +3,7 @@ import Spqr.PlanarRelabelProj
 import Spqr.Build
 import Spqr.Correctness
 import Spqr.PlanarInv
+import Spqr.PlanarEmbedSteps
 import Spqr.Spec
 
 /-!
@@ -203,16 +204,31 @@ theorem nodePlanar_complete (g : Graph) (ternarize : Bool) (vertOrder edgeOrder 
       ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i) := by
   sorry
 
+/-- At the root (item `0`, the `F` item of `g`, no parent): `edgesBelow 0` is every edge of `g`,
+`outerE[0]` is all unset, so `GluedUpTo 0` says the glued rotation is total and agrees with a
+planar embedding of `g.edges` under the identity renumbering. Admitted (tree facts about the
+root item). -/
+theorem glued_root (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (s : PlanarSpqrTree.EmbedState)
+    (h : (g.planarTree ternarize vertOrder edgeOrder).GluedUpTo g 0 s) :
+    IsPlanarEmbedding g.edges.toList g.nv ⟨s.rotAdj⟩ := by
+  sorry
+
 /-- Soundness of the glued embedding: it is a planar embedding of `g` (Euler's formula per
-component). Admitted; plan in PROOF.md §8.5: bottom-up over the reverse preorder, the partial
-rotation restricted to the edges below an item is a planar embedding of them — S/P/R nodes glue
-their children's embeddings through the twins (`twoSum_planar` with `nodePlanar_sound`), V items
-glue the blocks hanging off a vertex (`oneSum_planar`), Q items add their real edge, F items
-collect components (`disjointUnion_planar`). -/
+component). The reverse-preorder fold is `forM_reverse_range_inv` with the invariant `GluedUpTo`
+(`gluedUpTo_init` proved); the per-item steps `embedItem_step_{F,V,Q,leaf,node}` and the root
+assembly `glued_root` are admitted (plan in PROOF.md §8.5: `twoSum_planar` for S/P/R with
+`nodePlanar_sound`, `oneSum_planar` for V/Q, `disjointUnion_planar` for F). -/
 theorem planarEmbed_sound (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
     (rs : RotationSystem) (h : (g.planarTree ternarize vertOrder edgeOrder).planarEmbed = some rs) :
     IsPlanarEmbedding g.edges.toList g.nv rs := by
-  sorry
+  unfold PlanarSpqrTree.planarEmbed at h
+  split at h
+  · rename_i hall
+    simp only [Option.some.injEq] at h
+    subst h
+    exact glued_root g ternarize vertOrder edgeOrder _
+      ((g.planarTree ternarize vertOrder edgeOrder).gluedUpTo_planarEmbed g hall)
+  · cases h
 
 /-- The eventual target: the planar SPQR tree yields an embedding iff `g` is planar. `→` is
 `planarEmbed_sound`; `←` needs `nodePlanar_complete` plus the fact that a minor (each skeleton is a
