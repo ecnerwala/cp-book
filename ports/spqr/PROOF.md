@@ -404,9 +404,22 @@ type-2 pair; its class is 2-attached at `{a, b}`, touches both and is proper, an
 ((P.addParent g U s t).contract g).ThreeConnected` via `threeConnected_contract_iff`, with the
 terminal pairs handled by `Pieces.WF.not_sepPair_terminal` from `maximal` / `single`
 (`addParent_wf` uses `TwoAttached.conn_compl`: the complement of a 2-attached set in a block is
-connected). Still walk-side (not proved): that the R case of Loop 1 actually produces an
-`RCloseShape` — the content facts `single`, `maximal`, `bond`, `type1`, `type2` about the closed
-entries, on top of the stack-shape fact `walkTree_guards`.
+connected).
+
+Walk side (`RClose.lean`, `Proofs/RClose.lean`). At an R step of Loop 1 (`loop1Type` returns
+`.R`: `tstack = cur :: nxt :: rest`, `cur.topDepth = nxt.topDepth = d`, `nxt.vStart ≠ cur.vStart`)
+the closed set is `U = rU = edges cur ∪ edges nxt`, the terminals are `nxt.vStart` and
+`stackVerts[d]`, and the sub-pieces are `Pieces.ofItems` of the merged non-`V` items
+(`rPieceItems`). `WalkState.RStep` records this shape plus what the ear structure says about it:
+`cur.vStart` is interior to `U`, both entries are nonempty, `U` is proper, and the merged items
+are pairwise edge-disjoint 2-terminal pieces (`PieceItems`). Proved: `RStep.rCloseShape :
+Inv d s → TwoConnected → RStep → RContent → RCloseShape …` — the structural fields `wf`, `sub`,
+`conn`, `attached`, `touch_s`, `touch_t`, `ne`, `proper` come from `Inv d` (`EntryInv` via
+`TwoAttached.of_term`, `ConnEdges.union`/`TwoAttached.union`, `twoAttached_union_classes`) and
+`PieceItems` (`ofItems_mem_iff`) — and `RStep.threeConnected`. Not proved: the five content fields
+are the hypothesis `WalkState.RContent` (exact statements there), and `RStep` itself must be
+derived from the ear invariant at the point where Loop 1 takes the R branch (`interior`,
+`cur_ne`/`nxt_ne`/`proper`, `pieces` are not consequences of `Inv d` alone).
 
 ## 5. Phase 3: relabel
 
@@ -442,7 +455,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | typing/allocation part of `Items.WF` (`Items.Tree` sizes/types, I/O leaves, `vs_shape`, `vs_lt`): `walk_typing` | `WalkTyping.lean` | proved (`walk_q_children` sorry: needs span shape) |
 | §4.2b walk invariant (`EntryInv`, `Inv`): closure lemmas (`GraphLemmas.lean`), `mergeTstackTops_sound`, `finishTstackTop_complete`, `finishEdge_back_inv` (under explicit stack-shape hyps `BackCheckOk`) | `GraphLemmas.lean`, `WalkSpec.lean` | proved; `finishEdge_inv` (remaining branches), `walkTree_inv`, `walk_nodes_partition` sorry |
 | Invariant W, Lemmas 4.3/4.4 (`earOut_one_entry`, `ascend_frame_one_entry`) | `EarSpec.lean` | sorry / hard |
-| 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; the walk producing an `RCloseShape` (`single`/`maximal`/`bond`/`type1`/`type2`) and `spqrTree_r_three_connected` itself: hard |
+| 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape`/`RStep.threeConnected` (`Proofs/RClose.lean`) give it for Loop 1's R step from `Inv d` + `RStep` + `RContent`; `RContent` (content fields) and `RStep` from the ear invariant, and `spqrTree_r_three_connected` itself: hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean` | def / proved split |
 | 7 relabel-side: `vchildren_nv_increasing`, `orderedChildren_sorted`, `edgeChildren_dominance`, `layoutNode_r_bracket` | `StSpec.lean`, `StLayout.lean` | proved |
