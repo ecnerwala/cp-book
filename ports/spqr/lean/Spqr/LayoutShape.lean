@@ -1173,6 +1173,98 @@ theorem shape_S (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : 3
       List.getElem_range, Nat.add_sub_cancel, Prod.mk.injEq]
     omega
 
+theorem foldl_fillStep_sizes (nvSt neSt node : Nat) (L : List (Nat × Nat)) :
+    ∀ s : Layout × Nat,
+      (L.foldl (LayoutR.fillStep nvSt neSt node) s).1.adjBounds.size = s.1.adjBounds.size ∧
+      (L.foldl (LayoutR.fillStep nvSt neSt node) s).1.adjDat.size = s.1.adjDat.size := by
+  induction L with
+  | nil => intro s; exact ⟨rfl, rfl⟩
+  | cons a L ih =>
+    intro s
+    rw [List.foldl_cons]
+    refine ⟨(ih _).1.trans ?_, (ih _).2.trans ?_⟩ <;>
+      simp [LayoutR.fillStep, Layout.setNe, LayoutR.countStep, LayoutR.inc]
+
+theorem foldl_prefixStep_sizes (nvSt : Nat) (L : List Nat) :
+    ∀ s : Layout × Nat,
+      (L.foldl (LayoutR.prefixStep nvSt) s).1.adjBounds.size = s.1.adjBounds.size ∧
+      (L.foldl (LayoutR.prefixStep nvSt) s).1.adjDat.size = s.1.adjDat.size := by
+  induction L with
+  | nil => intro s; exact ⟨rfl, rfl⟩
+  | cons a L ih =>
+    intro s
+    rw [List.foldl_cons]
+    refine ⟨(ih _).1.trans ?_, (ih _).2.trans ?_⟩ <;> simp [LayoutR.prefixStep]
+
+theorem foldl_countStep_sizes (nvSt : Nat) (L : List (Nat × Nat)) :
+    ∀ l : Layout,
+      (L.foldl (LayoutR.countStep nvSt) l).adjBounds.size = l.adjBounds.size ∧
+      (L.foldl (LayoutR.countStep nvSt) l).adjDat.size = l.adjDat.size := by
+  induction L with
+  | nil => intro l; exact ⟨rfl, rfl⟩
+  | cons a L ih =>
+    intro l
+    rw [List.foldl_cons]
+    refine ⟨(ih _).1.trans ?_, (ih _).2.trans ?_⟩ <;> simp [LayoutR.countStep, LayoutR.inc]
+
+/-! #### R
+
+Hypotheses are the `Items.Shapes.r_shape` data after `vertPos`: `hE` (every child edge lies in
+`[nvSt, nvEn)` and is oriented by st-position), `hne` (one node-edge per child plus the cap),
+`h4` (`u`, `v` and at least two interior V children), `h6` (`6 ≤ virtualEdges.length`, which
+counts the cap), `hnd` (the pair encodings are `Nodup`, and the cap is not a child edge). -/
+
+theorem shape_R (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn) (hne : neEn = neSt + E.length + 1)
+    (h4 : 4 ≤ nvEn - nvSt) (h6 : 6 ≤ E.length + 1) (hnd : ((nvSt, nvEn - 1) :: E).Nodup) :
+    (layoutNode .R node nvSt nvEn neSt neEn E).Shape .R nvSt nvEn := by
+  rw [LayoutR.layoutNode_R_eq _ _ _ _ _ _ hv]
+  have hsk : (LayoutR.run node nvSt nvEn neSt neEn E).skeleton = (nvSt, nvEn - 1) :: E :=
+    run_skeleton node nvSt nvEn neSt neEn E hv hE hne
+  obtain ⟨hsz, -⟩ := run_edges node nvSt nvEn neSt neEn E hv hE hne
+  refine ⟨h4, by rw [hsz]; exact h6, by rw [hsk]; exact hnd, fun p hp => ?_⟩
+  rw [hsk, List.mem_cons] at hp
+  rcases hp with rfl | hp
+  · simp only; omega
+  · exact (hE p hp).2.1
+
+/-- The size and bound clauses of `Layout.Local` for R (the `ne` clauses are `local_R`). -/
+theorem local_R_sizes (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn) (hne : neEn = neSt + E.length + 1) :
+    (layoutNode .R node nvSt nvEn neSt neEn E).edges.size = neEn - neSt ∧
+    (layoutNode .R node nvSt nvEn neSt neEn E).adjBounds.size = 2 * (nvEn - nvSt) + 1 ∧
+    (layoutNode .R node nvSt nvEn neSt neEn E).adjDat.size = 2 * (neEn - neSt) ∧
+    (∀ k, k < (layoutNode .R node nvSt nvEn neSt neEn E).edges.size →
+      (layoutNode .R node nvSt nvEn neSt neEn E).edges[k]!.node = node ∧
+      (layoutNode .R node nvSt nvEn neSt neEn E).edges[k]!.twin = none) ∧
+    (∀ k, k < (layoutNode .R node nvSt nvEn neSt neEn E).edges.size →
+      nvSt ≤ (layoutNode .R node nvSt nvEn neSt neEn E).edges[k]!.nvs.1 ∧
+      (layoutNode .R node nvSt nvEn neSt neEn E).edges[k]!.nvs.1 ≤
+        (layoutNode .R node nvSt nvEn neSt neEn E).edges[k]!.nvs.2 ∧
+      (layoutNode .R node nvSt nvEn neSt neEn E).edges[k]!.nvs.2 < nvEn) ∧
+    rowBound nvSt neSt (layoutNode .R node nvSt nvEn neSt neEn E) (2 * nvEn) = 2 * neEn ∧
+    ∀ r, 2 * nvSt ≤ r → r < 2 * nvEn →
+      rowBound nvSt neSt (layoutNode .R node nvSt nvEn neSt neEn E) r ≤
+      rowBound nvSt neSt (layoutNode .R node nvSt nvEn neSt neEn E) (r + 1) := by
+  rw [LayoutR.layoutNode_R_eq _ _ _ _ _ _ hv]
+  obtain ⟨hsz, hget⟩ := run_edges node nvSt nvEn neSt neEn E hv hE hne
+  have hA := LayoutR.allE_bounds nvSt nvEn E hv hE
+  refine ⟨by rw [hsz]; omega, ?_, ?_, fun k hk => ?_, fun k hk => ?_,
+    run_rowBound_last node nvSt nvEn neSt neEn E hv hE hne,
+    fun r h1 h2 => run_rowBound_mono node nvSt nvEn neSt neEn E hv hE hne r h1 h2⟩
+  · simp only [LayoutR.run, LayoutR.inc, Array.size_modify, setNe_adjBounds, foldl_fillStep_sizes,
+      foldl_prefixStep_sizes, foldl_countStep_sizes, Layout.empty, Array.size_replicate]
+  · simp only [LayoutR.run, LayoutR.inc, Layout.setNe, Array.size_set!, foldl_fillStep_sizes,
+      foldl_prefixStep_sizes, foldl_countStep_sizes, Layout.empty, Array.size_replicate]
+  · rw [hsz] at hk; rw [hget k hk]; split_ifs <;> exact ⟨rfl, rfl⟩
+  · rw [hsz] at hk; rw [hget k hk]
+    split_ifs with h0
+    · simp only; omega
+    · have := hE (E.getD (k - 1) default)
+        (by rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega), Option.getD_some]
+            exact List.getElem_mem _)
+      simp only; omega
+
 end LayoutShape
 
 end Spqr
