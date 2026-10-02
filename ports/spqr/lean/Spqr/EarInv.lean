@@ -310,57 +310,6 @@ theorem EarAt.length {curV d origTstack : Nat} {o : DfsOut} {hasVert : Bool} {s 
   obtain ⟨sub, base, hl, he⟩ := h
   rw [he.tstack, List.length_append, hl]; omega
 
-/-- The frontier of `finishEdge _ d o origTstack _` at `s` (a tree edge with `lowval < d`): loops 1–2
-(`feS₂`) touch only the entries above the `origTstack` enclosing ones — `base` stays the bottom of the
-stack with the same entries and edge sets — and the first-occurrence walk never runs past the ear's
-bottom two entries `[py, vy]`, which end the child's entries both before and after. The child's
-entries hold exactly the sub-ear edges (`subEdges o`: the child's subtree and the tree edge `o.e`,
-which is pushed by `finishEdge` itself). Loop 3 stays above `origTstack + 3` by its condition. -/
-structure Frontier (d : Nat) (o : DfsOut) (origTstack : Nat) (s : WalkState) : Prop where
-  split : ∃ sub base c mid py vy, s.tstack = sub ++ base ∧ base.length = origTstack ∧
-    (∃ mid₀, sub = mid₀ ++ [py, vy]) ∧
-    (feS₂ d o s).tstack = c :: mid ++ [py, vy] ++ base ∧
-    (∀ t ∈ base, ∀ e, t.edges s.g (feS₂ d o s).items e ↔ t.edges s.g s.items e) ∧
-    (∀ e, e < s.g.ne → ((∃ t ∈ sub, t.edges s.g s.items e) ↔ (subEdges o e ∧ e ≠ o.e))) ∧
-    (∀ e, e < s.g.ne → ((∃ t ∈ c :: mid ++ [py, vy], t.edges s.g (feS₂ d o s).items e) ↔ subEdges o e))
-  g : (feS₂ d o s).g = s.g
-  sv : (feS₂ d o s).stackVerts = s.stackVerts
-
-theorem finishEdge_frontier {curV d origTstack : Nat} {o : DfsOut} {hasVert : Bool} {s : WalkState}
-    (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d)
-    (h : s.EarAt curV d o origTstack hasVert) : Frontier d o origTstack s := by
-  obtain ⟨sub, base, hl, hE⟩ := h
-  obtain ⟨c, mid, py, vy, hC⟩ := hE.close ht hlow
-  obtain ⟨c', mid', py', vy', hts', ⟨mid₀, hsub⟩, -⟩ := hE.loops ht hlow
-  have hb : [py', vy'] = [py, vy] := by
-    have h := hts'.symm.trans hC.tstack
-    obtain ⟨-, h2⟩ := List.cons_eq_cons.1 h
-    exact (List.append_inj' (List.append_cancel_right h2) rfl).2
-  simp only [List.cons.injEq, and_true] at hb
-  obtain ⟨hpy, hvy⟩ := hb
-  rw [hpy, hvy] at hsub
-  have hq : ∀ t ∈ sub, ¬ t.edges s.g s.items o.e := by
-    intro t ht' ⟨i, hi, hb⟩
-    have := Items.Below.eq_of_no_parent hE.q_root hb
-    subst this
-    exact hE.q_free t (by rw [hE.tstack]; exact List.mem_append_left _ ht') hi
-  refine ⟨⟨sub, base, c, mid, py, vy, hE.tstack, hl, ⟨mid₀, hsub⟩, hC.tstack, hC.base_edges, ?_, ?_⟩,
-    hC.g, hC.sv⟩
-  · intro e he
-    constructor
-    · rintro ⟨t, ht', hte⟩
-      refine ⟨hE.sub_edges t ht' e he hte, fun heq => ?_⟩
-      subst heq
-      exact hq t ht' hte
-    · rintro ⟨hse, hne⟩
-      exact hE.sub_cover e he hne hse
-  · intro e he
-    constructor
-    · rintro ⟨t, ht', hte⟩
-      exact hC.sub_edges t ht' e he hte
-    · intro hse
-      exact hC.sub_cover e he hse
-
 /-- A back edge: the stack is exactly `base`. -/
 theorem EarAt.back {curV d origTstack : Nat} {o : DfsOut} {hasVert : Bool} {s : WalkState}
     (h : s.EarAt curV d o origTstack hasVert) (hb : o.cls.isTree = false) :
