@@ -115,6 +115,57 @@ def earCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : Walk
             out := bad "boundary" s!"{showT t} {showT u} v={v}" :: out
   return out
 
+/-! ### Loop 1: `Loop1BodyOk` (D = d+1) at every iterate -/
+
+def interiorB (s : WalkState) (Es : List Nat) (v : Nat) : Bool :=
+  (List.range s.g.ne).all fun e => !inc s e v || Es.contains e
+/-! ### `EarFinish.loop1` (`Loop1Spec`) literally -/
+def l1CloseB (s : WalkState) (d v : Nat) (E : List Nat) (t : TEntry) (withMid : Bool) : List String :=
+  let Et := entryEdges s t
+  let U := E ++ Et
+  (if Et == [] || (List.range s.g.nv).any (fun x => touches s E x && touches s Et x) then [] else ["share"]) ++
+  (if v == t.vStart || (List.range (d+2)).any (fun k => d ≤ k && v == s.stackVerts[k]!) || interiorB s U v then [] else ["bottom"]) ++
+  (if !withMid then [] else
+    let x := s.stackVerts[d+1]!
+    if x == t.vStart || interiorB s U x || !touches s U x then [] else ["mid"])
+def unwrapB (s : WalkState) (ty : NodeType) (t : TEntry) : List String :=
+  [false, true].flatMap fun dir =>
+    let h := (getSide t.spans dir).headD 0
+    if Items.type s.items h ≠ ty then [] else
+    (if getSide t.spans dir ≠ [h] then ["single"] else []) ++
+    (if hasParent s h then ["root"] else []) ++
+    (if (Items.ch s.items h).any (fun c => s.tstack.any fun u => (spanItems u).contains c) then ["child"] else [])
+/-- Walk the reached splits of `hi`, checking `Loop1Spec`'s per-split facts. -/
+def specWalk (s : WalkState) (d : Nat) (o : DfsOut) (bad : String → String → V) :
+    Nat → List TEntry → List TEntry → List V
+  | 0, _, _ => []
+  | _ + 1, _, [] => []
+  | fuel + 1, done, t :: rest' =>
+    let v := (done.getLast?.map TEntry.vStart).getD o.dest
+    let E := o.e :: done.flatMap (entryEdges s)
+    if t.topDepth == d then
+      (l1CloseB s d v E t true).map (fun m => bad s!"close_{m}" (showT t)) ++
+      (if t.vStart == v then (unwrapB s .P t).map (fun m => bad s!"unwrapP_{m}" (showT t)) else []) ++
+      specWalk s d o bad fuel (done ++ [t]) rest'
+    else
+      (l1CloseB s d v E t false).map (fun m => bad s!"merge_{m}" (showT t)) ++
+      match rest' with
+      | t' :: rest'' =>
+        (l1CloseB s d t.vStart (E ++ entryEdges s t) t' true).map (fun m => bad s!"close2_{m}" s!"{showT t} {showT t'}") ++
+        (unwrapB s .S t').map (fun m => bad s!"unwrapS_{m}" s!"{showT t} {showT t'}") ++
+        specWalk s d o bad fuel (done ++ [t, t']) rest''
+      | [] => [bad "series_last" (showT t)]
+def specCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) : List V :=
+  let lowval := o.cls.lowval d
+  if !(o.cls.isTree && lowval < d) then [] else
+  let oStr := s!"tree e={o.e} dest={o.dest} lv={lowval} t1={o.cls.isType1}"
+  let n := s.tstack.length
+  let sub := s.tstack.take (n - orig)
+  let hi := sub.takeWhile fun t => d ≤ t.topDepth
+  let bad (kind : String) (info : String) : V :=
+    ⟨seed, curV, d, oStr, hv, s!"spec_{kind}", s!"{info} | orig={orig} sv={s.stackVerts.toList.take (d+2)} stack={s.tstack.map showT}"⟩
+  specWalk s d o bad (hi.length + 1) [] hi
+
 /-- Ear bottoms: `(y, (y,l) piece, V y)` recorded when the walk of `y` ends, if `y`'s own entries
 begin (bottom-up) with its vertex entry. -/
 abbrev EB := List (Nat × TEntry × TEntry)
@@ -232,7 +283,7 @@ partial def iOut (seed v d : Nat) (o : DfsOut) (hv : Bool) (eb : EB) (s : WalkSt
   let (s, eb, vs) := match o with
     | .tree _ _ child => iTree seed child (d+1) eb { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
     | .back .. => (s, eb, [])
-  let vs := vs ++ earCheck seed v d o orig hv s ++ ebCheck seed v d o orig hv eb s
+  let vs := vs ++ earCheck seed v d o orig hv s ++ ebCheck seed v d o orig hv eb s ++ specCheck seed v d o orig hv s
   let (hv', s) := (finishEdge v d o orig hv).run s
   (hv', s, eb, vs)
 end
