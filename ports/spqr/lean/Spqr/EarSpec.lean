@@ -1,6 +1,7 @@
 import Spqr.Ear
 import Spqr.Correctness
 import Spqr.Frame
+import Spqr.Proofs.Dfs
 import Mathlib.Data.List.TakeDrop
 
 /-!
@@ -238,21 +239,28 @@ def TstackLocal (m : WalkM α) (s : WalkState) : Prop :=
   let (a', s'') := m.run { s with tstack := [] }
   a = a' ∧ s' = { s'' with tstack := s''.tstack ++ s.tstack }
 
-/-- An entry a subtree walk at depth `d` never interacts with: it returns above `d`, is not
-started at a vertex of the subtree, and predates every back edge the subtree will see. -/
-def TEntry.BelowSubtree (e : TEntry) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
-  e.topDepth < d ∧ e.vStart ∉ t.verts ∧ e.firstIdx ≤ s.nxtEdgeIdx
+/-- The walk invariant (PROOF.md §4): along the walk of a well-formed DFS subtree from an empty
+tstack, the tstack-shape guards of every `finishEdge` (`FinishGuards`: boundary pops find their
+entries, `Inv1`/`Inv2` for the merge loops, the vertex ear has its three entries) hold. Hypotheses
+may need strengthening (e.g. `t` being a subtree of a DFS forest of `s.g`). -/
+theorem walkTree_guards (t : DfsTree) (anc : List Nat) (s : WalkState) (hwf : t.WF anc)
+    (hs : s.tstack = []) (hne : s.nxtEdgeIdx ≤ s.g.ne)
+    (hsz : anc.length + t.height ≤ s.firstOccurrence.size) : GuardsTree t anc.length s := by
+  sorry
 
-/-- Frame rule: the walk of a subtree is local to the entries it creates. (Hypotheses on `t`
-being a well-formed DFS subtree, from `Spqr.Proofs.Dfs`, still to be added.) -/
-theorem walkTree_local (t : DfsTree) (d : Nat) (s : WalkState)
-    (hS : ∀ e ∈ s.tstack, e.BelowSubtree t d s) : TstackLocal (walkTree t d) s := by
-  obtain ⟨a, h, -⟩ := Sim.walkTree (bot := s.tstack) t d (fun e he => ⟨(hS e he).1, (hS e he).2.1⟩)
-    { s with tstack := [] } ⟨rfl, fun e he => (hS e he).2.2⟩
+/-- Frame rule: the walk of a subtree is local to the entries it creates. Entries already on the
+tstack that return above the subtree's depth and were not started at its vertices are neither
+inspected nor modified. -/
+theorem walkTree_local (t : DfsTree) (anc : List Nat) (s : WalkState) (hwf : t.WF anc)
+    (hne : s.nxtEdgeIdx ≤ s.g.ne) (hsz : anc.length + t.height ≤ s.firstOccurrence.size)
+    (hS : ∀ e ∈ s.tstack, e.topDepth < anc.length ∧ e.vStart ∉ t.verts) :
+    TstackLocal (walkTree t anc.length) s := by
+  obtain ⟨a, h, -⟩ := Sim.walkTree (bot := s.tstack) t anc.length hS { s with tstack := [] }
+    (walkTree_guards t anc _ hwf rfl hne hsz)
   unfold TstackLocal
   rw [show lift s.tstack { s with tstack := [] } = s from rfl] at h
   rw [h]
-  rcases (walkTree t d).run { s with tstack := [] } with ⟨a', s''⟩
+  rcases (walkTree t anc.length).run { s with tstack := [] } with ⟨a', s''⟩
   exact ⟨Subsingleton.elim _ _, rfl⟩
 
 /-- PROOF.md Lemma 4.3: a non-first out-edge of `v` (a sub-ear, or a single back edge) nets out to
