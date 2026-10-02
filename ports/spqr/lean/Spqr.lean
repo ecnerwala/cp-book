@@ -37,3 +37,4 @@ import Spqr.PlanarSpec
 import Spqr.Proofs.ForestSpec
 import Spqr.Contract
 import Spqr.Proofs.Contract
+import Spqr.Proofs.SepClasses
