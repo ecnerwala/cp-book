@@ -3,9 +3,19 @@ import Spqr.Spec
 
 namespace Spqr
 
+theorem SpqrTree.ThreeConnected_congr_undirected {n : Nat} {es es' : List (Nat × Nat)}
+    (h : ∀ u v, ((u, v) ∈ es ∨ (v, u) ∈ es) ↔ ((u, v) ∈ es' ∨ (v, u) ∈ es')) :
+    SpqrTree.ThreeConnected n es ↔ SpqrTree.ThreeConnected n es' := by
+  simp only [SpqrTree.ThreeConnected, h]
+
 namespace Graph
 
 variable {g : Graph} {ok : Nat → Prop}
+
+theorem exists_joins_of_mem {u v : Nat} (h : (u, v) ∈ g.edges.toList) :
+    ∃ e, g.Joins e u v := by
+  obtain ⟨e, he, hval⟩ := List.getElem_of_mem h
+  exact ⟨e, .inl (Array.getElem?_eq_some_iff.2 ⟨by simpa using he, by simpa using hval⟩)⟩
 
 theorem IsEnd.reach {e u w : Nat} (hu : g.IsEnd e u) (hw : g.IsEnd e w)
     (hou : ok u) (how : ok w) : g.Reach ok u w := by

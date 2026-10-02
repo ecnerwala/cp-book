@@ -117,6 +117,100 @@ def Items.RSkel3 (g : Graph) (items : Items) (i : ItemId) : Prop :=
     (((Pieces.ofItems g items ((items.ch i).filter fun c => decide (items.type c ≠ .V))).addParent g
       (items.EdgeBelow g i) s t).contract g).ThreeConnected
 
+theorem Items.RSkel3.rThreeConnected {g : Graph} {items : Items} {i : ItemId}
+    (h : Items.RSkel3 g items i) (hwf : items.WF g) (hi : i < items.size)
+    (hR : items.type i = .R) (h2 : g.TwoConnected)
+    (hpieces : ∀ s t, (items.vs i = (some s, some t) ∨ items.vs i = (some t, some s)) →
+      ((Pieces.ofItems g items ((items.ch i).filter fun c => decide (items.type c ≠ .V))).addParent g
+        (items.EdgeBelow g i) s t).WF g)
+    (hcover : ∀ e, e < g.ne → items.EdgeBelow g i e →
+      ∃ c ∈ items.ch i, items.type c ≠ .V ∧ items.EdgeBelow g c e) :
+    SpqrTree.ThreeConnected (items.nvList g i).length (items.rSkeleton g i) := by
+  classical
+  obtain ⟨s, t, hvs, h3⟩ := h
+  let P := (Pieces.ofItems g items ((items.ch i).filter fun c => decide (items.type c ≠ .V))).addParent g
+    (items.EdgeBelow g i) s t
+  obtain ⟨idx, _, hidx, hnode⟩ := relabel_node_spec g items hwf
+  let hr : RelabelOK g items (relabelTree g items) idx := ⟨hwf, hidx, hnode⟩
+  have hedges : (P.contract g).edges.toList = items.virtualEdges i ++ [(s, t)] :=
+    Pieces.ofItems_addParent_edges s t (fun e he hE => by
+      obtain ⟨c, hc, ht, hce⟩ := hcover e he hE
+      exact ⟨c, List.mem_filter.2 ⟨hc, by simpa using ht⟩, hce⟩)
+  have hcap : ∀ v, (items.vs i).1 = some v ∨ (items.vs i).2 = some v → v = s ∨ v = t := by
+    intro v hv
+    rcases hvs with hvs | hvs <;> simp only [hvs, Option.some.injEq] at hv <;> tauto
+  have hcapmem : s ∈ items.nvList g i ∧ t ∈ items.nvList g i := by
+    rcases hvs with hvs | hvs <;> simp [RelabelOK.nvList_eq, hvs]
+  have hvirt : ∀ q ∈ items.virtualEdges i, q.1 ∈ items.nvList g i ∧ q.2 ∈ items.nvList g i := by
+    intro q hq
+    obtain ⟨c, hc, rfl⟩ := List.mem_map.1 hq
+    obtain ⟨hc, hcV⟩ := List.mem_filter.1 hc
+    obtain ⟨u, v, hcv⟩ := (hwf.shapes.r_shape i hi hR).2.2.2.2.2 c hc (by simpa using hcV)
+    simp only [hcv, Option.getD_some]
+    exact ⟨hr.mem_nvList_of_child (by simp [hR, NodeType.isNode]) hc (by simpa using hcV)
+      (.inl (by rw [hcv])),
+      hr.mem_nvList_of_child (by simp [hR, NodeType.isNode]) hc (by simpa using hcV)
+      (.inr (by rw [hcv]))⟩
+  have hends : ∀ e u v, (P.contract g).Joins e u v →
+      u ∈ items.nvList g i ∧ v ∈ items.nvList g i := by
+    intro e u v he
+    rcases he with he | he
+    all_goals
+      have hm := Array.mem_of_getElem? he
+      rw [← Array.mem_toList_iff, hedges] at hm
+      rcases List.mem_append.1 hm with hm | hm
+      · first | exact hvirt _ hm | exact (hvirt _ hm).symm
+      · simp only [List.mem_singleton, Prod.mk.injEq] at hm
+        rcases hm with ⟨rfl, rfl⟩
+        first | exact hcapmem | exact hcapmem.symm
+  have hactive : ∀ v ∈ items.nvList g i, ∃ e, (P.contract g).IsEnd e v := by
+    intro v hv
+    have hin : ∃ q ∈ (P.contract g).edges.toList, q.1 = v ∨ q.2 = v := by
+      rw [RelabelOK.nvList_eq, hr.filter_lt_eq hi] at hv
+      rcases List.mem_append.1 hv with hv | hv
+      · rcases List.mem_append.1 hv with hv | hv
+        · exact ⟨(s, t), by simp [hedges],
+            (hcap v (.inl (by simpa using hv))).imp Eq.symm Eq.symm⟩
+        · obtain ⟨c, hc, rfl⟩ := List.mem_map.1 hv
+          obtain ⟨hc, hcV⟩ := List.mem_filter.1 hc
+          have hclt := (hr.type_V_iff hi hc).1 (by simpa using hcV)
+          obtain ⟨heq, _⟩ := hr.ch_lt_vert hc hclt
+          have hvlt : c - 1 < g.nv := by
+            have hc0 : c ≠ 0 := hr.ch_ne_root hc
+            have hcLe : c ≤ g.nv := Nat.lt_succ_iff.1 (by simpa [Nat.add_comm] using hclt)
+            omega
+          have hvpar : items.IsParent i (vertItem (c - 1)) := by rwa [← heq]
+          obtain ⟨⟨e, he, hev⟩, hall, hnot⟩ :=
+            (hwf.endpoints.interior i (c - 1) hi hvlt (by simp [hR])).1 hvpar
+          obtain ⟨j, hj, hjV, hje⟩ := hcover e he (hall e he hev)
+          have hother := hnot j hj
+          push Not at hother
+          obtain ⟨f, hf, hfv, hjf⟩ := hother
+          have hterm := hwf.endpoints.separation j (hwf.tree.ch_lt i j hj)
+            (by simp [hr.child_type_ne_F hi hj, hjV])
+            (c - 1) e f hvlt he hf hev hfv hje hjf
+          obtain ⟨x, y, hjvs⟩ := (hwf.shapes.r_shape i hi hR).2.2.2.2.2 j hj hjV
+          refine ⟨(x, y), ?_, ?_⟩
+          · rw [hedges]
+            apply List.mem_append_left
+            exact List.mem_map.2 ⟨j, List.mem_filter.2 ⟨hj, by simpa using hjV⟩, by simp [hjvs]⟩
+          · simpa [hjvs] using hterm
+      · exact ⟨(s, t), by simp [hedges],
+          (hcap v (.inr (by simpa using hv))).imp Eq.symm Eq.symm⟩
+    obtain ⟨⟨u, w⟩, hq, hqv⟩ := hin
+    obtain ⟨e, he⟩ := Graph.exists_joins_of_mem hq
+    rcases hqv with rfl | rfl
+    · exact ⟨e, he.isEnd⟩
+    · exact ⟨e, he.symm.isEnd⟩
+  have hcut := h3.relabel ((hpieces s t hvs).twoConnected_contract h2) (hr.nv_nodup hi)
+    (hr.nvList_R hi hR).choose_spec.choose_spec.2 hactive hends
+  apply (SpqrTree.ThreeConnected_congr_undirected (es' := items.rSkeleton g i) ?_).1 hcut
+  intro u v
+  rw [hedges]
+  rcases hvs with hvs | hvs <;>
+    simp only [List.map_append, Items.rSkeleton, hvs, Option.getD_some,
+      List.map_cons, List.mem_append, List.mem_cons, Prod.mk.injEq] <;> tauto
+
 theorem Pieces.contract_congr {g : Graph} {P Q : Pieces} (hk : P.k = Q.k)
     (hp : ∀ e, e < g.ne → P.piece e = Q.piece e)
     (hxy : ∀ i, i < P.k → (P.x i, P.y i) = (Q.x i, Q.y i)) :
