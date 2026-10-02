@@ -3,23 +3,7 @@ import Spqr.StRef
 
 open Spqr
 
-/-! Differential test: the walk's S / P / R child lists equal the restriction of `refOrder`. -/
-
-partial def leaves (items : Items) (i : ItemId) : List ItemId :=
-  match Items.type items i with
-  | .V | .Q => [i]
-  | _ => (Items.ch items i).flatMap (leaves items)
-
-def refCh (items : Items) (order : List ItemId) (i : ItemId) : List ItemId :=
-  let owner : ItemId → Option ItemId := fun x =>
-    (Items.ch items i).find? fun c => x ∈ leaves items c
-  let rec go : List ItemId → Option ItemId → List ItemId
-    | [], _ => []
-    | x :: xs, last =>
-      match owner x with
-      | none => go xs last
-      | some c => if last = some c then go xs last else c :: go xs (some c)
-  go order none
+/-! Differential test of `walk_st'`: the walk's S / P / R child lists equal `restrictCh` of `refOrder`. -/
 
 def main : IO Unit := do
   let input ← (← IO.getStdin).readToEnd
@@ -48,7 +32,7 @@ def main : IO Unit := do
     match Items.type items i with
     | .S | .P | .R =>
       n := n + 1
-      let r := refCh items order i
+      let r := restrictCh items items.size order i
       if r ≠ Items.ch items i then
         bad := bad + 1
         IO.println s!"MISMATCH item {i}: walk {Items.ch items i} ref {r}"
