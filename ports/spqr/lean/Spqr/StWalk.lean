@@ -129,7 +129,7 @@ structure WalkState.StInv (s : WalkState) (d : Nat) (ord : Nat → Nat) : Prop w
 
 /-- Admitted: along the first-child chain of an ear every vertex has the ear's lowval, so
 `stackDir` is constant along it (`hchain`, from `first_ret_lowval`, `chain_stackDir_step` and
-`walkTree_stackDir_below` in `Spqr.StEar`) and every piece attached along the ear lands on the
+`walkTree_stackDir_below` in `Spqr.StFrame`) and every piece attached along the ear lands on the
 same side. The conclusion is a history fact about how the entries were built (`pushTstack`,
 `merge_onSide`, `fold_onSide`), not derivable from the state alone. -/
 theorem chain_stackDir_const (s : WalkState) (l d : Nat) (hl : l < d)

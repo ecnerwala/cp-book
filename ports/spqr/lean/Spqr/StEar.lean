@@ -153,12 +153,4 @@ theorem chain_stackDir_step (s : WalkState) (d l : Nat) (hl : l < d)
   simp only [this, ↓reduceIte] at hb
   rw [Array.getElem!_set!_self _ _ _ hsz, Array.getElem!_set!_ne _ _ _ _ hne, hb, hd]
 
-/-- Admitted (frame fact): walking a subtree at depth `d` leaves `stackDir` below `d` unchanged
-(`setStackDir` is only called at the current depth). With `chain_stackDir_step` and
-`first_ret_lowval` this gives `stackDir[d'] = stackDir[l + 1]` along the first-child chain of an
-ear returning to `l`, the hypothesis `hchain` of `chain_stackDir_const`. -/
-theorem walkTree_stackDir_below (t : DfsTree) (d : Nat) (s : WalkState) :
-    ∀ d', d' < d → ((walkTree t d).run s).2.stackDir[d']! = s.stackDir[d']! := by
-  sorry
-
 end Spqr
