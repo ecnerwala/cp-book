@@ -147,16 +147,22 @@ where
     | (.tree e cls child, cid) => .tree e cls (child.reorder tbl fuel cid)
     | (o, _) => o
 
-mutual
-def DfsTree.height : DfsTree → Nat
-  | .node _ outs => heightOuts outs + 1
-def heightOuts : List DfsOut → Nat
-  | [] => 0
-  | o :: rest => max o.height (heightOuts rest)
 def DfsOut.height : DfsOut → Nat
   | .back .. => 0
   | .tree _ _ child => child.height
-end
+
+def heightOuts : List DfsOut → Nat
+  | [] => 0
+  | o :: rest => max o.height (heightOuts rest)
+
+theorem heightList_eq_heightOuts : ∀ outs, DfsOut.heightList outs = heightOuts outs
+  | [] => rfl
+  | .back .. :: rest => by simp [DfsOut.heightList, heightOuts, DfsOut.height, heightList_eq_heightOuts rest]
+  | .tree _ _ _ :: rest => by simp [DfsOut.heightList, heightOuts, DfsOut.height, heightList_eq_heightOuts rest]
+
+theorem DfsTree.height_eq (v : Nat) (outs : List DfsOut) :
+    DfsTree.height (.node v outs) = heightOuts outs + 1 := by
+  rw [DfsTree.height, heightList_eq_heightOuts]
 
 def maxKey (key : α → Nat) (l : List α) : Nat := l.foldl (fun b x => max b (key x + 1)) 0
 
@@ -313,12 +319,12 @@ theorem height_dfsVisitRaw (adj : Array (List (Nat × Nat))) (fuel : Nat) :
     ∀ (v d : Nat) (prvE : Option Nat) (depth : Array (Option Nat)),
       (dfsVisitRaw adj fuel v d prvE depth).1.height ≤ fuel + 1 := by
   induction fuel with
-  | zero => intros; simp [dfsVisitRaw, DfsTree.height, heightOuts]
+  | zero => intros; simp [dfsVisitRaw, DfsTree.height_eq, heightOuts]
   | succ fuel ih =>
     intro v d prvE depth
     rw [dfsVisitRaw]
     dsimp only
-    rw [DfsTree.height]
+    rw [DfsTree.height_eq]
     refine Nat.succ_le_succ (heightOuts_le _ _ fun o ho => ?_)
     rw [List.mem_reverse] at ho
     have key : ∀ (l : List (Nat × Nat)) (init : DfsState), (∀ o ∈ init.1, o.height ≤ fuel + 1) →
@@ -412,7 +418,7 @@ theorem reorder_eq_sortOuts (tbl : Array (List (DfsOut × Nat))) :
       t.reorder tbl fuel n = t.sortOuts := by
   intro fuel
   induction fuel with
-  | zero => intro t n h; cases t; simp [DfsTree.height] at h
+  | zero => intro t n h; cases t; simp [DfsTree.height_eq] at h
   | succ fuel ih =>
     intro t n hh htbl
     obtain ⟨v, outs⟩ := t
@@ -422,7 +428,7 @@ theorem reorder_eq_sortOuts (tbl : Array (List (DfsOut × Nat))) :
     · congr 2
       rw [DfsTree.flist]
       rw [DfsTree.flist, DfsTree.fnext] at htbl
-      rw [DfsTree.height] at hh
+      rw [DfsTree.height_eq] at hh
       exact reorderOuts_eq tbl fuel ih outs n (n + 1) (Nat.lt_succ_self n)
         (fun o ho => Nat.le_trans (height_le_heightOuts outs o ho) (Nat.le_of_succ_le_succ hh))
         (htbl.mono (Nat.le_succ n) (Nat.le_refl _))
