@@ -452,6 +452,154 @@ theorem shape (hor : items.ROriented g) {i : ItemId} (hi : i < items.size) :
   rw [H.type hi, ← hsk, hed]
   exact hS
 
+/-! ### Adjacency -/
+
+omit H in
+theorem mono_le (f : Nat → Nat) (lo n : Nat)
+    (hm : ∀ r, lo ≤ r → r < lo + n → f r ≤ f (r + 1)) :
+    ∀ d a, lo ≤ a → a + d ≤ lo + n → f a ≤ f (a + d) := by
+  intro d
+  induction d with
+  | zero => intros; simp
+  | succ d ih =>
+    intro a ha hd
+    exact (ih a ha (by omega)).trans (by rw [← Nat.add_assoc]; exact hm _ (by omega) (by omega))
+
+omit H in
+theorem find_row (f : Nat → Nat) (lo : Nat) :
+    ∀ n, (∀ r, lo ≤ r → r < lo + n → f r ≤ f (r + 1)) →
+      ∀ x, f lo ≤ x → x < f (lo + n) →
+        ∃ r, lo ≤ r ∧ r < lo + n ∧ f r ≤ x ∧ x < f (r + 1) := by
+  intro n
+  induction n with
+  | zero => intro _ x h1 h2; rw [Nat.add_zero] at h2; omega
+  | succ n ih =>
+    intro hm x h1 h2
+    by_cases hx : x < f (lo + n)
+    · obtain ⟨r, hr1, hr2, hr3, hr4⟩ := ih (fun r h1 h2 => hm r h1 (by omega)) x h1 hx
+      exact ⟨r, hr1, by omega, hr3, hr4⟩
+    · exact ⟨lo + n, by omega, by omega, by omega, by rw [Nat.add_assoc]; exact h2⟩
+
+open LayoutR (row rowBound) in
+/-- Global adjacency bounds of node `i` are its local row bounds. -/
+theorem global_bound (hor : items.ROriented g) {i : ItemId} (hi : i < items.size) {pos : Nat → Nat}
+    (hl : RelabelLayout g items t idx i pos) :
+    ∀ r, 2 * (t.nvRange (idx i)).1 ≤ r → r ≤ 2 * (t.nvRange (idx i)).2 →
+      t.adjBounds[r]! =
+        rowBound (t.nvRange (idx i)).1 (t.neRange (idx i)).1 (nodeLayout g items t idx i pos) r := by
+  intro r h1 h2
+  have hnv := (H.node i hi).nv_range
+  unfold rowBound
+  split
+  · rename_i h; rw [h]; exact (H.adj_spec hor).1 (idx i) (H.idx_lt hi)
+  · have hj := hl.adj_bounds (r - 2 * (t.nvRange (idx i)).1) (by omega) (by omega)
+    rw [show 2 * (t.nvRange (idx i)).1 + (r - 2 * (t.nvRange (idx i)).1) = r by omega] at hj
+    exact hj
+
+theorem adj_bounds_mono (hor : items.ROriented g) :
+    ∀ r, r + 1 < t.adjBounds.size → t.adjBounds[r]! ≤ t.adjBounds[r + 1]! := by
+  intro r hr
+  have hsz := H.gl.sizes.adjBounds
+  obtain ⟨i, hi, h1, h2⟩ := H.nv_locate (nv := r / 2) (by omega)
+  obtain ⟨pos, hl, hloc⟩ := H.layout_local hor hi
+  rw [H.global_bound hor hi hl r (by omega) (by omega),
+    H.global_bound hor hi hl (r + 1) (by omega) (by omega)]
+  exact hloc.bound_mono r (by omega) (by omega)
+
+omit H in
+open LayoutR (row rowBound) in
+theorem rowBound_start {i : ItemId} {pos : Nat → Nat} :
+    rowBound (t.nvRange (idx i)).1 (t.neRange (idx i)).1 (nodeLayout g items t idx i pos)
+      (2 * (t.nvRange (idx i)).1) = 2 * (t.neRange (idx i)).1 := by
+  unfold rowBound; simp
+
+open LayoutR (row rowBound) in
+/-- Local row bounds of node `i` lie in `[2 neSt, 2 neEn]`. -/
+theorem rowBound_range {i : ItemId} (hi : i < items.size) {pos : Nat → Nat}
+    (hloc : (nodeLayout g items t idx i pos).Local (idx i) (t.nvRange (idx i)).1 (t.nvRange (idx i)).2
+      (t.neRange (idx i)).1 (t.neRange (idx i)).2) :
+    ∀ r, 2 * (t.nvRange (idx i)).1 ≤ r → r ≤ 2 * (t.nvRange (idx i)).2 →
+      2 * (t.neRange (idx i)).1 ≤
+        rowBound (t.nvRange (idx i)).1 (t.neRange (idx i)).1 (nodeLayout g items t idx i pos) r ∧
+      rowBound (t.nvRange (idx i)).1 (t.neRange (idx i)).1 (nodeLayout g items t idx i pos) r ≤
+        2 * (t.neRange (idx i)).2 := by
+  intro r h1 h2
+  have hnv := (H.node i hi).nv_range
+  have hm := mono_le _ (2 * (t.nvRange (idx i)).1) (2 * (items.nvList g i).length)
+    (fun r h1 h2 => hloc.bound_mono r h1 (by omega))
+  constructor
+  · have := hm (r - 2 * (t.nvRange (idx i)).1) _ le_rfl (by omega)
+    rwa [show 2 * (t.nvRange (idx i)).1 + (r - 2 * (t.nvRange (idx i)).1) = r by omega,
+      rowBound_start] at this
+  · have := hm (2 * (t.nvRange (idx i)).2 - r) r h1 (by omega)
+    rwa [show r + (2 * (t.nvRange (idx i)).2 - r) = 2 * (t.nvRange (idx i)).2 by omega,
+      hloc.bound_last] at this
+
+open LayoutR (row rowBound) in
+/-- Global row `r` of node `i` is its local row. -/
+theorem global_row (hor : items.ROriented g) {i : ItemId} (hi : i < items.size) {pos : Nat → Nat}
+    (hl : RelabelLayout g items t idx i pos)
+    (hloc : (nodeLayout g items t idx i pos).Local (idx i) (t.nvRange (idx i)).1 (t.nvRange (idx i)).2
+      (t.neRange (idx i)).1 (t.neRange (idx i)).2) :
+    ∀ r, 2 * (t.nvRange (idx i)).1 ≤ r → r < 2 * (t.nvRange (idx i)).2 →
+      (List.range (t.adjBounds[r + 1]! - t.adjBounds[r]!)).map (fun k => t.adjDat[t.adjBounds[r]! + k]!) =
+        row (t.nvRange (idx i)).1 (t.neRange (idx i)).1 (nodeLayout g items t idx i pos) r := by
+  intro r h1 h2
+  have hne := (H.node i hi).ne_range
+  unfold row
+  rw [H.global_bound hor hi hl r h1 h2.le, H.global_bound hor hi hl (r + 1) (by omega) (by omega)]
+  have hb := H.rowBound_range hi hloc r h1 h2.le
+  have hb' := H.rowBound_range hi hloc (r + 1) (by omega) (by omega)
+  apply List.map_congr_left
+  intro k hk
+  rw [List.mem_range] at hk
+  have := hl.adj_dat (rowBound (t.nvRange (idx i)).1 (t.neRange (idx i)).1
+    (nodeLayout g items t idx i pos) r + k - 2 * (t.neRange (idx i)).1) (by omega)
+  rwa [show 2 * (t.neRange (idx i)).1 + (rowBound (t.nvRange (idx i)).1 (t.neRange (idx i)).1
+    (nodeLayout g items t idx i pos) r + k - 2 * (t.neRange (idx i)).1) =
+    rowBound (t.nvRange (idx i)).1 (t.neRange (idx i)).1 (nodeLayout g items t idx i pos) r + k
+    by omega] at this
+
+open LayoutR (row rowBound) in
+theorem adj_dest (hor : items.ROriented g) :
+    ∀ k, k < t.adjDat.size → ∀ nvs, t.nvsOf t.adjDat[k]!.ne = some nvs →
+      t.adjDat[k]!.destNv = nvs.1 ∨ t.adjDat[k]!.destNv = nvs.2 := by
+  intro k hk nvs hnvs
+  have hds := H.gl.adj_dat_size
+  obtain ⟨i, hi, h1, h2⟩ := H.ne_locate (ne := k / 2) (by omega)
+  obtain ⟨pos, hl, hloc⟩ := H.layout_local hor hi
+  have hne := (H.node i hi).ne_range
+  have hnv := (H.node i hi).nv_range
+  have hk' := hl.adj_dat (k - 2 * (t.neRange (idx i)).1) (by omega)
+  rw [show 2 * (t.neRange (idx i)).1 + (k - 2 * (t.neRange (idx i)).1) = k by omega] at hk'
+  obtain ⟨r, hr1, hr2, hr3, hr4⟩ := find_row
+    (rowBound (t.nvRange (idx i)).1 (t.neRange (idx i)).1 (nodeLayout g items t idx i pos))
+    (2 * (t.nvRange (idx i)).1) (2 * (items.nvList g i).length)
+    (fun r h1 h2 => hloc.bound_mono r h1 (by omega)) k (by rw [rowBound_start]; omega)
+    (by rw [show 2 * (t.nvRange (idx i)).1 + 2 * (items.nvList g i).length = 2 * (t.nvRange (idx i)).2
+      by omega, hloc.bound_last]; omega)
+  have hmem : (nodeLayout g items t idx i pos).adjDat[k - 2 * (t.neRange (idx i)).1]! ∈
+      row (t.nvRange (idx i)).1 (t.neRange (idx i)).1 (nodeLayout g items t idx i pos) r := by
+    unfold row
+    refine List.mem_map.2 ⟨k - rowBound (t.nvRange (idx i)).1 (t.neRange (idx i)).1
+      (nodeLayout g items t idx i pos) r, List.mem_range.2 (by omega), ?_⟩
+    congr 1; omega
+  obtain ⟨ha1, ha2, ha3⟩ := hloc.adj_dest r hr1 (by omega) _ hmem
+  rw [hk'] at hnvs ⊢
+  have hnvs' : t.nodeEdges[(nodeLayout g items t idx i pos).adjDat[k - 2 * (t.neRange (idx i)).1]!.ne]!.nvs
+      = nvs := by
+    unfold SpqrTree.nvsOf at hnvs
+    obtain ⟨e, he, he2⟩ := Option.map_eq_some_iff.1 hnvs
+    rw [Array.getElem!_eq_getD_getElem?, he, Option.getD_some]; exact he2
+  have hev := hl.edge_nvs
+    ((nodeLayout g items t idx i pos).adjDat[k - 2 * (t.neRange (idx i)).1]!.ne - (t.neRange (idx i)).1)
+    (by omega)
+  rw [show (t.neRange (idx i)).1 +
+    ((nodeLayout g items t idx i pos).adjDat[k - 2 * (t.neRange (idx i)).1]!.ne - (t.neRange (idx i)).1) =
+    (nodeLayout g items t idx i pos).adjDat[k - 2 * (t.neRange (idx i)).1]!.ne by omega] at hev
+  rw [← hnvs', hev]
+  exact ha3
+
 end RelabelAll
 
 end Spqr
