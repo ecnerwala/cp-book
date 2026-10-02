@@ -20,3 +20,5 @@ import Spqr.Blocks
 import Spqr.Proofs.Blocks
 import Spqr.Proofs.Interval
 import Spqr.Proofs.Type2
+import Spqr.Sim
+import Spqr.Frame

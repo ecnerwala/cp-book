@@ -1,5 +1,6 @@
 import Spqr.Ear
 import Spqr.Correctness
+import Spqr.Frame
 import Mathlib.Data.List.TakeDrop
 
 /-!
@@ -246,7 +247,13 @@ def TEntry.BelowSubtree (e : TEntry) (t : DfsTree) (d : Nat) (s : WalkState) : P
 being a well-formed DFS subtree, from `Spqr.Proofs.Dfs`, still to be added.) -/
 theorem walkTree_local (t : DfsTree) (d : Nat) (s : WalkState)
     (hS : ∀ e ∈ s.tstack, e.BelowSubtree t d s) : TstackLocal (walkTree t d) s := by
-  sorry
+  obtain ⟨a, h, -⟩ := Sim.walkTree (bot := s.tstack) t d (fun e he => ⟨(hS e he).1, (hS e he).2.1⟩)
+    { s with tstack := [] } ⟨rfl, fun e he => (hS e he).2.2⟩
+  unfold TstackLocal
+  rw [show lift s.tstack { s with tstack := [] } = s from rfl] at h
+  rw [h]
+  rcases (walkTree t d).run { s with tstack := [] } with ⟨a', s''⟩
+  exact ⟨Subsingleton.elim _ _, rfl⟩
 
 /-- PROOF.md Lemma 4.3: a non-first out-edge of `v` (a sub-ear, or a single back edge) nets out to
 one entry `(v, lowval)` on top of the stack — a fresh one, or merged (P) into an entry with the
