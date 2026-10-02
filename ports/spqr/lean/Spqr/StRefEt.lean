@@ -1221,8 +1221,81 @@ theorem refBlocks_root_none (g : Graph) (forest : List DfsTree) :
     rw [stNest_single]
     exact ⟨v, rfl⟩
 
+/-! ### Every block's boundary edge is an edge of the graph -/
+
+theorem PairEq_of_joins {g : Graph} {e v w : Nat} (h : g.Joins e v w) :
+    e < g.ne ∧ Items.PairEq g.edges[e]! (v, w) := by
+  obtain ⟨he, hj⟩ := joins_of_Joins h
+  exact ⟨he, hj⟩
+
+theorem OutsJoins.head {g : Graph} {v : Nat} {o : DfsOut} {rest : List DfsOut}
+    (hJ : OutsJoins g v (o :: rest)) : OutsJoins g v [o] := by
+  intro p hp
+  apply hJ p
+  cases o <;> simp [DfsOut.allOutsList] at hp ⊢ <;> tauto
+
+theorem OutsJoins.tail {g : Graph} {v : Nat} {o : DfsOut} {rest : List DfsOut}
+    (hJ : OutsJoins g v (o :: rest)) : OutsJoins g v rest := by
+  intro p hp
+  apply hJ p
+  cases o <;> simp [DfsOut.allOutsList, hp]
+
+mutual
+theorem refTree_root_edges {g : Graph} : ∀ (t : DfsTree) (d : Nat) (dirs : List Bool),
+    TreeJoins g t → ∀ b ∈ (refTree g t d dirs).2, ∀ r ∈ b.root,
+      ∃ e, e < g.ne ∧ Items.PairEq g.edges[e]! r
+  | .node v outs, d, dirs, hJ => by
+    rw [refTree_node]; exact refOuts_root_edges outs v d dirs false hJ
+theorem refOuts_root_edges {g : Graph} : ∀ (outs : List DfsOut) (v d : Nat) (dirs : List Bool)
+    (hv : Bool), OutsJoins g v outs → ∀ b ∈ (refOuts g v d dirs outs hv).2.1, ∀ r ∈ b.root,
+      ∃ e, e < g.ne ∧ Items.PairEq g.edges[e]! r
+  | [], v, d, dirs, hv, _ => by simp [refOuts_nil]
+  | o :: rest, v, d, dirs, hv, hJ => by
+    rw [refOuts_cons]
+    intro b hb
+    rcases List.mem_append.mp hb with hb | hb
+    · exact refOut_root_edges o v d dirs hv hJ.head b hb
+    · exact refOuts_root_edges rest v d dirs _ hJ.tail b hb
+theorem refOut_root_edges {g : Graph} : ∀ (o : DfsOut) (v d : Nat) (dirs : List Bool) (hv : Bool),
+    OutsJoins g v [o] → ∀ b ∈ (refOut g v d dirs o hv).2.1, ∀ r ∈ b.root,
+      ∃ e, e < g.ne ∧ Items.PairEq g.edges[e]! r
+  | .back e dest cls, v, d, dirs, hv, _ => by
+    intro b hb
+    by_cases h : d ≤ cls.lowval d
+    · rw [refOut_boundary_back h] at hb; simp at hb
+    · simp [refOut, DfsOut.cls, h] at hb
+  | .tree e cls child, v, d, dirs, hv, hJ => by
+    intro b hb r hr
+    have hcJ : TreeJoins g child := fun p hp => hJ p (by simp [DfsOut.allOutsList, hp])
+    by_cases h : d ≤ cls.lowval d
+    · rw [refOut_boundary_tree h] at hb
+      rcases List.mem_append.mp hb with hb | hb
+      · exact refTree_root_edges child _ _ hcJ b hb r hr
+      · simp at hb; subst hb
+        simp at hr; subst hr
+        exact ⟨e, PairEq_of_joins (hJ (v, .tree e cls child) (by simp [DfsOut.allOutsList]))⟩
+    · have hb' : b ∈ (refTree g child (d + 1) (dirs ++ [!dirs.getD (cls.lowval d) false])).2 := by
+        simpa only [refOut, DfsOut.cls, h, ite_false] using hb
+      exact refTree_root_edges child _ _ hcJ b hb' r hr
+end
+
+/-- The boundary edge of a reference block is a tree edge of the DFS, hence an edge of `g`. -/
+theorem refBlocks_root_edge {g : Graph} (hg : g.WF) {vo eo : List Nat} (hvo : OrderOK g.nv vo)
+    (heo : OrderOK g.ne eo) :
+    ∀ b ∈ refBlocks g (g.dfsForest vo eo), ∀ r ∈ b.root, ∃ e, e < g.ne ∧ Items.PairEq g.edges[e]! r := by
+  intro b hb r hr
+  have spec := dfsForestSpec_of_dfsForest hg hvo heo
+  unfold refBlocks at hb
+  obtain ⟨t, ht, hb⟩ := List.mem_flatMap.mp hb
+  have hJ : TreeJoins g t := fun p hp => by
+    obtain ⟨x, o⟩ := p
+    exact spec.joins x o (DfsData.mem_forestAllOuts.mp (List.mem_flatMap.mpr ⟨t, ht, hp⟩))
+  rcases List.mem_append.mp hb with hb | hb
+  · exact refTree_root_edges t 0 [] hJ b hb r hr
+  · simp at hb; subst hb; simp at hr
+
 end Spqr.StRefEt
 
 namespace Spqr
-export StRefEt (refBlocks_st refBlocks_root_none)
+export StRefEt (refBlocks_st refBlocks_root_none refBlocks_root_edge)
 end Spqr
