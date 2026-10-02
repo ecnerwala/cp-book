@@ -52,7 +52,7 @@ theorem setSides_onSide (dir : Bool) (l : List ItemId) (v td fi : Nat) :
 theorem getSide_setSides (dir : Bool) (a b : α) : getSide (setSides dir a b) dir = a := by
   unfold getSide setSides; cases dir <;> rfl
 
-theorem getSide_setSides_not (dir : Bool) (a b : α) : getSide (setSides dir a b) (!dir) = b := by
+theorem getSide_setSides_other (dir : Bool) (a b : α) : getSide (setSides dir a b) (!dir) = b := by
   unfold getSide setSides; cases dir <;> rfl
 
 /-- `pushTstack` creates an entry whose single item sits on the side of `stackDir[topDepth]`. -/
