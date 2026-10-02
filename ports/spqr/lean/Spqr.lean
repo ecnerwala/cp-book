@@ -27,3 +27,10 @@ import Spqr.SepPairExhaust
 import Spqr.Proofs.SepPairExhaust
 import Spqr.StSpec
 import Spqr.StWalk
+import Spqr.Planar
+import Spqr.PlanarWalk
+import Spqr.PlanarRelabel
+import Spqr.PlanarEmbed
+import Spqr.PlanarWalkProj
+import Spqr.PlanarRelabelProj
+import Spqr.PlanarSpec
