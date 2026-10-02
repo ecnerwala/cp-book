@@ -342,7 +342,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | output spec `SpqrTree.WF`, `Represents` | `Spec.lean` | def |
 | phase-2 contract `Items.WF` | `ItemSpec.lean` | def |
 | 1.1, 1.2 DFS spanning + lowpoints | `Proofs/Dfs.lean` (`dfsForest_spanning`, `dfsForest_wf`, `classify_child_*`) | proved |
-| 2.1 blocks ↔ `lowval ≥ d` branches | — | to state |
+| 2.1 blocks ↔ `lowval ≥ d` branches (`sameBlock_iff`, `blockRoot_cut`, `ret_child_sameBlock`) | `Blocks.lean`, `Proofs/Blocks.lean` | proved |
 | Facts A–C (`sepPair_comparable`, type-1 class / above-between / sorted prefix-suffix, `type2_first_out`) | `SepPair.lean`, `Proofs/SepPair.lean` | proved |
 | Fact D (laminar intervals) | — | to state |
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
