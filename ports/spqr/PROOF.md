@@ -1156,7 +1156,7 @@ The one walk-side ingredient of the latter is the orientation of the children's 
 uses the same `stackDir[d]` as the splice side, which is why `stItem_of_refOrder` is stated for
 the walk's items rather than for arbitrary `WF` items with `ch` in reference order (for those the
 `vs` could be flipped). The §7.4 `StInv` route (`finishEdge_stInv`, `walk_stInv`,
-`walk_st_of_stInv`) is kept as a documented alternative and no longer feeds `walk_st`.
+`walk_st_of_stInv`) has been removed; `StInv` and its proved close-site lemmas remain as documentation of the invariant.
 
 **Blocks and orientation.** The reference now also records, per completed block (`StBlock`), the
 block-boundary tree edge `(v, w)` it hangs from (`root = none` for the one-vertex block of a DFS
@@ -1266,8 +1266,7 @@ Classical.choice, Quot.sound.
 | `StInv.onSide`, `chain_stackDir_const` (`ear_uniform_side`, semantic half; corrected statement) | `StWalk.lean` | def / proved |
 | `finishTstackTop_items`, `finishTstackTop_stItem` | `StWalk.lean` | proved |
 | `StInv.hole` (`StHole`, `EntryReach`, `HoleClosed`), `idxOf_lt_idxOf_iff`, `stList_of_sorted`, `stInv_topClosable`, `stInv_finishTstackTop_stItem` | `StWalk.lean` | def / proved (replaces `finishEdge_topClosable`, see 7.4) |
-| `EarsOnSide` (named ear-shape hypothesis), `finishEdge_stInv` | `StWalk.lean` | def / sorry (hard; push/merge/fold/close blocks via `Step`/`Sim`) |
-| `walk_stInv` | `StWalk.lean` | sorry (the `walkTree_inv'`-shaped induction; needs `StInv (d+1) → StInv d` at returns) |
+| `EarsOnSide`, `finishEdge_stInv`, `walk_stInv`, `walk_st_of_stInv` | `StWalk.lean` | removed (the `StInv` preservation route; superseded by `walk_st'`, nothing depended on them) |
 | `walk_st`, `spqrTree_st` (under `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo`, like `dfsForest_spanning`) | `StWalk.lean` | proved (from `walk_st'`, `stItem_of_refOrder`, `refBlocks_st`, `walk_items_wf`, `relabel_st`); `walk_st_of_stInv` is the same from the alternative `walk_stInv` route |
 | `refTree`/`refOrder`, `restrictCh`, `check_stref` differential test (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..300 (0 mismatches) |
 | `walk_st'` (`ch i = restrictCh … (refOrder …) i` for S/P/R items) | `StRef.lean` | sorry (the simulation) |

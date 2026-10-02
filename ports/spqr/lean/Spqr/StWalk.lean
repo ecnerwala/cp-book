@@ -356,21 +356,6 @@ theorem stInv_topClosable (s : WalkState) (d : Nat) (ord : Nat → Nat) (hinv : 
       (fun x hx => (hbot x hx).2 rfl) (fun x hx => (hor x hx).2 rfl) hsorted
       (hes _ _ (hmem' _ _)) hlow hup
 
-/-- Named hypothesis (ear-shape side): at a returning tree edge, every entry above the
-`origTstack` mark with `topDepth ≥ d` lies on the `stackDir[d]` side, so the `loop1` closes find
-one-sided entries (validated on the C++ trace, `PROOF.md` §7.4). -/
-def WalkState.EarsOnSide (s : WalkState) (d origTstack : Nat) : Prop :=
-  ∀ t ∈ s.tstack.take (s.tstack.length - origTstack), d ≤ t.topDepth → t.OnSide s.stackDir[d]!
-
-/-- Admitted: `finishEdge` preserves the st-invariant, under the stack-shape guards of the
-structural proof and the ear-side fact `EarsOnSide`. -/
-theorem finishEdge_stInv (s : WalkState) (curV d : Nat) (o : DfsOut) (origTstack : Nat)
-    (hasVert : Bool) (ord : Nat → Nat) (hinv : s.StInv d ord)
-    (hg : FinishGuards d o origTstack hasVert s)
-    (hears : o.cls.isTree = true → s.EarsOnSide d origTstack) :
-    ((finishEdge curV d o origTstack hasVert).run s).2.StInv d ord := by
-  sorry
-
 theorem finishTstackTop_items (s : WalkState) (item : ItemId) (t : TEntry) (rest : List TEntry)
     (hts : s.tstack = t :: rest) :
     ((WalkM.finishTstackTop item).run s).2.items =
@@ -448,13 +433,6 @@ theorem stInv_finishTstackTop_stItem (s : WalkState) (d : Nat) (ord : Nat → Na
       exact stInv_topClosable s d ord hinv t ht htd hside hclosed hne hvv htop)
     t ht hitem hnot
 
-/-- Admitted; alternative route (`PROOF.md` §7.4), no longer used by `walk_st`: the walk-level
-induction in the shape of `WalkInv.walkTree_inv'`: for some numbering `ord` of the vertices, the
-final state satisfies `StInv`. -/
-theorem walk_stInv (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    ∃ ord, (g.walk tern (g.dfsForest vo eo)).StInv 0 ord := by
-  sorry
-
 /-- Phase 2: the walk's children lists are in s-t order (`PROOF.md` §7.6): they are the reference
 order (`walk_st'`) with oriented `vs` (`walk_vsOriented`), which is an st-order
 (`stItem_of_refOrder`, on the st-numbered reference blocks `refBlocks_st`, which needs `g.WF`
@@ -464,12 +442,6 @@ theorem walk_st (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat) (hvo : 
   fun i hi ht => stItem_of_refOrder g tern vo eo i hi ht (walk_items_wf g tern vo eo)
     (walk_st' g tern vo eo i hi ht) (walk_vsOriented g tern vo eo) (refBlocks_st hg hvo heo)
     (refBlocks_root_edge hg hvo heo)
-
-/-- The same from the `StInv` route. -/
-theorem walk_st_of_stInv (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    Items.StNumbered (g.walk tern (g.dfsForest vo eo)).items := by
-  obtain ⟨ord, h⟩ := walk_stInv g tern vo eo
-  exact fun i hi ht => h.items i hi ht
 
 theorem spqrTree_st (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
     (heo : OrderOK g.ne eo) : (g.spqrTree tern vo eo).StOrder := by
