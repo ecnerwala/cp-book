@@ -3,14 +3,17 @@ import Spqr.Spec
 import Spqr.ItemSpec
 import Spqr.Proofs.Dfs
 import Spqr.RelabelRep
+import Spqr.WalkWF
 import Spqr.RelabelWF
+import Spqr.StOriented
 
 /-!
 # Correctness theorems
 
 Top level: `spqrTree_wf` and `spqrTree_represents`. They are assembled from one theorem per
-phase; each phase theorem is proven in its own module (`Spqr.Proofs.*`). Statements below that
-are still `sorry` are listed in the README.
+phase; each phase theorem is proven in its own module (`Spqr.Proofs.*`; `walk_items_wf`/`spqrTree_eq` in
+`Spqr.WalkWF`, `walk_items_rOriented'` in `Spqr.StOriented`). Statements below that are still
+`sorry` are listed in the README.
 -/
 
 namespace Spqr
@@ -25,18 +28,6 @@ theorem dfsForest_spanning (g : Graph) (hg : g.WF) (vo eo : List Nat) (hvo : Ord
     -- every edge appears exactly once
     ((forest.flatMap DfsTree.edges).Perm (List.range g.ne)) :=
   dfsForest_spanning' hg hvo heo
-
-/-- Phase 2: the walk's items satisfy the item-level specification. -/
-theorem walk_items_wf (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    Items.WF g (g.walk tern (g.dfsForest vo eo)).items := by
-  sorry
-
-/-- Phase 2, st side: the walk orients every R item's edge children along its node-vertex order
-(`Items.ROriented` follows from `Items.StNumbered`). `StOriented.walk_items_rOriented'` proves
-this from `walk_st`; it cannot be imported here since `StSpec` imports this file. -/
-theorem walk_items_rOriented (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    Items.ROriented g (g.walk tern (g.dfsForest vo eo)).items := by
-  sorry
 
 /-- Phase 3: relabelling a well-formed, R-oriented item tree gives a well-formed output ...
 (`RelabelWF.lean`, modulo `relabel_node_spec`). -/
@@ -60,12 +51,8 @@ theorem spqrTree_r_three_connected (g : Graph) (tern : Bool) (vo eo : List Nat) 
         ((t.skeleton i).map fun p => (p.1 - (t.nvRange i).1, p.2 - (t.nvRange i).1)) := by
   sorry
 
-theorem spqrTree_eq (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    g.spqrTree tern vo eo = relabelTree g (g.walk tern (g.dfsForest vo eo)).items := by
-  simp [Graph.spqrTree, Graph.dfsForestFast_eq, Graph.walkFast_items, Fast.relabelTreeFast_eq]
-
 theorem spqrTree_wf (g : Graph) (tern : Bool) (vo eo : List Nat) : (g.spqrTree tern vo eo).WF := by
-  rw [spqrTree_eq]; exact relabelTree_wf g _ (walk_items_wf g tern vo eo) (walk_items_rOriented g tern vo eo)
+  rw [spqrTree_eq]; exact relabelTree_wf g _ (walk_items_wf g tern vo eo) (walk_items_rOriented' g tern vo eo)
 
 theorem spqrTree_represents (g : Graph) (tern : Bool) (vo eo : List Nat) :
     (g.spqrTree tern vo eo).Represents g := by

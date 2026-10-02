@@ -1,5 +1,6 @@
 import Mathlib.Data.List.Nodup
-import Spqr.Correctness
+import Spqr.Spec
+import Spqr.ItemSpec
 import Spqr.StLayout
 
 /-!
@@ -10,7 +11,7 @@ skeleton (`StNumbered`), its node-edges are listed in a dominance order (`EdgeDo
 adjacency rows are the "center is longest" bracket order (`AdjBracket`). `spqrTree_st` states this
 for the output; it is split into the walk-level `walk_st` (the items' children lists are
 st-orderings, `Items.StNumbered`) and the relabel-level `relabel_st`, following the route of
-`Spqr.Correctness`. `walk_st` and `spqrTree_st` live in `Spqr.StWalk`, with the walk invariant
+`Spqr.Correctness` (whose walk-phase inputs `walk_items_wf`/`spqrTree_eq` are in `Spqr.WalkWF`). `walk_st` and `spqrTree_st` live in `Spqr.StWalk`, with the walk invariant
 behind them; see `PROOF.md` §7.
 -/
 

@@ -6,8 +6,7 @@ import Spqr.RelabelOwn
 
 `Items.StNumbered` orients every R item's edge children along its vertex list, which is
 `Items.ROriented` once `vertList` and `nvList` are identified (`Items.Tree`).
-`walk_items_rOriented'` is the statement of `Correctness.walk_items_rOriented`, proved from
-`walk_st`; `Correctness.lean` cannot import it (`StSpec` imports `Correctness`).
+`walk_items_rOriented'` (from `walk_st`) supplies it to `Correctness.spqrTree_wf`.
 -/
 
 namespace Spqr

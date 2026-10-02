@@ -271,7 +271,7 @@ flattened state machine:
     CheckPlanarLean.lean runs the decidable Spqr.Planar spec on the planar output
 
 Proof status: the specification and theorem statements are complete; the phase theorems
-(`walk_items_wf`, `walk_items_rOriented`, `spqrTree_r_three_connected`, `relabel_node_spec`, and
+(`walk_items_wf` (`WalkWF.lean`), `spqrTree_r_three_connected`, `relabel_node_spec`, and
 everything in `EarSpec.lean`) are currently `sorry` and are being proved per work package
 (`relabelTree_wf`, `relabelTree_represents` and `relabel_st` are proved from `Items.WF` modulo `relabel_node_spec`;
 the three `Items.WF` clauses added for them, `q_root`/`o_parent`/`s_order`, are checked on the walk

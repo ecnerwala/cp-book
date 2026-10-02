@@ -23,6 +23,7 @@ import Spqr.ItemAcyc
 import Spqr.WalkCover
 import Spqr.WalkSpec
 import Spqr.WalkInv
+import Spqr.WalkWF
 import Spqr.Correctness
 import Spqr.EarSpec
 import Spqr.EarShape
