@@ -117,14 +117,6 @@ def StackInv (s : PlanarWalkState) : Prop :=
   ∀ x ∈ s.base.tstack.zip s.aux.plStack, ∀ p, x.2.pl = some p →
     ∃ P ρ f, InvariantP s.base.g.nv s.aux.qem x.1 x.2 p P ρ f
 
-/-- The planar walk preserves Invariant P (PROOF.md §8.3–8.4: `makeEdgePlanarity` creates a
-planar piece, `mergePlanarity` glues along the shared terminal and its nesting test is the only
-obstruction, `finishMatches` / `unwrapPlanarity` replace a piece by its cap and back, `closeSide`
-/ `pruneSide` close returns). Admitted. -/
-theorem planarWalkOut_stackInv (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : PlanarWalkState)
-    (h : StackInv s) : StackInv ((planarWalkOut v d o hasVert).run s).2 := by
-  sorry
-
 /-! ### Gluing two embedded graphs -/
 
 /-- Vertex map used to glue a second graph onto a first one on `n₁` vertices: a vertex `w` of
