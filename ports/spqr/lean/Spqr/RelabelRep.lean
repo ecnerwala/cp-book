@@ -1171,6 +1171,69 @@ theorem virt_glue (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
     refine ⟨_, (x, y), hp, hcq, Or.inl ?_⟩
     rw [(List.getElem_eq_iff _).2 hxp, (List.getElem_eq_iff _).2 hyp]
 
+theorem twin_glue (hr : items.RepOK g) : ∀ ne ne', t.twin ne = some ne' →
+    ∀ p q, t.neOrig ne = some p → t.neOrig ne' = some q → Items.PairEq p q := by
+  intro ne ne' ht p q hp hq
+  obtain ⟨a, ha, h1, h2⟩ := h.ne_mem_range (twin_some_lt ht)
+  obtain ⟨pos, hl⟩ := (h.node a ha).layout
+  have hner := (h.node a ha).ne_range
+  rw [hner] at h2
+  by_cases hn : (items.type a).isNode = true
+  swap
+  · exfalso
+    have := nEdges_not_node (g := g) (i := a) (by simpa using hn)
+    omega
+  have hnE := h.nEdges_node ha hn
+  have hFlen : ((items.ordered g a (t.nvRange (idx a)).1 pos).filter (· ≥ 1 + g.nv)).length =
+      (items.virtualEdges a).length := by
+    rw [(ordered_filter_perm a _ pos _).length_eq, h.virt_length ha, List.countP_eq_length_filter]
+  by_cases hk : (t.neRange (idx a)).1 + items.capCount a ≤ ne
+  · -- `ne` is a virtual edge of `a`
+    have hj : ne - ((t.neRange (idx a)).1 + items.capCount a) <
+        ((items.ordered g a (t.nvRange (idx a)).1 pos).filter (· ≥ 1 + g.nv)).length := by omega
+    obtain ⟨p', q', hp', hq', hpq⟩ := h.virt_glue hr ha hn hl hj
+    have hne : (t.neRange (idx a)).1 + items.capCount a +
+        (ne - ((t.neRange (idx a)).1 + items.capCount a)) = ne := by omega
+    rw [hne] at hp'
+    have htw := (hl.twin hn _ hj).1
+    rw [hne, ht] at htw
+    cases htw
+    rw [hp] at hp'; rw [hq] at hq'
+    cases hp'; cases hq'
+    exact hpq
+  · -- `ne` is the cap of `a`: twinned with a virtual edge of its parent
+    have hc : items.hasCap a = true := by
+      by_contra hc
+      have : items.capCount a = 0 := by simp [Items.capCount, hc]
+      omega
+    have hne : ne = (t.neRange (idx a)).1 := by
+      have : items.capCount a = 1 := by simp [Items.capCount, hc]
+      omega
+    subst hne
+    have ha0 : a ≠ rootItem := by
+      rintro rfl; rw [h.tree.root] at hn; cases hn
+    obtain ⟨p0, hp0, -⟩ := h.tree.unique_parent a (Nat.pos_of_ne_zero ha0) ha
+    have hp0s := parent_lt hp0
+    by_cases hn0 : (items.type p0).isNode = true
+    · obtain ⟨pos0, hl0⟩ := (h.node p0 hp0s).layout
+      have hperm := ordered_perm (items := items) (g := g) p0 (t.nvRange (idx p0)).1 pos0
+      have haV : items.type a ≠ .V := by intro hV; rw [hV] at hn; cases hn
+      have hage : ¬ a < 1 + g.nv := fun hlt => haV ((h.type_V_iff hp0s hp0).2 hlt)
+      have hmem : a ∈ (items.ordered g p0 (t.nvRange (idx p0)).1 pos0).filter (· ≥ 1 + g.nv) :=
+        List.mem_filter.2 ⟨hperm.mem_iff.2 hp0, by simpa using hage⟩
+      obtain ⟨j, hj, hja⟩ := List.getElem_of_mem hmem
+      obtain ⟨p', q', hp', hq', hpq⟩ := h.virt_glue hr hp0s hn0 hl0 hj
+      have htw := (hl0.twin hn0 j hj).2
+      rw [hja] at htw hq'
+      rw [ht] at htw
+      cases htw
+      rw [hq] at hp'; rw [hp] at hq'
+      cases hp'; cases hq'
+      exact PairEq.symm' hpq
+    · exfalso
+      have := (h.node p0 hp0s).child_cap_twin_none (by simpa using hn0) a hp0 hc
+      rw [this] at ht; cases ht
+
 end RelabelOK
 
 end Spqr
