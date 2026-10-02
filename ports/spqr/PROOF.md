@@ -927,11 +927,20 @@ Python, on seeds 301..1000. (`finishTstackTop`'s re-siding of a closed entry, `m
 unwrapping and the P-closes do not move items relative to each other, which is why they do not
 appear in the reference.)
 
-Plan for the proof: `walk_st'` — for every S / P / R item, `ch i` is the restriction of
-`refOrder` — by simulation in the style of `Sim.lean`, relating each live tstack entry's `spans`
-to `stNest` of the pieces pushed since it; then `Items.StNumbered` from properties of the reference
-(every interior vertex of an ear has a neighbour on each side), where the proved `onSide` /
-hole lemmas of §7.4 can be reused.
+`walk_st` is now derived from two admissions: `walk_st'` — for every S / P / R item, `ch i` is
+the restriction of `refOrder` — to be proved by simulation in the style of `Sim.lean`, relating
+the reading `readStack` of the live tstack above the current block's base to `stNest` of the
+pieces pushed since (`readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`,
+`readStack_finishTstackTop` are the per-primitive steps; the closes are up to `expandItem`); and
+`stItem_of_refOrder` — an item listed in the reference order is in s-t order — by induction over
+`refTree` without the tstack (every piece spliced at depth `l` joins the open path on side
+`dirs[l]`, so every vertex other than a block's endpoints has a neighbour on each side; the
+restriction to an item keeps this since the item's virtual edges are the ends of the sub-ears).
+The one walk-side ingredient of the latter is the orientation of the children's `vs`: `makeVs`
+uses the same `stackDir[d]` as the splice side, which is why `stItem_of_refOrder` is stated for
+the walk's items rather than for arbitrary `WF` items with `ch` in reference order (for those the
+`vs` could be flipped). The §7.4 `StInv` route (`finishEdge_stInv`, `walk_stInv`,
+`walk_st_of_stInv`) is kept as a documented alternative and no longer feeds `walk_st`.
 
 ### 7.5 Work packages
 
@@ -955,9 +964,10 @@ hole lemmas of §7.4 can be reused.
 | `StInv.hole` (`StHole`, `EntryReach`, `HoleClosed`), `idxOf_lt_idxOf_iff`, `stList_of_sorted`, `stInv_topClosable`, `stInv_finishTstackTop_stItem` | `StWalk.lean` | def / proved (replaces `finishEdge_topClosable`, see 7.4) |
 | `EarsOnSide` (named ear-shape hypothesis), `finishEdge_stInv` | `StWalk.lean` | def / sorry (hard; push/merge/fold/close blocks via `Step`/`Sim`) |
 | `walk_stInv` | `StWalk.lean` | sorry (the `walkTree_inv'`-shaped induction; needs `StInv (d+1) → StInv d` at returns) |
-| `walk_st`, `spqrTree_st` | `StWalk.lean` | proved (from `walk_stInv`, `relabel_st`, `walk_items_wf`) |
+| `walk_st`, `spqrTree_st` | `StWalk.lean` | proved (from `walk_st'`, `stItem_of_refOrder`, `walk_items_wf`, `relabel_st`); `walk_st_of_stInv` is the same from the alternative `walk_stInv` route |
 | `refTree`/`refOrder`, `restrictCh`, `check_stref` differential test (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..300 (0 mismatches) |
 | `walk_st'` (`ch i = restrictCh … (refOrder …) i` for S/P/R items) | `StRef.lean` | sorry (the simulation) |
+| `stItem_of_refOrder` (an item listed in the reference order is in s-t order) | `StRef.lean` | sorry (Even–Tarjan on the reference, induction over `refTree`; needs the `makeVs` orientation of the children's `vs`) |
 | reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes) | `StRef.lean` | proved |
 
 ## 8. Planarity
