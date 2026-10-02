@@ -537,7 +537,6 @@ macro_rules
 namespace WalkM
 
 set_option maxHeartbeats 4000000 in
-set_option sim_auto.trace true in
 theorem sim_finishEdge (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool) :
     Refine.Sim WalkState.toSlow Eq (finishEdge curV d o origTstack hasVert)
       (Spqr.finishEdge curV d o origTstack hasVert) := by
