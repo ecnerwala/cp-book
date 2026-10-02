@@ -236,7 +236,7 @@ flattened state machine:
     Spqr/Blocks.lean, Spqr/Proofs/Blocks.lean  blocks ↔ lowval ≥ d (PROOF.md §2, no sorry)
     Spqr/Proofs/Dfs.lean  phase-1 spec: dfsForest_spanning, lowpoint/classify lemmas (no sorry)
     Spqr/StSpec.lean     st-order spec: SpqrTree.StOrder (StNumbered / EdgeDominance / AdjBracket),
-                         Items.StNumbered, spqrTree_st = relabel_st ∘ walk_st, relabel-side lemmas
+                         Items.StNumbered, relabel_st, relabel-side lemmas
     Spqr/StLayout.lean   fold model of the R-node layoutNode and the proof of its bracket rows
     Spqr/StWalk.lean     walk-side st invariant WalkState.StInv (st-ordering with a hole), the
                          setSides / merge / fold side lemmas, finishTstackTop_stItem
@@ -279,9 +279,9 @@ derived from `walk_st` and `relabel_st`, both `sorry`; proved there are `vchildr
 `layoutNode_r_bracket` (via `StLayout.lean`), the side-bookkeeping lemmas `pushTstack_onSide`,
 `merge_onSide`, `fold_onSide`, `finishTstackTop_stItem`, and the ear lowval lemmas
 `first_ret_lowval`, `chain_stackDir_step` (`StEar.lean`) and the frame fact
-`walkTree_stackDir_below` (`StFrame.lean`); admitted are `relabel_st`, `chain_stackDir_const`,
-`finishEdge_topClosable`, `finishEdge_stInv`, `walk_st` (so `#print axioms Spqr.spqrTree_st`
-reports `sorryAx`).
+`walkTree_stackDir_below` (`StFrame.lean`), `chain_stackDir_const`, and the close-site result
+`stInv_topClosable`/`stInv_finishTstackTop_stItem` (`StInv.hole`); admitted are `relabel_st`,
+`finishEdge_stInv`, `walk_stInv` (so `#print axioms Spqr.spqrTree_st` reports `sorryAx`).
 
 reports `sorryAx`).
 
