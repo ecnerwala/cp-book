@@ -80,12 +80,21 @@ structure GluedOriented (g : Graph) (i : Nat) (s : EmbedState) : Prop
     t.toSpqrTree.parent j = some p → t.toSpqrTree.type p = .V →
     t.edgesBelow j ≠ [] → ∃ q, s.exposedAt j q
 
-structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) : Prop
+structure GluedVertex (g : Graph) (i : Nat) (s : EmbedState) : Prop
     extends t.GluedOriented g i s where
   outer_vertex : ∀ j, j < t.size → t.toSpqrTree.type j = .V → ∀ v, t.origId[j]! = some v →
     (∀ q, s.exposedAt j q → QE.vert g.edges.toList q = some v) ∧
     (∀ k q, s.outerE[j]?.bind (fun o => o[k]?) = some (some q) → k < 2) ∧
     (i ≤ j → t.edgesBelow j ≠ [] → ∃ q, s.exposedAt j q)
+
+structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) : Prop
+    extends t.GluedVertex g i s where
+  outer_cap : ∀ j, j < t.size → ∀ ne, t.toSpqrTree.capNe j = some ne →
+    ∀ p, t.toSpqrTree.neOrig ne = some p →
+    (∀ k q, s.outerE[j]?.bind (fun o => o[k]?) = some (some q) →
+      QE.vert g.edges.toList q = some (if k < 2 then p.1 else p.2)) ∧
+    (i ≤ j → t.edgesBelow j ≠ [] → ∀ k, k < 4 →
+      ∃ q, s.outerE[j]?.bind (fun o => o[k]?) = some (some q))
 
 /-- The initial state of `planarEmbed`. -/
 def initState : EmbedState :=
@@ -130,6 +139,12 @@ theorem gluedUpTo_init (g : Graph) : t.GluedUpTo g t.size t.initState where
     refine ⟨?_, ?_, ?_⟩
     · intro q ⟨k, hk⟩
       by_cases hk' : k < 4 <;> simp [initState, hj, hk'] at hk
+    · intro k q hk
+      by_cases hk' : k < 4 <;> simp [initState, hj, hk'] at hk
+    · intro hge; omega
+  outer_cap := by
+    intro j hj _ _ _ _
+    refine ⟨?_, ?_⟩
     · intro k q hk
       by_cases hk' : k < 4 <;> simp [initState, hj, hk'] at hk
     · intro hge; omega

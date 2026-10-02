@@ -54,8 +54,8 @@ theorem embedItem_step_leaf_of (g : Graph) (i : Nat) (hi : i < t.size)
   have houter : ∀ q, ¬ s.exposedAt i q := h.outer_unprocessed i (Nat.lt_succ_self i)
   have hq : t.types[i]! ≠ .Q := by rcases hty with hty | hty <;> rw [hty] <;> decide
   have hbelow : t.edgesBelow i = [] := t.edgesBelow_leaf i hsub hq
-  refine ⟨⟨⟨⟨⟨h.rot_size, h.outer_size, fun j hj => h.outer_unprocessed j (by omega), ?_, ?_⟩,
-    h.outer_row_size, h.outer_slots⟩, h.outer_at_vertex⟩, h.outer_dir, ?_⟩, ?_⟩
+  refine ⟨⟨⟨⟨⟨⟨h.rot_size, h.outer_size, fun j hj => h.outer_unprocessed j (by omega), ?_, ?_⟩,
+    h.outer_row_size, h.outer_slots⟩, h.outer_at_vertex⟩, h.outer_dir, ?_⟩, ?_⟩, ?_⟩
   · intro q hq'
     exact h.unset q fun j hj hjs => hq' j (by omega) hjs
   · intro j hj
@@ -79,6 +79,13 @@ theorem embedItem_step_leaf_of (g : Graph) (i : Nat) (hi : i < t.size)
   · intro j hjs hjt v hv
     obtain ⟨hvert, hslots, hpres⟩ := h.outer_vertex j hjs hjt v hv
     refine ⟨hvert, hslots, ?_⟩
+    intro hj hne
+    by_cases hji : j = i
+    · subst j; exact (hne hbelow).elim
+    · exact hpres (by omega) hne
+  · intro j hjs ne hc p hp
+    obtain ⟨hvert, hpres⟩ := h.outer_cap j hjs ne hc p hp
+    refine ⟨hvert, ?_⟩
     intro hj hne
     by_cases hji : j = i
     · subst j; exact (hne hbelow).elim

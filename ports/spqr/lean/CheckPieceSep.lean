@@ -19,6 +19,16 @@ def checkOuter (g : Graph) (t : PlanarSpqrTree) (i : Nat)
     (s : PlanarSpqrTree.EmbedState) : IO Nat := do
   let mut bad := 0
   for j in [0:t.size] do
+    if let some ne := t.toSpqrTree.capNe j then
+      if let some (u, v) := t.toSpqrTree.neOrig ne then
+        for k in [0:4] do
+          if let some q := s.outerE[j]![k]! then
+            if QE.vert g.edges.toList q != some (if k < 2 then u else v) then
+              bad := bad + 1
+              IO.println s!"outer_cap_vertex: j={j} k={k} q={q}"
+          else if i <= j && !(t.edgesBelow j).isEmpty then
+            bad := bad + 1
+            IO.println s!"outer_cap_present: i={i} j={j} k={k}"
     if t.toSpqrTree.type j == .V then
       if i <= j && !(t.edgesBelow j).isEmpty && !(s.outerE[j]!.any Option.isSome) then
         bad := bad + 1
