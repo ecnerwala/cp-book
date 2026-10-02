@@ -106,14 +106,16 @@ structure RelabelLayout (g : Graph) (items : Items) (t : SpqrTree) (idx : ItemId
   vert_par_nv : ∀ k (hk : k < ((items.ordered g i (t.nvRange (idx i)).1 pos).filter (· < 1 + g.nv)).length),
     t.vertParNv[idx ((items.ordered g i (t.nvRange (idx i)).1 pos).filter (· < 1 + g.nv))[k]]! =
       some ((t.nvRange (idx i)).1 + (items.vs i).1.toList.length + k)
-  /-- Node-edge `capCount + k` of a node is twinned with the cap (first node-edge) of its `k`-th
-  non-V child, both ways. -/
+  /-- Node-edge `capCount + k` of a node is twinned with the first node-edge of its `k`-th non-V
+  child, and back when that child has a cap (a Q child with children has none: its first node-edge
+  is its own child's virtual edge, and `relabel` leaves the parent's pointer dangling). -/
   twin : (items.type i).isNode →
     ∀ k (hk : k < ((items.ordered g i (t.nvRange (idx i)).1 pos).filter (· ≥ 1 + g.nv)).length),
       t.twin ((t.neRange (idx i)).1 + items.capCount i + k) =
         some (t.neRange (idx ((items.ordered g i (t.nvRange (idx i)).1 pos).filter (· ≥ 1 + g.nv))[k])).1 ∧
-      t.twin (t.neRange (idx ((items.ordered g i (t.nvRange (idx i)).1 pos).filter (· ≥ 1 + g.nv))[k])).1 =
-        some ((t.neRange (idx i)).1 + items.capCount i + k)
+      (items.hasCap ((items.ordered g i (t.nvRange (idx i)).1 pos).filter (· ≥ 1 + g.nv))[k] →
+        t.twin (t.neRange (idx ((items.ordered g i (t.nvRange (idx i)).1 pos).filter (· ≥ 1 + g.nv))[k])).1 =
+          some ((t.neRange (idx i)).1 + items.capCount i + k))
   /-- Preorder: the first child is numbered next, each later child right after its predecessor's
   subtree. -/
   child_idx : ∀ k (hk : k < (items.ordered g i (t.nvRange (idx i)).1 pos).length),
