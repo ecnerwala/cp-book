@@ -715,6 +715,69 @@ derive coverage, the contracted skeleton's active vertex list, and well-formedne
 contracted pieces. The permutation lemma uses the same orientation for the item cap and
 the parent piece; `RSkel3` permits either orientation, so reversed caps also need transport.
 
+||||||| parent of e2b04f0 (spqr/lean: Items.Ranges + wf_of_ranges; walk_items_wf via walk_ranges)
+### 4.6 Ranges: `Endpoints`/`Shapes` without the tstack (`Ranges.lean`, `RangesWF.lean`)
+
+Almost all of `Items.Endpoints`/`Items.Shapes` is a consequence of the *final* item tree alone, read
+through the DFS edge postorder `σ = edgePostorderForest forest` (each edge listed at its deeper
+endpoint, in `walkOut` order — the order `StRef.refTree` uses) plus attachment-point facts; no
+ear/tstack reasoning is needed. `Items.Ranges g items σ` (`Spqr/Ranges.lean`) is that final-state
+property. Notation: `EdgeBelow i e` = `edgeItem e` is a descendant of `i`; `Att i v` = `v` has an
+incident edge below `i` and one not below `i`; `Inner i v` = `v` has an edge and all its incident
+edges are below `i`; `IsVs i v` = `v` is one of `vs i`; `PieceEdge i e` = `edgeItem e` is reached
+from `i` without passing through a `V` item (the edges of `i`'s own piece, excluding blocks hanging
+at its interior vertices).
+
+Fields (all checked by `lake build check_ranges`, 0 violations on seeds 0..400 of `gen.py` and on
+a single edge, a self-loop, isolated vertices, a star, a triangle, a digon, two blocks at a cut
+vertex, each with `tern ∈ {0,1}`):
+* `convex` (R1): for a node item `i` (type ∉ {F, V}) and piece edges `σ[a]`, `σ[c]` of `i` with
+  `a ≤ b ≤ c`, `σ[b]` is below `i` — the piece spans an interval of `σ` whose holes are blocks hanging
+  at `i`'s interior vertices (which are also below `i`). Laminarity along `IsParent` is
+  `ItemTree.Tree.desc_disjoint`.
+* attachments (R2): `att_vs` (`Att i v → IsVs i v` for every node item), `vs_att` (`IsVs i v → Att i v`
+  at S/P/R and at leaf Q), `vs_ne` (S/P/R endpoints distinct), `interior`
+  (`IsParent i (vertItem v) ↔ Inner i v ∧ no child owns all of v's edges`, at S/P/R),
+  `child_two` (a non-V child of an S/P/R node has two distinct endpoints), `io_parent`
+  (an I/O item's parent is a Q), `q_leaf` (a leaf Q's `vs` is its edge), `q_root` (a Q with children:
+  `vs = (u, none)`, `u` on the edge; loop ⇒ `ch = [c]` with `vs c = (u, none)`; non-loop ⇒
+  `ch = [c, vertItem w]`, `w < nv`, `{u, w}` = the edge, `vs c = (a, b)` a permutation of `(u, w)`;
+  `c ∉ {F, V}`, and `c` a leaf if it is a Q), `p_shape`, `s_order`, `r_shape` as in `Shapes`.
+
+False candidates (recorded, restated):
+* *All* edges below a node form an interval of `σ` — **false**: seed 348, S node `{e2, e0}` at
+  σ-positions `{4, 5}` has a digon hanging at its interior vertex 1 at positions `{0, 1}`, with another
+  piece's back edges at `{2, 3}` between. Restated on piece edges with holes allowed (`convex` above);
+  the strict form "piece edges are consecutive" is also false (seed 0, Q item 9: the hanging block
+  sits inside the piece's interval).
+* `Shapes.s_shape` with `2 ≤ xs.length` — **false**: a triangle gives S with `vs = (0,1)`, one V child
+  `[2]`, `virt = [(0,2), (2,1)]` (the third edge is the parent cap). Corrected to `1 ≤ xs.length`
+  (`ItemSpec.lean`, `RelabelRep.lean`, `RelabelSt.lean`).
+* `Shapes.r_shape` with `6 ≤ virtualEdges.length` — **false**: K4 gives R with 5 virtual edges
+  (+ parent cap). Corrected to `5 ≤`.
+* `Shapes.q_children` with `type c ∉ [F, V, Q]` — **false**: a digon (tree edge + a parallel back
+  edge; seed 380, `e = 1`) gives the block root `Q → [Q leaf, V w]`. Corrected to
+  `type c ∉ [F, V] ∧ (type c = Q → ch c = [])` (also in `WalkTyping.walk_q_children`,
+  `RelabelOwn`, `RelabelRep`, `RelabelAdj`).
+* `Shapes.canonical` — **false for `tern = true`**: P under P in ~55% of seeds (e.g. seed 0, items
+  62 → 61), S under S (seed 386). `Spec.Represents.canonical`'s docstring already says "unless
+  ternarizing"; the statement (and `spqrTree_represents` for `tern = true`) needs a `tern = false`
+  guard — `Spec.lean` is not edited here; `canonical` is a hypothesis of `wf_of_ranges` and a named
+  (false-as-stated) admission `walk_canonical` in `WalkWF.lean`.
+
+`RangesWF.lean`: `wf_of_ranges : Items.Tree → Items.TypingFacts → Items.Ranges → canonical → Items.WF`
+(`endpoints_of_ranges`, `shapes_of_ranges`; standard axioms). `TypingFacts` = the `i_o_leaf`,
+`vs_shape`, `vs_lt` fields of `WalkTyping`. Every clause of `Endpoints` and `Shapes` except
+`canonical` is derived from `Ranges` (the Q clauses from `q_leaf`/`q_root`; `child_vs_in_parent`
+from `vs_att` at the child + `att_vs`/`interior` at the parent + `desc_disjoint`; `nv_nodup` from
+`vs_ne`, `vs_att` vs `interior` and the injectivity of `vertItem`; `separation` = `att_vs`;
+`interior` = `interior`). `convex` is not needed for `WF` at all — it is the field the walk-time
+invariant (`RangesInv`, step 4) and the R/st layers consume. `WalkWF.walk_items_wf` is now
+`wf_of_ranges (walk_items_tree) (walk_typingFacts) (walk_ranges) (walk_canonical)`: the
+`Endpoints`/`Shapes` half rests on the named admission `walk_ranges` instead of the ear layer;
+`walk_items_tree`/`walk_typingFacts` are hypothesis-free bridges to `WalkCover.walk_tree` /
+`WalkTyping.walk_typing` (which sit above `WalkWF` in the import order and need `g.WF`/`OrderOK`).
+
 ## 5. Phase 3: relabel
 
 `relabelTree` **[def]** takes the item array and produces `SpqrTree`. It is a plain preorder walk:
@@ -926,7 +989,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | linear phase 2/3 refinements `walkFast` / `relabelTreeFast` (`CatList` spans, `Array` tstack, ticks): `walkFast_items`, `relabelTreeFast_eq`; `spqrTree_eq` routed through them | `CatList.lean`, `Refine.lean`, `WalkFast.lean`, `RelabelFast.lean`, `WalkWF.lean` | proved |
 | step bounds: `walk_ticks_le : (g.walkFast tern (g.dfsForest vo eo)).ticks ≤ 47·(nv+ne)` (via `walk_ticks_le_forest`, `dfsForest_size_le` from `dfsForest_spanning'`); `relabelRun_sizes_le` (`Items.desc` cardinalities), `relabel_ticks_le : ticks ≤ 288·(nv+ne) + 6` | `WalkCost.lean`, `ItemTree.lean`, `RelabelCost.lean` | proved; the relabel bounds take `Items.Tree` as hypothesis (`relabel_ticks_le'` discharges it with the admitted `walk_items_wf`) |
 | frame rule `walkTree_local` via `Lifts`/`Sim` simulation (`Sim.closeEars`, `Sim.mergeLate`, `Sim.finishRest`, `Sim.finishBoundary` proved) | `Sim.lean`, `Frame.lean`, `EarSpec.lean` | `Sim.closeVert`, `Sim.finishEdge`, `Sim.walkTree` proved; `walkTree_local` reduces to the stack-shape invariant `walkTree_guards` (admitted, with `earOut_one_entry` / `ascend_frame_one_entry`) |
-| typing/allocation part of `Items.WF` (`Items.Tree` sizes/types, I/O leaves, `vs_shape`, `vs_lt`): `walk_typing` | `WalkTyping.lean` | proved (`walk_q_children` sorry: needs span shape) |
+| typing/allocation part of `Items.WF` (`Items.Tree` sizes/types, I/O leaves, `vs_shape`, `vs_lt`): `walk_typing` | `WalkTyping.lean` | proved (`walk_q_children` sorry: needs span shape; restated with a leaf-Q child allowed, §4.6) |
 | §4.2b walk invariant `Inv' D` (`EntryInv' D above`: connected + attached at `Term'`; closed items 2-attached): closure lemmas (`GraphLemmas.lean`: `AttachedIn`, `twoAttached_iff`), primitives `Inv'.alloc`/`modifyVs`/`pushVert`/`pushEdge`/`mergeTop`/`retarget`/`pop`/`finishTop`, `Shape`/`Step` infrastructure, per-block lemmas `Step.closeEars`/`mergeLate`/`closeVert'`/`finishRest` under `CloseEarsOk`/`MergeLateOk`/`CloseVertOk`/`FinishRestOk` (`MergeTopOk`/`RetargetOk.disj`: entries below edge-disjoint from the touched ones) | `GraphLemmas.lean`, `WalkSpec.lean` | proved (the depth-indexed `Inv D` versions `mergeTstackTops_sound`/`finishTstackTop_complete` are kept; `Inv D` itself is false mid-walk) |
 | §4.2b `finishEdge_inv` (type-1 ± vertex entry, type-2 three loops, back edge) under `FinishOk`; `finishEdge_back_inv` corollary | `WalkSpec.lean` | proved for `Inv' D`; `FinishOk ← FinishGuards`/`EarFinish` (`ear_*` sorries, `ear_finishP_back` derived); `WalkInv.walkTree_inv'` (`Inv' d ∧ Shape`) proved modulo them — the `Inv d` form was **false** (`ear_lower` false, `Inv D` fails for every `D` under a type-2 chain with a sibling subtree; §4.2b correction), `ear_lower'` (`Inv' (d+1) → Inv' d` after a tree edge) admitted in its place; `walk_nodes_partition` proved in `WalkPlace.lean` under `ForestOK` + coverage |
 | Invariant W, Lemma 4.3 (`earOut_one_entry`) | `EarSpec.lean` | sorry / hard |
@@ -947,7 +1010,8 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 5 relabel, CSR bounds: `relabelTree_adj : Items.WF → Items.ROriented → (∀ n, adjBounds[2 nvSt n] = 2 neSt n) ∧ adjBounds[2 |nodeVerts|] = |adjDat|` (the statement of `relabel_adj_spec`); `layout_local` (`Layout.Local` for every item's `nodeLayout`) | `RelabelAdj.lean` | proved; `relabel_adj_spec` itself stays admitted in `RelabelSpec.lean` only because that file cannot import its proof |
 | 5 relabel, `WF` assembly: `RelabelAll.wf_tree`, `preorder` (`child_idx`/`subtree_end` chain, `subtree_props`, `parent_eq_iff`), `only_root_F`, `shape` (`skeleton_eq` + `LayoutShape.shape_*`), `adj_bounds_mono`, `adj_dest`, `adj_incident'` (`global_bound`/`global_row`: global CSR rows = `Layout.Local` rows; `foreign_ne`, `row_filter`) | `RelabelWF.lean` | proved (standard axioms) |
 | 2/7 `Items.ROriented` of the walk output: `rOriented_of_stNumbered`, `walk_items_rOriented'` | `StOriented.lean` | proved from `walk_st` (+ `walk_items_wf`), under `g.WF`/`OrderOK` like `walk_st`; used by `spqrTree_wf'` (`Correctness.lean`); the hypothesis-free `spqrTree_wf` the planar layer uses is a named admission (§7.6) |
-| 2 walk→relabel interface `walk_items_wf : Items.WF g (g.walk tern (g.dfsForest vo eo)).items`, and `spqrTree_eq` | `WalkWF.lean` (below `StSpec`/`StWalk`/`StOriented` and `Correctness`) | `walk_items_wf` sorry (the sole walk→WF admission); `spqrTree_eq` proved |
+| 2 walk→relabel interface `walk_items_wf : Items.WF g (g.walk tern (g.dfsForest vo eo)).items`, and `spqrTree_eq` | `WalkWF.lean` (below `StSpec`/`StWalk`/`StOriented` and `Correctness`) | `walk_items_wf = wf_of_ranges walk_items_tree walk_typingFacts walk_ranges walk_canonical`; admitted: `walk_ranges` (§4.6), `walk_canonical` (false for `tern = true`), the bridges `walk_items_tree`/`walk_typingFacts`; `spqrTree_eq` proved |
+| §4.6 final-state ranges `Items.Ranges g items σ` (piece-edge convexity in the DFS edge postorder + attachment facts), `wf_of_ranges : Tree → TypingFacts → Ranges → canonical → Items.WF` (`endpoints_of_ranges`, `shapes_of_ranges`); checker `check_ranges` (`CheckRanges.lean`) | `Ranges.lean`, `RangesWF.lean` | def / proved (standard axioms); every field 0 violations on seeds 0..400 + tiny graphs; corrected `s_shape` (`1 ≤`), `r_shape` (`5 ≤`), `q_children` (Q leaf child allowed) in `ItemSpec.lean` with counterexamples |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
 | 5 relabel per-node interface `RelabelNode`/`RelabelLayout`/`RelabelIdx`, `Items.nvList`/`ordered`/`edgeChildren`/`PosOK`/`hasCap`/`nEdges`/`ROriented` | `RelabelSpec.lean` | def; `relabel_node_spec` proved in `RelabelMain.lean` (`Ghost.relabel_node_spec_proved`) |
 | 5 relabel ghost (`order` field) + refinement `relabelTree_eq : relabelTree g items = ofRelabelState (relabelRun g items)` | `RelabelGhost.lean` | proved (`sim_relabel` at `maxHeartbeats 4000000`) |

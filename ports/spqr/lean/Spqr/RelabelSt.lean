@@ -141,7 +141,7 @@ theorem skeleton_length (n : Nat) : (t.skeleton n).length = (t.neRange n).2 - (t
 
 theorem nvList_S' {a : ItemId} (ha : a < items.size) (hS : items.type a = .S) :
     ∃ u v xs, items.vs a = (some u, some v) ∧ items.nvList g a = u :: (xs ++ [v]) ∧
-      2 ≤ xs.length ∧ (items.virtualEdges a).length = xs.length + 1 := by
+      1 ≤ xs.length ∧ (items.virtualEdges a).length = xs.length + 1 := by
   obtain ⟨u, v, xs, hvs, hxs, h2, hperm⟩ := h.shapes.s_shape a ha hS
   refine ⟨u, v, xs, hvs, ?_, h2, ?_⟩
   · rw [nvList_eq, hvs, h.filter_lt_eq ha, hxs, List.map_map]

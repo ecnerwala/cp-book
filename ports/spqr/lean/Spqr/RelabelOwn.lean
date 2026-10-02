@@ -266,7 +266,7 @@ theorem WF.vs_two (hw : items.WF g) {i : ItemId} (hi : i < items.size)
   rcases hn with ht | ht | ht | ht <;> simp only [ht] at h <;> exact h
 
 theorem WF.q_cases (hw : items.WF g) {i : ItemId} (hi : i < items.size) (hQ : items.type i = .Q) :
-    items.ch i = [] ∨ ∃ c, items.type c ∉ [NodeType.F, .V, .Q] ∧
+    items.ch i = [] ∨ ∃ c, items.type c ∉ [NodeType.F, .V] ∧ (items.type c = .Q → items.ch c = []) ∧
       (items.ch i = [c] ∨ ∃ v, v < g.nv ∧ items.ch i = [c, vertItem v]) := by
   have hr := (hw.tree.type_Q_iff hi).1 hQ
   have he : edgeItem g (i - 1 - g.nv) = i := by simp only [edgeItem]; iomega
@@ -333,7 +333,7 @@ theorem WF.layout_hyps (hw : items.WF g) {i : ItemId} (hi : i < items.size)
   all_goals simp only [hty] at hn hne ⊢
   all_goals simp [NodeType.isNode] at hn
   · -- Q
-    rcases hw.q_cases hi hty with h0 | ⟨c, hc, h1 | ⟨v, hv, h1⟩⟩
+    rcases hw.q_cases hi hty with h0 | ⟨c, hc, -, h1 | ⟨v, hv, h1⟩⟩
     · simp only [h0, List.countP_nil, List.filter_nil, List.length_nil] at hne hlen
       simp only [Items.hasCap, hty] at hcap ⊢
       refine ⟨fun _ => by omega, fun _ => by omega, by simp, by simp, fun _ _ => ?_, by simp⟩
@@ -789,7 +789,7 @@ theorem hasCap_eq {i : ItemId} (hi : i < items.size) : t.hasCap (idx i) = items.
   rw [H.type hi]
   by_cases hQ : items.type i = .Q
   · have : ((t.children (idx i)).any fun c => t.type c != .V) = !(items.ch i).isEmpty := by
-      rcases H.wf.q_cases hi hQ with h0 | ⟨c, hc, h1⟩
+      rcases H.wf.q_cases hi hQ with h0 | ⟨c, hc, -, h1⟩
       · have h2 : t.children (idx i) = [] := by
           have := H.children_perm hi; rw [h0] at this; exact this.eq_nil
         simp [h2, h0]
@@ -798,7 +798,7 @@ theorem hasCap_eq {i : ItemId} (hi : i < items.size) : t.hasCap (idx i) = items.
         rw [hne, Bool.not_false, List.any_eq_true]
         refine ⟨idx c, (H.children_perm hi).mem_iff.2 (List.mem_map_of_mem hcm), ?_⟩
         rw [H.type_child hcm, bne_iff_ne]
-        simp at hc; exact hc.2.1
+        simp at hc; exact hc.2
     rw [this]
   · have h := beq_eq_false_iff_ne.2 hQ
     simp only [h, Bool.false_and]

@@ -43,7 +43,7 @@ theorem WF.nEdges_pos (hw : items.WF g) {i : ItemId} (hi : i < items.size)
   · simp [Items.capCount, hcap]
   · have hQ : items.type i = .Q := by
       by_contra h; exact hcap (hasCap_of_ne_Q hn h)
-    rcases hw.q_cases hi hQ with h0 | ⟨c, hc, h1 | ⟨v, hv, h1⟩⟩
+    rcases hw.q_cases hi hQ with h0 | ⟨c, hc, -, h1 | ⟨v, hv, h1⟩⟩
     · exact absurd (by rw [hasCap_Q hQ, h0]; rfl) hcap
     · have hcge := hw.tree.child_ge_of_ne_V (p := i) (c := c) (by rw [h1]; simp) (by simp at hc; tauto)
       rw [h1]; simp [hcge]
@@ -68,7 +68,7 @@ theorem WF.nvList_Q (hw : items.WF g) {i : ItemId} (hi : i < items.size)
   have hlen := nvList_length (g := g) (items := items) i
   have hvs := hw.endpoints.vs_shape i hi
   rw [hQ] at hvs
-  rcases hw.q_cases hi hQ with h0 | ⟨c, hc, h1 | ⟨v, hv, h1⟩⟩
+  rcases hw.q_cases hi hQ with h0 | ⟨c, hc, -, h1 | ⟨v, hv, h1⟩⟩
   · rw [h0] at hlen
     rcases hvs with ⟨v, hv⟩ | ⟨u, v, hv⟩ <;> rw [hv] at hlen <;> simp at hlen <;> omega
   · have h2 := hw.q_vs_snd_none hi hQ (by rw [h1]; simp)

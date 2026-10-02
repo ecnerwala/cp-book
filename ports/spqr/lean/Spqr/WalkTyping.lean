@@ -995,7 +995,9 @@ the shape `[c]` / `[c, vertItem v]` needs the tstack span invariants (PROOF.md �
 theorem walk_q_children (g : Graph) (ternarize : Bool) (forest : List DfsTree) (hnv : 0 < g.nv)
     (hb : ∀ t ∈ forest, t.Bounded g.nv g.ne) (hcov : ∀ e, e < g.ne → ∃ t ∈ forest, e ∈ t.edges) :
     ∀ e, e < g.ne → Items.ch (g.walk ternarize forest).items (edgeItem g e) = [] ∨
-      ∃ c, Items.type (g.walk ternarize forest).items c ∉ [NodeType.F, .V, .Q] ∧
+      ∃ c, Items.type (g.walk ternarize forest).items c ∉ [NodeType.F, .V] ∧
+        (Items.type (g.walk ternarize forest).items c = .Q →
+          Items.ch (g.walk ternarize forest).items c = []) ∧
         (Items.ch (g.walk ternarize forest).items (edgeItem g e) = [c] ∨
           ∃ v, v < g.nv ∧ Items.ch (g.walk ternarize forest).items (edgeItem g e) = [c, vertItem v]) := by
   sorry

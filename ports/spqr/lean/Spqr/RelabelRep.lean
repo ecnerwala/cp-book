@@ -584,7 +584,7 @@ theorem hasCap_eq {i : ItemId} (hi : i < items.size) : t.hasCap (idx i) = items.
   · obtain ⟨e, he, rfl⟩ := h.type_Q_eq hi hQ
     have key : (((items.ordered g (edgeItem g e) (t.nvRange (idx (edgeItem g e))).1 pos).map idx).any
         fun c => t.type c != .V) = !(items.ch (edgeItem g e)).isEmpty := by
-      rcases h.shapes.q_children e he with h0 | ⟨c, hc, hch⟩
+      rcases h.shapes.q_children e he with h0 | ⟨c, hc, -, hch⟩
       · rw [h0] at hperm ⊢
         rw [List.perm_nil.1 hperm]; rfl
       · have hne : items.ch (edgeItem g e) ≠ [] := by
@@ -713,7 +713,7 @@ theorem nvList_P {i : ItemId} (hi : i < items.size) (hP : items.type i = .P) :
   rw [nvList_eq, hv, h.filter_V_eq_nil hi (h.shapes.p_shape i hi hP).2.1]; rfl
 
 theorem nvList_S {i : ItemId} (hi : i < items.size) (hS : items.type i = .S) :
-    ∃ u v xs, items.vs i = (some u, some v) ∧ items.nvList g i = u :: xs ++ [v] ∧ 2 ≤ xs.length ∧
+    ∃ u v xs, items.vs i = (some u, some v) ∧ items.nvList g i = u :: xs ++ [v] ∧ 1 ≤ xs.length ∧
       items.virtualEdges i = List.zip (u :: xs) (xs ++ [v]) := by
   obtain ⟨u, v, xs, hv, hxs, hvirt⟩ := h.wf.shapes.s_order i hi hS
   obtain ⟨u', v', xs', hv', hxs', hlen, -⟩ := h.shapes.s_shape i hi hS
@@ -752,7 +752,7 @@ theorem nEdges_Q {e : Nat} (he : e < g.ne) : items.nEdges g (edgeItem g e) = 1 :
   have hq := h.edgeItem_lt he
   have hQ := h.type_edgeItem he
   rw [h.nEdges_node hq (by rw [hQ]; decide), Items.virtualEdges, Items.capCount]
-  rcases h.shapes.q_children e he with h0 | ⟨c, hc, hch⟩
+  rcases h.shapes.q_children e he with h0 | ⟨c, hc, -, hch⟩
   · simp [h0, Items.hasCap, hQ, NodeType.isNode]
   · have hcV : items.type c ≠ .V := fun hV => hc (by simp [hV])
     rcases hch with h1 | ⟨w, hw, h1⟩
@@ -765,7 +765,7 @@ theorem nvList_Q_le {e : Nat} (he : e < g.ne) : (items.nvList g (edgeItem g e)).
   rw [h.type_edgeItem he] at hs
   unfold Items.nvList
   rw [h.filter_lt_eq hq]
-  rcases h.shapes.q_children e he with h0 | ⟨c, hc, hch⟩
+  rcases h.shapes.q_children e he with h0 | ⟨c, hc, -, hch⟩
   · rw [h0]; rcases hs with ⟨v, hv⟩ | ⟨u, v, hv⟩ <;> simp [hv]
   · have hcV : items.type c ≠ .V := fun hV => hc (by simp [hV])
     have hv2 := (h.q_root_iff he).2 (by rcases hch with h1 | ⟨w, -, h1⟩ <;> simp [h1])
@@ -792,7 +792,7 @@ theorem q_pair {e : Nat} (he : e < g.ne) :
   have hroot := h.q_root_iff he
   have hcap0 : items.ch (edgeItem g e) = [] → items.hasCap (edgeItem g e) = true := by
     intro h0; simp [Items.hasCap, hQ, h0, NodeType.isNode]
-  rcases h.shapes.q_children e he with h0 | ⟨c, hc, hch⟩
+  rcases h.shapes.q_children e he with h0 | ⟨c, hc, -, hch⟩
   · -- leaf
     have hcap := hcap0 h0
     have hne : items.nEdges g (edgeItem g e) = 1 := by

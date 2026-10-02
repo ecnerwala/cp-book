@@ -107,9 +107,10 @@ def virtualEdges (i : ItemId) : List (Nat × Nat) :=
 structure Shapes : Prop where
   /-- `I`, `O`: a single leaf under a Q. -/
   i_o_leaf : ∀ i, i < items.size → items.type i = .I ∨ items.type i = .O → items.ch i = []
-  /-- `Q`: either a leaf (cap to parent), or a block root with children `[node]` or `[node, v]`. -/
+  /-- `Q`: either a leaf (cap to parent), or a block root with children `[node]` or `[node, v]`
+  (the node is a leaf Q when the block is a digon: the tree edge plus one parallel back edge). -/
   q_children : ∀ e, e < g.ne → items.ch (edgeItem g e) = [] ∨
-    ∃ c, items.type c ∉ [NodeType.F, .V, .Q] ∧
+    ∃ c, items.type c ∉ [NodeType.F, .V] ∧ (items.type c = .Q → items.ch c = []) ∧
       (items.ch (edgeItem g e) = [c] ∨ ∃ v, v < g.nv ∧ items.ch (edgeItem g e) = [c, vertItem v])
   /-- `O` items hang alone under a (self-loop) Q. -/
   o_parent : ∀ p c, items.IsParent p c → items.type c = .O → items.type p = .Q ∧ items.ch p = [c]
@@ -120,21 +121,23 @@ structure Shapes : Prop where
   p_shape : ∀ i, i < items.size → items.type i = .P →
     2 ≤ (items.virtualEdges i).length ∧ (∀ c, items.IsParent i c → items.type c ≠ .V) ∧
     ∀ q ∈ items.virtualEdges i, ∃ u v, items.vs i = (some u, some v) ∧ PairEq q (u, v)
-  /-- `S`: with endpoints `u = x₀, x₁, …, x_k = v` (the V children in order) the non-V children
-  are exactly the path edges `(x_j, x_{j+1})`, `k ≥ 2`. -/
+  /-- `S`: with endpoints `u = x₀, x₁, …, x_{k+1} = v` (the V children in order) the non-V children
+  are exactly the path edges `(x_j, x_{j+1})`, `k ≥ 1` (the cycle's remaining edge is the parent
+  cap: a triangle has one V child). -/
   s_shape : ∀ i, i < items.size → items.type i = .S → ∃ u v xs,
     items.vs i = (some u, some v) ∧ ((items.ch i).filter fun c => items.type c = .V) = xs.map vertItem ∧
-    2 ≤ xs.length ∧
+    1 ≤ xs.length ∧
     (items.virtualEdges i).Perm (List.zip (u :: xs) (xs ++ [v]))
   /-- `S`, positionally: the non-V children in `ch` order are the path edges in path order, each
   oriented along the path (`vs c = (some x_j, some x_{j+1})`). -/
   s_order : ∀ i, i < items.size → items.type i = .S → ∃ u v xs,
     items.vs i = (some u, some v) ∧ ((items.ch i).filter fun c => items.type c = .V) = xs.map vertItem ∧
     items.virtualEdges i = List.zip (u :: xs) (xs ++ [v])
-  /-- `R`: ≥ 2 V children, simple skeleton with ≥ 6 edges (no child virtual edge parallel to the
-  node's own `vs`; non-V children all have two endpoints), 3-connected (checked on the output). -/
+  /-- `R`: ≥ 2 V children, simple skeleton with ≥ 6 edges counting the parent cap, i.e. ≥ 5
+  virtual edges (none parallel to the node's own `vs`; non-V children all have two endpoints),
+  3-connected (checked on the output). -/
   r_shape : ∀ i, i < items.size → items.type i = .R →
-    2 ≤ ((items.ch i).filter fun c => items.type c = .V).length ∧ 6 ≤ (items.virtualEdges i).length ∧
+    2 ≤ ((items.ch i).filter fun c => items.type c = .V).length ∧ 5 ≤ (items.virtualEdges i).length ∧
     ((items.virtualEdges i).map fun q => min q.1 q.2 + g.nv * max q.1 q.2).Nodup ∧
     (∀ q ∈ items.virtualEdges i, q.1 ≠ q.2) ∧
     (∀ u v, items.vs i = (some u, some v) → ∀ q ∈ items.virtualEdges i, ¬ PairEq q (u, v)) ∧
