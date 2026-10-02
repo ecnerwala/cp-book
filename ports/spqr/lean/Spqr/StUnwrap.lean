@@ -102,18 +102,17 @@ theorem run_mergeTstackTops_cons_cons (s : WalkState) (c t : TEntry) (R : List T
 theorem StSim.allocMergeClose {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEntry)
     (new base : List TEntry) (ps : List StPiece) (blocks : List StBlock)
     (hts : s.tstack = c :: t :: (new ++ base))
-    (hc : getSide c.spans (!s.stackDir[t.topDepth]!) = [])
-    (ht : getSide t.spans (!s.stackDir[t.topDepth]!) = [])
-    (hdir : s.stackDir[min t.topDepth c.topDepth]! = s.stackDir[t.topDepth]!)
+    (hc : getSide c.spans (!s.stackDir[min t.topDepth c.topDepth]!) = [])
+    (ht : getSide t.spans (!s.stackDir[min t.topDepth c.topDepth]!) = [])
     (hty : ty ≠ .V ∧ ty ≠ .Q)
     (hR : StRead s.items (c :: t :: new) ps) (hI : StItems g s blocks) :
     let s' := ((finishTstackTop s.items.size).run
       (mergeTstackTops.run { s with items := s.items.push ⟨ty, (none, none), []⟩ }).2).2
-    s'.tstack = { TEntry.mergeInto c t with spans := setSides s.stackDir[t.topDepth]! [s.items.size] [] } ::
+    s'.tstack = { TEntry.mergeInto c t with spans := setSides s.stackDir[min t.topDepth c.topDepth]! [s.items.size] [] } ::
         (new ++ base) ∧
       s'.stackDir = s.stackDir ∧ s'.items.size = s.items.size + 1 ∧
       Items.type s'.items s.items.size = ty ∧
-      StRead s'.items ({ TEntry.mergeInto c t with spans := setSides s.stackDir[t.topDepth]! [s.items.size] [] } :: new) ps ∧
+      StRead s'.items ({ TEntry.mergeInto c t with spans := setSides s.stackDir[min t.topDepth c.topDepth]! [s.items.size] [] } :: new) ps ∧
       StItems g s' blocks := by
   dsimp only
   have hs₂ := run_mergeTstackTops_cons_cons { s with items := s.items.push ⟨ty, (none, none), []⟩ } c t
@@ -127,9 +126,9 @@ theorem StSim.allocMergeClose {g : Graph} (s : WalkState) (ty : NodeType) (c t :
   have hsz : s₂.items.size = s.items.size + 1 := by rw [hitems₂, Array.size_push]
   have htop : (TEntry.mergeInto c t).topDepth = min t.topDepth c.topDepth := rfl
   have hside : getSide (TEntry.mergeInto c t).spans (!s₂.stackDir[(TEntry.mergeInto c t).topDepth]!) = [] := by
-    rw [hsd₂, htop, hdir]; exact TEntry.mergeInto_side_nil _ c t hc ht
-  have hdir₂ : s₂.stackDir[(TEntry.mergeInto c t).topDepth]! = s.stackDir[t.topDepth]! := by
-    rw [hsd₂, htop, hdir]
+    rw [hsd₂, htop]; exact TEntry.mergeInto_side_nil _ c t hc ht
+  have hdir₂ : s₂.stackDir[(TEntry.mergeInto c t).topDepth]! = s.stackDir[min t.topDepth c.topDepth]! := by
+    rw [hsd₂, htop]
   have hlt : ∀ x ∈ readStack s.tstack, x < s.items.size := fun x hx => hI.bounded x hx x .refl
   have hsub : ∀ x ∈ readStack (c :: t :: new), x ∈ readStack s.tstack := fun x hx => by
     rw [hts]; exact mem_readStack_append_left (l' := base) hx
@@ -371,9 +370,8 @@ theorem spans_eq_setSides_of_sides {sp : List ItemId × List ItemId} {dir : Bool
 theorem StSim.unwrapMergeClose {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEntry)
     (new base : List TEntry) (ps : List StPiece) (blocks : List StBlock)
     (hts : s.tstack = c :: t :: (new ++ base))
-    (hc : getSide c.spans (!s.stackDir[t.topDepth]!) = [])
-    (ht : getSide t.spans (!s.stackDir[t.topDepth]!) = [])
-    (hdir : s.stackDir[min t.topDepth c.topDepth]! = s.stackDir[t.topDepth]!)
+    (hc : getSide c.spans (!s.stackDir[min t.topDepth c.topDepth]!) = [])
+    (ht : getSide t.spans (!s.stackDir[min t.topDepth c.topDepth]!) = [])
     (hty : ty = .S ∨ ty = .P ∨ ty = .R)
     (hU : ty ≠ .R → ∀ dir h, (getSide t.spans dir).head! = h → Items.type s.items h = ty →
       getSide t.spans dir = [h] ∧ (∀ p, ¬ Items.IsParent s.items p h) ∧
@@ -381,23 +379,36 @@ theorem StSim.unwrapMergeClose {g : Graph} (s : WalkState) (ty : NodeType) (c t 
     (hR : StRead s.items (c :: t :: new) ps) (hI : StItems g s blocks) :
     let r := (maybeUnwrapNxt ty).run s
     let s' := ((finishTstackTop r.1).run (mergeTstackTops.run r.2).2).2
-    s'.tstack = { TEntry.mergeInto c t with spans := setSides s.stackDir[t.topDepth]! [r.1] [] } ::
-        (new ++ base) ∧
+    s'.tstack = { TEntry.mergeInto c t with
+        spans := setSides s.stackDir[min t.topDepth c.topDepth]! [r.1] [] } :: (new ++ base) ∧
       s'.stackDir = s.stackDir ∧ s.items.size ≤ s'.items.size ∧ r.1 < s'.items.size ∧
       Items.type s'.items r.1 = ty ∧
-      StRead s'.items ({ TEntry.mergeInto c t with spans := setSides s.stackDir[t.topDepth]! [r.1] [] } :: new) ps ∧
+      StRead s'.items ({ TEntry.mergeInto c t with
+        spans := setSides s.stackDir[min t.topDepth c.topDepth]! [r.1] [] } :: new) ps ∧
       StItems g s' blocks := by
   dsimp only
   have hty' : ty ≠ .V ∧ ty ≠ .Q := by rcases hty with rfl | rfl | rfl <;> simp
-  have alloc := StSim.allocMergeClose s ty c t new base ps blocks hts hc ht hdir hty' hR hI
+  have alloc := StSim.allocMergeClose s ty c t new base ps blocks hts hc ht hty' hR hI
   dsimp only at alloc
   have halloc : (allocItem ty).run s = (s.items.size, { s with items := s.items.push ⟨ty, (none, none), []⟩ }) := rfl
-  rw [maybeUnwrapNxt_run_eq ty s c t (new ++ base) hts _ rfl _ rfl]
-  split
-  · rw [halloc]
+  have allocGoal : let r := (allocItem ty).run s
+      let s' := ((finishTstackTop r.1).run (mergeTstackTops.run r.2).2).2
+      s'.tstack = { TEntry.mergeInto c t with
+          spans := setSides s.stackDir[min t.topDepth c.topDepth]! [r.1] [] } :: (new ++ base) ∧
+        s'.stackDir = s.stackDir ∧ s.items.size ≤ s'.items.size ∧ r.1 < s'.items.size ∧
+        Items.type s'.items r.1 = ty ∧
+        StRead s'.items ({ TEntry.mergeInto c t with
+          spans := setSides s.stackDir[min t.topDepth c.topDepth]! [r.1] [] } :: new) ps ∧
+        StItems g s' blocks := by
+    dsimp only
+    rw [halloc]
     dsimp only
     exact ⟨alloc.1, alloc.2.1, by rw [alloc.2.2.1]; exact Nat.le_succ _, by rw [alloc.2.2.1]; exact Nat.lt_succ_self _,
       alloc.2.2.2.1, alloc.2.2.2.2.1, alloc.2.2.2.2.2⟩
+  dsimp only at allocGoal
+  rw [maybeUnwrapNxt_run_eq ty s c t (new ++ base) hts _ rfl _ rfl]
+  split
+  · exact allocGoal
   · split
     · rename_i hA hT
       have hne : ty ≠ .R := fun e => hA (Or.inl e)
@@ -408,18 +419,27 @@ theorem StSim.unwrapMergeClose {g : Graph} (s : WalkState) (ty : NodeType) (c t 
         rcases hty with rfl | rfl | rfl <;> cases hT
       rw [Items.getElem!_type_of_lt hlt] at hT
       obtain ⟨hsingle, -, -⟩ := hU hne _ h hh hT
-      have htsp : t.spans = setSides s.stackDir[t.topDepth]! [h] [] := spans_eq_setSides_of_sides hsingle ht
-      have htyh : ¬ (Items.type s.items h = .V ∨ Items.type s.items h = .Q) := by
-        rw [hT]; exact fun e => e.elim hty'.1 hty'.2
-      have reopen := StSim.reopenMergeClose s c t h new base ps blocks hts hc htsp hdir htyh hR hI
-      dsimp only at reopen
-      rw [Items.getElem!_ch_of_lt hlt]
-      dsimp only
-      exact ⟨reopen.1, reopen.2.1, by rw [reopen.2.2.1], by rw [reopen.2.2.1]; exact hlt,
-        by rw [reopen.2.2.2.1, hT], reopen.2.2.2.2.1, reopen.2.2.2.2.2⟩
-    · rw [halloc]
-      dsimp only
-      exact ⟨alloc.1, alloc.2.1, by rw [alloc.2.2.1]; exact Nat.le_succ _, by rw [alloc.2.2.1]; exact Nat.lt_succ_self _,
-        alloc.2.2.2.1, alloc.2.2.2.2.1, alloc.2.2.2.2.2⟩
+      by_cases hd : s.stackDir[t.topDepth]! = s.stackDir[min t.topDepth c.topDepth]!
+      · rw [hd] at hsingle hh ⊢
+        have hc' : getSide c.spans (!s.stackDir[t.topDepth]!) = [] := by rw [hd]; exact hc
+        have ht' : getSide t.spans (!s.stackDir[t.topDepth]!) = [] := by rw [hd]; exact ht
+        have htsp : t.spans = setSides s.stackDir[t.topDepth]! [h] [] := by
+          rw [hd]; exact spans_eq_setSides_of_sides hsingle ht
+        have htyh : ¬ (Items.type s.items h = .V ∨ Items.type s.items h = .Q) := by
+          rw [hT]; exact fun e => e.elim hty'.1 hty'.2
+        have reopen := StSim.reopenMergeClose s c t h new base ps blocks hts hc' htsp hd.symm htyh hR hI
+        dsimp only at reopen
+        rw [hd] at reopen
+        rw [Items.getElem!_ch_of_lt hlt]
+        dsimp only
+        exact ⟨reopen.1, reopen.2.1, by rw [reopen.2.2.1], by rw [reopen.2.2.1]; exact hlt,
+          by rw [reopen.2.2.2.1, hT], reopen.2.2.2.2.1, reopen.2.2.2.2.2⟩
+      · exfalso
+        have hd' : s.stackDir[t.topDepth]! = !s.stackDir[min t.topDepth c.topDepth]! := by
+          revert hd
+          cases s.stackDir[t.topDepth]! <;> cases s.stackDir[min t.topDepth c.topDepth]! <;> simp
+        rw [hd', ht] at hsingle
+        exact List.cons_ne_nil _ _ hsingle.symm
+    · exact allocGoal
 
 end Spqr
