@@ -1,4 +1,5 @@
 import Spqr.Proofs.Orbits
+import Spqr.Proofs.OrbitCount
 
 /-!
 # 2-sum gluing (PROOF.md §8.5)
@@ -1377,13 +1378,6 @@ theorem _root_.Spqr.RotationSystem.faceFn_eq (rs : RotationSystem) :
     stepFn rs.faceStep = rs.stepC 3 := rfl
 theorem _root_.Spqr.RotationSystem.vertexFn_eq (rs : RotationSystem) :
     stepFn rs.vertexStep = rs.stepC 1 := rfl
-
-/-- ADMITTED (computational bridge): the marking loop `numOrbits` of `Planar.lean` counts the
-orbits of a step function that permutes `range n`. -/
-theorem _root_.Spqr.numOrbits_eq_orbitCount (step : Nat → Option Nat) (n : Nat)
-    (_h : IsPermOn (stepFn step) (Finset.range n)) :
-    numOrbits step n = orbitCount (stepFn step) (Finset.range n) := by
-  sorry
 
 theorem _root_.Spqr.RotationSystem.numFaceOrbits_eq (rs : RotationSystem) (ht : rs.Total)
     (hi : rs.Involution) {m : Nat} (hs : rs.size = 4 * m) :
