@@ -1095,14 +1095,372 @@ theorem count_τ
 
 end Count
 
-/-- WIP (PROOF.md §8.5): the splice of two planar embeddings along the virtual edge is a planar
-embedding of the 2-sum. Admitted; the embedding fields and the orbit counts are in progress. -/
-theorem splice_isPlanarEmbedding (W : T.WF rs₁ rs₂) :
-    IsPlanarEmbedding T.edges T.nVerts (T.splice rs₁ rs₂) := by
+/-! ### Conjugating the spliced step to the splice's rotation system -/
+
+section Conj
+variable (W : T.WF rs₁ rs₂) (c : Nat) (hc4 : c < 4)
+include W
+
+theorem φ_lt {q : Nat} (hq : q ∈ T.U) : T.φ q < 4 * (T.m₁ + T.m₂ - 2) := by
+  rw [T.mem_U W] at hq
+  have := T.e₁_lt W; have := T.e₂_lt W
+  rcases hq with ⟨h1, h2⟩ | ⟨h1, h2, h3⟩
+  · rw [T.φ_of_lt h1]; have := T.qe₁_lt_off W h1 h2; unfold off at this; omega
+  · obtain ⟨a, rfl⟩ : ∃ a, q = 4 * T.m₁ + a := ⟨q - 4 * T.m₁, by omega⟩
+    rw [Nat.add_sub_cancel_left] at h3
+    rw [T.φ_add]; exact T.qe₂_lt W (by omega) h3
+
+theorem φ_injOn : Set.InjOn T.φ T.U := by
+  intro a ha b hb h
+  rw [Finset.mem_coe, T.mem_U W] at ha hb
+  rcases ha with ⟨ha1, ha2⟩ | ⟨ha1, ha2, ha3⟩ <;> rcases hb with ⟨hb1, hb2⟩ | ⟨hb1, hb2, hb3⟩
+  · rw [T.φ_of_lt ha1, T.φ_of_lt hb1] at h
+    rw [← T.pre₁_qe₁ ha2, h, T.pre₁_qe₁ hb2]
+  · exfalso
+    obtain ⟨b', rfl⟩ : ∃ b', b = 4 * T.m₁ + b' := ⟨b - 4 * T.m₁, by omega⟩
+    rw [T.φ_of_lt ha1, T.φ_add] at h
+    have := T.qe₁_lt_off W ha1 ha2; have := T.off_le_qe₂ b'; omega
+  · exfalso
+    obtain ⟨a', rfl⟩ : ∃ a', a = 4 * T.m₁ + a' := ⟨a - 4 * T.m₁, by omega⟩
+    rw [T.φ_of_lt hb1, T.φ_add] at h
+    have := T.qe₁_lt_off W hb1 hb2; have := T.off_le_qe₂ a'; omega
+  · obtain ⟨a', rfl⟩ : ∃ a', a = 4 * T.m₁ + a' := ⟨a - 4 * T.m₁, by omega⟩
+    obtain ⟨b', rfl⟩ : ∃ b', b = 4 * T.m₁ + b' := ⟨b - 4 * T.m₁, by omega⟩
+    rw [Nat.add_sub_cancel_left] at ha3 hb3
+    rw [T.φ_add, T.φ_add] at h
+    have := congrArg T.pre₂ h
+    rw [T.pre₂_qe₂ ha3, T.pre₂_qe₂ hb3] at this
+    omega
+
+theorem φ_image : T.U.image T.φ = Finset.range (4 * (T.m₁ + T.m₂ - 2)) := by
+  ext r
+  rw [Finset.mem_image, Finset.mem_range]
+  constructor
+  · rintro ⟨q, hq, rfl⟩; exact T.φ_lt W hq
+  · intro hr
+    by_cases h : r < T.off
+    · refine ⟨T.pre₁ r, ?_, ?_⟩
+      · rw [T.mem_U W]; exact Or.inl ⟨T.pre₁_lt W h, T.pre₁_div_ne r⟩
+      · rw [T.φ_of_lt (T.pre₁_lt W h), T.qe₁_pre₁]
+    · refine ⟨4 * T.m₁ + T.pre₂ r, ?_, ?_⟩
+      · rw [T.mem_U W]
+        have := T.pre₂_lt W hr (not_lt.1 h); have := T.pre₂_div_ne r
+        exact Or.inr ⟨by omega, by omega, by rw [Nat.add_sub_cancel_left]; exact this⟩
+      · rw [T.φ_add, T.qe₂_pre₂ (not_lt.1 h)]
+
+include hc4
+
+theorem perm_splice :
+    IsPermOn ((T.splice rs₁ rs₂).stepC c) (Finset.range (4 * (T.m₁ + T.m₂ - 2))) := by
+  have := RotationSystem.isPermOn_stepC (T.splice_total W) (T.splice_involution W) T.splice_size hc4
+  rwa [T.splice_size] at this
+
+theorem stepC_splice {r : Nat} (hr : r < 4 * (T.m₁ + T.m₂ - 2)) :
+    (T.splice rs₁ rs₂).stepC c r = T.glue rs₁ rs₂ (r ^^^ c) := by
+  rw [RotationSystem.stepC_eq_rot (T.splice_total W) T.splice_size hc4 (T.splice_size ▸ hr),
+    T.splice_rot W (xor_lt_mul4 hr hc4)]
+
+omit W hc4 in
+theorem τ_of {q : Nat} (hq : ∀ k, k < 4 → q ≠ T.x rs₁ c k ∧ q ≠ T.y rs₂ c k) :
+    T.τ rs₁ rs₂ c q = T.σ₈ rs₁ rs₂ c q := by
+  unfold τ τ₃ τ₂ τ₁
+  rw [swapImg_of_ne _ (hq 3 (by decide)).1 (hq 3 (by decide)).2,
+    swapImg_of_ne _ (hq 1 (by decide)).1 (hq 1 (by decide)).2,
+    swapImg_of_ne _ (hq 2 (by decide)).1 (hq 2 (by decide)).2,
+    swapImg_of_ne _ (hq 0 (by decide)).1 (hq 0 (by decide)).2]
+
+theorem τ_x {k : Nat} (hk : k < 4) : T.τ rs₁ rs₂ c (T.x rs₁ c k) = T.σ₈ rs₁ rs₂ c (T.y rs₂ c k) := by
+  have hx : ∀ k k', k < 4 → k' < 4 → k ≠ k' → T.x rs₁ c k ≠ T.x rs₁ c k' :=
+    fun k k' hk hk' h => T.x_ne W c hk hk' h
+  have hxy : ∀ k k', k < 4 → T.x rs₁ c k ≠ T.y rs₂ c k' := fun k k' hk => T.x_ne_y W c hc4 hk
+  have hyx : ∀ k k', k' < 4 → T.y rs₂ c k ≠ T.x rs₁ c k' := fun k k' hk' => T.y_ne_x W c hc4 hk'
+  have hy : ∀ k k', k < 4 → k' < 4 → k ≠ k' → T.y rs₂ c k ≠ T.y rs₂ c k' :=
+    fun k k' hk hk' h => T.y_ne W c hc4 hk hk' h
+  unfold τ τ₃ τ₂ τ₁
+  obtain rfl | rfl | rfl | rfl : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3 := by omega
+  · rw [swapImg_of_ne _ (hx 0 3 (by decide) (by decide) (by decide)) (hxy 0 3 (by decide)),
+      swapImg_of_ne _ (hx 0 1 (by decide) (by decide) (by decide)) (hxy 0 1 (by decide)),
+      swapImg_of_ne _ (hx 0 2 (by decide) (by decide) (by decide)) (hxy 0 2 (by decide)),
+      swapImg_left]
+  · rw [swapImg_of_ne _ (hx 1 3 (by decide) (by decide) (by decide)) (hxy 1 3 (by decide)),
+      swapImg_left,
+      swapImg_of_ne _ (hyx 1 2 (by decide)) (hy 1 2 (by decide) (by decide) (by decide)),
+      swapImg_of_ne _ (hyx 1 0 (by decide)) (hy 1 0 (by decide) (by decide) (by decide))]
+  · rw [swapImg_of_ne _ (hx 2 3 (by decide) (by decide) (by decide)) (hxy 2 3 (by decide)),
+      swapImg_of_ne _ (hx 2 1 (by decide) (by decide) (by decide)) (hxy 2 1 (by decide)),
+      swapImg_left,
+      swapImg_of_ne _ (hyx 2 0 (by decide)) (hy 2 0 (by decide) (by decide) (by decide))]
+  · rw [swapImg_left,
+      swapImg_of_ne _ (hyx 3 1 (by decide)) (hy 3 1 (by decide) (by decide) (by decide)),
+      swapImg_of_ne _ (hyx 3 2 (by decide)) (hy 3 2 (by decide) (by decide) (by decide)),
+      swapImg_of_ne _ (hyx 3 0 (by decide)) (hy 3 0 (by decide) (by decide) (by decide))]
+
+theorem τ_y {k : Nat} (hk : k < 4) : T.τ rs₁ rs₂ c (T.y rs₂ c k) = T.σ₈ rs₁ rs₂ c (T.x rs₁ c k) := by
+  have hx : ∀ k k', k < 4 → k' < 4 → k ≠ k' → T.x rs₁ c k ≠ T.x rs₁ c k' :=
+    fun k k' hk hk' h => T.x_ne W c hk hk' h
+  have hxy : ∀ k k', k < 4 → T.x rs₁ c k ≠ T.y rs₂ c k' := fun k k' hk => T.x_ne_y W c hc4 hk
+  have hyx : ∀ k k', k' < 4 → T.y rs₂ c k ≠ T.x rs₁ c k' := fun k k' hk' => T.y_ne_x W c hc4 hk'
+  have hy : ∀ k k', k < 4 → k' < 4 → k ≠ k' → T.y rs₂ c k ≠ T.y rs₂ c k' :=
+    fun k k' hk hk' h => T.y_ne W c hc4 hk hk' h
+  unfold τ τ₃ τ₂ τ₁
+  obtain rfl | rfl | rfl | rfl : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3 := by omega
+  · rw [swapImg_of_ne _ (hyx 0 3 (by decide)) (hy 0 3 (by decide) (by decide) (by decide)),
+      swapImg_of_ne _ (hyx 0 1 (by decide)) (hy 0 1 (by decide) (by decide) (by decide)),
+      swapImg_of_ne _ (hyx 0 2 (by decide)) (hy 0 2 (by decide) (by decide) (by decide)),
+      swapImg_right _ (hyx 0 0 (by decide))]
+  · rw [swapImg_of_ne _ (hyx 1 3 (by decide)) (hy 1 3 (by decide) (by decide) (by decide)),
+      swapImg_right _ (hyx 1 1 (by decide)),
+      swapImg_of_ne _ (hx 1 2 (by decide) (by decide) (by decide)) (hxy 1 2 (by decide)),
+      swapImg_of_ne _ (hx 1 0 (by decide) (by decide) (by decide)) (hxy 1 0 (by decide))]
+  · rw [swapImg_of_ne _ (hyx 2 3 (by decide)) (hy 2 3 (by decide) (by decide) (by decide)),
+      swapImg_of_ne _ (hyx 2 1 (by decide)) (hy 2 1 (by decide) (by decide) (by decide)),
+      swapImg_right _ (hyx 2 2 (by decide)),
+      swapImg_of_ne _ (hx 2 0 (by decide) (by decide) (by decide)) (hxy 2 0 (by decide))]
+  · rw [swapImg_right _ (hyx 3 3 (by decide)),
+      swapImg_of_ne _ (hx 3 1 (by decide) (by decide) (by decide)) (hxy 3 1 (by decide)),
+      swapImg_of_ne _ (hx 3 2 (by decide) (by decide) (by decide)) (hxy 3 2 (by decide)),
+      swapImg_of_ne _ (hx 3 0 (by decide) (by decide) (by decide)) (hxy 3 0 (by decide))]
+
+/-- `φ` conjugates the spliced step `τ` to the step of the spliced rotation system. -/
+theorem conj {q : Nat} (hq : q ∈ T.U) :
+    (T.splice rs₁ rs₂).stepC c (T.φ q) = T.φ (T.τ rs₁ rs₂ c q) := by
+  have hm₁ := T.e₁_lt W; have hm₂ := T.e₂_lt W
+  rw [T.stepC_splice W c hc4 (T.φ_lt W hq)]
+  rw [T.mem_U W] at hq
+  rcases hq with ⟨h1, h2⟩ | ⟨h1, h2, h3⟩
+  · rw [T.φ_of_lt h1, ← T.qe₁_xor hc4]
+    have hqc : q ^^^ c < 4 * T.m₁ := xor_lt_mul4 h1 hc4
+    have hqc' : (q ^^^ c) / 4 ≠ T.e₁ := by rw [xor_div4 _ hc4]; exact h2
+    have hlt : T.qe₁ (q ^^^ c) < T.off := T.qe₁_lt_off W hqc hqc'
+    unfold glue
+    rw [if_pos hlt, T.pre₁_qe₁ hqc']
+    have hs : rs₁.rot (q ^^^ c) = rs₁.stepC c q :=
+      (RotationSystem.stepC_eq_rot W.emb₁.total (T.size₁ W) hc4 (T.size₁ W ▸ h1)).symm
+    have hs_lt : rs₁.stepC c q < 4 * T.m₁ :=
+      T.size₁ W ▸ RotationSystem.stepC_lt W.emb₁.total W.emb₁.involution (T.size₁ W) hc4
+        (T.size₁ W ▸ h1)
+    rw [hs]
+    split
+    · rename_i he
+      obtain ⟨k, hk4, hk⟩ : ∃ k, k < 4 ∧ rs₁.stepC c q = 4 * T.e₁ + k :=
+        ⟨rs₁.stepC c q % 4, Nat.mod_lt _ (by omega), by omega⟩
+      rw [show rs₁.stepC c q % 4 = k by omega]
+      have hqx : q = T.x rs₁ c k := by
+        unfold x
+        rw [ρ₁_def, ← hk, ← hs,
+          RotationSystem.rot_rot W.emb₁.total W.emb₁.involution (T.size₁ W ▸ hqc), xor_xor_self]
+      rw [hqx, T.τ_x W c hc4 hk4, T.σ₈_y W c hc4 hk4, T.φ_add]
+    · rename_i he
+      have hnx : ∀ k, k < 4 → q ≠ T.x rs₁ c k ∧ q ≠ T.y rs₂ c k := fun k hk =>
+        ⟨fun h => he (by rw [h, T.stepC_x W c hc4 hk]; omega), fun h => by unfold y at h; omega⟩
+      rw [T.τ_of c hnx, T.σ₈_apply_of c (by rw [T.mem_P₈ W]; omega)
+        (by rw [T.σ₀_apply₁ _ _ _ h1, T.mem_P₈ W]; omega), T.σ₀_apply₁ _ _ _ h1, T.φ_of_lt hs_lt]
+  · obtain ⟨a, rfl⟩ : ∃ a, q = 4 * T.m₁ + a := ⟨q - 4 * T.m₁, by omega⟩
+    rw [Nat.add_sub_cancel_left] at h3
+    have ha : a < 4 * T.m₂ := by omega
+    rw [T.φ_add, ← T.qe₂_xor hc4]
+    have hac : a ^^^ c < 4 * T.m₂ := xor_lt_mul4 ha hc4
+    have hac' : (a ^^^ c) / 4 ≠ T.e₂ := by rw [xor_div4 _ hc4]; exact h3
+    have hge : ¬T.qe₂ (a ^^^ c) < T.off := not_lt.2 (T.off_le_qe₂ _)
+    unfold glue
+    rw [if_neg hge, T.pre₂_qe₂ hac']
+    have hs : rs₂.rot (a ^^^ c) = rs₂.stepC c a :=
+      (RotationSystem.stepC_eq_rot W.emb₂.total (T.size₂ W) hc4 (T.size₂ W ▸ ha)).symm
+    have hs_lt : rs₂.stepC c a < 4 * T.m₂ :=
+      T.size₂ W ▸ RotationSystem.stepC_lt W.emb₂.total W.emb₂.involution (T.size₂ W) hc4
+        (T.size₂ W ▸ ha)
+    rw [hs]
+    split
+    · rename_i he
+      obtain ⟨k, hk4, hk⟩ : ∃ k, k < 4 ∧ rs₂.stepC c a = 4 * T.e₂ + k :=
+        ⟨rs₂.stepC c a % 4, Nat.mod_lt _ (by omega), by omega⟩
+      rw [show rs₂.stepC c a % 4 = k by omega]
+      have hk' : k ^^^ 1 ^^^ c < 4 := xor_lt4 (xor_lt4 hk4 (by decide)) hc4
+      have hqy : 4 * T.m₁ + a = T.y rs₂ c (k ^^^ 1 ^^^ c) := by
+        unfold y; congr 1
+        rw [xor_xor_self, xor_xor_self, ρ₂_def, ← hk, ← hs,
+          RotationSystem.rot_rot W.emb₂.total W.emb₂.involution (T.size₂ W ▸ hac), xor_xor_self]
+      rw [hqy, T.τ_y W c hc4 hk', T.σ₈_x W c hc4 hk', T.φ_of_lt (T.ρ₁_lt W (xor_lt4 hk' hc4)),
+        xor_xor_self]
+    · rename_i he
+      have hnx : ∀ k, k < 4 → 4 * T.m₁ + a ≠ T.x rs₁ c k ∧ 4 * T.m₁ + a ≠ T.y rs₂ c k :=
+        fun k hk => ⟨fun h => by have := T.x_lt W c hc4 hk; omega, fun h => he (by
+          unfold y at h
+          have h' : a = T.ρ₂ rs₂ (k ^^^ c ^^^ 1) ^^^ c := by omega
+          rw [h', T.stepC_y W c hc4 hk]; have := j_lt c hc4 hk; omega)⟩
+      rw [T.τ_of c hnx, T.σ₈_apply_of c (by rw [T.mem_P₈ W]; omega)
+        (by rw [T.σ₀_apply₂, T.mem_P₈ W]; omega), T.σ₀_apply₂, T.φ_add]
+
+theorem count_splice (hc2 : c % 2 = 1)
+    (h02 : ¬(SameOrbit (T.σ₈ rs₁ rs₂ c) (T.x rs₁ c 0) (T.x rs₁ c 2) ∧
+      SameOrbit (T.σ₈ rs₁ rs₂ c) (T.y rs₂ c 0) (T.y rs₂ c 2)))
+    (h13 : ¬(SameOrbit (T.σ₈ rs₁ rs₂ c) (T.x rs₁ c 1) (T.x rs₁ c 3) ∧
+      SameOrbit (T.σ₈ rs₁ rs₂ c) (T.y rs₂ c 1) (T.y rs₂ c 3))) :
+    orbitCount ((T.splice rs₁ rs₂).stepC c) (Finset.range (4 * (T.m₁ + T.m₂ - 2))) + 4 =
+      orbitCount (rs₁.stepC c) (Finset.range (4 * T.m₁)) +
+        orbitCount (rs₂.stepC c) (Finset.range (4 * T.m₂)) := by
+  rw [orbitCount_congr (T.perm_τ W c hc4) (T.perm_splice W c hc4) (T.φ_injOn W) (T.φ_image W)
+    (fun q hq => T.conj W c hc4 hq)]
+  exact T.count_τ W c hc4 hc2 h02 h13
+
+end Conj
+
+/-! ### The two face / vertex side conditions -/
+
+section Sides
+variable (W : T.WF rs₁ rs₂)
+include W
+
+theorem virt₁_lt' : 4 * T.e₁ < rs₁.size := by
+  have := T.virt₁_lt W (k := 0) (by decide); rwa [Nat.add_zero] at this
+theorem virt₂_lt' : 4 * T.e₂ < rs₂.size := by
+  have := T.virt₂_lt W (k := 0) (by decide); rwa [Nat.add_zero] at this
+
+theorem h02_face : ¬(SameOrbit (T.σ₈ rs₁ rs₂ 3) (T.x rs₁ 3 0) (T.x rs₁ 3 2) ∧
+    SameOrbit (T.σ₈ rs₁ rs₂ 3) (T.y rs₂ 3 0) (T.y rs₂ 3 2)) := by
+  rw [T.sameOrbit_x W 3 (by decide) (by decide) (by decide),
+    T.sameOrbit_y W 3 (by decide) (by decide) (by decide)]
+  rw [show (0 ^^^ 3 ^^^ 1 : Nat) = 2 from rfl, show (2 ^^^ 3 ^^^ 1 : Nat) = 0 from rfl,
+    Nat.add_zero, Nat.add_zero]
+  rintro ⟨h1, h2⟩
+  rcases W.face with hf | hf
+  · exact hf ((RotationSystem.sameFaceOrbit_iff W.emb₁.total W.emb₁.involution (T.size₁ W)
+      (T.virt₁_lt' W)).2 h1)
+  · exact hf ((RotationSystem.sameFaceOrbit_iff W.emb₂.total W.emb₂.involution (T.size₂ W)
+      (T.virt₂_lt' W)).2 h2.symm)
+
+theorem h13_face : ¬(SameOrbit (T.σ₈ rs₁ rs₂ 3) (T.x rs₁ 3 1) (T.x rs₁ 3 3) ∧
+    SameOrbit (T.σ₈ rs₁ rs₂ 3) (T.y rs₂ 3 1) (T.y rs₂ 3 3)) := by
+  rw [T.sameOrbit_x W 3 (by decide) (by decide) (by decide),
+    T.sameOrbit_y W 3 (by decide) (by decide) (by decide)]
+  rw [show (1 ^^^ 3 ^^^ 1 : Nat) = 3 from rfl, show (3 ^^^ 3 ^^^ 1 : Nat) = 1 from rfl]
+  rintro ⟨h1, h2⟩
+  have h1' := RotationSystem.sameOrbit_stepC_xor W.emb₁.total W.emb₁.involution (T.size₁ W)
+    (by decide : 3 < 4) h1
+  have h2' := RotationSystem.sameOrbit_stepC_xor W.emb₂.total W.emb₂.involution (T.size₂ W)
+    (by decide : 3 < 4) h2
+  rw [mul4_add_xor T.e₁ 1 (by decide) (by decide), mul4_add_xor T.e₁ 3 (by decide) (by decide),
+    show (1 ^^^ 3 : Nat) = 2 from rfl, show (3 ^^^ 3 : Nat) = 0 from rfl, Nat.add_zero] at h1'
+  rw [mul4_add_xor T.e₂ 3 (by decide) (by decide), mul4_add_xor T.e₂ 1 (by decide) (by decide),
+    show (1 ^^^ 3 : Nat) = 2 from rfl, show (3 ^^^ 3 : Nat) = 0 from rfl, Nat.add_zero] at h2'
+  rcases W.face with hf | hf
+  · exact hf ((RotationSystem.sameFaceOrbit_iff W.emb₁.total W.emb₁.involution (T.size₁ W)
+      (T.virt₁_lt' W)).2 h1'.symm)
+  · exact hf ((RotationSystem.sameFaceOrbit_iff W.emb₂.total W.emb₂.involution (T.size₂ W)
+      (T.virt₂_lt' W)).2 h2')
+
+theorem h02_vert : ¬(SameOrbit (T.σ₈ rs₁ rs₂ 1) (T.x rs₁ 1 0) (T.x rs₁ 1 2) ∧
+    SameOrbit (T.σ₈ rs₁ rs₂ 1) (T.y rs₂ 1 0) (T.y rs₂ 1 2)) := by
+  rw [T.sameOrbit_x W 1 (by decide) (by decide) (by decide)]
+  rintro ⟨h1, -⟩
+  have := sameOrbit_invariant (QE.vert T.es₁)
+    (RotationSystem.vert_stepC_one W.emb₁.total W.emb₁.same_vertex (T.size₁ W)) h1
+  rw [T.vert_virt₁ W (k := 0) (by decide), T.vert_virt₁ W (k := 2) (by decide)] at this
+  simp at this
+  exact W.uv₁ this
+
+theorem h13_vert : ¬(SameOrbit (T.σ₈ rs₁ rs₂ 1) (T.x rs₁ 1 1) (T.x rs₁ 1 3) ∧
+    SameOrbit (T.σ₈ rs₁ rs₂ 1) (T.y rs₂ 1 1) (T.y rs₂ 1 3)) := by
+  rw [T.sameOrbit_x W 1 (by decide) (by decide) (by decide)]
+  rintro ⟨h1, -⟩
+  have := sameOrbit_invariant (QE.vert T.es₁)
+    (RotationSystem.vert_stepC_one W.emb₁.total W.emb₁.same_vertex (T.size₁ W)) h1
+  rw [T.vert_virt₁ W (k := 1) (by decide), T.vert_virt₁ W (k := 3) (by decide)] at this
+  simp at this
+  exact W.uv₁ this
+
+end Sides
+
+/-! ### Bridging to the computable counters of `Planar.lean` -/
+
+theorem _root_.Spqr.RotationSystem.faceFn_eq (rs : RotationSystem) :
+    stepFn rs.faceStep = rs.stepC 3 := rfl
+theorem _root_.Spqr.RotationSystem.vertexFn_eq (rs : RotationSystem) :
+    stepFn rs.vertexStep = rs.stepC 1 := rfl
+
+/-- ADMITTED (computational bridge): the marking loop `numOrbits` of `Planar.lean` counts the
+orbits of a step function that permutes `range n`. -/
+theorem _root_.Spqr.numOrbits_eq_orbitCount (step : Nat → Option Nat) (n : Nat)
+    (_h : IsPermOn (stepFn step) (Finset.range n)) :
+    numOrbits step n = orbitCount (stepFn step) (Finset.range n) := by
   sorry
 
-theorem planar (W : T.WF rs₁ rs₂) : Planar T.edges T.nVerts :=
-  ⟨_, T.splice_isPlanarEmbedding W⟩
+theorem _root_.Spqr.RotationSystem.numFaceOrbits_eq (rs : RotationSystem) (ht : rs.Total)
+    (hi : rs.Involution) {m : Nat} (hs : rs.size = 4 * m) :
+    rs.numFaceOrbits = orbitCount (rs.stepC 3) (Finset.range (4 * m)) := by
+  unfold RotationSystem.numFaceOrbits
+  rw [numOrbits_eq_orbitCount _ _ (by
+    rw [RotationSystem.faceFn_eq]; exact RotationSystem.isPermOn_stepC ht hi hs (by decide)),
+    RotationSystem.faceFn_eq, hs]
+theorem _root_.Spqr.RotationSystem.numVertexOrbits_eq (rs : RotationSystem) (ht : rs.Total)
+    (hi : rs.Involution) {m : Nat} (hs : rs.size = 4 * m) :
+    rs.numVertexOrbits = orbitCount (rs.stepC 1) (Finset.range (4 * m)) := by
+  unfold RotationSystem.numVertexOrbits
+  rw [numOrbits_eq_orbitCount _ _ (by
+    rw [RotationSystem.vertexFn_eq]; exact RotationSystem.isPermOn_stepC ht hi hs (by decide)),
+    RotationSystem.vertexFn_eq, hs]
+
+section Final
+variable (W : T.WF rs₁ rs₂)
+include W
+
+/-- Faces of the splice: `F = F₁ + F₂ − 4` (orbits counted twice, so two faces merge pairwise). -/
+theorem splice_numFaceOrbits :
+    (T.splice rs₁ rs₂).numFaceOrbits + 4 = rs₁.numFaceOrbits + rs₂.numFaceOrbits := by
+  rw [RotationSystem.numFaceOrbits_eq _ (T.splice_total W) (T.splice_involution W) T.splice_size,
+    RotationSystem.numFaceOrbits_eq _ W.emb₁.total W.emb₁.involution (T.size₁ W),
+    RotationSystem.numFaceOrbits_eq _ W.emb₂.total W.emb₂.involution (T.size₂ W)]
+  exact T.count_splice W 3 (by decide) rfl (T.h02_face W) (T.h13_face W)
+
+/-- Vertex orbits of the splice: `V = V₁ + V₂ − 4` (the two terminals are identified). -/
+theorem splice_numVertexOrbits :
+    (T.splice rs₁ rs₂).numVertexOrbits + 4 = rs₁.numVertexOrbits + rs₂.numVertexOrbits := by
+  rw [RotationSystem.numVertexOrbits_eq _ (T.splice_total W) (T.splice_involution W) T.splice_size,
+    RotationSystem.numVertexOrbits_eq _ W.emb₁.total W.emb₁.involution (T.size₁ W),
+    RotationSystem.numVertexOrbits_eq _ W.emb₂.total W.emb₂.involution (T.size₂ W)]
+  exact T.count_splice W 1 (by decide) rfl (T.h02_vert W) (T.h13_vert W)
+
+/-- ADMITTED (graph counting): the non-isolated vertices of the 2-sum are those of `G₁` plus
+those of `G₂` other than its two terminals (which are identified with `u₁, v₁`, non-isolated in
+`G₁` by `deg₁`). -/
+theorem numNonIsolated_edges :
+    numNonIsolated T.edges T.nVerts + 2 = numNonIsolated T.es₁ T.n₁ + numNonIsolated T.es₂ T.n₂ := by
+  sorry
+
+/-- ADMITTED (graph counting): components of the 2-sum, using `conn` (the virtual edge is not a
+bridge on at least one side): `C = C₁ + C₂ − 1`. -/
+theorem numComponents_edges :
+    numComponents T.edges T.nVerts + 1 = numComponents T.es₁ T.n₁ + numComponents T.es₂ T.n₂ := by
+  sorry
+
+/-- PROOF.md §8: the splice of two planar embeddings along the virtual edge is a planar embedding
+of the 2-sum. -/
+theorem splice_isPlanarEmbedding : IsPlanarEmbedding T.edges T.nVerts (T.splice rs₁ rs₂) where
+  size := by rw [T.splice_size, T.edges_length W]
+  verts := T.edges_verts W
+  total := T.splice_total W
+  involution := T.splice_involution W
+  opposite_dir := T.splice_oppositeDir W
+  same_vertex := T.splice_sameVertex W
+  vertex_orbits := by
+    have h := T.splice_numVertexOrbits W
+    have h1 := W.emb₁.vertex_orbits; have h2 := W.emb₂.vertex_orbits
+    have h3 := T.numNonIsolated_edges W
+    omega
+  euler := by
+    unfold EulerFormula
+    have h := T.splice_numFaceOrbits W
+    have h1 := W.emb₁.euler; have h2 := W.emb₂.euler
+    unfold EulerFormula at h1 h2
+    have h3 := T.numNonIsolated_edges W; have h4 := T.numComponents_edges W
+    have hm₁ : T.m₁ = T.es₁.length := rfl; have hm₂ : T.m₂ = T.es₂.length := rfl
+    have := T.e₁_lt W; have := T.e₂_lt W
+    rw [T.edges_length W]
+    omega
+
+theorem planar : Planar T.edges T.nVerts := ⟨_, T.splice_isPlanarEmbedding W⟩
+
+end Final
 
 /-- Converse (not attempted): a planar embedding of the 2-sum yields one of `G₁` by contracting
 the `G₂` side onto `e₁`. -/
