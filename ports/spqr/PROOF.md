@@ -105,19 +105,27 @@ Consequently a separation pair `{a, b}` is of one (or both) of two kinds:
   edges above `a` are allowed, they are their own classes/`above`), and both sides are non-trivial.
   Then `above ∪ prefix` and `between ∪ suffix` are unions of classes separated by `{a, b}`.
 
-**Fact C (type-2 pairs live on first-child chains) [lemma, graph theory].** If `{a, b}` is a
-type-2 pair then `b` is reached from `a` by one tree edge to some child `a'` followed by a chain
-of **first** children in sorted order: for each `x` on `P ∪ {b}` with parent `p ≠ a`, `p → x` is
-the first `ret` edge of `p`.
-*Proof.* Let `p ∈ P` have a child `x` toward `b` and suppose an earlier `ret` edge `p → y` (or
-back edge `p → anc`) exists. Then `lowpt1 y ≤ lowpt1 x ≤ l` (`T_x ⊇ T_b` reaches `a`), so `T_y`
-(or the back edge) reaches depth `≤ l`; it is part of *between* yet attaches to `above ∪ {a}`. If
-it reaches `< l`, between and above are joined: contradiction. If it reaches exactly `l` only…
-then `p → y` is type-1 for `p` with the same `l` — it is a class of its own hanging at `{p, a}`,
-and `p` is interior to the between piece; the pair `{a,b}` still separates. *(So the precise
-statement: non-first edges on the chain are allowed only if they are type-1 edges returning
-exactly to `a`; these are "virtual back edges" `p — a` and get glued to the between piece as
-leaves. The algorithm handles exactly this via `firstOccurrence`/`firstIdx`, see 4.4.)*
+**Fact C (type-2 pairs live on first-child chains) [lemma, graph theory; Lean:
+`type2_first_out`].** Let `{a, b}` be a pair whose *above* and *between* parts are separated by
+`{a, b}` (no edge of *above* is in the class of an edge of *between* — this is what "type-2"
+contributes), and let `a` have a parent (`a` is not the root). Then `b` is reached from `a` by one
+tree edge to some child `a'` followed by a chain of **first** out-edges in sorted order: for each
+`x` on `P ∪ {b}` with parent `p ≠ a`, `p → x` is the *first* out-edge of `p` — no back edge, no
+type-1 edge and no other child of `p` precedes it.
+*Proof.* `a` is not a cut vertex, so `T_{a'}` has a back edge to a proper ancestor of `a`. If it
+left from `T_{a'} − T_x` it would join *between* to *above*; hence it leaves from `T_x`, and
+`lowpt1 x < l`. An out-edge of `p` sorted before `p → x` has `lowval ≤ lowpt1 x < l`, so it (a
+back edge of `p`, or the subtree of another child of `p`) reaches a vertex above `a` from `p ∈ P`,
+again joining *between* to *above*: contradiction.
+
+*Caveat (root case).* The hypothesis that `a` is not the root is necessary. If `a` is the root
+(`l = 0`) the *above* part is empty, `{a, b}` separates only through parallel `a–b` edges (a
+bond, ≥ 3 classes), and the first-child claim fails: `T_x` returns to `a` only (`lowpt1 x = 0`),
+so an earlier out-edge of `p` with `lowval 0` — a back edge to `a`, a type-1 child returning only
+to `a`, or a type-2 child with `lowpt1 = 0` that ties with `p → x` in rank — is possible. (The
+"type-1 edges returning exactly to `l` may precede `p → x`" exception of an earlier version of
+this note only arises there; for a non-root `a` nothing precedes `p → x`.) The walk must handle
+the root/bond case separately — via `firstOccurrence`/`firstIdx`, see 4.4.
 
 Similarly, for `a` itself: `a'` need not be `a`'s first child — a type-2 pair is attached to `a`
 from whichever child.
