@@ -15,6 +15,7 @@ import Spqr.WalkPlace
 import Spqr.WalkSpec
 import Spqr.Correctness
 import Spqr.EarSpec
+import Spqr.EarShape
 import Spqr.SepPair
 import Spqr.Proofs.Postorder
 import Spqr.Proofs.SepPair
