@@ -111,11 +111,53 @@ structure WalkState.StSides (s : WalkState) (ord : Nat → Nat) (t : TEntry) : P
   nodup : (Items.vertsOf s.items (t.spans.1 ++ t.spans.2)).Nodup
   sorted : (Items.vertsOf s.items (t.spans.1 ++ t.spans.2)).Pairwise fun x y => ord x < ord y
 
+/-- The top entry is in addition oriented: read along `stackDir[topDepth]`, its vertices lie
+strictly between the upper terminal `top` and the lower terminal `vStart`. -/
 structure WalkState.StEntry (s : WalkState) (ord : Nat → Nat) (t : TEntry) : Prop
     extends s.StSides ord t where
-  oriented : ∀ x ∈ Items.vertsOf s.items (t.spans.1 ++ t.spans.2), x ≠ t.top s →
+  oriented : ∀ x ∈ Items.vertsOf s.items (t.spans.1 ++ t.spans.2),
     (s.stackDir[t.topDepth]! = false → ord (t.top s) < ord x) ∧
     (s.stackDir[t.topDepth]! = true → ord x < ord (t.top s))
+  bottom : ∀ x ∈ Items.vertsOf s.items (t.spans.1 ++ t.spans.2),
+    (s.stackDir[t.topDepth]! = false → ord x < ord t.vStart) ∧
+    (s.stackDir[t.topDepth]! = true → ord t.vStart < ord x)
+  ends : (s.stackDir[t.topDepth]! = false → ord (t.top s) < ord t.vStart) ∧
+    (s.stackDir[t.topDepth]! = true → ord t.vStart < ord (t.top s))
+
+/-- The vertices of an entry: its V items, both sides. -/
+def WalkState.entryVerts (s : WalkState) (t : TEntry) : List Nat :=
+  Items.vertsOf s.items (t.spans.1 ++ t.spans.2)
+
+/-- The skeleton edges carried by the non-V items of `l` (their `vs`). -/
+def WalkState.itemEdges (s : WalkState) (l : List ItemId) : List (Nat × Nat) :=
+  (l.filter fun c => Items.type s.items c ≠ .V).map fun c =>
+    ((Items.vs s.items c).1.getD 0, (Items.vs s.items c).2.getD 0)
+
+/-- A vertex an entry's edges may reach at depth `d`: one of its own vertices, a terminal, or an
+open-path vertex in its hole `(topDepth, d]`. -/
+def WalkState.EntryReach (s : WalkState) (d : Nat) (t : TEntry) (x : Nat) : Prop :=
+  x ∈ s.entryVerts t ∨ x = t.top s ∨ x = t.vStart ∨
+    ∃ k, t.topDepth < k ∧ k ≤ d ∧ s.stackVerts[k]! = x
+
+/-- Hole closure of a live entry relative to the numbering `ord`: its skeleton edges are oriented
+along `ord` and stay within reach, and every vertex of the entry has a lower and a higher
+neighbour along them (the hole, i.e. the open path through `(topDepth, d]`, may supply the
+endpoint). -/
+structure WalkState.StHole (s : WalkState) (ord : Nat → Nat) (d : Nat) (t : TEntry) : Prop where
+  edges : ∀ p ∈ s.itemEdges (t.spans.1 ++ t.spans.2),
+    ord p.1 < ord p.2 ∧ s.EntryReach d t p.1 ∧ s.EntryReach d t p.2
+  lower : ∀ x ∈ s.entryVerts t, ∃ p ∈ s.itemEdges (t.spans.1 ++ t.spans.2),
+    (p.1 = x ∧ ord p.2 < ord x) ∨ (p.2 = x ∧ ord p.1 < ord x)
+  upper : ∀ x ∈ s.entryVerts t, ∃ p ∈ s.itemEdges (t.spans.1 ++ t.spans.2),
+    (p.1 = x ∧ ord x < ord p.2) ∨ (p.2 = x ∧ ord x < ord p.1)
+
+/-- Close-site condition on the hole of `t` (the st-side of `WalkSpec.FinishTopOk.mid`): every
+open-path vertex in `(topDepth, d]` is the lower terminal, one of the entry's own vertices, or
+not an endpoint of any of its edges. -/
+def WalkState.HoleClosed (s : WalkState) (d : Nat) (t : TEntry) : Prop :=
+  ∀ k, t.topDepth < k → k ≤ d →
+    s.stackVerts[k]! = t.vStart ∨ s.stackVerts[k]! ∈ s.entryVerts t ∨
+    ∀ p ∈ s.itemEdges (t.spans.1 ++ t.spans.2), p.1 ≠ s.stackVerts[k]! ∧ p.2 ≠ s.stackVerts[k]!
 
 /-- The st-invariant of a walk state at depth `d`: every entry attached at or above the current
 depth has sorted, distinct sides; the top entry is in addition oriented towards its upper
@@ -123,6 +165,7 @@ terminal; and whenever `finishEdge` closes the top entry it is st-numbered. -/
 structure WalkState.StInv (s : WalkState) (d : Nat) (ord : Nat → Nat) : Prop where
   sides : ∀ t ∈ s.tstack, t.topDepth ≤ d → s.StSides ord t
   top : ∀ t, s.tstack.head? = some t → t.topDepth ≤ d → s.StEntry ord t
+  hole : ∀ t ∈ s.tstack, t.topDepth ≤ d → s.StHole ord d t
   items : ∀ i, i < s.items.size →
     Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R →
     Items.StItem s.items i
@@ -153,11 +196,155 @@ theorem chain_stackDir_const (s : WalkState) (l d : Nat) (ord : Nat → Nat) (hi
   have h := hinv.onSide t ht hd hj
   rwa [hchain t.topDepth hl (Nat.le_of_lt hd)] at h
 
-/-- Admitted: the top entry is closable whenever `finishEdge` closes it
-(the `finishTstackTop` calls in the type-1, type-2 and block-boundary branches). -/
-theorem finishEdge_topClosable (s : WalkState) (d : Nat) (ord : Nat → Nat) (hinv : s.StInv d ord) :
-    s.TopClosable := by
-  sorry
+theorem idxOf_lt_idxOf_iff (ord : Nat → Nat) (xs : List Nat)
+    (hs : xs.Pairwise fun x y => ord x < ord y) {a b : Nat} (ha : a ∈ xs) (hb : b ∈ xs) :
+    xs.idxOf a < xs.idxOf b ↔ ord a < ord b := by
+  have ha' := List.idxOf_lt_length_iff.2 ha
+  have hb' := List.idxOf_lt_length_iff.2 hb
+  have key : ∀ {x y : Nat}, x ∈ xs → y ∈ xs → xs.idxOf x < xs.idxOf y → ord x < ord y := by
+    intro x y hx hy hlt
+    have hx' := List.idxOf_lt_length_iff.2 hx
+    have hy' := List.idxOf_lt_length_iff.2 hy
+    have := List.pairwise_iff_getElem.1 hs _ _ hx' hy' hlt
+    rwa [List.getElem_idxOf, List.getElem_idxOf] at this
+  refine ⟨key ha hb, fun h => ?_⟩
+  rcases Nat.lt_trichotomy (xs.idxOf a) (xs.idxOf b) with hlt | heq | hgt
+  · exact hlt
+  · have : a = b := by
+      rw [← List.getElem_idxOf ha', ← List.getElem_idxOf hb']
+      simp only [heq]
+    subst this; exact absurd h (Nat.lt_irrefl _)
+  · exact absurd (key hb ha hgt) (Nat.not_lt.2 (Nat.le_of_lt h))
+
+/-- An `ord`-increasing vertex list `a :: verts ++ [b]` whose edges are oriented along `ord`,
+stay inside the list and give every interior vertex a lower and a higher neighbour is an
+`StList`, with every edge oriented along it. -/
+theorem stList_of_sorted (ord : Nat → Nat) (a b : Nat) (verts : List Nat) (es : List (Nat × Nat))
+    (hab : ord a < ord b) (ha : ∀ x ∈ verts, ord a < ord x) (hb : ∀ x ∈ verts, ord x < ord b)
+    (hsorted : verts.Pairwise fun x y => ord x < ord y)
+    (hes : ∀ p ∈ es, ord p.1 < ord p.2 ∧ p.1 ∈ a :: (verts ++ [b]) ∧ p.2 ∈ a :: (verts ++ [b]))
+    (hlow : ∀ x ∈ verts, ∃ p ∈ es, (p.1 = x ∧ ord p.2 < ord x) ∨ (p.2 = x ∧ ord p.1 < ord x))
+    (hup : ∀ x ∈ verts, ∃ p ∈ es, (p.1 = x ∧ ord x < ord p.2) ∨ (p.2 = x ∧ ord x < ord p.1)) :
+    Items.StList (a :: (verts ++ [b])) ((a, b) :: es) ∧
+    ∀ p ∈ es, (a :: (verts ++ [b])).idxOf p.1 < (a :: (verts ++ [b])).idxOf p.2 := by
+  set xs := a :: (verts ++ [b]) with hxs
+  have hpw : xs.Pairwise fun x y => ord x < ord y := by
+    rw [hxs, List.pairwise_cons, List.pairwise_append]
+    refine ⟨fun x hx => ?_, hsorted, by simp, fun x hx y hy => ?_⟩
+    · simp only [List.mem_append, List.mem_singleton] at hx
+      rcases hx with hx | rfl
+      · exact ha x hx
+      · exact hab
+    · simp only [List.mem_singleton] at hy; subst hy; exact hb x hx
+  have hmem : ∀ x, x ∈ xs ↔ x = a ∨ x ∈ verts ∨ x = b := by
+    intro x; simp [hxs]
+  have hidx : ∀ {x y : Nat}, x ∈ xs → y ∈ xs → (xs.idxOf x < xs.idxOf y ↔ ord x < ord y) :=
+    fun hx hy => idxOf_lt_idxOf_iff ord xs hpw hx hy
+  have hirr : Std.Irrefl fun x y : Nat => ord x < ord y := ⟨fun x => Nat.lt_irrefl (ord x)⟩
+  have hnodup : xs.Nodup := hpw.nodup
+  have hesx : ∀ p ∈ (a, b) :: es, ord p.1 < ord p.2 ∧ p.1 ∈ xs ∧ p.2 ∈ xs := by
+    intro p hp
+    simp only [List.mem_cons] at hp
+    rcases hp with rfl | hp
+    · exact ⟨hab, by simp [hxs], by simp [hxs]⟩
+    · exact hes p hp
+  refine ⟨⟨hnodup, fun p hp => ?_, fun x hx hhd hlast => ?_⟩, fun p hp => ?_⟩
+  · obtain ⟨h1, h2, h3⟩ := hesx p hp
+    exact ⟨h2, h3, fun h => by rw [h] at h1; exact Nat.lt_irrefl _ h1⟩
+  · have hxv : x ∈ verts := by
+      rcases (hmem x).1 hx with rfl | hxv | rfl
+      · exact absurd rfl hhd
+      · exact hxv
+      · exact absurd (by rw [hxs, ← List.cons_append, List.getLast?_concat]) hlast
+    refine ⟨?_, ?_⟩
+    · obtain ⟨p, hp, hcase⟩ := hlow x hxv
+      obtain ⟨-, h1, h2⟩ := hesx p (List.mem_cons_of_mem _ hp)
+      refine ⟨p, List.mem_cons_of_mem _ hp, ?_⟩
+      rcases hcase with ⟨rfl, hlt⟩ | ⟨rfl, hlt⟩
+      · exact Or.inl ⟨rfl, (hidx h2 h1).2 hlt⟩
+      · exact Or.inr ⟨rfl, (hidx h1 h2).2 hlt⟩
+    · obtain ⟨p, hp, hcase⟩ := hup x hxv
+      obtain ⟨-, h1, h2⟩ := hesx p (List.mem_cons_of_mem _ hp)
+      refine ⟨p, List.mem_cons_of_mem _ hp, ?_⟩
+      rcases hcase with ⟨rfl, hlt⟩ | ⟨rfl, hlt⟩
+      · exact Or.inl ⟨rfl, (hidx h1 h2).2 hlt⟩
+      · exact Or.inr ⟨rfl, (hidx h2 h1).2 hlt⟩
+  · obtain ⟨h1, h2, h3⟩ := hes p hp
+    exact (hidx h2 h3).2 h1
+
+theorem getSide_eq_append_of_onSide {t : TEntry} {dir : Bool} (h : t.OnSide dir) :
+    getSide t.spans dir = t.spans.1 ++ t.spans.2 := by
+  unfold TEntry.OnSide getSide at *
+  cases dir <;> simp_all
+
+theorem entryVertList_eq (s : WalkState) (t : TEntry) :
+    s.entryVertList t =
+      (setSides s.stackDir[t.topDepth]! (some (t.top s)) (some t.vStart)).1.toList ++
+        Items.vertsOf s.items (getSide t.spans s.stackDir[t.topDepth]!) ++
+        (setSides s.stackDir[t.topDepth]! (some (t.top s)) (some t.vStart)).2.toList := rfl
+
+theorem entryEdges_eq (s : WalkState) (t : TEntry) :
+    s.entryEdges t =
+      ((setSides s.stackDir[t.topDepth]! (some (t.top s)) (some t.vStart)).1.getD 0,
+        (setSides s.stackDir[t.topDepth]! (some (t.top s)) (some t.vStart)).2.getD 0) ::
+        s.itemEdges (getSide t.spans s.stackDir[t.topDepth]!) := rfl
+
+/-- Closability of a one-sided live entry from the invariant: `StEntry` gives the `ord`-increasing
+vertex list between the terminals, `StHole` the neighbours, and the close-site condition
+`HoleClosed` keeps the edges inside the list.  (The earlier statement `StInv d ord → TopClosable`
+is not provable: the top entry's edges may reach into its hole before the hole has been closed,
+see `PROOF.md` §7.4.) -/
+theorem stInv_topClosable (s : WalkState) (d : Nat) (ord : Nat → Nat) (hinv : s.StInv d ord)
+    (t : TEntry) (ht : s.tstack.head? = some t) (htd : t.topDepth ≤ d)
+    (hside : t.OnSide s.stackDir[t.topDepth]!) (hclosed : s.HoleClosed d t) :
+    Items.StList (s.entryVertList t) (s.entryEdges t) ∧
+    ∀ p ∈ (s.entryEdges t).tail, (s.entryVertList t).idxOf p.1 < (s.entryVertList t).idxOf p.2 := by
+  have htm : t ∈ s.tstack := List.mem_of_mem_head? ht
+  have hent := hinv.top t ht htd
+  have hhole := hinv.hole t htm htd
+  have hsideq := getSide_eq_append_of_onSide hside
+  have hreach : ∀ x, s.EntryReach d t x →
+      (∃ p ∈ s.itemEdges (t.spans.1 ++ t.spans.2), p.1 = x ∨ p.2 = x) →
+      x ∈ s.entryVerts t ∨ x = t.top s ∨ x = t.vStart := by
+    intro x hr ⟨p, hp, hpx⟩
+    rcases hr with h | h | h | ⟨k, hk1, hk2, hk⟩
+    · exact Or.inl h
+    · exact Or.inr (Or.inl h)
+    · exact Or.inr (Or.inr h)
+    · rcases hclosed k hk1 hk2 with h | h | h
+      · exact Or.inr (Or.inr (hk ▸ h))
+      · exact Or.inl (hk ▸ h)
+      · exact absurd hpx (by have := h p hp; rw [hk] at this; tauto)
+  have hmem : ∀ a b x, x ∈ s.entryVerts t ∨ x = a ∨ x = b → x ∈ a :: (s.entryVerts t ++ [b]) := by
+    intro a b x h; simp only [List.mem_cons, List.mem_append]; tauto
+  have hmem' : ∀ a b x, x ∈ s.entryVerts t ∨ x = b ∨ x = a → x ∈ a :: (s.entryVerts t ++ [b]) := by
+    intro a b x h; simp only [List.mem_cons, List.mem_append]; tauto
+  have hes : ∀ (a b : Nat),
+      (∀ x, x ∈ s.entryVerts t ∨ x = t.top s ∨ x = t.vStart → x ∈ a :: (s.entryVerts t ++ [b])) →
+      ∀ p ∈ s.itemEdges (t.spans.1 ++ t.spans.2),
+        ord p.1 < ord p.2 ∧ p.1 ∈ a :: (s.entryVerts t ++ [b]) ∧ p.2 ∈ a :: (s.entryVerts t ++ [b]) := by
+    intro a b hm p hp
+    obtain ⟨h1, h2, h3⟩ := hhole.edges p hp
+    exact ⟨h1, hm _ (hreach p.1 h2 ⟨p, hp, Or.inl rfl⟩), hm _ (hreach p.2 h3 ⟨p, hp, Or.inr rfl⟩)⟩
+  have hsorted : (s.entryVerts t).Pairwise fun x y => ord x < ord y := hent.sorted
+  have hor := hent.oriented
+  have hbot := hent.bottom
+  have hends := hent.ends
+  have hlow := hhole.lower
+  have hup := hhole.upper
+  rw [entryVertList_eq, entryEdges_eq, hsideq]
+  generalize hdir : s.stackDir[t.topDepth]! = dir at hor hbot hends ⊢
+  cases dir
+  · simp only [setSides, Bool.false_eq_true, ↓reduceIte, Option.toList,
+      List.cons_append, Option.getD_some, List.tail_cons]
+    exact stList_of_sorted ord (t.top s) t.vStart (s.entryVerts t) _ (hends.1 rfl)
+      (fun x hx => (hor x hx).1 rfl) (fun x hx => (hbot x hx).1 rfl) hsorted
+      (hes _ _ (hmem _ _)) hlow hup
+  · simp only [setSides, ↓reduceIte, Option.toList,
+      List.cons_append, Option.getD_some, List.tail_cons]
+    exact stList_of_sorted ord t.vStart (t.top s) (s.entryVerts t) _ (hends.2 rfl)
+      (fun x hx => (hbot x hx).2 rfl) (fun x hx => (hor x hx).2 rfl) hsorted
+      (hes _ _ (hmem' _ _)) hlow hup
 
 /-- Admitted: `finishEdge` preserves the st-invariant. -/
 theorem finishEdge_stInv (s : WalkState) (curV d : Nat) (o : DfsOut) (origTstack : Nat)
