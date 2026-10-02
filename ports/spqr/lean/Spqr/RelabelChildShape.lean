@@ -1,6 +1,7 @@
 import Spqr.PlanarShape
 import Spqr.RelabelRep
 import Spqr.WalkWF
+import Spqr.RelabelWF
 
 /-!
 # `ChildShape` of the relabelled tree
@@ -30,6 +31,23 @@ theorem childShape : t.ChildShape where
     obtain ⟨i, hi, rfl⟩ := h.idx_surj hn
     rw [h.type_eq hi] at hty
     exact h.children_nil hi (h.shapes.i_o_leaf i hi hty.symm)
+  tile := by
+    intro n hn k hk
+    obtain ⟨i, hi, rfl⟩ := h.idx_surj hn
+    have H : RelabelAll g items t idx := ⟨h.wf, h.ridx, h.node⟩
+    obtain ⟨pos, hl⟩ := (h.node i hi).layout
+    set L := items.ordered g i (t.nvRange (idx i)).1 pos with hL
+    rw [hl.children] at hk ⊢
+    simp only [List.length_map, ← hL] at hk ⊢
+    rw [getElem!_pos _ k (by simpa using hk), List.getElem_map, ← getElem!_pos L k hk,
+      RelabelAll.child_idx_eq hl hk, ← hL, ← H.children_sum hl k hk.le]
+    have : (((L.map idx).take k).map fun c => t.subtreeEnd[c]! - c) =
+        (List.range k).map fun j => t.subtreeEnd[idx L[j]!]! - idx L[j]! := by
+      apply List.ext_getElem (by simp; omega)
+      intro j h1 h2
+      simp only [List.getElem_map, List.getElem_take, List.getElem_range]
+      rw [getElem!_pos L j (by simp at h2; omega)]
+    rw [this]; simp only [← hL]; omega
 
 end RelabelOK
 
