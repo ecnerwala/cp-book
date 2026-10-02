@@ -231,4 +231,133 @@ end
 
 end RotationSystem
 
+theorem HasEdge.exists_quarter {es : List (Nat × Nat)} {v : Nat} (h : HasEdge es v) :
+    ∃ a, a < 4 * es.length ∧ a % 2 = 0 ∧ QE.vert es a = some v := by
+  obtain ⟨p, hp, hpv⟩ := h
+  obtain ⟨i, hi, rfl⟩ := List.mem_iff_getElem.1 hp
+  rcases hpv with h | h
+  · refine ⟨4 * i, by omega, by omega, ?_⟩
+    unfold QE.vert
+    rw [show QE.edge (4 * i) = i by unfold QE.edge; omega,
+      show QE.side (4 * i) = 0 by unfold QE.side; omega, List.getElem?_eq_getElem hi]
+    simp [h]
+  · refine ⟨4 * i + 2, by omega, by omega, ?_⟩
+    unfold QE.vert
+    rw [show QE.edge (4 * i + 2) = i by unfold QE.edge; omega,
+      show QE.side (4 * i + 2) = 1 by unfold QE.side; omega, List.getElem?_eq_getElem hi]
+    simp [h]
+
+theorem numNonIsolated_ident {es : List (Nat × Nat)} {n a b : Nat} (hab : a ≠ b) (ha : a < n)
+    (hb : b < n) (hea : HasEdge es a) (heb : HasEdge es b) :
+    numNonIsolated (identEdges a b es) n + 1 = numNonIsolated es n := by
+  rw [numNonIsolated_eq_card, numNonIsolated_eq_card]
+  have : (Finset.range n).filter (HasEdge es) =
+      insert b ((Finset.range n).filter (HasEdge (identEdges a b es))) := by
+    ext v
+    simp only [Finset.mem_insert, Finset.mem_filter, Finset.mem_range]
+    by_cases hv : v = b
+    · subst hv; simp [hb, heb]
+    · simp only [hv, false_or]
+      by_cases hva : v = a
+      · subst hva; simp [ha, hea, hasEdge_ident_a hab hea]
+      · rw [hasEdge_ident_of_ne hva hv]
+  rw [this, Finset.card_insert_of_notMem]
+  rw [Finset.mem_filter]
+  exact fun h => not_hasEdge_ident_b hab h.2
+
+/-- The 1-sum on the disjoint union: identify `v₁` (with an edge in `es₁`) and `n₁ + v₂` (with
+an edge in `es₂`) by conjugating `rs₁.union rs₂` with a transposition of two of their
+quarter-edges. -/
+theorem IsPlanarEmbedding.oneSum {es₁ es₂ : List (Nat × Nat)} {n₁ n₂ : Nat}
+    {rs₁ rs₂ : RotationSystem} (h₁ : IsPlanarEmbedding es₁ n₁ rs₁)
+    (h₂ : IsPlanarEmbedding es₂ n₂ rs₂) {v₁ v₂ : Nat} (hv₁ : HasEdge es₁ v₁)
+    (hv₂ : HasEdge es₂ v₂) :
+    Planar (identEdges v₁ (n₁ + v₂) (es₁ ++ shiftEdges n₁ es₂)) (n₁ + n₂) := by
+  obtain ⟨a, ha, ha2, hva⟩ := hv₁.exists_quarter
+  obtain ⟨b₂, hb₂, hb2, hvb⟩ := hv₂.exists_quarter
+  have hU := h₁.union h₂
+  have hs₁ := h₁.size
+  have hs₂ := h₂.size
+  have hsz := hU.size
+  have hv₁n : v₁ < n₁ := hv₁.lt_of h₁.verts
+  have hv₂n : v₂ < n₂ := hv₂.lt_of h₂.verts
+  have hw : v₁ ≠ n₁ + v₂ := by omega
+  set rs := rs₁.union rs₂ with hrs
+  set es := es₁ ++ shiftEdges n₁ es₂ with hes
+  set b := rs₁.size + b₂ with hbdef
+  have hsU : rs.size = rs₁.size + rs₂.size := RotationSystem.union_size rs₁ rs₂
+  have ha' : a < rs.size := by omega
+  have hb : b < rs.size := by omega
+  have hab : a ≠ b := by omega
+  have hab2 : a % 2 = b % 2 := by omega
+  have hrota : rs.rot a < rs₁.size := by
+    have := rs.get_eq_rot hU.total ha'
+    rw [RotationSystem.union_get_lt _ _ (by omega)] at this
+    exact (h₁.involution a (by omega) _ (by rw [this]; rfl)).1
+  have hrotb : rs₁.size ≤ rs.rot b := by
+    have := rs.get_eq_rot hU.total hb
+    rw [RotationSystem.union_get_ge _ _ (by omega), Option.map_eq_some_iff] at this
+    obtain ⟨r', -, hr'⟩ := this
+    omega
+  have hrab : rs.rot a ≠ b := by omega
+  have hC : ∀ c, c < 4 → ∀ z, z < rs₁.size ↔ rs.stepC c z < rs₁.size := by
+    intro c hc z
+    rw [RotationSystem.union_stepC _ _ hs₁ hc]
+    unfold unionStep shift
+    simp only [Finset.mem_range]
+    by_cases hz : z < rs₁.size
+    · simp only [hz, ↓reduceIte, true_iff]
+      exact RotationSystem.stepC_lt h₁.total h₁.involution hs₁ hc hz
+    · simp only [hz, ↓reduceIte, false_iff, not_lt]
+      omega
+  have hCa : ∀ c, c < 4 → a ^^^ c < rs₁.size := fun c hc => hs₁ ▸ xor_lt_mul4 (hs₁ ▸ ha) hc
+  have hCb : ∀ c, c < 4 → ¬b ^^^ c < rs₁.size := fun c hc =>
+    not_lt.2 (hs₁ ▸ ge_of_xor_ge (hs₁ ▸ (by omega : rs₁.size ≤ b)) hc)
+  have hCra : ∀ c, c < 4 → rs.rot a ^^^ c < rs₁.size := fun c hc =>
+    hs₁ ▸ xor_lt_mul4 (hs₁ ▸ hrota) hc
+  have hCrb : ∀ c, c < 4 → ¬rs.rot b ^^^ c < rs₁.size := fun c hc =>
+    not_lt.2 (hs₁ ▸ ge_of_xor_ge (hs₁ ▸ hrotb) hc)
+  have hva' : QE.vert es a = some v₁ := by
+    rw [hes, vert_append_left (by omega)]; exact hva
+  have hwb : QE.vert es b = some (n₁ + v₂) := by
+    rw [hes, hbdef, hs₁, vert_shiftEdges_add, hvb]; rfl
+  have hev : ∀ p ∈ identEdges v₁ (n₁ + v₂) es, p.1 < n₁ + n₂ ∧ p.2 < n₁ + n₂ := by
+    intro p hp
+    obtain ⟨q, hq, rfl⟩ := mem_identEdges.1 hp
+    have := hU.verts q hq
+    simp only [ident]
+    split_ifs <;> omega
+  have hea : HasEdge es v₁ := hasEdge_union_iff.2 (Or.inl hv₁)
+  have heb : HasEdge es (n₁ + v₂) := hasEdge_union_iff.2 (Or.inr ⟨v₂, rfl, hv₂⟩)
+  have hnc : ¬EdgesConn es v₁ (n₁ + v₂) := fun h =>
+    by have := (edgesConn_union_left h₁.verts hv₁n h).1; omega
+  have hVO := RotationSystem.conj_numVertexOrbits rs a b hU.total hU.involution hU.opposite_dir
+    ha' hb hab hrab hsz (fun z => z < rs₁.size) (hC 1 (by decide)) (hCa 1 (by decide))
+    (hCb 1 (by decide)) (hCra 1 (by decide)) (hCrb 1 (by decide))
+  have hFO := RotationSystem.conj_numFaceOrbits rs a b hU.total hU.involution hU.opposite_dir
+    ha' hb hab hrab hsz (fun z => z < rs₁.size) (hC 3 (by decide)) (hCa 3 (by decide))
+    (hCb 3 (by decide)) (hCra 3 (by decide)) (hCrb 3 (by decide))
+  have hNI := numNonIsolated_ident (n := n₁ + n₂) hw (by omega) (by omega) hea heb
+  have hCC := ccCount_ident_of_not_conn (n := n₁ + n₂) hw (by omega) (by omega) hea heb hnc
+  refine ⟨rs.conj a b, ?_⟩
+  exact {
+    size := by
+      rw [RotationSystem.conj_size, hsz]
+      simp [identEdges]
+    verts := hev
+    total := RotationSystem.conj_total rs a b hU.total ha' hb
+    involution := RotationSystem.conj_involution rs a b hU.total hU.involution ha' hb
+    opposite_dir := RotationSystem.conj_oppositeDir rs a b hU.total hU.opposite_dir ha' hb hab2
+    same_vertex := RotationSystem.conj_sameVertex rs a b hU.total ha' hb hU.same_vertex hva' hwb
+    vertex_orbits := by
+      have := hU.vertex_orbits
+      omega
+    euler := by
+      unfold EulerFormula
+      have hE := hU.euler
+      unfold EulerFormula at hE
+      rw [numComponents_eq_ccCount hev, numComponents_eq_ccCount hU.verts] at *
+      simp only [identEdges, List.length_map] at *
+      omega }
+
 end Spqr
