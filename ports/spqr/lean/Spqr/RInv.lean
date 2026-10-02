@@ -24,8 +24,11 @@ invariant of the tstack:
   touches both its terminals, no edge of `nxt` joins `cur`'s terminals (those are `cur`'s own
   parallel edges, P-merged into `cur`), both entries are nonempty and the union is proper.
 
-`Proofs/RInv.lean` derives `RStep` and `RContent` from `RInv ∧ RBranch ∧ Inv (d+1)`, so
-`RStep.threeConnected'` gives the 3-connected R skeleton.
+`Proofs/RInv.lean` derives `RStep` and `RContent` from `RTop ∧ RBranch ∧ Inv (d+1)` (`RTop`: the
+two top entries' `EntryR` and disjointness, all the R branch reads), so `RStep.threeConnected'`
+gives the 3-connected R skeleton. `RInv` is not an invariant of every intermediate state (the
+fresh tree-edge entry of `pushEdgeTstack`, or `cur` just before a P merge, is not `maximal`);
+`RInvAt` is the form settled at the current vertex.
 -/
 
 namespace Spqr
@@ -86,6 +89,22 @@ structure EntryR (s : WalkState) (dfs : DfsData) (t : TEntry) : Prop where
 /-- The R-maximality invariant of the tstack. -/
 structure RInv (s : WalkState) (dfs : DfsData) : Prop where
   entries : ∀ t ∈ s.tstack, s.EntryR dfs t
+  disj : s.tstack.Pairwise fun t t' => ∀ e, t.edges s.g s.items e → ¬t'.edges s.g s.items e
+
+/-- The content facts Loop 1's R branch reads: `EntryR` of its two top entries and their
+edge-disjointness. -/
+structure RTop (s : WalkState) (dfs : DfsData) (cur nxt : TEntry) : Prop where
+  entry_cur : s.EntryR dfs cur
+  entry_nxt : s.EntryR dfs nxt
+  disj : ∀ e, cur.edges s.g s.items e → ¬nxt.edges s.g s.items e
+
+/-- `RInv` settled at the vertex `v` being walked. An entry with bottom `v` is still collecting
+`v`'s classes at its top: a `(v, l)` entry's complement contains the `(v, l)` classes of `v`'s
+later out-edges until the P-check merges them (two parallel back edges `v → stackVerts[l]`: after
+the first is pushed its single-edge entry is not `maximal`), so such entries are exempt until `v`
+is finished (`walkTree_rInvAt`). -/
+structure RInvAt (s : WalkState) (dfs : DfsData) (v : Nat) : Prop where
+  entries : ∀ t ∈ s.tstack, t.vStart ≠ v → s.EntryR dfs t
   disj : s.tstack.Pairwise fun t t' => ∀ e, t.edges s.g s.items e → ¬t'.edges s.g s.items e
 
 /-- The stack shape at Loop 1's R branch (`loop1Type` returns `.R` while `finishEdge` runs at

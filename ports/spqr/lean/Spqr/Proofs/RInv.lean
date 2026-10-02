@@ -5,7 +5,7 @@ import Spqr.Proofs.Type2
 /-!
 # `RStep` and `RContent` from the R-maximality invariant (PROOF.md §4.5, walk side)
 
-At Loop 1's R branch, `RInv` (per-entry content facts, edge-disjoint entries) together with the
+At Loop 1's R branch, `RTop` (`EntryR` of the two top entries, their edge-disjointness) together with the
 branch shape `RBranch` and `Inv (d+1)` give `WalkState.RStep` and `WalkState.RContent`:
 
 * `pieces`: the merged items are the two entries' pieces, disjoint across entries;
@@ -46,27 +46,26 @@ theorem sepClass_of_common {a b v e e' : Nat} (hv : v ≠ a) (hv' : v ≠ b) (he
     (he' : s.g.IsEnd e' v) : s.g.SepClass a b e e' :=
   Graph.EdgeConn.of_reach he he' (.refl ⟨hv, hv'⟩)
 
-theorem RBranch.disj (hR : s.RInv dfs) (hb : s.RBranch d cur nxt rest) {e : Nat}
-    (hc : cur.edges s.g s.items e) (hn : nxt.edges s.g s.items e) : False := by
-  have := hR.disj
-  rw [hb.tstack, List.pairwise_cons] at this
-  exact this.1 nxt (List.mem_cons_self ..) e hc hn
+theorem RInv.toRTop (hR : s.RInv dfs) (hs : s.tstack = cur :: nxt :: rest) : s.RTop dfs cur nxt := by
+  have hd := hR.disj
+  rw [hs, List.pairwise_cons] at hd
+  exact ⟨hR.entries cur (by simp [hs]), hR.entries nxt (by simp [hs]), hd.1 nxt (List.mem_cons_self ..)⟩
 
-theorem RBranch.entry_cur (hR : s.RInv dfs) (hb : s.RBranch d cur nxt rest) : s.EntryR dfs cur :=
-  hR.entries cur (by simp [hb.tstack])
+theorem RInvAt.toRTop {v : Nat} (hR : s.RInvAt dfs v) (hs : s.tstack = cur :: nxt :: rest)
+    (hc : cur.vStart ≠ v) (hn : nxt.vStart ≠ v) : s.RTop dfs cur nxt := by
+  have hd := hR.disj
+  rw [hs, List.pairwise_cons] at hd
+  exact ⟨hR.entries cur (by simp [hs]) hc, hR.entries nxt (by simp [hs]) hn,
+    hd.1 nxt (List.mem_cons_self ..)⟩
 
-theorem RBranch.entry_nxt (hR : s.RInv dfs) (hb : s.RBranch d cur nxt rest) : s.EntryR dfs nxt :=
-  hR.entries nxt (by simp [hb.tstack])
-
-/-- The merged items are pairwise edge-disjoint pieces. -/
-theorem RBranch.pieceItems (hR : s.RInv dfs) (hb : s.RBranch d cur nxt rest) :
+theorem RBranch.pieceItems (hR : s.RTop dfs cur nxt) (hb : s.RBranch d cur nxt rest) :
     s.PieceItems (s.rPieceItems cur nxt) := by
-  have hc := (hb.entry_cur hR).pieces
-  have hn := (hb.entry_nxt hR).pieces
+  have hc := (hR.entry_cur).pieces
+  have hn := (hR.entry_nxt).pieces
   have both : ∀ i, i ∈ s.entryPieceItems cur → i ∈ s.entryPieceItems nxt → False := by
     intro i hic hin
     obtain ⟨e, -, he⟩ := hc.ne i hic
-    exact hb.disj hR (edges_of_entryPieceItems hic he) (edges_of_entryPieceItems hin he)
+    exact hR.disj _ (edges_of_entryPieceItems hic he) (edges_of_entryPieceItems hin he)
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact rPieceItems_perm.nodup_iff.2
       (List.nodup_append.2 ⟨hc.nodup, hn.nodup, by intro i hic j hjn hij; subst hij; exact both i hic hjn⟩)
@@ -89,11 +88,11 @@ theorem RBranch.pieceItems (hR : s.RInv dfs) (hb : s.RBranch d cur nxt rest) :
   · intro i hi j hj hij e hei hej
     rcases mem_rPieceItems_iff.1 hi with hi | hi <;> rcases mem_rPieceItems_iff.1 hj with hj | hj
     · exact hc.disj i hi j hj hij e hei hej
-    · exact hb.disj hR (edges_of_entryPieceItems hi hei) (edges_of_entryPieceItems hj hej)
-    · exact hb.disj hR (edges_of_entryPieceItems hj hej) (edges_of_entryPieceItems hi hei)
+    · exact hR.disj _ (edges_of_entryPieceItems hi hei) (edges_of_entryPieceItems hj hej)
+    · exact hR.disj _ (edges_of_entryPieceItems hj hej) (edges_of_entryPieceItems hi hei)
     · exact hn.disj i hi j hj hij e hei hej
 
-theorem RBranch.rStep (hR : s.RInv dfs) (hb : s.RBranch d cur nxt rest) :
+theorem RBranch.rStep (hR : s.RTop dfs cur nxt) (hb : s.RBranch d cur nxt rest) :
     s.RStep d cur nxt rest :=
   ⟨hb.tstack, hb.cur_top, hb.nxt_top, hb.ne, hb.interior, hb.cur_ne, hb.nxt_ne, hb.proper,
     hb.pieceItems hR⟩
@@ -106,7 +105,7 @@ theorem RBranch.hmid (hb : s.RBranch d cur nxt rest) :
 
 section Content
 
-variable (hR : s.RInv dfs) (hb : s.RBranch d cur nxt rest)
+variable (hR : s.RTop dfs cur nxt) (hb : s.RBranch d cur nxt rest)
 include hR hb
 
 local notation "L" => s.rPieceItems cur nxt
@@ -185,12 +184,12 @@ theorem RBranch.laminar_union {K : Nat → Prop} {a b : Nat} (hKlt : ∀ e, K e 
 
 end Content
 
-/-- `RContent` at the R branch, from `RInv`, the branch shape, and `Inv (d+1)`. -/
+/-- `RContent` at the R branch, from `RTop`, the branch shape, and `Inv (d+1)`. -/
 theorem RBranch.rContent (h : s.Inv (d + 1)) (h2 : s.g.TwoConnected) (hs : dfs.Spec s.g)
-    (hR : s.RInv dfs) (hb : s.RBranch d cur nxt rest) : s.RContent dfs d cur nxt := by
+    (hR : s.RTop dfs cur nxt) (hb : s.RBranch d cur nxt rest) : s.RContent dfs d cur nxt := by
   have hr := hb.rStep hR
-  have hcur := hb.entry_cur hR
-  have hnxt := hb.entry_nxt hR
+  have hcur := hR.entry_cur
+  have hnxt := hR.entry_nxt
   obtain ⟨e₀, he₀, hU₀⟩ := hb.proper
   obtain ⟨e₁, he₁, hE₁⟩ := hb.cur_ne
   have hcurA := hr.cur_attached h hb.hmid
@@ -210,7 +209,7 @@ theorem RBranch.rContent (h : s.Inv (d + 1)) (h2 : s.g.TwoConnected) (hs : dfs.S
   have hbot : ¬s.g.Touches (cur.edges s.g s.items) nxt.vStart := by
     rintro ⟨e₄, he₄, hE₄, hv₄⟩
     obtain ⟨e₅, he₅, hE₅, hv₅⟩ := hb.nxt_touch_bot
-    rcases hcurA _ e₄ e₅ he₄ he₅ hE₄ (fun h => hb.disj hR h hE₅) hv₄ hv₅ with h | h
+    rcases hcurA _ e₄ e₅ he₄ he₅ hE₄ (fun h => hR.disj _ h hE₅) hv₄ hv₅ with h | h
     · exact hb.ne h
     · exact hne h
   -- the shared vertex outside a skeleton pair
@@ -237,7 +236,7 @@ theorem RBranch.rContent (h : s.Inv (d + 1)) (h2 : s.g.TwoConnected) (hs : dfs.S
     have hnA : ¬s.g.TwoAttached (nxt.edges s.g s.items) nxt.vStart s.stackVerts[nxt.topDepth]! := by
       rw [hb.nxt_top]
       intro hA
-      rcases hA _ e₂ e₃ he₂ he₃ hE₂ (fun h => hb.disj hR hE₃ h) hv₂ hv₃ with h | h
+      rcases hA _ e₂ e₃ he₂ he₃ hE₂ (fun h => hR.disj _ hE₃ h) hv₂ hv₃ with h | h
       · exact hb.ne h.symm
       · exact hcu h
     have hn : ∀ e e', e < s.g.ne → e' < s.g.ne → nxt.edges s.g s.items e →
@@ -317,7 +316,7 @@ theorem RBranch.rContent (h : s.Inv (d + 1)) (h2 : s.g.TwoConnected) (hs : dfs.S
           rcases hv.eq_or hj₁ with rfl | rfl
           · exact hj₂.isEnd
           · exact hj₂.symm.isEnd
-        exact hcurA v f₁ f₂ hj₁.lt hj₂.lt hE₁ (fun h => hb.disj hR h hE₂)
+        exact hcurA v f₁ f₂ hj₁.lt hj₂.lt hE₁ (fun h => hR.disj _ h hE₂)
           (Graph.isEnd_iff.1 hv).2 (Graph.isEnd_iff.1 hv₂).2
       rcases hend a hj₁.isEnd with rfl | rfl <;> rcases hend b hj₁.symm.isEnd with rfl | rfl
       · exact hab rfl
@@ -350,9 +349,9 @@ theorem RBranch.rContent (h : s.Inv (d + 1)) (h2 : s.g.TwoConnected) (hs : dfs.S
       (hnxt.type2 a b (hb.entrySkelPair hR (.inr rfl) hsk) ht2 o ho hot hanc)
 
 /-- The R skeleton closed at Loop 1's R branch is 3-connected, from the walk invariants
-`RInv`, `RBranch`, and `Inv (d+1)` (no `RContent`/`RStep` hypothesis). -/
+`RTop`, `RBranch`, and `Inv (d+1)` (no `RContent`/`RStep` hypothesis). -/
 theorem RBranch.threeConnected (h : s.Inv (d + 1)) (h2 : s.g.TwoConnected) (hs : dfs.Spec s.g)
-    (hrt : dfs.Rooted s.g) (hR : s.RInv dfs) (hb : s.RBranch d cur nxt rest) :
+    (hrt : dfs.Rooted s.g) (hR : s.RTop dfs cur nxt) (hb : s.RBranch d cur nxt rest) :
     (((Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).addParent s.g (s.rU cur nxt)
       nxt.vStart s.stackVerts[d]!).contract s.g).ThreeConnected :=
   (hb.rStep hR).threeConnected' h hb.hmid h2 hs hrt (hb.rContent h h2 hs hR)
