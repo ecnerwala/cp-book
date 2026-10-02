@@ -1554,6 +1554,176 @@ theorem run_entries (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv
       Array.getElem!_set!_self _ _ _ (by rw [hsz4]; omega)]
   · rw [Array.getElem!_set!_self _ _ _ (by rw [Array.size_set!, hsz4]; omega)]
 
+theorem length_filter_range_getD {α : Type} [Inhabited α] (A : List α) (q : α → Bool) :
+    ((List.range A.length).filter fun k => q (A.getD k default)).length = (A.filter q).length := by
+  induction A with
+  | nil => rfl
+  | cons a A ih =>
+    rw [List.length_cons, List.range_succ_eq_map, List.filter_cons, List.filter_map, List.filter_cons]
+    simp only [List.getD_cons_zero, Function.comp_def, Nat.succ_eq_add_one, List.getD_cons_succ]
+    split_ifs <;> simp only [List.length_cons, List.length_map, ih]
+
+/-- `Layout.Local` for R. Hypotheses as in `shape_R` (`Items.Shapes.r_shape` after `vertPos`). -/
+theorem local_R (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn) (hne : neEn = neSt + E.length + 1) :
+    (layoutNode .R node nvSt nvEn neSt neEn E).Local node nvSt nvEn neSt neEn := by
+  have hs := local_R_sizes node nvSt nvEn neSt neEn E hv hE hne
+  rw [LayoutR.layoutNode_R_eq _ _ _ _ _ _ hv] at hs ⊢
+  obtain ⟨s1, s2, s3, s4, s5, s6, s7⟩ := hs
+  obtain ⟨hsz, hget⟩ := run_edges node nvSt nvEn neSt neEn E hv hE hne
+  obtain ⟨hent, hdec, hcap0, hcap1⟩ := run_entries node nvSt nvEn neSt neEn E hv hE hne
+  have hend := start_end nvSt nvEn neSt E hv hE
+  have htwo := start_two nvSt nvEn neSt E hv hE
+  have hrb := run_rowBound node nvSt nvEn neSt neEn E hv hE hne
+  generalize LayoutR.run node nvSt nvEn neSt neEn E = l at s1 s2 s3 s4 s5 s6 s7 hsz hget hent hdec hcap0 hcap1 hrb ⊢
+  have hrow : ∀ r, 2 * nvSt ≤ r → r < 2 * nvEn →
+      row nvSt neSt l r = (List.range (cnt (r + 1) (allE nvSt nvEn E))).map fun j =>
+        l.adjDat[start nvSt neSt (allE nvSt nvEn E) (r + 1) + j - 2 * neSt]! := by
+    intro r h1 h2
+    unfold LayoutR.row
+    rw [hrb r h1 (by omega), hrb (r + 1) (by omega) (by omega),
+      start_succ nvSt neSt (allE nvSt nvEn E) (r + 1) (by omega), Nat.add_sub_cancel_left]
+  have hbump : ∀ i, (i = 2 * nvSt + 2 ∧ bump nvSt i = 1) ∨ (i ≠ 2 * nvSt + 2 ∧ bump nvSt i = 0) := by
+    intro i; unfold bump; split_ifs with h <;> simp [h]
+  have hcnt : ∀ i, (i = 2 * nvEn - 1 ∧ cnt i (allE nvSt nvEn E) = bump nvSt i + 1 + cnt i E) ∨
+      (i ≠ 2 * nvEn - 1 ∧ cnt i (allE nvSt nvEn E) = bump nvSt i + cnt i E) := by
+    intro i; rw [cnt_allE _ _ _ hv]; split_ifs with h <;> simp [h]
+  have hentry : ∀ r, 2 * nvSt ≤ r → r < 2 * nvEn → ∀ j, j < cnt (r + 1) (allE nvSt nvEn E) →
+      (r + 1 = 2 * nvSt + 2 ∧ j = 0 ∧
+        l.adjDat[start nvSt neSt (allE nvSt nvEn E) (r + 1) + j - 2 * neSt]! = ⟨neSt, nvEn - 1⟩) ∨
+      (bump nvSt (r + 1) ≤ j ∧ j < bump nvSt (r + 1) + cnt (r + 1) E ∧
+        start nvSt neSt (allE nvSt nvEn E) (r + 1) + j - 2 * neSt =
+          slot nvSt nvEn neSt E (r + 1) (j - bump nvSt (r + 1))) ∨
+      (r + 1 = 2 * nvEn - 1 ∧ j = cnt (r + 1) E ∧
+        l.adjDat[start nvSt neSt (allE nvSt nvEn E) (r + 1) + j - 2 * neSt]! = ⟨neSt, nvSt⟩) := by
+    intro r h1 h2 j hj
+    have hb := hbump (r + 1)
+    have hc := hcnt (r + 1)
+    have hge := start_ge nvSt neSt (allE nvSt nvEn E) (r + 1)
+    have hs := start_succ nvSt neSt (allE nvSt nvEn E) (r + 1) (by omega)
+    by_cases hA : r + 1 = 2 * nvSt + 2 ∧ j = 0
+    · left
+      refine ⟨hA.1, hA.2, ?_⟩
+      rw [hA.1, hA.2, htwo, Nat.add_zero, Nat.sub_self]
+      exact hcap0
+    · by_cases hC : r + 1 = 2 * nvEn - 1 ∧ j = cnt (r + 1) E
+      · right; right
+        refine ⟨hC.1, hC.2, ?_⟩
+        rw [show r + 1 + 1 = 2 * nvEn by omega, hend] at hs
+        rw [show start nvSt neSt (allE nvSt nvEn E) (r + 1) + j - 2 * neSt =
+          2 * neEn - 1 - 2 * neSt by omega]
+        exact hcap1
+      · right; left
+        unfold slot
+        exact ⟨by omega, by omega, by omega⟩
+  have hdest : ∀ r, 2 * nvSt ≤ r → r < 2 * nvEn → ∀ a ∈ row nvSt neSt l r,
+      neSt ≤ a.ne ∧ a.ne < neEn ∧
+      (a.destNv = l.edges[a.ne - neSt]!.nvs.1 ∨ a.destNv = l.edges[a.ne - neSt]!.nvs.2) := by
+    intro r h1 h2 a ha
+    rw [hrow r h1 h2] at ha
+    simp only [List.mem_map, List.mem_range] at ha
+    obtain ⟨j, hj, rfl⟩ := ha
+    rcases hentry r h1 h2 j hj with ⟨_, _, heq⟩ | ⟨hb1, hb2, heq⟩ | ⟨_, _, heq⟩
+    · rw [heq]; dsimp only
+      refine ⟨Nat.le_refl _, by omega, ?_⟩
+      rw [Nat.sub_self, hget 0 (by omega)]; simp
+    · rw [heq]
+      obtain ⟨e1, e2, e3, e4⟩ := hent (r + 1) (by omega) (by omega) (j - bump nvSt (r + 1)) (by omega)
+      generalize l.adjDat[slot nvSt nvEn neSt E (r + 1) (j - bump nvSt (r + 1))]! = a at e1 e2 e3 e4 ⊢
+      refine ⟨by omega, e2, ?_⟩
+      rw [e4, hget (a.ne - neSt) (by omega), if_neg (by omega)]
+      unfold other chEdge
+      dsimp only
+      rw [show a.ne - neSt - 1 = a.ne - 1 - neSt by omega]
+      split_ifs <;> simp
+    · rw [heq]; dsimp only
+      refine ⟨Nat.le_refl _, by omega, ?_⟩
+      rw [Nat.sub_self, hget 0 (by omega)]; simp
+  have hperm : ∀ r, 2 * nvSt ≤ r → r < 2 * nvEn →
+      ((row nvSt neSt l r).map (·.ne)).Perm
+        (((List.range l.edges.size).filter fun k => hits (r + 1) l.edges[k]!.nvs).map (· + neSt)) := by
+    intro r h1 h2
+    have hb := hbump (r + 1)
+    have hc := hcnt (r + 1)
+    rw [hrow r h1 h2, List.map_map]
+    simp only [Function.comp_def]
+    refine (List.subperm_of_subset ?_ ?_).perm_of_length_le ?_
+    · refine List.nodup_range.map_on ?_
+      intro x hx y hy hxy
+      rw [List.mem_range] at hx hy
+      have key : ∀ x y, x < cnt (r + 1) (allE nvSt nvEn E) → y < cnt (r + 1) (allE nvSt nvEn E) →
+          x < y →
+          (l.adjDat[start nvSt neSt (allE nvSt nvEn E) (r + 1) + x - 2 * neSt]!).ne ≠
+          (l.adjDat[start nvSt neSt (allE nvSt nvEn E) (r + 1) + y - 2 * neSt]!).ne := by
+        intro x y hx hy hlt
+        rcases hentry r h1 h2 x hx with ⟨a1, a2, a3⟩ | ⟨b1, b2, b3⟩ | ⟨c1, c2, c3⟩ <;>
+          rcases hentry r h1 h2 y hy with ⟨a1', a2', a3'⟩ | ⟨b1', b2', b3'⟩ | ⟨c1', c2', c3'⟩
+        · omega
+        · rw [a3, b3']
+          have := (hent (r + 1) (by omega) (by omega) (y - bump nvSt (r + 1)) (by omega)).1
+          dsimp only; omega
+        · omega
+        · omega
+        · rw [b3, b3']
+          exact Nat.ne_of_gt (hdec (r + 1) (by omega) (by omega) _ _ (by omega) (by omega))
+        · rw [b3, c3']
+          have := (hent (r + 1) (by omega) (by omega) (x - bump nvSt (r + 1)) (by omega)).1
+          dsimp only; omega
+        · omega
+        · omega
+        · omega
+      rcases Nat.lt_trichotomy x y with h | h | h
+      · exact absurd hxy (key x y hx hy h)
+      · exact h
+      · exact absurd hxy.symm (key y x hy hx h)
+    · intro x hx
+      simp only [List.mem_map, List.mem_range] at hx
+      obtain ⟨j, hj, rfl⟩ := hx
+      rw [List.mem_map]
+      rcases hentry r h1 h2 j hj with ⟨a1, a2, a3⟩ | ⟨b1, b2, b3⟩ | ⟨c1, c2, c3⟩
+      · refine ⟨0, List.mem_filter.2 ⟨List.mem_range.2 (by omega), ?_⟩, ?_⟩
+        · rw [hget 0 (by omega), a1]; simp [hits]
+        · rw [a3]; simp
+      · rw [b3]
+        obtain ⟨e1, e2, e3, e4⟩ :=
+          hent (r + 1) (by omega) (by omega) (j - bump nvSt (r + 1)) (by omega)
+        generalize l.adjDat[slot nvSt nvEn neSt E (r + 1) (j - bump nvSt (r + 1))]! = a
+          at e1 e2 e3 e4 ⊢
+        refine ⟨a.ne - neSt, List.mem_filter.2 ⟨List.mem_range.2 (by omega), ?_⟩,
+          show a.ne - neSt + neSt = a.ne by omega⟩
+        rw [hget (a.ne - neSt) (by omega), if_neg (by omega)]
+        unfold chEdge at e3
+        dsimp only
+        rw [show a.ne - neSt - 1 = a.ne - 1 - neSt by omega]
+        exact e3
+      · refine ⟨0, List.mem_filter.2 ⟨List.mem_range.2 (by omega), ?_⟩, ?_⟩
+        · rw [hget 0 (by omega), c1]; simp [hits] <;> omega
+        · rw [c3]; simp
+    · rw [List.length_map, List.length_map, List.length_range, hsz]
+      have hpred : ∀ k ∈ List.range (E.length + 1),
+          hits (r + 1) l.edges[k]!.nvs = hits (r + 1) ((allE nvSt nvEn E).getD k default) := by
+        intro k hk
+        rw [List.mem_range] at hk
+        rw [hget k hk]
+        split_ifs with h0
+        · subst h0; simp [allE]
+        · obtain ⟨k', rfl⟩ : ∃ k', k = k' + 1 := ⟨k - 1, by omega⟩
+          simp only [allE, List.getD_cons_succ, Nat.add_sub_cancel]
+      have hfc := List.filter_congr hpred
+      rw [hfc, show E.length + 1 = (allE nvSt nvEn E).length from rfl, length_filter_range_getD]
+      exact Nat.le_refl _
+  refine ⟨s1, s2, s3, s4, s5, s6, s7, hdest, fun nv h1 h2 => ?_, fun nv h1 h2 => ?_⟩
+  · have hf : ((List.range l.edges.size).filter fun k => hits (2 * nv + 1) l.edges[k]!.nvs) =
+        (List.range l.edges.size).filter fun k => l.edges[k]!.nvs.2 = nv :=
+      List.filter_congr fun k _ => by rw [Bool.eq_iff_iff, hits_iff, decide_eq_true_eq]; omega
+    rw [← hf]
+    exact hperm (2 * nv) (by omega) (by omega)
+  · have hf : ((List.range l.edges.size).filter fun k => hits (2 * nv + 1 + 1) l.edges[k]!.nvs) =
+        (List.range l.edges.size).filter fun k => l.edges[k]!.nvs.1 = nv :=
+      List.filter_congr fun k _ => by rw [Bool.eq_iff_iff, hits_iff, decide_eq_true_eq]; omega
+    rw [← hf]
+    exact hperm (2 * nv + 1) (by omega) (by omega)
+
 end RNe
 
 end LayoutShape
