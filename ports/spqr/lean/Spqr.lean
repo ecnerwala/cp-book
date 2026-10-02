@@ -37,6 +37,7 @@ import Spqr.Proofs.PieceAppend
 import Spqr.PlanarEmbedClose
 import Spqr.Proofs.PlanarEmbedCounterexample
 import Spqr.Proofs.PlanarEmbedVCounterexample
+import Spqr.Proofs.PlanarSplice
 import Spqr.Proofs.Postorder
 import Spqr.Proofs.SepPair
 import Spqr.Blocks
