@@ -233,6 +233,8 @@ def closeCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : Wa
   if s₂.stackDir[lowval]! ≠ s.stackDir[lowval]! then out := bad₂ "close_dir_l" "" :: out
   for t in base do
     if !sameEdges (E₂ t) (entryEdges s t) then out := bad₂ "close_base_edges" (showT t) :: out
+    for i in spanItems t do
+      if !hasParent s i && hasParent s₂ i then out := bad₂ "close_base_root" (showT t) :: out
   if !pairwiseDisjB s₂ s₂.tstack then out := bad₂ "close_disj" "" :: out
   if !pairwiseSpanDisjB s₂.tstack then out := bad₂ "close_span_disj" "" :: out
   let subE := subEdgesL o

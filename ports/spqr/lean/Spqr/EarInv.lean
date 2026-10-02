@@ -180,6 +180,8 @@ structure EarClose (curV d l : Nat) (o : DfsOut) (hasVert : Bool) (base : List T
   dir_l : st.stackDir[l]! = s.stackDir[l]!
   c_top : l ≤ c.topDepth ∧ c.topDepth ≤ d
   base_edges : ∀ t ∈ base, ∀ e, t.edges s.g st.items e ↔ t.edges s.g s.items e
+  base_root : ∀ t ∈ base, ∀ i ∈ t.spans.1 ++ t.spans.2, (∀ p, ¬ Items.IsParent s.items p i) →
+    ∀ p, ¬ Items.IsParent st.items p i
   disj : st.tstack.Pairwise fun t t' => ∀ e, e < s.g.ne → t.edges s.g st.items e → ¬ t'.edges s.g st.items e
   span_disj : st.tstack.Pairwise fun t t' => ∀ i ∈ t.spans.1 ++ t.spans.2, i ∉ t'.spans.1 ++ t'.spans.2
   sub_edges : ∀ t ∈ c :: mid ++ [py, vy], ∀ e, e < s.g.ne → t.edges s.g st.items e → subEdges o e

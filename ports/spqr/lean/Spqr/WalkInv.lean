@@ -87,9 +87,19 @@ theorem ear_closeVert (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.is
 
 /-- The P-check after the vertex close. -/
 theorem ear_finishP_vert (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
-    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = true) :
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = true)
+    (hD : D = d + 1) (hlen : base.length = origTstack) (hi₂ : (feS₂ d o s).Inv' D) (hs₂ : Shape (feS₂ d o s))
+    (hs₃ : Shape (feS₃ curV d o origTstack s)) (he : o.e < s.g.ne)
+    (hends : Items.PairEq (o.dest, s.stackVerts[d]!) s.g.edges[o.e]!) :
     FinishPOk D curV lv o.cls.isType1 (feS₃ curV d o origTstack s) := by
-  sorry
+  have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
+  cases ht1 : o.cls.isType1
+  · exact ⟨fun h => by simp [result, run_condP] at h⟩
+  obtain ⟨c, mid, py, vy, hC⟩ := hE.close ht (by rw [hlv]; exact hlow)
+  subst hv hD hlen
+  unfold feS₃ at hs₃ ⊢
+  rw [ht1] at hs₃ ⊢
+  exact hlv ▸ finishPOk_type1_of_close _ hE hC rfl hi₂ hs₂ hs₃ ht ht1 (by rw [hlv]; exact hlow) he hends
 
 /-- The P-check of a first tree edge (no vertex entry yet). -/
 theorem ear_finishP_tree (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
@@ -180,7 +190,7 @@ theorem ear_finishP_back (ho : o.cls = .ret lv kind) (hlow : lv < d) (hb : o.cls
       · exact hiq (List.mem_singleton.1 ((mem_setSides dir [q] i).1 hmem))
       · exact (List.pairwise_cons.1 hpws).1 t ht i hib hmem
   -- the close
-  obtain ⟨b', hts₃, hg₃, hsv₃, hsd₃, hbv', hbt', hside', hbE', hallE⟩ :=
+  obtain ⟨b', hts₃, hg₃, hsv₃, hsd₃, hbv', hbt', hside', hbE', hallE, -⟩ :=
     maybeUnwrapNxt_edges (s := s₂) (ty := .P) hsB (by decide) hts₂' (i := i)
       (by rw [hbt]; exact hbside) (by rw [hbt]; exact hbsingle)
   set s₃ := after (maybeUnwrapNxt .P) s₂ with hs₃
@@ -290,12 +300,18 @@ theorem finishOk_of_guards (ho : o.cls = .ret lv kind) (hlow : lv < d)
   have st₂ : o.cls.isTree = true → Step D curV (feS₁ d o s) (feS₂ d o s) := fun ht =>
     Step.mergeLate (st₁ ht).inv (st₁ ht).shape (by rw [(st₁ ht).g]; exact hv₀)
       (ear_mergeLate ho hlow ht hg hE hi hs (by rw [hD, if_pos ht]))
+  have hv₂ : o.cls.isTree = true → curV < (feS₂ d o s).g.nv := fun ht => by
+    rw [(st₂ ht).g, (st₁ ht).g]; exact hv₀
+  have st₃ : o.cls.isTree = true → hasVert = true → Step D curV (feS₂ d o s) (feS₃ curV d o origTstack s) :=
+    fun ht hv' => Step.closeVert' (st₂ ht).inv (st₂ ht).shape (hv₂ ht)
+      (ear_closeVert ho hlow ht hg hE hi hs hv' (by rw [hD, if_pos ht]) hlen (st₂ ht).shape)
   refine
     { e_lt := he
       ears := hears
       late := fun ht => ear_mergeLate ho hlow ht hg hE hi hs (by rw [hD, if_pos ht])
       vert := fun ht hv' => ear_closeVert ho hlow ht hg hE hi hs hv' (by rw [hD, if_pos ht]) hlen (st₂ ht).shape
-      rest_vert := fun ht hv' => ⟨ear_finishP_vert ho hlow ht hg hE hi hs hv',
+      rest_vert := fun ht hv' => ⟨ear_finishP_vert ho hlow ht hg hE hi hs hv' (by rw [hD, if_pos ht]) hlen
+          (st₂ ht).inv (st₂ ht).shape (st₃ ht hv').shape he (by simpa [ht] using hends),
         fun h => by simp [hv'] at h, fun h => by simp [hv'] at h, fun h => by simp [hv'] at h⟩
       rest_tree := fun ht hv' => ?_
       q := fun _ => hq
