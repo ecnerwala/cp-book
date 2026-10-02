@@ -15,6 +15,8 @@ structure PieceSep : Prop where
   v_attach : ∀ i v, i < t.size → t.type i = .V → t.origId[i]! = some v →
     ∀ a ∈ t.children i, ∀ b ∈ t.children i, a ≠ b →
       ∀ w, t.Touches g a w → t.Touches g b w → w = v
+  v_nonempty : ∀ i, i < t.size → t.type i = .V →
+    ∀ c ∈ t.children i, ∃ e, t.EdgeIn c e
   q_root_attach : ∀ i c w e, i < t.size → t.type i = .Q →
     t.children i = [c, w] → t.type w = .V → t.origId[i]! = some e →
       ∀ v e', t.Touches g i v → Graph.Incident g v e' → ¬ t.EdgeIn i e' →

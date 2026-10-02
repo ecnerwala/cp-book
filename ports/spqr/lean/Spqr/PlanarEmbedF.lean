@@ -73,7 +73,7 @@ theorem embedItem_step_F (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
   have hroot : ∀ q, ¬(closeList (t.children 0) s).exposedAt 0 q := by
     intro q
     simpa only [EmbedState.exposedAt, closeList_outerE] using h.outer_unprocessed 0 (by omega) q
-  refine ⟨⟨⟨?_, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩, ?_⟩
+  refine ⟨⟨⟨⟨?_, ?_, ?_, ?_, ?_⟩, ?_, ?_⟩, ?_⟩, ?_, ?_⟩
   · rw [closeList_rotAdj_size, h.rot_size]
   · rw [closeList_outerE, h.outer_size]
   · intro j hj; omega
@@ -103,5 +103,13 @@ theorem embedItem_step_F (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree
   · intro j p v q hj hp hv he
     apply h.outer_at_vertex j p v q hj hp hv
     simpa only [EmbedState.exposedAt, closeList_outerE] using he
+  · intro j k q hk
+    rw [closeList_outerE] at hk
+    exact h.outer_dir j k q hk
+  · intro j hj hjs p hp hpt hne
+    have hj0 : j ≠ 0 := by
+      intro hh; subst j; rw [hwf.preorder.root_par] at hp; cases hp
+    obtain ⟨q, hq⟩ := h.outer_present j (by omega) hjs p hp hpt hne
+    exact ⟨q, by simpa only [EmbedState.exposedAt, closeList_outerE] using hq⟩
 
 end Spqr.PlanarSpqrTree

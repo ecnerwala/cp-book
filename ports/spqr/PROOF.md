@@ -1446,10 +1446,10 @@ and an item whose parent is F or V exposes only slots 0/1.
 The initialization and leaf proofs preserve these fields; `badState_excluded` proves
 the counterexample is excluded. `CheckPieceSep` checks these fields after every item
 of every successful planar fold. Seeds 0..300 and the four tiny cases again give zero violations.
-`GluedUpTo` extends `GluedSlots` with `outer_at_vertex`: exposed ends of a child
+`GluedAttachments` extends `GluedSlots` with `outer_at_vertex`: exposed ends of a child
 of a V item for original vertex `v` must be at `v` in `g.edges`.
-The V/Q/node steps still need further boundary-existence / endpoint / cofacial audits;
-these corrections are not a claim that their current statements are sufficient.
+The V/Q/node steps still need endpoint / cofacial audits; these corrections are not
+a claim that their current statements are sufficient.
 
 The attachment condition is necessary already on the two-edge star
 `nv=3, edges=[(0,1),(0,2)]`. Its items are `F,V(0),Q(0),I,V(1),Q(1),I,V(2)`.
@@ -1464,6 +1464,26 @@ this comparison is empirical, not a kernel proof of tree well-formedness.
 `outer_at_vertex` excludes that state and is preserved by the initialization, leaf,
 and F proofs. The checker validates it after every item as well: seeds 0..300 and
 the four tiny graphs all give zero violations.
+
+The attachment condition alone still permits a fully closed pair of child pieces.
+On the same star, set `rotAdj=[1,0,3,2,5,4,7,6]` and leave every outer row empty.
+Each child has a planar one-edge rotation, so `GluedAttachments 2` holds, but V does
+no linking and leaves eight vertex orbits instead of `2 * 3 = 6`.
+`closedVState_before` and `closedVState_after` prove this failure with only standard
+axioms. `GluedUpTo` now extends `GluedAttachments` with `outer_present`: a processed
+nonempty piece whose parent is V has an exposed end. It also records `outer_dir`,
+the equality of the quarter-edge direction and slot parity needed by the specified
+1-sum transposition. Initialization, leaf, and F preservation are proved; the
+closed counterexample is excluded by `closedVState_excluded`.
+
+V's executable loop cannot ignore an empty child after starting its chain: such a
+child clears the last endpoint. The structural `PieceSep.v_nonempty` clause says
+every child of V contains an original edge; together with `outer_present`, the
+paired-end invariant, and slot support this supplies slots 0/1 for each child.
+The new structural clause and both boundary conditions were checked before use,
+on seeds 0..300 and the single-edge/star/self-loop/isolated-vertices cases, with
+zero violations. `spqrTree_pieceSep` remains the one named admission for this
+structural predicate; no additional admission was introduced.
 
 `embedItem_step_F` is proved in `PlanarEmbedF.lean` with the strengthened invariant.
 `only_root_F` reduces the item to index 0; `closeList_get` identifies each

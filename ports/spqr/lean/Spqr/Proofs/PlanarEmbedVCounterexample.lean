@@ -130,4 +130,104 @@ theorem badVState_excluded : ¬starTree.GluedUpTo starGraph 2 badVState := by
   have : (some 1 : Option Nat) = some 0 := hv
   cases this
 
+def closedVState : EmbedState :=
+  ⟨#[some 1, some 0, some 3, some 2, some 5, some 4, some 7, some 6],
+    Array.replicate 8 (Array.replicate 4 none)⟩
+
+theorem closedVState_before : starTree.GluedAttachments starGraph 2 closedVState := by
+  have hout : ∀ j q, ¬closedVState.exposedAt j q := by
+    intro j q ⟨k, hk⟩
+    by_cases hj : j < 8 <;> by_cases hkl : k < 4 <;>
+      simp [closedVState, hj, hkl] at hk
+  refine ⟨⟨⟨by decide, by decide, fun j _ q => hout j q, ?_, ?_⟩, ?_, ?_⟩, ?_⟩
+  · intro q hq
+    have h0 := hq 2 (by omega) (by decide)
+    have h1 := hq 5 (by omega) (by decide)
+    change QE.edge q ∉ [0] at h0
+    change QE.edge q ∉ [1] at h1
+    have hge : 8 ≤ q := by simp [QE.edge] at h0 h1; omega
+    exact Or.inl (Array.getElem?_eq_none hge)
+  · intro j hj
+    have hjs : j < 8 := hj.2.1
+    have hj' : j = 2 ∨ j = 5 := by
+      interval_cases j <;> simp_all [PlanarSpqrTree.Maximal, starTree]
+    rcases hj' with rfl | rfl
+    all_goals refine ⟨edgeRot, ?_, ?_, ?_, ?_⟩
+    case inl.refine_1 => exact starEdgeRot_planar 0 (by decide)
+    case inr.refine_1 => exact starEdgeRot_planar 1 (by decide)
+    case inl.refine_2 | inr.refine_2 =>
+      intro q r hq hr
+      first | change q / 4 ∈ [0] at hq | change q / 4 ∈ [1] at hq
+      simp only [List.mem_singleton] at hq
+      have hql : q < 8 := by omega
+      interval_cases q <;> norm_num at hq <;> simp [closedVState] at hr <;> subst r
+      all_goals first
+        | exact ⟨0, 1, by decide, by decide, by decide⟩
+        | exact ⟨1, 0, by decide, by decide, by decide⟩
+        | exact ⟨2, 3, by decide, by decide, by decide⟩
+        | exact ⟨3, 2, by decide, by decide, by decide⟩
+    case inl.refine_3 | inr.refine_3 =>
+      intro q hq
+      first | change q / 4 ∈ [0] at hq | change q / 4 ∈ [1] at hq
+      simp only [List.mem_singleton] at hq
+      have hql : q < 8 := by omega
+      simp only [hout, iff_false]
+      interval_cases q <;> norm_num at hq <;> decide
+    case inl.refine_4 | inr.refine_4 =>
+      intro k hk
+      interval_cases k <;> simp [closedVState]
+  · intro j hj
+    change j < 8 at hj
+    simp [closedVState, getElem!_pos, hj]
+  · intro j k q hk
+    exact (hout j q ⟨k, hk⟩).elim
+  · intro j p v q _ _ _ he
+    exact (hout j q he).elim
+
+theorem closedVState_after :
+    ¬starTree.GluedAttachments starGraph 1 ((starTree.embedItem 1).run closedVState).2 := by
+  intro h
+  obtain ⟨ρ, hρ, ha, _, _⟩ := h.piece 1 ⟨by decide, by decide, by
+    intro p hp
+    have : p = 0 := by simpa [starTree] using hp.symm
+    omega⟩
+  have hs : ρ.rotAdj.size = 8 := hρ.size
+  have hget : ∀ q, q < 8 → ρ.get q = closedVState.rotAdj[q]!.map id := by
+    intro q hq
+    have hm : (starTree.pieceBelow starGraph 1).Mem q := by
+      change q / 4 ∈ [0, 1]
+      simp only [List.mem_cons]
+      omega
+    have hrun : ((starTree.embedItem 1).run closedVState).2.rotAdj[q]? =
+        some (some (q ^^^ 1)) := by interval_cases q <;> decide
+    have hlocal : ∀ k, k < 8 → (starTree.pieceBelow starGraph 1).loc k = some k := by
+      intro k hk
+      interval_cases k <;> decide
+    have hqr : q ^^^ 1 < 8 := by interval_cases q <;> decide
+    obtain ⟨a, b, hla, hlb, hab⟩ := ha q (q ^^^ 1) hm hrun
+    have ha' := Option.some.inj (hla.symm.trans (hlocal q hq))
+    have hb' := Option.some.inj (hlb.symm.trans (hlocal (q ^^^ 1) hqr))
+    subst a; subst b
+    interval_cases q <;> exact hab
+  have heq : ρ.rotAdj = closedVState.rotAdj := by
+    apply Array.ext
+    · exact hs
+    · intro q hq hq'
+      have hg := hget q (by omega)
+      rw [RotationSystem.get, Array.getElem?_eq_getElem hq] at hg
+      simpa [Option.bind_some, getElem!_pos closedVState.rotAdj q hq'] using hg
+  have hvo := hρ.vertex_orbits
+  have hr : ρ = ⟨closedVState.rotAdj⟩ := by cases ρ; cases heq; rfl
+  rw [hr] at hvo
+  have ho : (RotationSystem.mk closedVState.rotAdj).numVertexOrbits = 8 := by decide
+  have hn : numNonIsolated (starTree.pieceBelow starGraph 1).es starGraph.nv = 3 := by decide
+  rw [ho, hn] at hvo
+  omega
+
+theorem closedVState_excluded : ¬starTree.GluedUpTo starGraph 2 closedVState := by
+  intro h
+  obtain ⟨q, k, hk⟩ := h.outer_present 2 (by decide) (by decide) 1
+    (by rfl) (by rfl) (by decide)
+  by_cases hkl : k < 4 <;> simp [closedVState, hkl] at hk
+
 end Spqr.PlanarEmbedCounterexample
