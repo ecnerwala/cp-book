@@ -28,6 +28,7 @@ import Spqr.SepPairExhaust
 import Spqr.Proofs.SepPairExhaust
 import Spqr.StSpec
 import Spqr.StWalk
+import Spqr.StEar
 import Spqr.Planar
 import Spqr.PlanarWalk
 import Spqr.PlanarRelabel
