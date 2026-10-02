@@ -600,7 +600,8 @@ gives), and `((nvSt, nvEn-1) :: E).Nodup`. The last one needs `r_shape`'s clause
 virtual edge is parallel to the node's own `vs` (the cap edge; the key-`Nodup` clause alone only
 makes the children pairwise distinct): `r_skeleton_nodup` derives it from the two clauses through
 the position map `vertPos` (injective on the node's vertices).
-`PlanarSpec.neRotAdj_segment` reads no adjacency row (it is about `layoutRot`, which does not look
+`PlanarSpec.neRotAdj_segment` (proved in `PlanarRotSpec.lean` from the admitted fold characterization
+`planarRelabel_rot_spec`) reads no adjacency row (it is about `layoutRot`, which does not look
 at the `Layout`); the layout-side facts its transport needs are the `Local` sizes and
 `bound_last` (the `adjBounds.extract 1 …` pushed by `planarRelabel` has `2(nvEn - nvSt)` entries
 and ends at `2·neEn`).
@@ -1154,8 +1155,9 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 | `layoutRot_S_shift`, `layoutRot_P_shift` (renumbering a node's edges from 0) | `PlanarInv.lean` | **proved** |
 | Invariant P (§8.2) as a Lean structure: `Piece`, `SideWalk`, `InvariantP`, `StackInv` | `PlanarInv.lean` | def (the deliverable is the statement) |
 | `planarWalkOut_stackInv` (the walk preserves Invariant P) | `PlanarInv.lean` | sorry |
-| `neRotAdj_segment` (relabel bookkeeping: node `i`'s `neRotAdj` segment is its `layoutRot`) | `PlanarSpec.lean` | sorry |
-| `nodePlanar_sound_S`, `nodePlanar_sound_P` | `PlanarSpec.lean` | proved modulo `neRotAdj_segment` and `Shape` (via `spqrTree_wf`, itself admitted in `relabelTree_wf`) |
+| `planarRelabel_rot_spec` (the `planarRelabel` fold: `neRotAdj` has four entries per node-edge; node `n`'s entries `4 neSt + j` are those of `layoutRot (type n) (nVerts n) neSt neEn edgeVes mapRot (2 g.ne)`, `mapRot` four entries each, `|edgeVes| + 1 = nEdges n` for R) | `PlanarRotSpec.lean` | sorry (named admission mirroring `relabel_node_spec`) |
+| `layoutRot_size` (every type's `layoutRot` has `4 · nEdges` entries, from `WF.shape`/`Twins.cap_none`), `neRotAdj_segment` (relabel bookkeeping: node `i`'s `neRotAdj` segment is its `layoutRot`) | `PlanarRotSpec.lean`, `PlanarSpec.lean` | **proved** from `planarRelabel_rot_spec` + `spqrTree_wf` (through `planarRelabel_proj`) |
+| `nodePlanar_sound_S`, `nodePlanar_sound_P` | `PlanarSpec.lean` | proved modulo `planarRelabel_rot_spec` and `Shape` (via `spqrTree_wf`, itself admitted in `relabelTree_wf`) |
 | `nodePlanar_sound_R` (Invariant P at finish, mapped by `mapRot`) | `PlanarSpec.lean` | sorry |
 | `nodePlanar_sound` = S ∨ P ∨ R cases | `PlanarSpec.lean` | proved from the three |
 | `nodePlanar_complete` (Kuratowski-style certificate from the §8.3 crossing) | `PlanarSpec.lean` | sorry, hard |
@@ -1169,13 +1171,13 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 | `planarEmbed_sound` | `PlanarSpec.lean` | proved from `gluedUpTo_planarEmbed` + `glued_root` |
 | `spqrTree_planar` (`→` from `planarEmbed_sound`; `←` needs completeness + skeletons are minors of `g`) | `PlanarSpec.lean` | sorry |
 
-Admitted, precisely (`#print axioms` reports `sorryAx` for each): `neRotAdj_segment`;
+Admitted, precisely (`#print axioms` reports `sorryAx` for each): `planarRelabel_rot_spec` (hence `neRotAdj_segment`);
 `nodePlanar_sound_R`; the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
 `planarWalkOut_stackInv`); `nodePlanar_complete`; `twoSum_planar`,
 `oneSum_planar`, `disjointUnion_planar`; `embedItem_step_F`, `embedItem_step_V`,
 `embedItem_step_Q`, `embedItem_step_leaf`, `embedItem_step_node`, `glued_root` (hence
 `planarEmbed_sound`); `spqrTree_planar`. The S and P
-cases of `nodePlanar_sound` are proved except for `neRotAdj_segment` and the `Shape` of the
+cases of `nodePlanar_sound` are proved except for `planarRelabel_rot_spec` and the `Shape` of the
 skeleton (`spqrTree_wf`, which inherits `relabelTree_wf`'s `sorry`); the local counting itself
 (`cycleRot_isPlanarEmbedding`, `bondRot_isPlanarEmbedding`) is fully proved.
 
@@ -1184,8 +1186,10 @@ Work packages:
   `planarWalkOut_stackInv` step by step for `makeEdgePlanarity`, `mergeSide`,
   `closeSide`/`pruneSide`, `foldPlanarity`, `finishMatches`/`unwrapPlanarity`; the merge-side
   crossing argument gives the `none` case.
-* **Relabel transport**: `neRotAdj_segment` (induction over `planarRelabel`: `neRotAdj` grows by
-  exactly the node's `layoutRot` when `neBounds` is pushed).
+* **Relabel transport**: `planarRelabel_rot_spec` (induction over `planarRelabel`: `neRotAdj` grows by
+  exactly the node's `layoutRot` when `neBounds` is pushed; `LiftsR`/`AuxOnlyR` of
+  `PlanarRelabelProj.lean` give the base/aux split). `neRotAdj_segment` is derived from it
+  (`PlanarRotSpec.lean`).
 * **Local embeddings**: S and P done; R (`nodePlanar_sound_R`) from Invariant P at the finish of
   the R item via `planarRelabel`'s `mapRot`.
 * **Gluing**: `twoSum_planar` (explicit splice, `PlanarGlue`), `oneSum_planar`,
