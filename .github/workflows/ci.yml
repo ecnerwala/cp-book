@@ -54,11 +54,13 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
 
       # Bundle + minify every src/ header and verify (via clang's raw
       # lexer) that minification preserves every token.
       - name: Bundle and check all headers
-        run: scripts/bundle.py --all --check
+        run: uv run --locked scripts/bundle.py --all --check
 
   setup-verify:
     runs-on: ubuntu-26.04
@@ -67,14 +69,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up competitive-verifier
-        uses: competitive-verifier/actions/setup@v2
+      - uses: astral-sh/setup-uv@v7
         with:
-          # Fork with cp-book integration patches (content-hash skip, docs
-          # coverage integration, bundler include paths); see the branch's
-          # log vs upstream main.
-          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
-          cache-pip: true
+          enable-cache: true
+
+      # Installs the competitive-verifier pinned in uv.lock and puts it on
+      # PATH for the competitive-verifier/actions/* steps.
+      - name: Set up competitive-verifier
+        run: |
+          uv sync --locked
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: oj-resolve
         uses: competitive-verifier/actions/oj-resolve@v2
@@ -241,14 +245,16 @@ jobs:
       - name: Download verify_files.json
         uses: competitive-verifier/actions/download-verify-artifact@v2
 
-      - name: Set up competitive-verifier
-        uses: competitive-verifier/actions/setup@v2
+      - uses: astral-sh/setup-uv@v7
         with:
-          # Fork with cp-book integration patches (content-hash skip, docs
-          # coverage integration, bundler include paths); see the branch's
-          # log vs upstream main.
-          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
-          cache-pip: true
+          enable-cache: true
+
+      # Installs the competitive-verifier pinned in uv.lock and puts it on
+      # PATH for the competitive-verifier/actions/* steps.
+      - name: Set up competitive-verifier
+        run: |
+          uv sync --locked
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       # Restore-only: setup-verify owns generating and saving this cache,
       # and exports the exact key it saved under.
@@ -311,14 +317,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up competitive-verifier
-        uses: competitive-verifier/actions/setup@v2
+      - uses: astral-sh/setup-uv@v7
         with:
-          # Fork with cp-book integration patches (content-hash skip, docs
-          # coverage integration, bundler include paths); see the branch's
-          # log vs upstream main.
-          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
-          cache-pip: true
+          enable-cache: true
+
+      # Installs the competitive-verifier pinned in uv.lock and puts it on
+      # PATH for the competitive-verifier/actions/* steps.
+      - name: Set up competitive-verifier
+        run: |
+          uv sync --locked
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Download shard results
         uses: actions/download-artifact@v7
@@ -362,14 +370,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up competitive-verifier
-        uses: competitive-verifier/actions/setup@v2
+      - uses: astral-sh/setup-uv@v7
         with:
-          # Fork with cp-book integration patches (content-hash skip, docs
-          # coverage integration, bundler include paths); see the branch's
-          # log vs upstream main.
-          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
-          cache-pip: true
+          enable-cache: true
+
+      # Installs the competitive-verifier pinned in uv.lock and puts it on
+      # PATH for the competitive-verifier/actions/* steps.
+      - name: Set up competitive-verifier
+        run: |
+          uv sync --locked
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Download verify_files-coverage.json
         uses: actions/download-artifact@v7
@@ -467,14 +477,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up competitive-verifier
-        uses: competitive-verifier/actions/setup@v2
+      - uses: astral-sh/setup-uv@v7
         with:
-          # Fork with cp-book integration patches (content-hash skip, docs
-          # coverage integration, bundler include paths); see the branch's
-          # log vs upstream main.
-          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
-          cache-pip: true
+          enable-cache: true
+
+      # Installs the competitive-verifier pinned in uv.lock and puts it on
+      # PATH for the competitive-verifier/actions/* steps.
+      - name: Set up competitive-verifier
+        run: |
+          uv sync --locked
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       # Slim rolling cache: only the staged counters of the previous run
       # plus the result.json used to skip unchanged solutions (a few MB).
@@ -676,20 +688,19 @@ jobs:
         env:
           SRCDIR: .artifacts/Bundled-${{ runner.os }}
 
-      - name: Set up competitive-verifier
-        uses: competitive-verifier/actions/setup@v2
+      - uses: astral-sh/setup-uv@v7
         with:
-          # Fork with cp-book integration patches (content-hash skip, docs
-          # coverage integration, bundler include paths); see the branch's
-          # log vs upstream main.
-          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
-          cache-pip: true
+          enable-cache: true
+
+      # Installs the competitive-verifier pinned in uv.lock and puts it on
+      # PATH for the competitive-verifier/actions/* steps.
+      - name: Set up competitive-verifier
+        run: |
+          uv sync --locked --group docs
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Install gcovr
         run: pipx install gcovr
-
-      - name: Install tree-sitter
-        run: pip install tree_sitter tree_sitter_cpp
 
       - name: Merge coverage reports
         run: |
@@ -789,14 +800,18 @@ jobs:
     runs-on: ubuntu-26.04
     needs: [verify-merge]
     steps:
-      - name: Set up competitive-verifier
-        uses: competitive-verifier/actions/setup@v2
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
         with:
-          # Fork with cp-book integration patches (content-hash skip, docs
-          # coverage integration, bundler include paths); see the branch's
-          # log vs upstream main.
-          package: git+https://github.com/ecnerwala/competitive-verifier.git@cp-book-integration
-          cache-pip: true
+          enable-cache: true
+
+      # Installs the competitive-verifier pinned in uv.lock and puts it on
+      # PATH for the competitive-verifier/actions/* steps.
+      - name: Set up competitive-verifier
+        run: |
+          uv sync --locked
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Download result
         uses: actions/download-artifact@v7

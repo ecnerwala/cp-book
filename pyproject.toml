@@ -1,0 +1,20 @@
+[project]
+name = "cp-book"
+version = "0"
+requires-python = ">=3.12"
+dependencies = ["competitive-verifier"]
+
+[dependency-groups]
+# scripts/coverage_fill_missing.py (docs CI)
+docs = ["tree-sitter", "tree-sitter-cpp"]
+
+[tool.uv]
+package = false
+# scripts/*.py run via `#!/usr/bin/env -S uv run` from any cwd, which needs
+# script-relative project discovery (uv 0.12+).
+required-version = ">=0.12"
+
+[tool.uv.sources]
+# Fork with cp-book integration patches (content-hash skip, docs coverage
+# integration, bundler include paths); see the branch's log vs upstream main.
+competitive-verifier = { git = "https://github.com/ecnerwala/competitive-verifier.git", rev = "b093c35f966f733eb88414e042f3fdd5cf5c4714" }

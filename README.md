@@ -33,22 +33,24 @@ scripts/bundle.py --minify fft/series.hpp          # compiler-directed minificat
 scripts/bundle.py --all                            # pregenerate all headers
 ```
 
-To run the bundler offline, first initialize the UV cache by running
+The script runs in the repo's [uv](https://docs.astral.sh/uv/) project
+(`pyproject.toml` / `uv.lock`, which pin competitive-verifier). To run it
+offline, first populate the environment with
 ```sh
-uv sync --script scripts/bundle.py
+uv sync
 ```
 
 Then, you can run
 ```sh
 UV_OFFLINE=1 scripts/bundle.py ...
-uv run --offline --script scripts/bundle.py ...
+uv run --offline scripts/bundle.py ...
 ```
 
-Upgrade the bundler's lockfile with
+Bump the pinned competitive-verifier by editing `rev` in `pyproject.toml`
+and running
 ```sh
-uv lock --script scripts/bundle.py --upgrade
+uv lock --upgrade-package competitive-verifier
 ```
-(Make sure to rerun the sync afterwards.)
 
 ## Library Checker verification
 
@@ -58,9 +60,9 @@ verified in CI with
 
 ```sh
 # Run verification locally
-uvx competitive-verifier oj-resolve --include src verify --exclude third_party \
+uv run competitive-verifier oj-resolve --include src verify --exclude third_party \
     --config .competitive-verifier/config.toml > verify_files.json
-uvx competitive-verifier verify --verify-json verify_files.json
+uv run competitive-verifier verify --verify-json verify_files.json
 ```
 
 ## Contest tooling
