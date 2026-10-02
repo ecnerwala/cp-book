@@ -791,6 +791,186 @@ theorem run_row_destNv (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) 
 
 end R
 
+/-! ### Local shape and adjacency interface
+
+`Layout.Shape` mirrors `SpqrTree.Shape` with `(s, e) := (nvSt, nvEn)`, `nEdges := l.edges.size`
+and `skeleton := l.skeleton`, so that once a node's `nodeEdgesOf` is known to be `l.edges.toList`
+the global shape is a rewrite. `Layout.Local` collects the local forms of `WF.adj_bounds_mono`,
+`WF.adj_last`, `WF.adj_dest`, `Ownership.ne_nvs` and the (row-split) incidence statement. -/
+
+def _root_.Spqr.Layout.skeleton (l : Layout) : List (Nat × Nat) := l.edges.toList.map (·.nvs)
+
+def _root_.Spqr.Layout.Shape (type : NodeType) (nvSt nvEn : Nat) (l : Layout) : Prop :=
+  let s := nvSt
+  let e := nvEn
+  let n := e - s
+  match type with
+  | .F => l.edges.size = 0
+  | .V => n = 0 ∧ l.edges.size = 0
+  | .Q => (n = 1 ∧ l.skeleton = [(s, s)]) ∨ (n = 2 ∧ l.skeleton = [(s, s + 1)])
+  | .I => n = 2 ∧ l.skeleton = [(s, s + 1)]
+  | .O => n = 1 ∧ l.skeleton = [(s, s)]
+  | .P => n = 2 ∧ 3 ≤ l.edges.size ∧ ∀ p ∈ l.skeleton, p = (s, s + 1)
+  | .S => 3 ≤ n ∧ l.skeleton = (s, e - 1) :: (List.range (n - 1)).map fun k => (s + k, s + k + 1)
+  | .R => 4 ≤ n ∧ 6 ≤ l.edges.size ∧ l.skeleton.Nodup ∧ ∀ p ∈ l.skeleton, p.1 < p.2
+
+/-- Local adjacency interface of one node's layout. `adj_incident_lo`/`adj_incident_hi` split
+`WF.adj_incident` by row: the lower row of `nv` lists the edges ending at `nv`, the upper row the
+edges starting at `nv` (a loop `(nv, nv)` therefore appears once in each row). -/
+structure _root_.Spqr.Layout.Local (node nvSt nvEn neSt neEn : Nat) (l : Layout) : Prop where
+  edges_size : l.edges.size = neEn - neSt
+  adjBounds_size : l.adjBounds.size = 2 * (nvEn - nvSt) + 1
+  adjDat_size : l.adjDat.size = 2 * (neEn - neSt)
+  edge_node : ∀ k, k < l.edges.size → l.edges[k]!.node = node ∧ l.edges[k]!.twin = none
+  ne_nvs : ∀ k, k < l.edges.size →
+    nvSt ≤ l.edges[k]!.nvs.1 ∧ l.edges[k]!.nvs.1 ≤ l.edges[k]!.nvs.2 ∧ l.edges[k]!.nvs.2 < nvEn
+  bound_last : rowBound nvSt neSt l (2 * nvEn) = 2 * neEn
+  bound_mono : ∀ r, 2 * nvSt ≤ r → r < 2 * nvEn → rowBound nvSt neSt l r ≤ rowBound nvSt neSt l (r + 1)
+  adj_dest : ∀ r, 2 * nvSt ≤ r → r < 2 * nvEn → ∀ a ∈ row nvSt neSt l r,
+    neSt ≤ a.ne ∧ a.ne < neEn ∧
+    (a.destNv = l.edges[a.ne - neSt]!.nvs.1 ∨ a.destNv = l.edges[a.ne - neSt]!.nvs.2)
+  adj_incident_lo : ∀ nv, nvSt ≤ nv → nv < nvEn →
+    ((row nvSt neSt l (2 * nv)).map (·.ne)).Perm
+      (((List.range l.edges.size).filter fun k => l.edges[k]!.nvs.2 = nv).map (· + neSt))
+  adj_incident_hi : ∀ nv, nvSt ≤ nv → nv < nvEn →
+    ((row nvSt neSt l (2 * nv + 1)).map (·.ne)).Perm
+      (((List.range l.edges.size).filter fun k => l.edges[k]!.nvs.1 = nv).map (· + neSt))
+
+theorem toList_map_eq {α β : Type} [Inhabited α] [Inhabited β] (xs : Array α) (f : α → β)
+    (L : List β) (hs : xs.size = L.length) (h : ∀ k, k < xs.size → f xs[k]! = L[k]!) :
+    xs.toList.map f = L := by
+  apply List.ext_getElem
+  · simp [hs]
+  · intro k h1 h2
+    simp only [List.getElem_map, Array.getElem_toList]
+    rw [← getElem!_pos xs k (by simpa using h1), ← getElem!_pos L k h2]
+    exact h k (by simpa using h1)
+
+theorem perm_of_mem_iff {L M : List Nat} (hL : L.Nodup) (hM : M.Nodup) (h : ∀ x, x ∈ L ↔ x ∈ M) :
+    L.Perm M := (List.perm_ext_iff_of_nodup hL hM).2 h
+
+theorem filter_range_nodup (n : Nat) (p : Nat → Bool) (neSt : Nat) :
+    (((List.range n).filter p).map (· + neSt)).Nodup :=
+  ((List.nodup_range).filter p).map (fun _ _ h => by omega)
+
+theorem mem_filter_range {n : Nat} {p : Nat → Bool} {neSt x : Nat} :
+    x ∈ ((List.range n).filter p).map (· + neSt) ↔ neSt ≤ x ∧ x - neSt < n ∧ p (x - neSt) = true := by
+  simp only [List.mem_map, List.mem_filter, List.mem_range]
+  constructor
+  · rintro ⟨a, ⟨ha, hp⟩, rfl⟩; refine ⟨by omega, by omega, ?_⟩; rwa [Nat.add_sub_cancel]
+  · rintro ⟨h1, h2, h3⟩; exact ⟨x - neSt, ⟨h2, h3⟩, by omega⟩
+
+/-! #### V and F -/
+
+theorem local_V (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvEn = nvSt)
+    (hne : neEn = neSt) : (layoutNode .V node nvSt nvEn neSt neEn E).Local node nvSt nvEn neSt neEn := by
+  rw [layoutNode_V]
+  refine ⟨by rw [empty_edges_size], by rw [empty_adjBounds_size], by rw [empty_adjDat_size],
+    fun k hk => by rw [empty_edges_size] at hk; omega,
+    fun k hk => by rw [empty_edges_size] at hk; omega,
+    by simp [rowBound, hv, hne], fun r h1 h2 => by omega, fun r h1 h2 => by omega,
+    fun nv h1 h2 => by omega, fun nv h1 h2 => by omega⟩
+
+theorem shape_V (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvEn = nvSt)
+    (hne : neEn = neSt) : (layoutNode .V node nvSt nvEn neSt neEn E).Shape .V nvSt nvEn := by
+  rw [layoutNode_V]; subst hv hne; simp [Layout.Shape, empty_edges_size]
+
+theorem local_F (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt ≤ nvEn)
+    (hne : neEn = neSt) :
+    (layoutNode .F node nvSt nvEn neSt neEn E).Local node nvSt nvEn neSt neEn := by
+  rw [layoutNode_F_eq]
+  have hsz : (runF nvSt nvEn neSt neEn).edges.size = 0 := by rw [runF_edges]; simp [hne]
+  have hrow : ∀ r, 2 * nvSt ≤ r → r ≤ 2 * nvEn → rowBound nvSt neSt (runF nvSt nvEn neSt neEn) r = 2 * neSt :=
+    fun r h1 h2 => runF_rowBound _ _ _ _ _ h1 h2
+  refine ⟨by rw [hsz]; omega, runF_adjBounds_size .., by rw [runF_adjDat]; simp [hne],
+    fun k hk => by rw [hsz] at hk; omega, fun k hk => by rw [hsz] at hk; omega,
+    by rw [hrow _ (by omega) (Nat.le_refl _)]; omega,
+    fun r h1 h2 => by rw [hrow _ h1 (by omega), hrow _ (by omega) (by omega)]; exact Nat.le_refl _,
+    fun r h1 h2 => by rw [runF_row _ _ _ _ _ h1 h2]; simp,
+    fun nv h1 h2 => by rw [runF_row _ _ _ _ _ (by omega) (by omega), hsz]; simp,
+    fun nv h1 h2 => by rw [runF_row _ _ _ _ _ (by omega) (by omega), hsz]; simp⟩
+
+theorem shape_F (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hne : neEn = neSt) :
+    (layoutNode .F node nvSt nvEn neSt neEn E).Shape .F nvSt nvEn := by
+  rw [layoutNode_F_eq]; simp [Layout.Shape, runF_edges, hne]
+
+/-! #### Q-loop / O -/
+
+theorem local_loop (type : NodeType) (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat))
+    (ht : type ≠ .F ∧ type ≠ .V) (hv : nvEn - nvSt = 1) (he : neEn - neSt = 1) :
+    (layoutNode type node nvSt nvEn neSt neEn E).Local node nvSt nvEn neSt neEn := by
+  rw [layoutNode_loop_eq _ _ _ _ _ _ _ ht hv]
+  have hsz := runLoop_edges_size node nvSt nvEn neSt neEn
+  have hg := runLoop_edges_get node nvSt nvEn neSt neEn he
+  have hrow := runLoop_row node nvSt nvEn neSt neEn hv he
+  have hB := runLoop_rowBound node nvSt nvEn neSt neEn hv
+  refine ⟨hsz, runLoop_adjBounds_size .., runLoop_adjDat_size .., fun k hk => ?_, fun k hk => ?_,
+    ?_, fun r h1 h2 => ?_, fun r h1 h2 a ha => ?_, fun nv h1 h2 => ?_, fun nv h1 h2 => ?_⟩
+  · rw [hsz] at hk; rw [show k = 0 by omega, hg]; exact ⟨rfl, rfl⟩
+  · rw [hsz] at hk; rw [show k = 0 by omega, hg]; simp only; omega
+  · rw [hB _ (by omega) (Nat.le_refl _)]; omega
+  · rw [hB _ h1 (by omega), hB _ (by omega) (by omega)]; omega
+  · rw [hrow _ h1 h2, List.mem_singleton] at ha; subst ha
+    simp [hg]; omega
+  · rw [hrow _ (by omega) (by omega), show nv = nvSt by omega, hsz, he, List.range_one]
+    simp [hg]
+  · rw [hrow _ (by omega) (by omega), show nv = nvSt by omega, hsz, he, List.range_one]
+    simp [hg]
+
+theorem shape_loop (type : NodeType) (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat))
+    (ht : type = .Q ∨ type = .O) (hv : nvEn - nvSt = 1) (he : neEn - neSt = 1) :
+    (layoutNode type node nvSt nvEn neSt neEn E).Shape type nvSt nvEn := by
+  have hsk : (layoutNode type node nvSt nvEn neSt neEn E).skeleton = [(nvSt, nvSt)] := by
+    rw [layoutNode_loop_eq _ _ _ _ _ _ _ (by rcases ht with rfl | rfl <;> simp) hv, Layout.skeleton]
+    apply toList_map_eq _ _ _ (by rw [runLoop_edges_size, he]; rfl)
+    intro k hk
+    rw [runLoop_edges_size, he] at hk
+    rw [show k = 0 by omega, runLoop_edges_get _ _ _ _ _ he]; rfl
+  rcases ht with rfl | rfl
+  · exact Or.inl ⟨hv, hsk⟩
+  · exact ⟨hv, hsk⟩
+
+/-! #### Q / I -/
+
+theorem local_QI (type : NodeType) (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat))
+    (ht : type = .Q ∨ type = .I) (hv : nvEn - nvSt = 2) (he : neEn - neSt = 1) :
+    (layoutNode type node nvSt nvEn neSt neEn E).Local node nvSt nvEn neSt neEn := by
+  rw [layoutNode_QI_eq _ _ _ _ _ _ _ ht (by omega)]
+  have hsz := runQI_edges_size node nvSt nvEn neSt neEn
+  have hg := runQI_edges_get node nvSt nvEn neSt neEn he
+  have hrow := runQI_row node nvSt nvEn neSt neEn hv he
+  have hB := runQI_rowBound node nvSt nvEn neSt neEn hv
+  refine ⟨hsz, runQI_adjBounds_size .., runQI_adjDat_size .., fun k hk => ?_, fun k hk => ?_,
+    ?_, fun r h1 h2 => ?_, fun r h1 h2 a ha => ?_, fun nv h1 h2 => ?_, fun nv h1 h2 => ?_⟩
+  · rw [hsz] at hk; rw [show k = 0 by omega, hg]; exact ⟨rfl, rfl⟩
+  · rw [hsz] at hk; rw [show k = 0 by omega, hg]; simp only; omega
+  · rw [hB _ (by omega) (Nat.le_refl _), ite_of_neg (by omega), ite_of_neg (by omega)]; omega
+  · rw [hB _ h1 (by omega), hB _ (by omega) (by omega)]; split_ifs <;> omega
+  · rw [hrow _ h1 h2] at ha
+    split_ifs at ha <;> simp only [List.mem_singleton, List.not_mem_nil] at ha <;> subst ha <;>
+      simp [hg] <;> omega
+  · rw [hrow _ (by omega) (by omega), hsz, he, List.range_one]
+    rcases (show nv = nvSt ∨ nv = nvSt + 1 by omega) with rfl | rfl
+    · rw [ite_of_neg (by omega), ite_of_neg (by omega)]; simp [hg]
+    · rw [ite_of_neg (by omega), ite_of_pos (by omega)]; simp [hg]
+  · rw [hrow _ (by omega) (by omega), hsz, he, List.range_one]
+    rcases (show nv = nvSt ∨ nv = nvSt + 1 by omega) with rfl | rfl
+    · rw [ite_of_pos rfl]; simp [hg]
+    · rw [ite_of_neg (by omega), ite_of_neg (by omega)]; simp [hg]
+
+theorem shape_QI (type : NodeType) (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat))
+    (ht : type = .Q ∨ type = .I) (hv : nvEn - nvSt = 2) (he : neEn - neSt = 1) :
+    (layoutNode type node nvSt nvEn neSt neEn E).Shape type nvSt nvEn := by
+  have hsk : (layoutNode type node nvSt nvEn neSt neEn E).skeleton = [(nvSt, nvSt + 1)] := by
+    rw [layoutNode_QI_eq _ _ _ _ _ _ _ ht (by omega), Layout.skeleton]
+    apply toList_map_eq _ _ _ (by rw [runQI_edges_size, he]; rfl)
+    intro k hk
+    rw [runQI_edges_size, he] at hk
+    rw [show k = 0 by omega, runQI_edges_get _ _ _ _ _ he]; rfl
+  rcases ht with rfl | rfl
+  · exact Or.inr ⟨hv, hsk⟩
+  · exact ⟨hv, hsk⟩
+
 end LayoutShape
 
 end Spqr
