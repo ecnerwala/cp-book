@@ -130,15 +130,39 @@ the root/bond case separately — via `firstOccurrence`/`firstIdx`, see 4.4.
 Similarly, for `a` itself: `a'` need not be `a`'s first child — a type-2 pair is attached to `a`
 from whichever child.
 
-**Fact D (laminarity) [lemma, graph theory; to be stated precisely].** Order the edges of `B` by
-*postorder* σ: `dfsVisit`'s finishing order — a vertex's out-edges in sorted order, each tree edge
-placed right after its subtree's edges. (This is the order in which `finishEdge` is called, and
-`nxtEdgeIdx`/`firstIdx` count the back edges in it.) Then every separation class is a contiguous
-interval of σ **up to S/P multiplicity**: the classes of a type-1 pair are intervals; the classes
-`between ∪ suffix` of a type-2 pair are an interval; and the family of all such intervals is
-laminar. The S/P caveat: a cycle (S) or bond (P) can be split at any point, so the maximal pieces
-of the canonical decomposition, not the individual classes, are what is unique. This is the
-statement that makes a *stack* the right data structure: the open intervals at any time are nested.
+**Fact D (laminarity) [lemma, graph theory; Lean: `Spqr/Proofs/{Postorder,Interval}.lean`].**
+Order the edges of `B` by *postorder* σ: `dfsVisit`'s finishing order — a vertex's out-edges in
+sorted order, each tree edge placed right after its subtree's edges. (This is the order in which
+`finishEdge` is called, and `nxtEdgeIdx`/`firstIdx` count the back edges in it.) In Lean σ is
+`DfsTree.edgePostorder` / `edgePostorderForest`, defined purely from the `DfsTree`; the *block* of
+a tree edge `p → c` is `σ(T_c) ++ [p → c]` (`DfsOut.block`), and `DfsForestSpec` additionally
+assumes the forest's vertex list and edge list are duplicate-free. Then every separation class is
+a contiguous interval of σ **up to S/P multiplicity**:
+
+* *Type-1 classes* (`type1_class_interval`): for `a = anc b l` and a child `c` of `b` with
+  `b → c` classified `ret l type1Child`, the class of `b → c` is exactly the block of `b → c`,
+  an interval of σ. Blocks of tree edges are pairwise nested or disjoint
+  (`type1_classes_laminar`, structural: `blocks_laminar_forest`).
+* *Type-2 classes* (`type2_class_interval`): under the hypotheses of Fact C (`a` not the root,
+  `a'` its child toward `b`, *above* and *between* separated by `{a, b}`), the class of `a → a'`
+  is `DfsTree.type2Block l (a → a') T_{a'} T_b` = `σ(dropWhile (rank ≤ rank(ret l backEdge))
+  outs(b)) ++ (σ(T_{a'}) − σ(T_b)) ++ [a → a']`, a suffix of the block of `a → a'` and hence an
+  interval of σ. The proof uses Fact C: every tree edge on the path `a' ⇝ b` is first in its
+  out-list, so `σ(T_b)` is a prefix of `σ(T_{a'})` (`type2_chain_prefix`).
+* *Nesting, type-2 vs type-1* (`type2Block_laminar_block`): the type-2 class of `{a, b}` and the
+  block of any tree edge `p → w` are nested or disjoint **unless** `w` lies strictly below `a'` on
+  the tree path to `b`. That exception is exactly the S caveat: a cycle (S) or bond (P) can be
+  split at any point, so the maximal pieces of the canonical decomposition, not the individual
+  classes, are what is unique; e.g. in a cycle `x – a – v – w – b – x` the type-2 class
+  `{a–v, v–w, w–b}` of `{a, b}` and the type-1 class `{v–w, w–b, b–x}` of `{x, v}` overlap.
+* *Nesting, type-2 vs type-2*: **not proved in Lean.** Structurally the two `type2Block`s need
+  not be nested (e.g. same `a, a'`, `b₂` below `b₁`, with out-edges of `b₁` sorted before
+  `ret l backEdge`, or `b₂` in a child of `b₁` sorted after it while `b₂` itself has out-edges
+  sorted before); ruling these out needs the semantic facts of §1 (in a block no child of `b₂`
+  below a non-returning child of `b₁` can return to depth `≤ l`), which were not formalised.
+
+This is the statement that makes a *stack* the right data structure: the open intervals at any
+time are nested.
 
 ## 4. The walk: ears and the tstack
 
