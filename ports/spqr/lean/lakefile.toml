@@ -32,3 +32,7 @@ root = "DumpStRef"
 [[lean_exe]]
 name = "check_stref"
 root = "CheckStRef"
+
+[[lean_exe]]
+name = "check_repok"
+root = "CheckRepOK"
