@@ -5,7 +5,7 @@ import Spqr.Proofs.SepClasses
 /-!
 # The R case of loop 1 yields an `RCloseShape` (PROOF.md §4.5, walk side)
 
-From `Inv` and the stack shape `RStep`, the structural fields of `RCloseShape` follow for
+From `Inv d` (the depth-indexed walk invariant at the current depth `d`) and the stack shape `RStep`, the structural fields of `RCloseShape` follow for
 `U = rU`, `P = ofItems (rPieceItems)`, terminals `nxt.vStart`, `stackVerts[d]`; the content fields
 are `RContent`. Hence (`RCloseShape.threeConnected`) the R skeleton is 3-connected.
 -/
@@ -102,9 +102,9 @@ theorem PieceItems.wf (hp : s.PieceItems (s.rPieceItems cur nxt)) (h2 : s.g.TwoC
     obtain ⟨-, hne, -⟩ := Graph.twoAttached_union_classes h2 (att i hi) (ne i hi) (proper i hi)
     exact hne
 
-/-- The R case of loop 1 is an `RCloseShape`: structural fields from `Inv` and the stack shape,
+/-- The R case of loop 1 is an `RCloseShape`: structural fields from `Inv d` and the stack shape,
 content fields from `RContent`. -/
-theorem RStep.rCloseShape (h : s.Inv) (h2 : s.g.TwoConnected) (hr : s.RStep d cur nxt rest)
+theorem RStep.rCloseShape (h : s.Inv d) (h2 : s.g.TwoConnected) (hr : s.RStep d cur nxt rest)
     {dfs : DfsData} (hc : s.RContent dfs d cur nxt) :
     RCloseShape s.g dfs (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)) (s.rU cur nxt)
       nxt.vStart s.stackVerts[d]! := by
@@ -113,28 +113,30 @@ theorem RStep.rCloseShape (h : s.Inv) (h2 : s.g.TwoConnected) (hr : s.RStep d cu
   obtain ⟨e₀, he₀, hU₀⟩ := hr.proper
   have hcur_out : ∃ e, e < s.g.ne ∧ ¬cur.edges s.g s.items e := ⟨e₀, he₀, fun h => hU₀ (.inl h)⟩
   have hnxt_out : ∃ e, e < s.g.ne ∧ ¬nxt.edges s.g s.items e := ⟨e₀, he₀, fun h => hU₀ (.inr h)⟩
-  have hcur_top : cur.top s = s.stackVerts[d]! := by simp [TEntry.top, hr.cur_top]
-  have hnxt_top : nxt.top s = s.stackVerts[d]! := by simp [TEntry.top, hr.nxt_top]
+  have hcurA : s.g.TwoAttached (cur.edges s.g s.items) cur.vStart s.stackVerts[d]! := by
+    have := TwoAttached.of_term hcur.attached fun k h1 h2 => by have := hr.cur_top; omega
+    rwa [hr.cur_top] at this
+  have hnxtA : s.g.TwoAttached (nxt.edges s.g s.items) nxt.vStart s.stackVerts[d]! := by
+    have := TwoAttached.of_term hnxt.attached fun k h1 h2 => by have := hr.nxt_top; omega
+    rwa [hr.nxt_top] at this
   obtain ⟨wf, sub⟩ := hr.pieces.wf h2 ⟨e₀, he₀, hU₀⟩
   have conn : s.g.ConnEdges (s.rU cur nxt) := by
     refine Graph.ConnEdges.union hcur.conn hnxt.conn fun _ _ => ⟨s.stackVerts[d]!, ?_, ?_⟩
     · obtain ⟨e₁, he₁, hE₁⟩ := hr.cur_ne
       obtain ⟨e₂, he₂, hE₂⟩ := hcur_out
-      have := (hcur.attached.touches h2 he₁ hE₁ he₂ hE₂).2
-      rwa [hcur_top] at this
+      exact (hcurA.touches h2 he₁ hE₁ he₂ hE₂).2
     · obtain ⟨e₁, he₁, hE₁⟩ := hr.nxt_ne
       obtain ⟨e₂, he₂, hE₂⟩ := hnxt_out
-      have := (hnxt.attached.touches h2 he₁ hE₁ he₂ hE₂).2
-      rwa [hnxt_top] at this
+      exact (hnxtA.touches h2 he₁ hE₁ he₂ hE₂).2
   have att : s.g.TwoAttached (s.rU cur nxt) nxt.vStart s.stackVerts[d]! := by
-    refine Graph.TwoAttached.union hcur.attached hnxt.attached ?_
+    refine Graph.TwoAttached.union hcurA hnxtA ?_
     intro v hv
     simp only [List.mem_cons, List.mem_singleton, List.not_mem_nil, or_false] at hv
     rcases hv with rfl | rfl | rfl | rfl
     · exact .inr (.inr hr.interior)
-    · exact .inr (.inl hcur_top)
+    · exact .inr (.inl rfl)
     · exact .inl rfl
-    · exact .inr (.inl hnxt_top)
+    · exact .inr (.inl rfl)
   obtain ⟨-, hne, hts, htt, -⟩ :=
     Graph.twoAttached_union_classes h2 att
       (hr.cur_ne.imp fun e h => ⟨h.1, .inl h.2⟩) ⟨e₀, he₀, hU₀⟩
@@ -142,7 +144,7 @@ theorem RStep.rCloseShape (h : s.Inv) (h2 : s.g.TwoConnected) (hr : s.RStep d cu
     hc.bond, hc.type2⟩
 
 /-- The R skeleton closed by loop 1 is 3-connected. -/
-theorem RStep.threeConnected (h : s.Inv) (h2 : s.g.TwoConnected) (hr : s.RStep d cur nxt rest)
+theorem RStep.threeConnected (h : s.Inv d) (h2 : s.g.TwoConnected) (hr : s.RStep d cur nxt rest)
     {dfs : DfsData} (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g) (hc : s.RContent dfs d cur nxt) :
     (((Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).addParent s.g (s.rU cur nxt)
       nxt.vStart s.stackVerts[d]!).contract s.g).ThreeConnected :=
