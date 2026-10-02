@@ -4,6 +4,7 @@ import Spqr.RelabelSt
 import Spqr.WalkWF
 import Spqr.StRef
 import Spqr.StRefEt
+import Spqr.StRestrict
 
 /-!
 # Walk-level st-ordering invariant
@@ -461,8 +462,8 @@ and the order hypotheses like `dfsForest_spanning`). -/
 theorem walk_st (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
     (heo : OrderOK g.ne eo) : Items.StNumbered (g.walk tern (g.dfsForest vo eo)).items :=
   fun i hi ht => stItem_of_refOrder g tern vo eo i hi ht (walk_items_wf g tern vo eo)
-    (walk_st' g tern vo eo i hi ht) (walk_vsOriented g tern vo eo) hg (refBlocks_st hg hvo heo)
-    (refBlocks_root_none g _)
+    (walk_st' g tern vo eo i hi ht) (walk_vsOriented g tern vo eo) (refBlocks_st hg hvo heo)
+    (refBlocks_root_edge hg hvo heo)
 
 /-- The same from the `StInv` route. -/
 theorem walk_st_of_stInv (g : Graph) (tern : Bool) (vo eo : List Nat) :

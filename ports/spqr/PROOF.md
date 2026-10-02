@@ -837,7 +837,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 7 walk-side: `finishTstackTop_stItem`; ear lowvals `first_ret_lowval`, `chain_stackDir_step` | `StWalk.lean`, `StEar.lean` | proved |
 | 7 walk-side: `StInv.onSide` field, `chain_stackDir_const` (corrected statement, see 7.4) | `StWalk.lean` | def / proved |
 | 7 walk-side: `StInv.hole` (`StHole`/`HoleClosed`), `stInv_topClosable`, `stInv_finishTstackTop_stItem` (close site, see 7.4) | `StWalk.lean` | def / proved |
-| 7 walk-side: `finishEdge_stInv` (under `FinishGuards`/`EarsOnSide`), `walk_stInv`; `walk_st`, `spqrTree_st` from `walk_stInv`; route changed to the `StRef.lean` reference order (§7.6) | `StWalk.lean`, `StRef.lean` | sorry / proved (`walkTree_stackDir_below` in `StFrame.lean` proved); reference + `VsOriented` + `StBlock.St` tested seeds 0..1000; `refBlocks_st` proved (`StRefEt.lean`, standard axioms); `walk_st'`, `walk_vsOriented`, `stItem_of_refOrder` sorry |
+| 7 walk-side: `finishEdge_stInv` (under `FinishGuards`/`EarsOnSide`), `walk_stInv`; `walk_st`, `spqrTree_st` from `walk_stInv`; route changed to the `StRef.lean` reference order (§7.6) | `StWalk.lean`, `StRef.lean` | sorry / proved (`walkTree_stackDir_below` in `StFrame.lean` proved); reference + `VsOriented` + `StBlock.St` tested seeds 0..1000; `refBlocks_st` proved (`StRefEt.lean`, standard axioms); `stItem_of_refOrder` proved (`StRestrict.lean`, standard axioms); `walk_st'`, `walk_vsOriented` sorry |
 
 Work packages for child sessions, in dependency order:
 * **DFS**: 1.1, 1.2, no cross edges, `lowpt` characterization of `OutClass`.
@@ -1147,10 +1147,11 @@ the restriction of `refOrder` — to be proved by simulation in the style of `Si
 the reading `readStack` of the live tstack above the current block's base to `stNest` of the
 pieces pushed since (`readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`,
 `readStack_finishTstackTop` are the per-primitive steps; the closes are up to `expandItem`); and
-`stItem_of_refOrder` — an item listed in the reference order is in s-t order — by induction over
-`refTree` without the tstack (every piece spliced at depth `l` joins the open path on side
-`dirs[l]`, so every vertex other than a block's endpoints has a neighbour on each side; the
-restriction to an item keeps this since the item's virtual edges are the ends of the sub-ears).
+`stItem_of_refOrder` — an item listed in the reference order is in s-t order — without the tstack:
+`refBlocks_st` by induction over `refTree` (every piece spliced at depth `l` joins the open path on
+side `dirs[l]`, so every vertex other than a block's endpoints has a neighbour on each side) and
+the restriction `stItem_of_block` (`StRestrict.lean`; the item's virtual edges are the ends of the
+sub-ears, so the restriction to an item keeps the neighbours).
 The one walk-side ingredient of the latter is the orientation of the children's `vs`: `makeVs`
 uses the same `stackDir[d]` as the splice side, which is why `stItem_of_refOrder` is stated for
 the walk's items rather than for arbitrary `WF` items with `ch` in reference order (for those the
@@ -1203,9 +1204,28 @@ hypotheses like `dfsForest_spanning`; so do `walk_items_rOriented'` (`StOriented
 open. `VsOriented` also records that a block edge (an edge item of `b`, or an edge on `b.root`'s
 endpoints) below `i` is a leaf of `i` — i.e. not in a block hanging off a V child of `i` — which the
 restriction argument needs to know that a block neighbour of a V child of `i` comes from one of
-`i`'s own children (checked by `check_stref`, seeds 0..1000). `refBlocks_root_none` (the `root = none`
-block is a DFS root's `[vertItem r]`) excludes the block head from the open-vertex arguments. `#print axioms refBlocks_st`: propext, Classical.choice,
-Quot.sound.
+`i`'s own children; that the V children of `i` lie strictly between `i`'s endpoints in `b.seq`; and
+that a block edge below a non-V child `c` has both endpoints between `c`'s endpoints (the items'
+vertex sets are nested sub-ears) — all checked by `check_stref`, seeds 0..1000. `refBlocks_root_none`
+(the `root = none` block is a DFS root's `[vertItem r]`) and `refBlocks_root_edge` (a block's boundary
+edge is a tree edge, hence `PairEq` to some `g.edges[e]!`; from `DfsForestSpec.joins`) are the two
+structural facts about blocks. `#print axioms refBlocks_st`: propext, Classical.choice, Quot.sound.
+
+**The restriction argument (`StRestrict.lean`).** `stItem_of_block` proves `Items.StItem items i`
+for one block `b` with `b.St` from `Items.WF`, `ch i = restrictCh … order i` where `order` contains
+`b.items` as a segment, and the `VsOriented` clauses for `i`. With `vs i = (some s, some t)` the
+item's vertex list is `s :: xs ++ [t]` (`xs` the V children's vertices); the order of two V children
+in `ch i` is their order in `b.items` (`before_ch_of_before_order`: `Before b.items → Before order →
+Before (filterMap find?) → Before (collapseRuns …)`, since `find?` picks the child itself for a V
+child), so `Precedes b.seq` on the item's vertices implies `Precedes (vertList i)` (the between
+clause handles `s`/`t`). For an interior `x ∈ xs`, `b.St` gives a block edge `(x, z)` with `z` before
+(resp. after) `x` in `b.seq`; it is below `i` (`interior`), hence a leaf of `i` (the block-edge clause),
+hence below a non-V child `c` with `vs c = (some u, some v)`; `separation` forces `x ∈ {u, v}`, the span
+clause excludes `x = u` (resp. `x = v`), and `(u, v) ∈ virtualEdges i` is the required neighbour. The
+third `StItem` clause is the children's orientation transported by the same order lemma.
+`stItem_of_refOrder` is `stItem_of_block` on the block supplied by `VsOriented`, with `refBlocks_st`
+and `refBlocks_root_edge`. `#print axioms stItem_of_block`, `stItem_of_refOrder`: propext,
+Classical.choice, Quot.sound.
 
 ### 7.5 Work packages
 
@@ -1233,11 +1253,13 @@ Quot.sound.
 | `refTree`/`refOrder`, `restrictCh`, `check_stref` differential test (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..300 (0 mismatches) |
 | `walk_st'` (`ch i = restrictCh … (refOrder …) i` for S/P/R items) | `StRef.lean` | sorry (the simulation) |
 | `StBlock`, `StBlock.seq`/`edges`/`St`, `Precedes`, `Oriented`, `VsOriented`; `check_stref` checks `VsOriented` and `StBlock.St` too (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..1000 (0 mismatches) |
-| `walk_vsOriented` (`VsOriented` for the walk's items and `refBlocks`: block membership of the leaves, block edges below `i` are leaves of `i`, `vs` orientation of `i` and its non-V children) | `StRef.lean` | sorry (the simulation, with `walk_st'`) |
+| `walk_vsOriented` (`VsOriented` for the walk's items and `refBlocks`: block membership of the leaves, block edges below `i` are leaves of `i`, `vs` orientation of `i` and its non-V children, V children between `i`'s endpoints, block edges below a non-V child between its endpoints) | `StRef.lean` | sorry (the simulation, with `walk_st'`) |
 | `refBlocks_root_none` (a block without boundary edge is a DFS root's one-vertex block) | `StRefEt.lean` | proved (`refTree_roots`; axioms propext, Quot.sound) |
+| `refBlocks_root_edge` (a block's boundary edge is `PairEq` to some `g.edges[e]!`, `e < g.ne`; under `g.WF`, `OrderOK`) | `StRefEt.lean` | proved (`refTree_root_edges`/`refOuts_root_edges`/`refOut_root_edges` from `TreeJoins`; standard axioms) |
 | `refBlocks_st` (every reference block is `StBlock.St`; corrected statement: under `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo`) | `StRefEt.lean` | proved (`refTree_inv`/`refOuts_inv`; axioms propext, Classical.choice, Quot.sound) |
 | `Before`, `Side`, `Nb`, `NbV`, `VInv` (`nil`, `single`, `extend`, `step`, `step_back`, `step_tree`), `block_st`, `root_block_st`, `refOut_boundary_back/tree`, `refOut_ret_back/tree`, `refOuts_nil/cons/zero`, `refTree_node` | `StRefEt.lean` | def / proved |
-| `stItem_of_refOrder` (an item with `ch` in reference order and oriented `vs` is in s-t order; takes `refBlocks_st`'s conclusion as `hbl`) | `StRef.lean` | sorry (restriction of the block's st-order to the item) |
+| `Before.*` (`or_of_mem_mem`, `filter`, `filter_of`, `map`, `cons`, `append_left/right`, `filterMap`, …), `collapseRuns_sublist`, `before_collapseRuns`, `Precedes.of_before/before/ne/asymm/trans`, `Items.below_of_mem_leaves`, `leaves_of_type`, `leaves_succ`, `Tree.child_below_child`, `Tree.child_class`, `Tree.v_child_eq`, `Tree.type_ne_F`, `find?_leaves_vertItem`, `before_ch_of_before_order`, `edgeOf_eq_some` | `StRestrict.lean` | proved |
+| `stItem_of_block` (the restriction argument for one block, §7.6), `stItem_of_refOrder` (on the block from `VsOriented`, with `refBlocks_st` as `hbl` and `refBlocks_root_edge` as `hre`) | `StRestrict.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes) | `StRef.lean` | proved |
 
 ## 8. Planarity
