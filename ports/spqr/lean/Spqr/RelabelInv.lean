@@ -126,21 +126,29 @@ end PreFrom
 structure Bounds where
   chDat : Nat
   nodeEdges : Nat
+  /-- Node index: `subtreeEnd` entries at or above it are kept. -/
+  idx : Nat
 
-def Bounds.of (s : RelabelState) : Bounds := ⟨s.chDat.size, s.nodeEdges.size⟩
+def Bounds.of (s : RelabelState) : Bounds := ⟨s.chDat.size, s.nodeEdges.size, s.types.size⟩
 
-def Bounds.le (B B' : Bounds) : Prop := B.chDat ≤ B'.chDat ∧ B.nodeEdges ≤ B'.nodeEdges
+/-- Nothing may be rewritten. -/
+def Bounds.zero : Bounds := ⟨0, 0, 0⟩
 
-/-- `s'` extends `s`: every array grows at the end, entries are unchanged except `chDat` at or
-above `B.chDat`, the `twin`s of `nodeEdges` at or above `B.nodeEdges`, and `vertIndex` /
-`edgeIndex` / `edgeFlipped` entries that were still unset. -/
+def Bounds.le (B B' : Bounds) : Prop := B.chDat ≤ B'.chDat ∧ B.nodeEdges ≤ B'.nodeEdges ∧ B.idx ≤ B'.idx
+
+theorem Bounds.zero_le (B : Bounds) : Bounds.zero.le B := ⟨Nat.zero_le _, Nat.zero_le _, Nat.zero_le _⟩
+theorem Bounds.le_refl (B : Bounds) : B.le B := ⟨le_rfl, le_rfl, le_rfl⟩
+
+/-- `s'` extends `s`: every array grows at the end, entries are unchanged except `chDat` below
+`B.chDat`, the `twin`s of `nodeEdges` below `B.nodeEdges`, `subtreeEnd` below `B.idx`, and
+`vertIndex` / `edgeIndex` / `edgeFlipped` entries that were still unset. -/
 structure Agree (B : Bounds) (s s' : RelabelState) : Prop where
   g_eq : s'.g = s.g
   items_eq : s'.items = s.items
   order : s.order.toList <+: s'.order.toList
   types : Pre s.types s'.types
   par : Pre s.par s'.par
-  subtreeEnd : Pre s.subtreeEnd s'.subtreeEnd
+  subtreeEnd : PreFrom B.idx s.subtreeEnd s'.subtreeEnd
   origId : Pre s.origId s'.origId
   vertParNv : Pre s.vertParNv s'.vertParNv
   chBounds : Pre s.chBounds s'.chBounds
@@ -212,7 +220,10 @@ theorem trans (h1 : Agree B s s') (h2 : Agree B s' s'') : Agree B s s'' where
   vertPos_size := h2.vertPos_size.trans h1.vertPos_size
 
 theorem mono (h : Agree B s s') (hB : B.le B') : Agree B' s s' :=
-  { h with chDat := h.chDat.mono hB.1, nodeEdges := h.nodeEdges.mono hB.2 }
+  { h with
+    chDat := h.chDat.mono hB.1
+    nodeEdges := h.nodeEdges.mono hB.2.1
+    subtreeEnd := h.subtreeEnd.mono hB.2.2 }
 
 theorem order_size (h : Agree B s s') : s.order.size ≤ s'.order.size := by
   simpa using h.order.length_le
@@ -259,19 +270,29 @@ structure NodeS (g : Graph) (items : Items) (s : RelabelState) (i : ItemId) : Pr
   raw : ∀ k (hk : k < (items.nvList g i).length),
     s.nodeVerts[((s.tree g).nvRange (s.idx i)).1 + k]! = ⟨s.idx i, (items.nvList g i)[k]⟩
 
-/-- Item `i` is numbered and all its slots lie at or above `B` and within the arrays. -/
+/-- Item `i` and its children are numbered and all the slots `RelabelNode … i` reads lie at or
+above `B` and within the arrays. -/
 structure LowB (items : Items) (B : Bounds) (s : RelabelState) (i : ItemId) : Prop where
   mem : i ∈ s.order.toList
+  idx : B.idx ≤ s.idx i
   chDat : B.chDat ≤ s.chBounds[s.idx i]!
   chDat_le : s.chBounds[s.idx i + 1]! ≤ s.chDat.size
   nodeEdges : B.nodeEdges ≤ s.neBounds[s.idx i]!
   nodeEdges_le : s.neBounds[s.idx i + 1]! ≤ s.nodeEdges.size
   nodeVerts_le : s.nvBounds[s.idx i + 1]! ≤ s.nodeVerts.size
-  cap_lt : items.hasCap i → s.neBounds[s.idx i]! < s.nodeEdges.size
+  ch_mem : ∀ c ∈ items.ch i, c ∈ s.order.toList
+  ch_idx : ∀ c ∈ items.ch i, B.idx ≤ s.idx c
+  ch_ne : ∀ c ∈ items.ch i, B.nodeEdges ≤ s.neBounds[s.idx c]! ∧
+    (items.hasCap c → s.neBounds[s.idx c]! < s.nodeEdges.size)
 
 theorem LowB.mono {items : Items} {B B' : Bounds} {s : RelabelState} {i : ItemId} (h : LowB items B s i)
     (hB : B'.le B) : LowB items B' s i :=
-  { h with chDat := hB.1.trans h.chDat, nodeEdges := hB.2.trans h.nodeEdges }
+  { h with
+    idx := hB.2.2.trans h.idx
+    chDat := hB.1.trans h.chDat
+    nodeEdges := hB.2.1.trans h.nodeEdges
+    ch_idx := fun c hc => hB.2.2.trans (h.ch_idx c hc)
+    ch_ne := fun c hc => ⟨hB.2.1.trans (h.ch_ne c hc).1, (h.ch_ne c hc).2⟩ }
 
 end Ghost
 
