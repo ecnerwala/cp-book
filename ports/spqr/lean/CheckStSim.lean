@@ -68,12 +68,14 @@ def stItemsB (g : Graph) (s : WalkState) (blocks : List StBlock) : List String :
   let m1 := if rs.all (fun x => (List.range items.size).all fun p => !(x ∈ Items.ch items p)) then []
     else ["roots: a stack item has a parent"]
   let m2 := if decide rs.Nodup then [] else [s!"nodup: {rs}"]
+  let m4 := if rs.all (fun x => (descOf items items.size x).all (· < items.size)) then []
+    else ["bounded: a stack item's subtree is out of range"]
   let m3 := (List.range items.size).filterMap fun i =>
     if !isSPR items i then none
     else if rs.any (fun x => i ∈ descOf items items.size x) then none
     else if blocks.any (inBlockB g items · i) then none
     else some s!"item {i} ({repr (Items.type items i)}) vs {repr (Items.vs items i)} ch {Items.ch items i} leaves {leavesB items i} not live and in no block {blocks.map (·.items)}"
-  m1 ++ m2 ++ m3
+  m1 ++ m2 ++ m4 ++ m3
 
 def report (st : IO.Ref Stats) (ok : Bool) (msg : String) : IO Unit := do
   st.modify fun x => { x with checks := x.checks + 1, bad := if ok then x.bad else x.bad + 1 }
