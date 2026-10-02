@@ -715,7 +715,6 @@ derive coverage, the contracted skeleton's active vertex list, and well-formedne
 contracted pieces. The permutation lemma uses the same orientation for the item cap and
 the parent piece; `RSkel3` permits either orientation, so reversed caps also need transport.
 
-||||||| parent of e2b04f0 (spqr/lean: Items.Ranges + wf_of_ranges; walk_items_wf via walk_ranges)
 ### 4.6 Ranges: `Endpoints`/`Shapes` without the tstack (`Ranges.lean`, `RangesWF.lean`)
 
 Almost all of `Items.Endpoints`/`Items.Shapes` is a consequence of the *final* item tree alone, read
