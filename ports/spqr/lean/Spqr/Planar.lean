@@ -1,4 +1,5 @@
 import Mathlib.Logic.Relation
+import Mathlib.Logic.Function.Iterate
 import Spqr.Graph
 
 /-!
@@ -36,19 +37,17 @@ structure RotationSystem where
   rotAdj : Array (Option Nat)
 deriving Repr, Inhabited
 
-/-- Number of orbits of the partial map `step` on `[0, n)`: the number of distinct cycles when
-`step` is a permutation; in general, the number of chains started from the smallest unvisited
-point. -/
+/-- The total extension of a partial step map: unset points are fixed. -/
+def stepFn (step : Nat → Option Nat) (q : Nat) : Nat := (step q).getD q
+
+/-- `q` is the least point among the first `n` iterates of `step` starting at `q`. -/
+def isOrbitMin (step : Nat → Option Nat) (n q : Nat) : Bool :=
+  ((List.range n).foldl (fun (p : Nat × Bool) _ => (stepFn step p.1, p.2 && decide (q ≤ p.1))) (q, true)).2
+
+/-- Number of orbits of `step` on `[0, n)`: the number of points that are minimal on their
+`n`-step forward orbit. For a permutation of `[0, n)` this is the number of cycles. -/
 def numOrbits (step : Nat → Option Nat) (n : Nat) : Nat :=
-  let rec mark : Nat → Array Bool → Nat → Array Bool
-    | 0, seen, _ => seen
-    | fuel + 1, seen, q =>
-      if seen[q]?.getD true then seen
-      else match step q with
-        | none => seen.set! q true
-        | some r => mark fuel (seen.set! q true) r
-  ((List.range n).foldl (init := (Array.replicate n false, 0)) fun (seen, cnt) q =>
-    if seen[q]! then (seen, cnt) else (mark n seen q, cnt + 1)).2
+  ((List.range n).filter (isOrbitMin step n)).length
 
 /-- Vertex `v` has an incident edge in `es`. -/
 def nonIsolated (es : List (Nat × Nat)) (v : Nat) : Bool := es.any fun p => p.1 == v || p.2 == v
@@ -56,16 +55,21 @@ def nonIsolated (es : List (Nat × Nat)) (v : Nat) : Bool := es.any fun p => p.1
 def numNonIsolated (es : List (Nat × Nat)) (nVerts : Nat) : Nat :=
   ((List.range nVerts).filter (nonIsolated es)).length
 
-/-- Number of connected components of `es` with at least one edge (union-find over `nVerts`). -/
+/-- One relaxation round: both endpoints of every edge receive the smaller of their labels
+(a vertex without a label entry is its own label). -/
+def relaxLabels (es : List (Nat × Nat)) (l : List Nat) : List Nat :=
+  es.foldl (fun l p => let m := min (l[p.1]?.getD p.1) (l[p.2]?.getD p.2); (l.set p.1 m).set p.2 m) l
+
+/-- Component labels: after `nVerts` rounds of relaxation every vertex carries the least vertex
+of its connected component. -/
+def compLabels (es : List (Nat × Nat)) (nVerts : Nat) : List Nat :=
+  (relaxLabels es)^[nVerts] (List.range nVerts)
+
+/-- Number of connected components of `es` with at least one edge: the non-isolated vertices
+that are the least vertex of their component. -/
 def numComponents (es : List (Nat × Nat)) (nVerts : Nat) : Nat :=
-  let rec find (p : Array Nat) : Nat → Nat → Nat
-    | 0, x => x
-    | fuel + 1, x => let px := p[x]?.getD x; if px == x then x else find p fuel px
-  let p := es.foldl (init := Array.range nVerts) fun p (u, v) =>
-    let a := find p nVerts u
-    let b := find p nVerts v
-    if a == b then p else p.set! a b
-  ((List.range nVerts).filter fun v => nonIsolated es v && p[v]! == v).length
+  let l := compLabels es nVerts
+  ((List.range nVerts).filter fun v => nonIsolated es v && l[v]?.getD v == v).length
 
 namespace RotationSystem
 
