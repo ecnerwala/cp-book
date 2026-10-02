@@ -661,8 +661,8 @@ be corrected (both were false of the output, i.e. statement bugs):
 `ROriented` is needed for R nodes (`Ownership.ne_nvs`, `Shape`); `StOriented.lean` derives it from
 the st-ordering, `Items.rOriented_of_stNumbered : StNumbered → WF → ROriented` (`vertList =
 nvList` under `Items.Tree`), so `walk_items_rOriented' : ROriented (walk …).items` follows from
-`walk_st`. `spqrTree_wf` uses it as the named admission `walk_items_rOriented` in
-`Correctness.lean`, because `StSpec` imports `Correctness` and the proof cannot be imported there.
+`walk_st`; `spqrTree_wf` uses it directly (`walk_items_wf`/`spqrTree_eq` live in `WalkWF.lean`,
+below the st layer, so `Correctness` can import `StOriented`).
 The other fields: `Sizes` is `RelabelIdx.sizes`; `Preorder` from `RelabelLayout.child_idx`/
 `subtree_end` (children are numbered `idx i + 1`, then after the previous child's subtree —
 `chainEnd`; by induction on `|Items.desc|` every subtree is non-empty and contained in the
@@ -696,7 +696,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | `walkEarTree = walkTree` (`walkEarTree_eq_walkTree`, `walkEar_eq_walk`) | `EarSpec.lean` | proved |
 | span discipline / placement (`Place`: each item id placed ≤ 1 time over spans + ch lists; `walk_place`, `walk_ch_nodup`, `walk_parent_unique`, `root_no_parent`) | `WalkPlace.lean` | proved; `walk_tstack_nil`, `walk_covered`, `walk_root_children`, `walk_reach` moved to `WalkCover.lean` |
 | coverage + reachability half of `Items.Tree` (`WalkState.Full` = exact placement + `Acyc`; `walk_tstack_nil`, `walk_covered`, `walk_root_children`, `walk_reach`, `walk_tree`) | `WalkCover.lean`, `ItemAcyc.lean` | proved from `walk_sides : SidesForest forest (WalkState.init g tern)` (§4.4; the only `sorry` in the file, now including the `¬ Below c (vertItem curV)` clause of `BoundaryOK`) |
-| linear phase 2/3 refinements `walkFast` / `relabelTreeFast` (`CatList` spans, `Array` tstack, ticks): `walkFast_items`, `relabelTreeFast_eq`; `spqrTree_eq` routed through them | `CatList.lean`, `Refine.lean`, `WalkFast.lean`, `RelabelFast.lean`, `Correctness.lean` | proved |
+| linear phase 2/3 refinements `walkFast` / `relabelTreeFast` (`CatList` spans, `Array` tstack, ticks): `walkFast_items`, `relabelTreeFast_eq`; `spqrTree_eq` routed through them | `CatList.lean`, `Refine.lean`, `WalkFast.lean`, `RelabelFast.lean`, `WalkWF.lean` | proved |
 | step bounds: `walk_ticks_le : (g.walkFast tern (g.dfsForest vo eo)).ticks ≤ 47·(nv+ne)` (via `walk_ticks_le_forest`, `dfsForest_size_le` from `dfsForest_spanning'`); `relabelRun_sizes_le` (`Items.desc` cardinalities), `relabel_ticks_le : ticks ≤ 288·(nv+ne) + 6` | `WalkCost.lean`, `ItemTree.lean`, `RelabelCost.lean` | proved; the relabel bounds take `Items.Tree` as hypothesis (`relabel_ticks_le'` discharges it with the admitted `walk_items_wf`) |
 | frame rule `walkTree_local` via `Lifts`/`Sim` simulation (`Sim.closeEars`, `Sim.mergeLate`, `Sim.finishRest`, `Sim.finishBoundary` proved) | `Sim.lean`, `Frame.lean`, `EarSpec.lean` | `Sim.closeVert`, `Sim.finishEdge`, `Sim.walkTree` proved; `walkTree_local` reduces to the stack-shape invariant `walkTree_guards` (admitted, with `earOut_one_entry` / `ascend_frame_one_entry`) |
 | typing/allocation part of `Items.WF` (`Items.Tree` sizes/types, I/O leaves, `vs_shape`, `vs_lt`): `walk_typing` | `WalkTyping.lean` | proved (`walk_q_children` sorry: needs span shape) |
@@ -713,7 +713,8 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 5 relabel, structural part: `relabelTree_own : Items.WF → Items.ROriented → Bijections ∧ Ownership ∧ Twins` (also `relabelTree_bijections`, `relabelTree_twins` from `WF` alone); `layoutNode_edges` | `RelabelOwn.lean` | proved modulo `relabel_node_spec` (`RelabelSpec.lean`, sorry); the item-level facts it needs are clauses of `Items.WF` (`nv_nodup`, `q_leaf_of_node`, `q_children`'s `v < nv`, `r_shape`'s child endpoints) |
 | 5 relabel, CSR bounds: `relabelTree_adj : Items.WF → Items.ROriented → (∀ n, adjBounds[2 nvSt n] = 2 neSt n) ∧ adjBounds[2 |nodeVerts|] = |adjDat|` (the statement of `relabel_adj_spec`); `layout_local` (`Layout.Local` for every item's `nodeLayout`) | `RelabelAdj.lean` | proved modulo `relabel_node_spec`; `relabel_adj_spec` itself stays admitted in `RelabelSpec.lean` only because that file cannot import its proof |
 | 5 relabel, `WF` assembly: `RelabelAll.wf_tree`, `preorder` (`child_idx`/`subtree_end` chain, `subtree_props`, `parent_eq_iff`), `only_root_F`, `shape` (`skeleton_eq` + `LayoutShape.shape_*`), `adj_bounds_mono`, `adj_dest`, `adj_incident'` (`global_bound`/`global_row`: global CSR rows = `Layout.Local` rows; `foreign_ne`, `row_filter`) | `RelabelWF.lean` | proved (standard axioms) |
-| 2/7 `Items.ROriented` of the walk output: `rOriented_of_stNumbered`, `walk_items_rOriented'` | `StOriented.lean` | proved from `walk_st` (+ `walk_items_wf`); `Correctness.walk_items_rOriented` restates it as an admission for `spqrTree_wf` (import cycle: `StSpec` → `Correctness`) |
+| 2/7 `Items.ROriented` of the walk output: `rOriented_of_stNumbered`, `walk_items_rOriented'` | `StOriented.lean` | proved from `walk_st` (+ `walk_items_wf`); used directly by `spqrTree_wf` |
+| 2 walk→relabel interface `walk_items_wf : Items.WF g (g.walk tern (g.dfsForest vo eo)).items`, and `spqrTree_eq` | `WalkWF.lean` (below `StSpec`/`StWalk`/`StOriented` and `Correctness`) | `walk_items_wf` sorry (the sole walk→WF admission); `spqrTree_eq` proved |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
 | 7 relabel-side: `vchildren_nv_increasing`, `orderedChildren_sorted`, `edgeChildren_dominance`, `layoutNode_r_bracket` | `StSpec.lean`, `StLayout.lean` | proved |
 | 7 relabel-side: `relabel_st` | `StSpec.lean` | sorry |

@@ -1,5 +1,6 @@
 import Spqr.WalkSpec
 import Spqr.StSpec
+import Spqr.WalkWF
 import Spqr.StRef
 
 /-!
