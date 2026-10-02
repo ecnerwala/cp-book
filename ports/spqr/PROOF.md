@@ -398,6 +398,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | Facts A–C (`sepPair_comparable`, type-1 class / above-between / sorted prefix-suffix, `type2_first_out`) | `SepPair.lean`, `Proofs/SepPair.lean` | proved |
 | Fact D (laminar intervals: `type1_class_interval`, `type2_class_interval`, `type2Block_laminar_block`, `type2Block_laminar_type2Block`) | `Proofs/Postorder.lean`, `Proofs/Interval.lean` | proved (S-caveat exceptions) |
 | 4.5 exhaustiveness: separation pairs of a block = type-1 ∪ type-2 pairs (`sepPair_iff`, `three_connected_of_no_split`) | `SepPairExhaust.lean`, `Proofs/SepPairExhaust.lean` | proved |
+| 5 skeleton/contraction: `Graph.contract` of a laminar family of 2-attached pieces; `sepPair_contract_lift`, `sepPair_contract_of` (non-terminal pairs), `threeConnected_contract_iff_dfs` (R skeleton 3-connected ↔ no type-1/type-2 pair among non-terminal skeleton vertices), `TwoAttached.sepClass_mem` | `Contract.lean`, `Proofs/Contract.lean` | proved |
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
 | `walkEarTree = walkTree` (`walkEarTree_eq_walkTree`, `walkEar_eq_walk`) | `EarSpec.lean` | proved |
 | frame rule `walkTree_local` via `Lifts`/`Sim` simulation (`Sim.closeEars`, `Sim.mergeLate`, `Sim.finishRest`, `Sim.finishBoundary` proved) | `Sim.lean`, `Frame.lean`, `EarSpec.lean` | `Sim.closeVert`, `Sim.finishEdge`, `Sim.walkTree` proved; `walkTree_local` reduces to the stack-shape invariant `walkTree_guards` (admitted, with `earOut_one_entry` / `ascend_frame_one_entry`) |

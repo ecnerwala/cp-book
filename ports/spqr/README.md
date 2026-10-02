@@ -224,6 +224,7 @@ flattened state machine:
     Spqr/WalkTyping.lean typing/allocation invariant of the walk (`walk_typing`; only `walk_q_children` admitted)
     Spqr/Proofs/SepPair.lean  Facts A–C proved (no sorry)
     Spqr/SepPairExhaust.lean, Spqr/Proofs/SepPairExhaust.lean  separation pairs of a block = type-1 ∪ type-2 pairs; three_connected_of_no_split (no sorry)
+    Spqr/Contract.lean, Spqr/Proofs/Contract.lean  skeleton = contraction of a laminar family of 2-attached pieces; separation pairs of skeleton vs block (non-terminal pairs), threeConnected_contract_iff_dfs, TwoAttached.sepClass_mem (0 sorry)
     Spqr/GraphLemmas.lean  ConnEdges/TwoAttached closure lemmas (no sorry)
     Spqr/Proofs/{Postorder,Interval,Type2}.lean  Fact D: edge postorder, classes are laminar intervals (no sorry)
     Spqr/Blocks.lean, Spqr/Proofs/Blocks.lean  blocks ↔ lowval ≥ d (PROOF.md §2, no sorry)
