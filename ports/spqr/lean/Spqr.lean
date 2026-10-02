@@ -50,6 +50,8 @@ import Spqr.PlanarEmbed
 import Spqr.PlanarWalkProj
 import Spqr.PlanarRelabelProj
 import Spqr.PlanarRotSpec
+import Spqr.LayoutSize
+import Spqr.PlanarRotInv
 import Spqr.Proofs.Planar
 import Spqr.PlanarLayout
 import Spqr.PlanarInv
