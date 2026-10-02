@@ -1,4 +1,5 @@
 import Spqr.StLayout
+import Spqr.ItemSpec
 
 /-!
 # Per-type skeleton layouts
@@ -1725,6 +1726,26 @@ theorem local_R (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : n
     exact hperm (2 * nv + 1) (by omega) (by omega)
 
 end RNe
+
+/-- `shape_R`'s `Nodup` hypothesis from `Items.Shapes.r_shape`: with `Q = items.virtualEdges i`
+(any permutation of it, `Nodup` is permutation-invariant), `items.vs i = (some u, some v)` and the
+endpoints read through a position map `pos` injective on the node's vertices `V` (`vertPos`, so
+`pos u = nvSt`, `pos v = nvEn - 1` and `edgeChildren` is `Q.map (pos × pos)` up to order), the
+key-`Nodup` clause and the no-parallel-to-cap clause give the whole skeleton `Nodup`. -/
+theorem r_skeleton_nodup (nv u v : Nat) (Q : List (Nat × Nat)) (V : List Nat) (pos : Nat → Nat)
+    (hkey : (Q.map fun q => min q.1 q.2 + nv * max q.1 q.2).Nodup)
+    (hcap : ∀ q ∈ Q, ¬ Items.PairEq q (u, v))
+    (hV : ∀ q ∈ Q, q.1 ∈ V ∧ q.2 ∈ V) (hu : u ∈ V) (hv : v ∈ V)
+    (hinj : ∀ a ∈ V, ∀ b ∈ V, pos a = pos b → a = b) :
+    ((pos u, pos v) :: Q.map fun q => (pos q.1, pos q.2)).Nodup := by
+  refine List.nodup_cons.2 ⟨?_, List.Nodup.map_on ?_ (List.Nodup.of_map _ hkey)⟩
+  · intro h
+    obtain ⟨q, hq, hqe⟩ := List.mem_map.1 h
+    simp only [Prod.mk.injEq] at hqe
+    exact hcap q hq (Or.inl (Prod.ext (hinj _ (hV q hq).1 _ hu hqe.1) (hinj _ (hV q hq).2 _ hv hqe.2)))
+  · intro x hx y hy hxy
+    simp only [Prod.mk.injEq] at hxy
+    exact Prod.ext (hinj _ (hV x hx).1 _ (hV y hy).1 hxy.1) (hinj _ (hV x hx).2 _ (hV y hy).2 hxy.2)
 
 end LayoutShape
 
