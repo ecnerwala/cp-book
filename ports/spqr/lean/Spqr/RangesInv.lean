@@ -298,9 +298,9 @@ theorem RangesInv.mergeTop (cur nxt : TEntry) (rest : List TEntry) (hs : s.tstac
     · exact h.convex t (by simp [hs, ht]) a b c hab hbc hc hpa hpc
 
 /-- `finishTstackTop` under the hypotheses of `Inv'.finishTop`: the closed item takes over the
-top entry's edges and a subset of its pieces, so its convexity is the entry's. Admitted. -/
+top entry's edges and a subset of its pieces, so its convexity is the entry's. -/
 theorem RangesInv.finishTop (item : ItemId) (t : TEntry) (rest : List TEntry)
-    (hs : s.tstack = t :: rest) (h : s.RangesInv σ n D)
+    (hs : s.tstack = t :: rest) (h : s.RangesInv σ n D) (hσ : ∀ e ∈ σ, e < s.g.ne)
     (hitem : item < s.items.size) (hnode : 1 + s.g.nv + s.g.ne ≤ item)
     (hroot : ∀ p, ¬ Items.IsParent s.items p item)
     (hfree : ∀ t' ∈ s.tstack, item ∉ t'.spans.1 ++ t'.spans.2)
@@ -309,7 +309,107 @@ theorem RangesInv.finishTop (item : ItemId) (t : TEntry) (rest : List TEntry)
       s.g.Interior (t.edges s.g s.items) s.stackVerts[k]! ∨
       ¬ s.g.Touches (t.edges s.g s.items) s.stackVerts[k]!) :
     RangesInv σ n D ((finishTstackTop item).run s).2 := by
-  sorry
+  have hinv := h.inv.finishTop item t rest hs hitem hnode hroot hfree hside hmid
+  rw [finishTstackTop_run_eq s item t rest hs] at hinv ⊢
+  set dir := s.stackDir[t.topDepth]!
+  set f : Item → Item := fun it =>
+    { it with vs := setSides dir (some s.stackVerts[t.topDepth]!) (some t.vStart),
+              ch := getSide t.spans dir }
+  have hf : ∀ it, (f it).type = it.type := fun _ => rfl
+  have hty : ∀ c, Items.type (s.items.modify item f) c = Items.type s.items c :=
+    Items.type_modify_type_eq item f hf
+  have hitem_edge : ∀ e, e < s.g.ne → edgeItem s.g e ≠ item := by
+    intro e he; show 1 + s.g.nv + e ≠ item; omega
+  have hnb : ∀ i, i ≠ item → ¬ Items.Below s.items i item := fun i hi hb =>
+    hi (Items.Below.eq_of_no_parent hroot hb)
+  have hch : Items.ch (s.items.modify item f) item = getSide t.spans dir := by
+    rw [Items.ch_modify_at item f hitem]
+  have hne : ∀ c ∈ getSide t.spans dir, c ≠ item := fun c hc hce => by
+    subst hce; exact hfree t (by simp [hs]) ((mem_of_getSide_nil dir t.spans hside c).2 hc)
+  have ht : t ∈ s.tstack := by simp [hs]
+  have hsub : ∀ e, e < s.g.ne →
+      (Items.EdgeBelow s.g (s.items.modify item f) item e ↔ t.edges s.g s.items e) := by
+    intro e he
+    simp only [TEntry.edges, Items.EdgeBelow, mem_of_getSide_nil dir t.spans hside]
+    constructor
+    · intro hb
+      rcases hb.head_cases with heq | ⟨c, hc, hb⟩
+      · exact absurd heq.symm (hitem_edge e he)
+      · simp only [Items.IsParent, hch] at hc
+        exact ⟨c, hc, (Items.Below_modify_of_not_below item f (hnb c (hne c hc))).1 hb⟩
+    · rintro ⟨c, hc, hb⟩
+      exact .head (by simpa [Items.IsParent, hch] using hc)
+        ((Items.Below_modify_of_not_below item f (hnb c (hne c hc))).2 hb)
+  have hpiece : ∀ e, e < s.g.ne → Items.PieceEdge s.g (s.items.modify item f) item e →
+      t.piece s.g s.items e := by
+    intro e he hp
+    rcases Relation.ReflTransGen.cases_head hp with heq | ⟨c, ⟨hc, hcv⟩, hb⟩
+    · exact absurd heq.symm (hitem_edge e he)
+    · simp only [Items.IsParent, hch] at hc
+      refine ⟨c, (mem_of_getSide_nil dir t.spans hside c).2 hc, by rwa [hty] at hcv, ?_⟩
+      exact (Items.BelowNoV_modify_of_not_below item f hf (hnb c (hne c hc))).1 hb
+  have hE' : ∀ e, e < s.g.ne →
+      (TEntry.edges s.g (s.items.modify item f) { t with spans := setSides dir [item] [] } e ↔
+        t.edges s.g s.items e) := by
+    intro e he
+    rw [← hsub e he]
+    simp only [TEntry.edges]
+    constructor
+    · rintro ⟨i, hi, hb⟩
+      rwa [List.mem_singleton.1 ((mem_setSides dir [item] i).1 hi)] at hb
+    · exact fun hb => ⟨item, (mem_setSides dir [item] item).2 (List.mem_singleton.2 rfl), hb⟩
+  have hP' : ∀ e, e < s.g.ne →
+      TEntry.piece s.g (s.items.modify item f) { t with spans := setSides dir [item] [] } e →
+        t.piece s.g s.items e := by
+    rintro e he ⟨i, hi, _, hp⟩
+    rw [List.mem_singleton.1 ((mem_setSides dir [item] i).1 hi)] at hp
+    exact hpiece e he hp
+  have hEu : ∀ u ∈ rest, ∀ e,
+      TEntry.edges s.g (s.items.modify item f) u e ↔ u.edges s.g s.items e :=
+    fun u hu e => TEntry.edges_modify_of_not_mem item f hroot (hfree u (by simp [hs, hu])) e
+  have hPu : ∀ u ∈ rest, ∀ e,
+      TEntry.piece s.g (s.items.modify item f) u e ↔ u.piece s.g s.items e := by
+    intro u hu e
+    refine TEntry.piece_congr (fun i _ => hty i) (fun i hi e => ?_) e
+    have hi' : i ≠ item := fun h => hfree u (by simp [hs, hu]) (h ▸ hi)
+    exact Items.BelowNoV_modify_of_not_below item f hf (hnb i hi')
+  refine ⟨hinv, ?_, ?_, ?_, ?_⟩
+  · intro u hu e he hue
+    rcases List.mem_cons.1 hu with rfl | hu
+    · exact h.processed t ht e he ((hE' e he).1 hue)
+    · exact h.processed u (by simp [hs, hu]) e he ((hEu u hu e).1 hue)
+  · intro above u below hs' u' hu' e e' he he' hp hp'
+    cases above with
+    | nil =>
+      simp only [List.nil_append, List.cons.injEq] at hs'; obtain ⟨rfl, rfl⟩ := hs'
+      exact h.ordered [] t rest hs u' hu' e e' he he' (hP' e he hp) ((hPu u' hu' e').1 hp')
+    | cons a above =>
+      simp only [List.cons_append, List.cons.injEq] at hs'; obtain ⟨rfl, hs'⟩ := hs'
+      have hu : u ∈ rest := by rw [hs']; simp
+      have hu'' : u' ∈ rest := by rw [hs']; simp [hu']
+      exact h.ordered (t :: above) u below (by rw [hs, hs']; rfl) u' hu' e e' he he'
+        ((hPu u hu e).1 hp) ((hPu u' hu'' e').1 hp')
+  · intro u hu a b c hab hbc hc hpa hpc
+    have hσa := getElem!_lt hσ (s := s) (by omega : a < σ.length)
+    have hσb := getElem!_lt hσ (s := s) (by omega : b < σ.length)
+    have hσc := getElem!_lt hσ (s := s) hc
+    rcases List.mem_cons.1 hu with rfl | hu
+    · exact (hE' _ hσb).2 (h.convex t ht a b c hab hbc hc (hP' _ hσa hpa) (hP' _ hσc hpc))
+    · exact (hEu u hu _).2 (h.convex u (by simp [hs, hu]) a b c hab hbc hc
+        ((hPu u hu _).1 hpa) ((hPu u hu _).1 hpc))
+  · intro i hi hty' a b c hab hbc hc hpa hpc
+    have hσa := getElem!_lt hσ (s := s) (by omega : a < σ.length)
+    have hσb := getElem!_lt hσ (s := s) (by omega : b < σ.length)
+    have hσc := getElem!_lt hσ (s := s) hc
+    simp only [Array.size_modify] at hi
+    by_cases hi' : i = item
+    · rw [hi'] at hpa hpc ⊢
+      exact (hsub _ hσb).2 (h.convex t ht a b c hab hbc hc (hpiece _ hσa hpa) (hpiece _ hσc hpc))
+    · rw [hty] at hty'
+      exact (Items.Below_modify_of_not_below item f (hnb i hi')).2
+        (h.closed i hi hty' a b c hab hbc hc
+          ((Items.BelowNoV_modify_of_not_below item f hf (hnb i hi')).1 hpa)
+          ((Items.BelowNoV_modify_of_not_below item f hf (hnb i hi')).1 hpc))
 
 end WalkState
 end Spqr
