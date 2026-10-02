@@ -398,13 +398,8 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | Facts A–C (`sepPair_comparable`, type-1 class / above-between / sorted prefix-suffix, `type2_first_out`) | `SepPair.lean`, `Proofs/SepPair.lean` | proved |
 | Fact D (laminar intervals: `type1_class_interval`, `type2_class_interval`, `type2Block_laminar_block`, `type2Block_laminar_type2Block`) | `Proofs/Postorder.lean`, `Proofs/Interval.lean` | proved (S-caveat exceptions) |
 | 4.5 exhaustiveness: separation pairs of a block = type-1 ∪ type-2 pairs (`sepPair_iff`, `three_connected_of_no_split`) | `SepPairExhaust.lean`, `Proofs/SepPairExhaust.lean` | proved |
-<<<<<<< HEAD
-| 4.2b→4.5 bridge: a nonempty proper 2-attached edge set of a block is a union of `{u,v}`-classes and `{u,v}` is a separation pair (unless it or its complement is the single edge `u–v`); `twoAttached_union_classes`, `DfsData.twoAttached_type1_or_type2` | `Proofs/SepClasses.lean` | proved |
 | 5 skeleton/contraction: `Graph.contract` of a laminar family of 2-attached pieces; `sepPair_contract_lift`, `sepPair_contract_of` (non-terminal pairs), `threeConnected_contract_iff_dfs` (R skeleton 3-connected ↔ no type-1/type-2 pair among non-terminal skeleton vertices), `TwoAttached.sepClass_mem` | `Contract.lean`, `Proofs/Contract.lean` | proved |
-||||||| parent of 97e05bd (spqr/lean: Proofs/SepClasses.lean — walk pieces are unions of separation classes; TwoAttached ⇒ SeparationPair or single u–v edge (twoAttached_union_classes, twoAttached_type1_or_type2))
-=======
 | walk pieces ↔ separation classes: a nonempty proper `TwoAttached` set of a block is a union of `{u,v}`-classes with `{u,v}` a separation pair, or it / its complement is a single `u–v` edge (`twoAttached_union_classes`, `twoAttached_type1_or_type2`) | `Proofs/SepClasses.lean` | proved |
->>>>>>> 97e05bd (spqr/lean: Proofs/SepClasses.lean — walk pieces are unions of separation classes; TwoAttached ⇒ SeparationPair or single u–v edge (twoAttached_union_classes, twoAttached_type1_or_type2))
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
 | `walkEarTree = walkTree` (`walkEarTree_eq_walkTree`, `walkEar_eq_walk`) | `EarSpec.lean` | proved |
 | frame rule `walkTree_local` via `Lifts`/`Sim` simulation (`Sim.closeEars`, `Sim.mergeLate`, `Sim.finishRest`, `Sim.finishBoundary` proved) | `Sim.lean`, `Frame.lean`, `EarSpec.lean` | `Sim.closeVert`, `Sim.finishEdge`, `Sim.walkTree` proved; `walkTree_local` reduces to the stack-shape invariant `walkTree_guards` (admitted, with `earOut_one_entry` / `ascend_frame_one_entry`) |
