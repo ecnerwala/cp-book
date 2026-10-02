@@ -251,9 +251,13 @@ theorem walkTree_book (t : DfsTree) (d : Nat) (s : WalkState)
     BookTree t d s := by
   sorry
 
-/-- Ear fact: after `finishEdge` of a tree edge at depth `d` (returning or boundary), no open entry
-is attached at `stackVerts[d+1]`: the subtree's entries were closed into items or merged into
-entries terminating at `curV` or above. -/
+/-- **False** (kept only because `finishEdge_step`/`walkTree_inv'` are stated through it; see
+`EarInv.lean` and `checks/InvCheck.lean`, `cexBuried`). Intended: after `finishEdge` of a tree edge
+at depth `d`, no open entry is attached at `stackVerts[d+1]`. Counterexample: at the type-2 frame
+`(4, 4)` of the chain `2→3→4→5→6` (cycle `0..6` with chords `6-1`, `5-2`) the entry
+`(6, 5, [], [Q(5,6)])` stays open under `(5, 2)` and is attached at `5 = stackVerts[5]`, which is
+not in `Term 4`. The true statement needs the corrected attachment set `TEntry.Term'`
+(`Term d` plus the `vStart`s of the entries above), under which no lowering step is needed at all. -/
 theorem ear_lower {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
     (ht : o.cls.isTree = true) (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv (d + 1))
     (hs : Shape s) (hb : FinishBook curV d o hasVert s) :
@@ -633,7 +637,11 @@ theorem invOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), 
       case pre => exact fun w outs _ => (hi₁.frame' (s' := { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne })).setSv w
 end
 
-/-- `walkTree` preserves the invariant, given the ear guards and the bookkeeping facts. -/
+/-- `walkTree` preserves the invariant, given the ear guards and the bookkeeping facts.
+**Not provable as stated**: the `Inv d` post-condition is false at a vertex whose first out-edge is
+type 2 (`ear_lower`'s counterexample is `walkTree (node 4) 4`), and `Inv D` is false for every `D`
+while a sibling subtree overwrites `stackVerts` above `d` (`EarInv.lean`). The induction has to be
+redone for `EarInv.Inv' d`. -/
 theorem walkTree_inv' (t : DfsTree) (d : Nat) (s : WalkState)
     (hi : ∀ v outs, t = .node v outs → ({ s with stackVerts := s.stackVerts.set! d v } : WalkState).Inv d)
     (hs : Shape s) (hg : GuardsTree t d s) (hb : BookTree t d s) :

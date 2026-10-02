@@ -26,6 +26,7 @@ import Spqr.WalkInv
 import Spqr.Correctness
 import Spqr.EarSpec
 import Spqr.EarShape
+import Spqr.EarInv
 import Spqr.SepPair
 import Spqr.Proofs.Postorder
 import Spqr.Proofs.SepPair

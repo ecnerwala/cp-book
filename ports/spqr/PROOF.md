@@ -259,6 +259,25 @@ terminals `{vStart, stackVerts[topDepth]}` (`TwoAttached.of_term`). This hypothe
 the loop-1 closures (`topDepth ≥ d`, the sub-ear is finished) and is the type-1 condition for the
 vertex close and the P-check.
 
+**Correction (ear session 3, `EarInv.lean`, `checks/InvCheck.lean`).** The index `D = d + 1`
+"while a tree edge's subtree is being walked" is **not** enough, and no choice of `D` is: the
+sub-ears that loop 1 closes are only those *above* the first entry with `topDepth < d`; an entry
+of a deeper chain vertex that returns above `d` stays open underneath it. Cycle `0-1-2-3-4-5-6-0`
+with chords `6-1`, `5-2` and the pendant ear `4-7-3`: after `finishEdge` of the type-2 frame
+`(4, 4)` the stack is `(4,4) (5,4) (5,2) (5,5) (6,5)=[Q(5,6)] (6,1) (6,0) (6,6)`; `(6,5)` is attached
+at `5`, so `Inv 4` fails (`WalkInv.ear_lower` is false and `walkTree_inv'`'s `Inv d` post-condition
+with it), and as soon as the sibling `4→7` is entered (`stackVerts[5] := 7`) vertex `5` is
+`stackVerts[k]` for no `k`, so `Inv D` fails for every `D`. The attachment set has to include the
+bottoms of the entries above: `TEntry.Term' D s above t v := Term D s t v ∨ ∃ t' ∈ above, v =
+t'.vStart` (`EarInv.EntryInv'`/`Inv'`, implied by `Inv`). With that clause `D = d` (the current
+depth, under tree edges too) is enough — 0 violations on 9000 random multigraphs (≤ 12 vertices,
+≤ 24 edges) at every `walkTree` start/end and after every `walkOut`, while `Term d` fails 1827
+times and `Term (d+1)` 728 times on the same snapshots; connectivity of every open entry also had
+0 violations. The per-block lemmas of `WalkSpec.lean` are unaffected (they are stated for `Inv D`
+with `D` free and transfer to `Inv'`, whose extra clause is preserved by pushes/merges that only add
+entries above or merge adjacent ones); the walk induction `WalkInv.walkTree_inv'` has to be
+restated for `Inv' d`.
+
 *Soundness*: every `mergeTstackTops` joins two entries sharing a terminal, so the union is again
 connected and attached inside the union of the two `Term` sets, which the `min topDepth` rule
 re-expresses as `Term` of the merged entry (`mergeTstackTops_sound`, hypotheses `MergeOk`).
@@ -537,8 +556,11 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | frame rule `walkTree_local` via `Lifts`/`Sim` simulation (`Sim.closeEars`, `Sim.mergeLate`, `Sim.finishRest`, `Sim.finishBoundary` proved) | `Sim.lean`, `Frame.lean`, `EarSpec.lean` | `Sim.closeVert`, `Sim.finishEdge`, `Sim.walkTree` proved; `walkTree_local` reduces to the stack-shape invariant `walkTree_guards` (admitted, with `earOut_one_entry` / `ascend_frame_one_entry`) |
 | typing/allocation part of `Items.WF` (`Items.Tree` sizes/types, I/O leaves, `vs_shape`, `vs_lt`): `walk_typing` | `WalkTyping.lean` | proved (`walk_q_children` sorry: needs span shape) |
 | §4.2b walk invariant `Inv D` (`EntryInv D`: connected + attached at `vStart`/`stackVerts[topDepth..D]`; closed items 2-attached): closure lemmas (`GraphLemmas.lean`: `AttachedIn`, `twoAttached_iff`), `mergeTstackTops_sound`, `finishTstackTop_complete`, `Shape`/`Step` infrastructure, per-block lemmas `Step.closeEars`/`mergeLate`/`closeVert'`/`finishRest` under `CloseEarsOk`/`MergeLateOk`/`CloseVertOk`/`FinishRestOk` | `GraphLemmas.lean`, `WalkSpec.lean` | proved |
-| §4.2b `finishEdge_inv` (type-1 ± vertex entry, type-2 three loops, back edge) under `FinishOk`; `finishEdge_back_inv` corollary | `WalkSpec.lean` | proved; `FinishOk ← FinishGuards`/`EarShape`, `walkTree_inv` sorry; `walk_nodes_partition` proved in `WalkPlace.lean` under `ForestOK` + coverage |
-| Invariant W, Lemmas 4.3/4.4 (`earOut_one_entry`, `ascend_frame_one_entry`) | `EarSpec.lean` | sorry / hard |
+| §4.2b `finishEdge_inv` (type-1 ± vertex entry, type-2 three loops, back edge) under `FinishOk`; `finishEdge_back_inv` corollary | `WalkSpec.lean` | proved; `FinishOk ← FinishGuards`/`EarShape`, `walkTree_inv` sorry — and **not provable as stated**: `ear_lower` is false and `Inv D` fails for every `D` under a type-2 chain with a sibling subtree (§4.2b correction, `EarInv.lean`); restate for `EarInv.Inv' d`; `walk_nodes_partition` proved in `WalkPlace.lean` under `ForestOK` + coverage |
+| Invariant W, Lemma 4.3 (`earOut_one_entry`) | `EarSpec.lean` | sorry / hard |
+| Lemma 4.4 (`ascend_frame_one_entry`: a finished frame's vertex owns one entry) | `EarSpec.lean` | **false** for chain frames (cycle `0..5` + chord `5-1`, frame `(4,4)`: five entries); removed, the collapse holds only at the ear's top (= `earOut_one_entry`) |
+| boundary branch of `finishEdge` keeps `Inv D ∧ Shape` (`finishBoundary_inv`, via `BStep`, under `BoundaryOk`: popped entries exist, Q/V items are roots not on any span) | `WalkInv.lean` | proved (`BoundaryOk ← ear_boundary` sorry); the former `Step` form is false (the Q item goes under `vertItem curV`), as is `VertBook`'s `hasVert = false → ch (vertItem v) = []` (bridge `1-2` before back edge `1→0`) — replaced by connectivity + `TwoAttached v v` of the vertex item |
+| corrected attachment set `TEntry.Term'`, `EntryInv'`, `Inv'` (`Inv'.of_inv`, `Inv'.mono`); empirical check `checks/InvCheck.lean` | `EarInv.lean` | def + proved; the walk induction for `Inv'` is open |
 | 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape`/`RStep.threeConnected` (`Proofs/RClose.lean`) give it for Loop 1's R step from `Inv d` + `RStep` + `RContent`; `RContent` (content fields) and `RStep` from the ear invariant, and `spqrTree_r_three_connected` itself: hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
