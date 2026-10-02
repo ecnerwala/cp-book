@@ -12,3 +12,11 @@ name = "Spqr"
 [[lean_exe]]
 name = "dump_lean"
 root = "DumpLean"
+
+[[lean_exe]]
+name = "dump_planar_lean"
+root = "DumpPlanarLean"
+
+[[lean_exe]]
+name = "check_planar_lean"
+root = "CheckPlanarLean"
