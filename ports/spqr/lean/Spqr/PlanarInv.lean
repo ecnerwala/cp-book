@@ -149,7 +149,8 @@ def disjointUnionEdges (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) : List (Na
 /-- **2-sum gluing.** Two planar embedded graphs sharing a twin edge glue to a planar graph:
 splice the rotations at `u` and at `v` (the corners facing the twin in each embedding become
 adjacent) and delete the twins; the face count is `f₁ + f₂ - 2` and Euler's formula follows.
-Admitted; the explicit splice is `Spqr.PlanarGlue`. -/
+Admitted; the explicit splice is `Spqr.PlanarGlue`. The explicit construction is `Spqr.TwoSum.planar` (`Spqr.PlanarGlue`, `Proofs/PlanarGlue.lean`);
+discharging this statement from it amounts to identifying `twoSumEdges` with `TwoSum.edges`. -/
 theorem twoSum_planar (n₁ n₂ : Nat) (es₁ es₂ : List (Nat × Nat)) (rs₁ rs₂ : RotationSystem)
     (h₁ : IsPlanarEmbedding es₁ n₁ rs₁) (h₂ : IsPlanarEmbedding es₂ n₂ rs₂) (e₁ e₂ u₁ v₁ u₂ v₂ : Nat)
     (he₁ : es₁[e₁]? = some (u₁, v₁)) (he₂ : es₂[e₂]? = some (u₂, v₂)) (hu₁ : u₁ ≠ v₁) (hu₂ : u₂ ≠ v₂) :
