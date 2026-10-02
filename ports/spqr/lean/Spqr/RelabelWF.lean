@@ -600,6 +600,157 @@ theorem adj_dest (hor : items.ROriented g) :
   rw [← hnvs', hev]
   exact ha3
 
+omit H in
+theorem filter_range_restrict (p : Nat → Bool) (N a b : Nat) (hab : a ≤ b) (hbN : b ≤ N)
+    (hout : ∀ x, x < N → ¬ (a ≤ x ∧ x < b) → p x = false) :
+    (List.range N).filter p = ((List.range (b - a)).filter fun k => p (a + k)).map (a + ·) := by
+  have h0 : (List.range a).filter p = [] :=
+    List.filter_eq_nil_iff.2 fun x hx => by
+      rw [List.mem_range] at hx; simp [hout x (by omega) (by omega)]
+  have h2 : ((List.range (N - b)).map ((a + (b - a)) + ·)).filter p = [] :=
+    List.filter_eq_nil_iff.2 fun x hx => by
+      obtain ⟨k, hk, rfl⟩ := List.mem_map.1 hx
+      rw [List.mem_range] at hk
+      simp only [Bool.not_eq_true]
+      exact hout _ (by omega) (by omega)
+  conv_lhs => rw [show N = a + (b - a) + (N - b) by omega]
+  rw [List.range_add, List.range_add, List.filter_append, List.filter_append, List.filter_map, h0, h2,
+    List.nil_append, List.append_nil]
+  rfl
+
+/-- The global node-edges of node `i` selected by an endpoint predicate are its local ones. -/
+theorem row_filter {i : ItemId} (hi : i < items.size) {pos : Nat → Nat}
+    (hl : RelabelLayout g items t idx i pos)
+    (hloc : (nodeLayout g items t idx i pos).Local (idx i) (t.nvRange (idx i)).1 (t.nvRange (idx i)).2
+      (t.neRange (idx i)).1 (t.neRange (idx i)).2)
+    (sel : Nat × Nat → Nat) (nv : Nat)
+    (hout : ∀ ne, ne < t.nodeEdges.size →
+      ¬ ((t.neRange (idx i)).1 ≤ ne ∧ ne < (t.neRange (idx i)).2) → sel t.nodeEdges[ne]!.nvs ≠ nv) :
+    (List.range t.nodeEdges.size).filter (fun ne => decide (sel t.nodeEdges[ne]!.nvs = nv)) =
+      ((List.range (nodeLayout g items t idx i pos).edges.size).filter fun k =>
+        decide (sel (nodeLayout g items t idx i pos).edges[k]!.nvs = nv)).map
+        (· + (t.neRange (idx i)).1) := by
+  have hne := (H.node i hi).ne_range
+  have hle := H.neEn_le_size (H.idx_lt hi)
+  have hc : ∀ k ∈ List.range ((t.neRange (idx i)).2 - (t.neRange (idx i)).1),
+      decide (sel t.nodeEdges[(t.neRange (idx i)).1 + k]!.nvs = nv) =
+        decide (sel (nodeLayout g items t idx i pos).edges[k]!.nvs = nv) := by
+    intro k hk; rw [List.mem_range] at hk; rw [hl.edge_nvs k (by omega)]
+  rw [filter_range_restrict (fun ne => decide (sel t.nodeEdges[ne]!.nvs = nv)) t.nodeEdges.size
+    (t.neRange (idx i)).1 (t.neRange (idx i)).2 (by omega) hle
+    (fun x hx hn => by simpa using hout x hx hn)]
+  rw [hloc.edges_size, List.filter_congr hc]
+  exact List.map_congr_left fun k _ => Nat.add_comm _ _
+
+open LayoutR (row rowBound) in
+/-- Node-edges of a node other than `i` have no endpoint among `i`'s node-vertices. -/
+theorem foreign_ne (hor : items.ROriented g) {i : ItemId} (hi : i < items.size) {nv : Nat}
+    (h1 : (t.nvRange (idx i)).1 ≤ nv) (h2 : nv < (t.nvRange (idx i)).2) :
+    ∀ ne, ne < t.nodeEdges.size →
+      ¬ ((t.neRange (idx i)).1 ≤ ne ∧ ne < (t.neRange (idx i)).2) →
+      t.nodeEdges[ne]!.nvs.1 ≠ nv ∧ t.nodeEdges[ne]!.nvs.2 ≠ nv := by
+  intro ne hne' hnot
+  obtain ⟨j, hj, hj1, hj2⟩ := H.ne_locate hne'
+  obtain ⟨pos', hl', hloc'⟩ := H.layout_local hor hj
+  have hij : idx j ≠ idx i := by
+    intro he; rw [he] at hj1 hj2; exact hnot ⟨hj1, hj2⟩
+  have hnej := (H.node j hj).ne_range
+  have hev := hl'.edge_nvs (ne - (t.neRange (idx j)).1) (by omega)
+  rw [show (t.neRange (idx j)).1 + (ne - (t.neRange (idx j)).1) = ne by omega] at hev
+  have hb := hloc'.ne_nvs (ne - (t.neRange (idx j)).1) (by rw [hloc'.edges_size]; omega)
+  rw [← hev] at hb
+  constructor
+  · intro h; rw [h] at hb
+    exact H.nv_disjoint (H.idx_lt hj) (H.idx_lt hi) hij ⟨hb.1, by omega⟩ ⟨h1, h2⟩
+  · intro h; rw [h] at hb
+    exact H.nv_disjoint (H.idx_lt hj) (H.idx_lt hi) hij ⟨by omega, hb.2.2⟩ ⟨h1, h2⟩
+
+open LayoutR (row rowBound) in
+/-- `WF.adj_incident` with multiplicity: rows `2 nv` and `2 nv + 1` list the node-edges ending,
+respectively starting, at `nv`. A loop `(nv, nv)` therefore occurs twice on the left, so the
+`Spec.lean` clause (whose right side lists it once) is false; this is the corrected statement. -/
+theorem adj_incident' (hor : items.ROriented g) : ∀ nv, nv < t.nodeVerts.size →
+    ((List.range (t.adjBounds[2 * nv + 2]! - t.adjBounds[2 * nv]!)).map fun k =>
+        (t.adjDat[t.adjBounds[2 * nv]! + k]!).ne).Perm
+      (((List.range t.nodeEdges.size).filter fun ne => t.nodeEdges[ne]!.nvs.2 = nv) ++
+       ((List.range t.nodeEdges.size).filter fun ne => t.nodeEdges[ne]!.nvs.1 = nv)) := by
+  intro nv hnv
+  obtain ⟨i, hi, h1, h2⟩ := H.nv_locate hnv
+  obtain ⟨pos, hl, hloc⟩ := H.layout_local hor hi
+  have hmono := H.adj_bounds_mono hor
+  have hsz := H.gl.sizes.adjBounds
+  have hb01 : t.adjBounds[2 * nv]! ≤ t.adjBounds[2 * nv + 1]! := hmono (2 * nv) (by omega)
+  have hb12 : t.adjBounds[2 * nv + 1]! ≤ t.adjBounds[2 * nv + 2]! := hmono (2 * nv + 1) (by omega)
+  have hsplit : ((List.range (t.adjBounds[2 * nv + 2]! - t.adjBounds[2 * nv]!)).map fun k =>
+        (t.adjDat[t.adjBounds[2 * nv]! + k]!).ne) =
+      ((List.range (t.adjBounds[2 * nv + 1]! - t.adjBounds[2 * nv]!)).map fun k =>
+        t.adjDat[t.adjBounds[2 * nv]! + k]!).map (·.ne) ++
+      ((List.range (t.adjBounds[2 * nv + 1 + 1]! - t.adjBounds[2 * nv + 1]!)).map fun k =>
+        t.adjDat[t.adjBounds[2 * nv + 1]! + k]!).map (·.ne) := by
+    have e : t.adjBounds[2 * nv + 2]! = t.adjBounds[2 * nv + 1 + 1]! :=
+      congrArg (fun m => t.adjBounds[m]!) (by omega : 2 * nv + 2 = 2 * nv + 1 + 1)
+    rw [show t.adjBounds[2 * nv + 2]! - t.adjBounds[2 * nv]! =
+      (t.adjBounds[2 * nv + 1]! - t.adjBounds[2 * nv]!) +
+        (t.adjBounds[2 * nv + 1 + 1]! - t.adjBounds[2 * nv + 1]!) by omega,
+      List.range_add, List.map_append, List.map_map, List.map_map, List.map_map]
+    congr 1
+    apply List.map_congr_left
+    intro k hk
+    simp only [Function.comp]
+    congr 2; omega
+  rw [hsplit, H.global_row hor hi hl hloc (2 * nv) (by omega) (by omega),
+    H.global_row hor hi hl hloc (2 * nv + 1) (by omega) (by omega),
+    H.row_filter hi hl hloc Prod.snd nv (fun ne h hn => (H.foreign_ne hor hi h1 h2 ne h hn).2),
+    H.row_filter hi hl hloc Prod.fst nv (fun ne h hn => (H.foreign_ne hor hi h1 h2 ne h hn).1)]
+  exact (hloc.adj_incident_lo nv h1 h2).append (hloc.adj_incident_hi nv h1 h2)
+
+/-- `SpqrTree.WF` modulo its two false clauses (`only_root_F`, `adj_incident`), taken as
+hypotheses; see `only_root_F` and `adj_incident'` for the corrected, proved forms. -/
+theorem wf_of (hor : items.ROriented g) (hF : ∀ n, 0 < n → t.type n ≠ .F)
+    (hinc : ∀ nv, nv < t.nodeVerts.size →
+      ((List.range (t.adjBounds[2 * nv + 2]! - t.adjBounds[2 * nv]!)).map fun k =>
+          (t.adjDat[t.adjBounds[2 * nv]! + k]!).ne).Perm
+        ((List.range t.nodeEdges.size).filter fun ne =>
+          t.nodeEdges[ne]!.nvs.1 = nv ∨ t.nodeEdges[ne]!.nvs.2 = nv)) :
+    t.WF :=
+  ⟨H.gl.sizes, H.preorder hF, H.bijections, H.ownership hor, H.twins,
+    fun n hn => by obtain ⟨i, hi, rfl⟩ := H.idx_surj hn; exact H.shape hor hi,
+    H.adj_bounds_mono hor, (H.adj_spec hor).2, hinc, H.adj_dest hor⟩
+
 end RelabelAll
+
+/-- `SpqrTree.WF` of the relabelled tree, modulo the two false `Spec.lean` clauses taken as
+hypotheses (`relabelTree_only_root_F`/`relabelTree_adj_incident'` are their corrected forms). -/
+theorem relabelTree_wf_of (g : Graph) (items : Items) (h : items.WF g)
+    (hor : items.ROriented g)
+    (hF : ∀ n, 0 < n → (relabelTree g items).type n ≠ .F)
+    (hinc : ∀ nv, nv < (relabelTree g items).nodeVerts.size →
+      ((List.range ((relabelTree g items).adjBounds[2 * nv + 2]! -
+          (relabelTree g items).adjBounds[2 * nv]!)).map fun k =>
+          ((relabelTree g items).adjDat[(relabelTree g items).adjBounds[2 * nv]! + k]!).ne).Perm
+        ((List.range (relabelTree g items).nodeEdges.size).filter fun ne =>
+          (relabelTree g items).nodeEdges[ne]!.nvs.1 = nv ∨
+          (relabelTree g items).nodeEdges[ne]!.nvs.2 = nv)) :
+    (relabelTree g items).WF := by
+  obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
+  exact RelabelAll.wf_of ⟨h, hidx, hnode⟩ hor hF hinc
+
+theorem relabelTree_only_root_F (g : Graph) (items : Items) (h : items.WF g) :
+    ∀ n, 0 < n → n < (relabelTree g items).size → (relabelTree g items).type n ≠ .F := by
+  obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
+  exact RelabelAll.only_root_F ⟨h, hidx, hnode⟩
+
+theorem relabelTree_adj_incident' (g : Graph) (items : Items) (h : items.WF g)
+    (hor : items.ROriented g) :
+    ∀ nv, nv < (relabelTree g items).nodeVerts.size →
+      ((List.range ((relabelTree g items).adjBounds[2 * nv + 2]! -
+          (relabelTree g items).adjBounds[2 * nv]!)).map fun k =>
+          ((relabelTree g items).adjDat[(relabelTree g items).adjBounds[2 * nv]! + k]!).ne).Perm
+        (((List.range (relabelTree g items).nodeEdges.size).filter fun ne =>
+            (relabelTree g items).nodeEdges[ne]!.nvs.2 = nv) ++
+         ((List.range (relabelTree g items).nodeEdges.size).filter fun ne =>
+            (relabelTree g items).nodeEdges[ne]!.nvs.1 = nv)) := by
+  obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
+  exact RelabelAll.adj_incident' ⟨h, hidx, hnode⟩ hor
 
 end Spqr
