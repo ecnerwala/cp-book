@@ -32,7 +32,7 @@ def descOf (items : Items) : Nat → ItemId → List ItemId
 def leavesB (items : Items) (i : ItemId) : List ItemId := Items.leaves items items.size i
 
 def stReadB (items : Items) (new : List TEntry) (ps : List StPiece) : Bool :=
-  (readStack new).flatMap (leavesB items) == stNest ps
+  ((readL new).flatMap (leavesB items) == stNestL ps && (readR new).flatMap (leavesB items) == stNestR ps)
 
 def vsOrientedAtB (g : Graph) (items : Items) (b : StBlock) (i : ItemId) : Bool :=
   let lv := leavesB items i

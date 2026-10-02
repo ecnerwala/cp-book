@@ -78,7 +78,7 @@ theorem L1StInv.mergeTopsN {g : Graph} {s : WalkState} {d : Nat} {ps : List StPi
   refine ⟨⟨new', by dsimp only; rw [hts, h1], ?_⟩, ?_, hJ.dirs⟩
   · unfold StRead at hR ⊢
     dsimp only
-    rw [readStack, h2, h3]
+    rw [h2, h3]
     exact hR
   · exact StItems.congr hJ.items (by dsimp only; rw [hts, h1]; exact readStack_append_congr h2 h3) rfl
 

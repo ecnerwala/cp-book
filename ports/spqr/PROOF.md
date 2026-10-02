@@ -1645,8 +1645,8 @@ inverse expansion).
 *The relation (`StSim.lean`, checked by `check_stsim` / `compare_stsim.sh`, seeds 0..1000, 0 violations
 at every boundary).* Expansion is the fuel-free inductive `ExpandsList items xs L` (`L` = the
 concatenated leaves of `xs`; a V / Q item is its own leaf, any other item is replaced by its children),
-`Expands items x L := ExpandsList items [x] L`; `StRead items new ps := ExpandsList items (readStack new)
-(stNest ps)`; `DirsOf s d := [stackDir[0], …, stackDir[d-1]]` is the reference's `dirs`. `StSim g prev
+`Expands items x L := ExpandsList items [x] L`; `StRead items new ps := ExpandsList items (readL new) (stNestL ps) ∧ ExpandsList items (readR new)
+(stNestR ps)` (per side, so that readings of adjacent stack segments concatenate); `DirsOf s d := [stackDir[0], …, stackDir[d-1]]` is the reference's `dirs`. `StSim g prev
 fs t base s` is the postcondition of `walkTree t d` (`d = fs.length`, `base` the tstack before, `prev`
 the finished trees of the forest): `s.tstack = new ++ base` with `StRead s.items new (refTree g t d
 (DirsOf s d)).1`, and `StItems g s (refBlocks g (prev ++ [truncTree fs t]))`; `StSimOuts g prev fs v
