@@ -350,6 +350,56 @@ theorem DfsTree.edgePostorder_eq (t : DfsTree) :
     t.edgePostorder = DfsOut.edgePostorderList t.outs := by
   cases t; rfl
 
+theorem DfsOut.edgePostorderList_takeWhile_dropWhile (p : DfsOut → Bool) (l : List DfsOut) :
+    DfsOut.edgePostorderList l =
+      DfsOut.edgePostorderList (l.takeWhile p) ++ DfsOut.edgePostorderList (l.dropWhile p) := by
+  rw [DfsOut.edgePostorderList_eq_flatMap, DfsOut.edgePostorderList_eq_flatMap,
+    DfsOut.edgePostorderList_eq_flatMap, ← List.flatMap_append, List.takeWhile_append_dropWhile]
+
+theorem DfsOut.edgePostorderList_subset_of_sublist {l l' : List DfsOut} (h : l.Sublist l') :
+    DfsOut.edgePostorderList l ⊆ DfsOut.edgePostorderList l' := by
+  rw [DfsOut.edgePostorderList_eq_flatMap, DfsOut.edgePostorderList_eq_flatMap]
+  intro x hx
+  obtain ⟨o, ho, hx⟩ := List.mem_flatMap.mp hx
+  exact List.mem_flatMap.mpr ⟨o, h.subset ho, hx⟩
+
+theorem DfsTree.mem_type2Block {c sb : DfsTree} (hnd : c.edgePostorder.Nodup)
+    (hpre : sb.edgePostorder <+: c.edgePostorder) {l e₀ x : Nat} :
+    x ∈ DfsTree.type2Block l e₀ c sb ↔
+      x = e₀ ∨ (x ∈ c.edgePostorder ∧ x ∉ sb.edgePostorder) ∨
+        x ∈ DfsOut.edgePostorderList
+          (sb.outs.dropWhile fun o => decide (o.cls.rank ≤ (OutClass.ret l .backEdge).rank)) := by
+  obtain ⟨R, hR⟩ := hpre
+  unfold DfsTree.type2Block
+  rw [← hR, List.drop_left]
+  rw [← hR, List.nodup_append] at hnd
+  simp only [List.mem_append, List.mem_singleton]
+  constructor
+  · rintro ((h | h) | h)
+    · exact .inr (.inr h)
+    · exact .inr (.inl ⟨.inr h, fun h' => hnd.2.2 _ h' _ h rfl⟩)
+    · exact .inl h
+  · rintro (h | ⟨h | h, h'⟩ | h)
+    · exact .inr h
+    · exact absurd h h'
+    · exact .inl (.inr h)
+    · exact .inl (.inl h)
+
+theorem DfsTree.type2Block_disjoint_takeWhile {c sb : DfsTree} {e₀ : Nat}
+    (hnd : (c.edgePostorder ++ [e₀]).Nodup) (hpre : sb.edgePostorder <+: c.edgePostorder)
+    {l x : Nat}
+    (hx : x ∈ DfsOut.edgePostorderList
+      (sb.outs.takeWhile fun o => decide (o.cls.rank ≤ (OutClass.ret l .backEdge).rank))) :
+    x ∉ DfsTree.type2Block l e₀ c sb := by
+  obtain ⟨R, hR⟩ := hpre
+  unfold DfsTree.type2Block
+  rw [← hR, List.drop_left]
+  rw [← hR, sb.edgePostorder_eq, DfsOut.edgePostorderList_takeWhile_dropWhile
+    (fun o => decide (o.cls.rank ≤ (OutClass.ret l .backEdge).rank)), List.append_assoc,
+    List.append_assoc, List.nodup_append] at hnd
+  rw [List.append_assoc]
+  exact fun h => hnd.2.2 _ hx _ h rfl
+
 theorem DfsOut.e_mem_block (o : DfsOut) : o.e ∈ o.block := by
   cases o <;> simp [DfsOut.block, DfsOut.e]
 
