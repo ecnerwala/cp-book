@@ -150,6 +150,100 @@ theorem RStep.threeConnected (h : s.Inv d) (h2 : s.g.TwoConnected) (hr : s.RStep
       nxt.vStart s.stackVerts[d]!).contract s.g).ThreeConnected :=
   (hr.rCloseShape h h2 hc).threeConnected hsp hrt h2
 
+/-- `nxt` touches `cur.vStart`: otherwise `cur.vStart` is interior to `cur` and `cur` is attached at
+`stackVerts[d]` alone, contradicting 2-connectivity. -/
+theorem RStep.nxt_touches (h2 : s.g.TwoConnected) (hr : s.RStep d cur nxt rest)
+    (hcurA : s.g.TwoAttached (cur.edges s.g s.items) cur.vStart s.stackVerts[d]!) :
+    s.g.Touches (nxt.edges s.g s.items) cur.vStart := by
+  obtain ⟨e₀, he₀, hU₀⟩ := hr.proper
+  obtain ⟨e₁, he₁, hE₁⟩ := hr.cur_ne
+  by_contra hno
+  have hint : s.g.Interior (cur.edges s.g s.items) cur.vStart := by
+    intro e he hv
+    rcases hr.interior e he hv with h | h
+    · exact h
+    · exact absurd ⟨e, he, h, hv⟩ hno
+  have hA : s.g.TwoAttached (cur.edges s.g s.items) s.stackVerts[d]! s.stackVerts[d]! := by
+    intro v e e' he he' hE hE' hv hv'
+    rcases hcurA v e e' he he' hE hE' hv hv' with rfl | h
+    · exact absurd (hint e' he' hv') hE'
+    · exact .inl h
+  exact hA.ne h2 he₁ hE₁ he₀ (fun h => hU₀ (.inl h)) rfl
+
+/-- `Inv d` never holds at an R close with edge-disjoint entries: `Inv d` would attach `nxt` at
+`{nxt.vStart, stackVerts[d]}` only, but `cur.vStart` (the child `stackVerts[d+1]`) is touched by
+both entries (`RStep.nxt_touches`) and is neither (`RStep.ne`, `TwoAttached.ne`). The invariant that
+holds at the R branch of `finishEdge` at depth `d` is `Inv (d+1)`; use `RStep.rCloseShape'`. -/
+theorem RStep.inv_absurd (h : s.Inv d) (h2 : s.g.TwoConnected) (hr : s.RStep d cur nxt rest)
+    (hdisj : ∀ e, cur.edges s.g s.items e → nxt.edges s.g s.items e → False) : False := by
+  have hcur := h.entries cur (by simp [hr.tstack])
+  have hnxt := h.entries nxt (by simp [hr.tstack])
+  obtain ⟨e₀, he₀, hU₀⟩ := hr.proper
+  obtain ⟨e₁, he₁, hE₁⟩ := hr.cur_ne
+  have hcurA : s.g.TwoAttached (cur.edges s.g s.items) cur.vStart s.stackVerts[d]! := by
+    have := TwoAttached.of_term hcur.attached fun k h1 h2 => by have := hr.cur_top; omega
+    rwa [hr.cur_top] at this
+  have hnxtA : s.g.TwoAttached (nxt.edges s.g s.items) nxt.vStart s.stackVerts[d]! := by
+    have := TwoAttached.of_term hnxt.attached fun k h1 h2 => by have := hr.nxt_top; omega
+    rwa [hr.nxt_top] at this
+  obtain ⟨e₂, he₂, hE₂, hv₂⟩ := hr.nxt_touches h2 hcurA
+  obtain ⟨e₃, he₃, hE₃, hv₃⟩ := (hcurA.touches h2 he₁ hE₁ he₀ (fun h => hU₀ (.inl h))).1
+  rcases hnxtA cur.vStart e₂ e₃ he₂ he₃ hE₂ (fun h => hdisj e₃ hE₃ h) hv₂ hv₃ with h | h
+  · exact hr.ne h.symm
+  · exact hcurA.ne h2 he₁ hE₁ he₀ (fun h => hU₀ (.inl h)) h
+
+/-- The R case of loop 1 is an `RCloseShape`, from the invariant `Inv D` at any depth `D ≥ d` whose
+intermediate stack vertices `stackVerts[d+1..D]` all equal `cur.vStart` (at the R branch of
+`finishEdge` at depth `d`: `D = d+1` and `cur.vStart = stackVerts[d+1]`, the child). `cur` is then
+2-attached at `{cur.vStart, stackVerts[d]}`; `nxt` may attach at `cur.vStart`, which is interior to
+`U`, so `U` is 2-attached at `{nxt.vStart, stackVerts[d]}`. -/
+theorem RStep.rCloseShape' {D : Nat} (h : s.Inv D)
+    (hmid : ∀ k, d < k → k ≤ D → s.stackVerts[k]! = cur.vStart)
+    (h2 : s.g.TwoConnected) (hr : s.RStep d cur nxt rest)
+    {dfs : DfsData} (hc : s.RContent dfs d cur nxt) :
+    RCloseShape s.g dfs (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)) (s.rU cur nxt)
+      nxt.vStart s.stackVerts[d]! := by
+  have hcur := h.entries cur (by simp [hr.tstack])
+  have hnxt := h.entries nxt (by simp [hr.tstack])
+  obtain ⟨e₀, he₀, hU₀⟩ := hr.proper
+  obtain ⟨e₁, he₁, hE₁⟩ := hr.cur_ne
+  have hcurA : s.g.TwoAttached (cur.edges s.g s.items) cur.vStart s.stackVerts[d]! := by
+    have := TwoAttached.of_term hcur.attached fun k h1 h2 =>
+      .inl (hmid k (by have := hr.cur_top; omega) h2)
+    rwa [hr.cur_top] at this
+  have hcurT := (hcurA.touches h2 he₁ hE₁ he₀ (fun h => hU₀ (.inl h))).1
+  have hnxtC := hr.nxt_touches h2 hcurA
+  obtain ⟨wf, sub⟩ := hr.pieces.wf h2 ⟨e₀, he₀, hU₀⟩
+  have conn : s.g.ConnEdges (s.rU cur nxt) :=
+    Graph.ConnEdges.union hcur.conn hnxt.conn fun _ _ => ⟨cur.vStart, hcurT, hnxtC⟩
+  have att : s.g.TwoAttached (s.rU cur nxt) nxt.vStart s.stackVerts[d]! := by
+    intro v e e' he he' hE hE' hv hv'
+    have hvc : v ≠ cur.vStart := by
+      rintro rfl
+      exact hE' (hr.interior e' he' hv')
+    rcases hE with hE | hE
+    · rcases hcurA v e e' he he' hE (fun h => hE' (.inl h)) hv hv' with h | h
+      · exact absurd h hvc
+      · exact .inr h
+    · rcases hnxt.attached v e e' he he' hE (fun h => hE' (.inr h)) hv hv' with h | ⟨k, h1, h2, rfl⟩
+      · exact .inl h
+      · rcases Nat.eq_or_lt_of_le h1 with h1 | h1
+        · exact .inr (by rw [← h1, hr.nxt_top])
+        · exact absurd (hmid k (by have := hr.nxt_top; omega) h2) hvc
+  obtain ⟨-, hne, hts, htt, -⟩ :=
+    Graph.twoAttached_union_classes h2 att ⟨e₁, he₁, .inl hE₁⟩ ⟨e₀, he₀, hU₀⟩
+  exact ⟨wf, sub, conn, att, hts, htt, hne, ⟨e₀, he₀, hU₀⟩, hc.single, hc.maximal, hc.type1,
+    hc.bond, hc.type2⟩
+
+/-- `RStep.threeConnected` under the invariant that actually holds at the R branch. -/
+theorem RStep.threeConnected' {D : Nat} (h : s.Inv D)
+    (hmid : ∀ k, d < k → k ≤ D → s.stackVerts[k]! = cur.vStart)
+    (h2 : s.g.TwoConnected) (hr : s.RStep d cur nxt rest)
+    {dfs : DfsData} (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g) (hc : s.RContent dfs d cur nxt) :
+    (((Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).addParent s.g (s.rU cur nxt)
+      nxt.vStart s.stackVerts[d]!).contract s.g).ThreeConnected :=
+  (hr.rCloseShape' h hmid h2 hc).threeConnected hsp hrt h2
+
 end WalkState
 
 end Spqr
