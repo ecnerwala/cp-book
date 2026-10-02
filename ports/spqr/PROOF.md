@@ -616,8 +616,10 @@ Items.WF g items → Items.OwnExtra g items → Items.ROriented g items →
 * `Bijections` from `Items.Tree` only (types of `1+v`, `1+nv+e`, `RelabelIdx.vert_index/edge_index`,
   `RelabelNode.orig`);
 * `Ownership` from `Items.Tree`, `Endpoints.vs_shape`, `Shapes.*_shape`/`i_o_leaf`/`q_children`
-  (the per-type `layoutNode` hypotheses), the `layoutNode` edge records (`layoutNode_edges`, proved
-  from `StLayout.lean`'s `layoutNode_R_eq`), and the two extra hypotheses: `Items.ROriented`
+  (the per-type `layoutNode` hypotheses), the `layoutNode` edge records (`layoutNode_edges`, read
+  off `LayoutShape.lean`'s `layoutNode_*_eq`/`run*_edges_get`/`run*_spec`; the R edges are
+  re-derived there without `LayoutShape.run_edges`'s endpoint hypothesis so that `Twins` does not
+  need `ROriented`), and the two extra hypotheses: `Items.ROriented`
   (`ne_nvs` for R nodes needs the ordered endpoints to lie in the node-vert list, which is the
   st-ordering fact of §7, not part of `Items.WF`) and `Items.OwnExtra` — four facts about the walk's
   items that `Items.WF` does not state: node-vert lists are nodup (`WF` admits `I`/`P` with `u = v`,
