@@ -1,5 +1,6 @@
 import Spqr.ItemSpec
 import Spqr.Frame
+import Spqr.StSpec
 
 /-!
 # The st-order reference
@@ -224,6 +225,26 @@ theorem walk_st' (g : Graph) (tern : Bool) (vo eo : List Nat) (i : ItemId)
       restrictCh (g.walk tern (g.dfsForest vo eo)).items
         (g.walk tern (g.dfsForest vo eo)).items.size
         (refOrder g (g.dfsForest vo eo)) i := by
+  sorry
+
+/-- Admitted (Even–Tarjan on the reference): an S / P / R item of the walk whose children are
+listed in the reference order is in s-t order. Plan: induction over `refTree`, no tstack — every
+piece spliced at depth `l` joins the open path at depth `l` on side `dirs[l]`, so in the reading of
+a block every vertex other than the block's endpoints has a neighbour on each side, and the
+restriction to an item keeps this (the item's virtual edges are the sub-ears' ends). The
+orientation of the children's `vs` (`makeVs` uses the same `stackDir[d]` as the splice side) is
+the one walk-side fact needed besides `walk_st'`. -/
+theorem stItem_of_refOrder (g : Graph) (tern : Bool) (vo eo : List Nat) (i : ItemId)
+    (hi : i < (g.walk tern (g.dfsForest vo eo)).items.size)
+    (ht : Items.type (g.walk tern (g.dfsForest vo eo)).items i = .S ∨
+      Items.type (g.walk tern (g.dfsForest vo eo)).items i = .P ∨
+      Items.type (g.walk tern (g.dfsForest vo eo)).items i = .R)
+    (hwf : Items.WF g (g.walk tern (g.dfsForest vo eo)).items)
+    (hch : Items.ch (g.walk tern (g.dfsForest vo eo)).items i =
+      restrictCh (g.walk tern (g.dfsForest vo eo)).items
+        (g.walk tern (g.dfsForest vo eo)).items.size
+        (refOrder g (g.dfsForest vo eo)) i) :
+    Items.StItem (g.walk tern (g.dfsForest vo eo)).items i := by
   sorry
 
 end Spqr

@@ -1,5 +1,6 @@
 import Spqr.WalkSpec
 import Spqr.StSpec
+import Spqr.StRef
 
 /-!
 # Walk-level st-ordering invariant
@@ -443,14 +444,21 @@ theorem stInv_finishTstackTop_stItem (s : WalkState) (d : Nat) (ord : Nat → Na
       exact stInv_topClosable s d ord hinv t ht htd hside hclosed hne hvv htop)
     t ht hitem hnot
 
-/-- Admitted: the walk-level induction in the shape of `WalkInv.walkTree_inv'`: for some
-numbering `ord` of the vertices, the final state satisfies `StInv`. -/
+/-- Admitted; alternative route (`PROOF.md` §7.4), no longer used by `walk_st`: the walk-level
+induction in the shape of `WalkInv.walkTree_inv'`: for some numbering `ord` of the vertices, the
+final state satisfies `StInv`. -/
 theorem walk_stInv (g : Graph) (tern : Bool) (vo eo : List Nat) :
     ∃ ord, (g.walk tern (g.dfsForest vo eo)).StInv 0 ord := by
   sorry
 
-/-- Phase 2: the walk's children lists are in s-t order (`PROOF.md` §7, via `WalkState.StInv`). -/
+/-- Phase 2: the walk's children lists are in s-t order (`PROOF.md` §7.6): they are the reference
+order (`walk_st'`), which is an st-order (`stItem_of_refOrder`). -/
 theorem walk_st (g : Graph) (tern : Bool) (vo eo : List Nat) :
+    Items.StNumbered (g.walk tern (g.dfsForest vo eo)).items :=
+  fun i hi ht => stItem_of_refOrder g tern vo eo i hi ht (walk_items_wf g tern vo eo) (walk_st' g tern vo eo i hi ht)
+
+/-- The same from the `StInv` route. -/
+theorem walk_st_of_stInv (g : Graph) (tern : Bool) (vo eo : List Nat) :
     Items.StNumbered (g.walk tern (g.dfsForest vo eo)).items := by
   obtain ⟨ord, h⟩ := walk_stInv g tern vo eo
   exact fun i hi ht => h.items i hi ht
