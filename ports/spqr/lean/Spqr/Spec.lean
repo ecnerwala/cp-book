@@ -216,10 +216,14 @@ structure Represents (g : Graph) : Prop where
   separation : ∀ i ne, i < t.size → t.capNe i = some ne → ∀ p, t.neOrig ne = some p →
     ∀ v e e', Graph.Incident g v e → Graph.Incident g v e' → t.EdgeIn i e → ¬ t.EdgeIn i e' →
       v = p.1 ∨ v = p.2
-  /-- The vertex children of a node are exactly the original vertices interior to it: the
-  vertices all of whose edges lie in its subtree but not in a single child's subtree. -/
-  interior : ∀ i v, i < t.size → v < g.nv → ∀ j, t.vertIndex[v]! = some j →
+  /-- The vertex children of an S/P/R node are exactly the original vertices interior to it: the
+  non-isolated vertices all of whose edges lie in its subtree but not in a single child's subtree.
+  (Not stated at other items: at the root a DFS root's edges all lie below its vertex item, at a
+  `Q` block root the attachment vertex's edges may all lie below it.) -/
+  interior : ∀ i v, i < t.size → v < g.nv → t.type i ∈ [NodeType.S, .P, .R] →
+    ∀ j, t.vertIndex[v]! = some j →
     (t.parent j = some i ↔
+      (∃ e, Graph.Incident g v e) ∧
       (∀ e, Graph.Incident g v e → t.EdgeIn i e) ∧
       ∀ c ∈ t.children i, ¬ ∀ e, Graph.Incident g v e → t.EdgeIn c e)
   /-- R skeletons are 3-connected (as graphs on their node-vertices, relabelled from `nvSt`). -/

@@ -88,10 +88,14 @@ structure Endpoints : Prop where
       ((g.edges[e]!).1 = v ∨ (g.edges[e]!).2 = v) → ((g.edges[e']!).1 = v ∨ (g.edges[e']!).2 = v) →
       items.EdgeBelow g i e → ¬ items.EdgeBelow g i e' →
       (items.vs i).1 = some v ∨ (items.vs i).2 = some v
-  /-- Interior: the V children of a node are the vertices whose every edge lies below the node but
-  below none of its children. -/
-  interior : ∀ i v, i < items.size → v < g.nv →
+  /-- Interior: the V children of an S/P/R node are the non-isolated vertices whose every edge lies
+  below the node but below none of its children.
+  Not stated at other items: at `F` a DFS root's edges all lie below its `V` child, at a `Q`
+  block root the attachment vertex's edges may all lie below it, and `I`/`O` leaves hold no edges
+  of an isolated vertex. -/
+  interior : ∀ i v, i < items.size → v < g.nv → items.type i ∈ [NodeType.S, .P, .R] →
     (items.IsParent i (vertItem v) ↔
+      (∃ e, e < g.ne ∧ ((g.edges[e]!).1 = v ∨ (g.edges[e]!).2 = v)) ∧
       (∀ e, e < g.ne → ((g.edges[e]!).1 = v ∨ (g.edges[e]!).2 = v) → items.EdgeBelow g i e) ∧
       ∀ c, items.IsParent i c → ¬ ∀ e, e < g.ne → ((g.edges[e]!).1 = v ∨ (g.edges[e]!).2 = v) → items.EdgeBelow g c e)
 

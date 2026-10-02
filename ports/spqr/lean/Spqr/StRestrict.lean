@@ -295,6 +295,7 @@ theorem stItem_of_block (g : Graph) (items : Items)
     Items.StItem items i := by
   set sq := b.seq g with hsq
   have ht' : items.type i ∉ [NodeType.F, .V] := by rcases ht with h | h | h <;> simp [h]
+  have htN : items.type i ∈ [NodeType.S, .P, .R] := by rcases ht with h | h | h <;> simp [h]
   obtain ⟨s, t, hst⟩ : ∃ s t, items.vs i = (some s, some t) := by
     have := hwf.endpoints.vs_shape i hi
     rcases ht with h | h | h <;> rw [h] at this <;> exact this
@@ -412,7 +413,7 @@ theorem stItem_of_block (g : Graph) (items : Items)
       intro y hy
       rcases hpe with hpe | hpe <;> rw [hpe] <;> simpa [or_comm] using hy
     have hbelow : items.Below i (edgeItem g e) :=
-      ((hwf.endpoints.interior i x hi hxn).mp hpx').1 e he (hinc x hpx)
+      ((hwf.endpoints.interior i x hi hxn htN).mp hpx').2.1 e he (hinc x hpx)
     have hlf := hedge e he hbe hbelow
     rw [hleaves] at hlf
     obtain ⟨c, hc, hcl⟩ := List.mem_flatMap.mp hlf
@@ -425,7 +426,7 @@ theorem stItem_of_block (g : Graph) (items : Items)
     obtain ⟨u, v, huv, huv', huV, hvV, hve⟩ := hchild c hc hcV
     have hsp := hspan c hc hcV u v huv e he hbe hcB
     have hxuv : x = u ∨ x = v := by
-      have hnot := ((hwf.endpoints.interior i x hi hxn).mp hpx').2 c hc
+      have hnot := ((hwf.endpoints.interior i x hi hxn htN).mp hpx').2.2 c hc
       push Not at hnot
       obtain ⟨e', he', hinc', hnb'⟩ := hnot
       have hcT : items.type c ∉ [NodeType.F, .V] := by

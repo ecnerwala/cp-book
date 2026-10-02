@@ -4,9 +4,14 @@ import Spqr.ItemSpec
 open Spqr
 
 /-! Empirical check of the item facts beyond the former `Items.WF` (`q_root`, `o_parent`, `s_order`)
-on the walk's output; input format of `gen.py`. -/
+and of `Endpoints.interior` (at S/P/R items) on the walk's output; input format of
+`gen.py`. -/
 
 def pairEq (p q : Nat × Nat) : Bool := p == q || p == (q.2, q.1)
+
+def below (items : Items) : Nat → ItemId → ItemId → Bool
+  | 0, a, i => a == i
+  | fuel + 1, a, i => a == i || (Items.ch items a).any fun c => below items fuel c i
 
 def main : IO Unit := do
   let input ← (← IO.getStdin).readToEnd
@@ -54,4 +59,12 @@ def main : IO Unit := do
           bad := bad + 1
           IO.println s!"s_order: i={i} vs={Items.vs items i} xs={xs} virt={Items.virtualEdges items i}"
       | _ => bad := bad + 1; IO.println s!"s_order vs: i={i} vs={Items.vs items i}"
+    if [NodeType.S, .P, .R].contains (Items.type items i) then
+      for v in [0:nv] do
+        let incident := (List.range ne).filter fun e => edges[e]!.1 == v || edges[e]!.2 == v
+        let allBelow := fun j => incident.all fun e => below items items.size j (1 + nv + e)
+        let rhs := !incident.isEmpty && allBelow i && (Items.ch items i).all fun c => !allBelow c
+        if (Items.ch items i).contains (1 + v) != rhs then
+          bad := bad + 1
+          IO.println s!"interior: i={i} type={repr (Items.type items i)} v={v} ch={Items.ch items i} rhs={rhs}"
   IO.println s!"items {items.size} bad {bad}"

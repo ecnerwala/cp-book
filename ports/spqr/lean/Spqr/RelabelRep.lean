@@ -492,23 +492,26 @@ theorem canonical : ∀ i p, t.parent i = some p →
   rw [h.type_eq hc, h.type_eq hp']
   exact h.shapes.canonical p c hpar
 
-theorem interior : ∀ i v, i < t.size → v < g.nv → ∀ j, t.vertIndex[v]! = some j →
+theorem interior : ∀ i v, i < t.size → v < g.nv → t.type i ∈ [NodeType.S, .P, .R] →
+    ∀ j, t.vertIndex[v]! = some j →
     (t.parent j = some i ↔
+      (∃ e, SpqrTree.Graph.Incident g v e) ∧
       (∀ e, SpqrTree.Graph.Incident g v e → t.EdgeIn i e) ∧
       ∀ c ∈ t.children i, ¬ ∀ e, SpqrTree.Graph.Incident g v e → t.EdgeIn c e) := by
-  intro n v hn hv j hj
+  intro n v hn hv hT j hj
   obtain ⟨a, ha, rfl⟩ := h.idx_surj hn
+  rw [h.type_eq ha] at hT
   rw [h.ridx.vert_index v hv] at hj
   cases hj
-  rw [h.parent_eq_iff ha (h.vertItem_lt hv), h.endpoints.interior a v ha hv]
+  rw [h.parent_eq_iff ha (h.vertItem_lt hv), h.endpoints.interior a v ha hv hT]
   constructor
-  · rintro ⟨h1, h2⟩
-    refine ⟨fun e ⟨he, hinc⟩ => (h.edgeIn_iff ha he).2 (h1 e he hinc), ?_⟩
+  · rintro ⟨⟨e₀, he₀, hinc₀⟩, h1, h2⟩
+    refine ⟨⟨e₀, he₀, hinc₀⟩, fun e ⟨he, hinc⟩ => (h.edgeIn_iff ha he).2 (h1 e he hinc), ?_⟩
     intro c' hc' hall
     obtain ⟨c, hc, rfl⟩ := (h.mem_children_iff ha c').1 hc'
     exact h2 c hc fun e he hinc => (h.edgeIn_iff (h.ch_lt ha hc) he).1 (hall e ⟨he, hinc⟩)
-  · rintro ⟨h1, h2⟩
-    refine ⟨fun e he hinc => (h.edgeIn_iff ha he).1 (h1 e ⟨he, hinc⟩), ?_⟩
+  · rintro ⟨⟨e₀, he₀, hinc₀⟩, h1, h2⟩
+    refine ⟨⟨e₀, he₀, hinc₀⟩, fun e he hinc => (h.edgeIn_iff ha he).1 (h1 e ⟨he, hinc⟩), ?_⟩
     intro c hc hall
     exact h2 (idx c) ((h.mem_children_iff ha _).2 ⟨c, hc, rfl⟩)
       fun e ⟨he, hinc⟩ => (h.edgeIn_iff (h.ch_lt ha hc) he).2 (hall e he hinc)
