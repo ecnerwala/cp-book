@@ -279,6 +279,14 @@ two terminals of the entry are the two ends. When the hole closes (`mergeTstackT
 item; every interior vertex then has a neighbour on each side, which is the st property
 (`Items.StNumbered`, checked empirically by `cpp/check_st_planar.cpp`).
 
+Two facts make most entries one-sided (they are what the one-sided asserts in the C++ rely on):
+along an ear every vertex has the same lowval (the ear's return depth), so `stackDir` is constant
+along the first-child chain and every piece attached along the ear goes to the *same* side — the
+hole is two-sided only at ear boundaries, where a finished inner ear gets wrapped from both
+sides; and type-2 separation pairs always lie along a single ear (Fact C), so the piece a type-2
+split cuts off is uniformly on one side and its entry has the empty-side shape. Only type-1
+closes / ear boundaries produce genuinely two-sided entries.
+
 ### 4.5 Maximality and R skeletons [hard]
 
 Soundness (each item is a separation class, Fact B direction "⇐") comes from statement 3 of
