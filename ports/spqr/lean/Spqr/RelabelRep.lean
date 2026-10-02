@@ -25,21 +25,6 @@ theorem Array.getElem!_opt {α : Type} (a : Array (Option α)) (i : Nat) :
     a[i]! = a[i]?.getD none := by
   simp only [getElem!_def]; cases a[i]? <;> rfl
 
-/-- Item-level facts the representation transport needs beyond `Items.WF`. All hold for the
-walk's output (`PROOF.md` §5); `Items.WF` alone does not imply them. -/
-structure Items.RepOK (g : Graph) (items : Items) : Prop where
-  /-- A block-root Q with children `[c]` is a self-loop; with `[c, v]` its edge is `{u, v}`. -/
-  q_root : ∀ e, e < g.ne →
-    (∀ c, items.ch (edgeItem g e) = [c] → (g.edges[e]!).1 = (g.edges[e]!).2) ∧
-    (∀ c w u, items.ch (edgeItem g e) = [c, vertItem w] → (items.vs (edgeItem g e)).1 = some u →
-      Items.PairEq (u, w) g.edges[e]!)
-  /-- O items hang alone under a (self-loop) Q. -/
-  o_parent : ∀ p c, items.IsParent p c → items.type c = .O → items.type p = .Q ∧ items.ch p = [c]
-  /-- S children are in path order (positional `s_shape`). -/
-  s_order : ∀ i, i < items.size → items.type i = .S → ∃ u v xs,
-    items.vs i = (some u, some v) ∧ ((items.ch i).filter fun c => items.type c = .V) = xs.map vertItem ∧
-    items.virtualEdges i = List.zip (u :: xs) (xs ++ [v])
-
 /-! ### `layoutNode` facts, in `Layout`-local form (derived from `Spqr.LayoutShape`) -/
 
 namespace LayoutFacts
@@ -731,10 +716,10 @@ theorem nvList_P {i : ItemId} (hi : i < items.size) (hP : items.type i = .P) :
   refine ⟨u, v, hv, ?_⟩
   rw [nvList_eq, hv, h.filter_V_eq_nil hi (h.shapes.p_shape i hi hP).2.1]; rfl
 
-theorem nvList_S (hr : items.RepOK g) {i : ItemId} (hi : i < items.size) (hS : items.type i = .S) :
+theorem nvList_S {i : ItemId} (hi : i < items.size) (hS : items.type i = .S) :
     ∃ u v xs, items.vs i = (some u, some v) ∧ items.nvList g i = u :: xs ++ [v] ∧ 2 ≤ xs.length ∧
       items.virtualEdges i = List.zip (u :: xs) (xs ++ [v]) := by
-  obtain ⟨u, v, xs, hv, hxs, hvirt⟩ := hr.s_order i hi hS
+  obtain ⟨u, v, xs, hv, hxs, hvirt⟩ := h.wf.shapes.s_order i hi hS
   obtain ⟨u', v', xs', hv', hxs', hlen, -⟩ := h.shapes.s_shape i hi hS
   rw [hv] at hv'; cases hv'
   rw [hxs] at hxs'
@@ -794,7 +779,7 @@ theorem nvList_Q_le {e : Nat} (he : e < g.ne) : (items.nvList g (edgeItem g e)).
       · simp [hv, h1, hcV, h.type_vertItem hw]
     · rw [hv] at hv2; cases hv2
 
-theorem q_pair (hr : items.RepOK g) {e : Nat} (he : e < g.ne) :
+theorem q_pair {e : Nat} (he : e < g.ne) :
     ∃ u v, (items.vs (edgeItem g e)).1 = some u ∧ Items.PairEq (u, v) g.edges[e]! ∧
       ((items.ch (edgeItem g e) = [] ∧ items.vs (edgeItem g e) = (some u, some v) ∧
           items.nvList g (edgeItem g e) = [u, v]) ∨
@@ -807,7 +792,7 @@ theorem q_pair (hr : items.RepOK g) {e : Nat} (he : e < g.ne) :
   have hQ := h.type_edgeItem he
   have hs := h.endpoints.vs_shape _ hq
   rw [hQ] at hs
-  obtain ⟨hloop, hpair⟩ := hr.q_root e he
+  obtain ⟨hloop, hpair⟩ := h.wf.endpoints.q_root e he
   have hroot := h.q_root_iff he
   have hcap0 : items.ch (edgeItem g e) = [] → items.hasCap (edgeItem g e) = true := by
     intro h0; simp [Items.hasCap, hQ, h0, NodeType.isNode]
@@ -857,7 +842,7 @@ theorem q_pair (hr : items.RepOK g) {e : Nat} (he : e < g.ne) :
       show 1 + w - 1 = w; omega
 
 /-- The cap (first node-edge) of a node joins its first and last node-vert. -/
-theorem edge0_nvs (hr : items.RepOK g) {i : ItemId} (hi : i < items.size)
+theorem edge0_nvs {i : ItemId} (hi : i < items.size)
     (hn : (items.type i).isNode = true) (h1 : 1 ≤ items.nEdges g i) :
     (t.nodeEdges[(t.neRange (idx i)).1]!).nvs =
       ((t.nvRange (idx i)).1, (t.nvRange (idx i)).1 + ((items.nvList g i).length - 1)) := by
@@ -879,7 +864,7 @@ theorem edge0_nvs (hr : items.RepOK g) {i : ItemId} (hi : i < items.size)
   · rw [hty] at hn; cases hn
   · rw [hty] at hn; cases hn
   · obtain ⟨e, he, rfl⟩ := h.type_Q_eq hi hty
-    obtain ⟨u, v, -, -, hl, -, hne1⟩ := h.q_pair hr he
+    obtain ⟨u, v, -, -, hl, -, hne1⟩ := h.q_pair he
     rcases hl with ⟨-, -, hl2⟩ | ⟨-, -, c, ⟨-, hl2⟩ | ⟨-, hl1, -⟩⟩
     · rw [hl2]; exact LayoutFacts.qi_edge _ (Or.inl rfl) _ _ _ _ _ (by omega)
     · rw [hl2]; exact LayoutFacts.qi_edge _ (Or.inl rfl) _ _ _ _ _ (by omega)
@@ -894,7 +879,7 @@ theorem edge0_nvs (hr : items.RepOK g) {i : ItemId} (hi : i < items.size)
       simp [Items.capCount, Items.hasCap, hty, NodeType.isNode]
     obtain ⟨v, -, hl1⟩ := h.nvList_O hi hty
     rw [hl1]; exact LayoutFacts.one_vert _ (by decide) _ _ _ _ _ (by omega)
-  · obtain ⟨u, v, xs, -, hnl, hxs, hvirt⟩ := h.nvList_S hr hi hty
+  · obtain ⟨u, v, xs, -, hnl, hxs, hvirt⟩ := h.nvList_S hi hty
     have hlen : (items.nvList g i).length = xs.length + 2 := by rw [hnl]; simp
     have hcap : items.capCount i = 1 := by simp [Items.capCount, Items.hasCap, hty, NodeType.isNode]
     have hvl : (items.virtualEdges i).length = xs.length + 1 := by rw [hvirt, List.length_zip]; simp
@@ -913,9 +898,9 @@ theorem edge0_nvs (hr : items.RepOK g) {i : ItemId} (hi : i < items.size)
     rw [ite_eq_left rfl] at this
     rw [this]; congr 1; omega
 
-theorem edges_lt (hr : items.RepOK g) {e : Nat} (he : e < g.ne) :
+theorem edges_lt {e : Nat} (he : e < g.ne) :
     (g.edges[e]!).1 < g.nv ∧ (g.edges[e]!).2 < g.nv := by
-  obtain ⟨u, v, hu, hpe, hl, -, -⟩ := h.q_pair hr he
+  obtain ⟨u, v, hu, hpe, hl, -, -⟩ := h.q_pair he
   have hu' := h.endpoints.vs_lt _ u (Or.inl hu)
   have hv' : v < g.nv := by
     rcases hl with ⟨-, -, hl⟩ | ⟨-, -, c, ⟨-, hl⟩ | ⟨-, hl, rfl⟩⟩
@@ -926,7 +911,7 @@ theorem edges_lt (hr : items.RepOK g) {e : Nat} (he : e < g.ne) :
   · rw [← hpe]; exact ⟨hu', hv'⟩
   · obtain ⟨h1, h2⟩ := Prod.mk.inj hpe; omega
 
-theorem q_endpoints (hr : items.RepOK g) : ∀ e, e < g.ne → ∀ i, t.edgeIndex[e]! = some i →
+theorem q_endpoints : ∀ e, e < g.ne → ∀ i, t.edgeIndex[e]! = some i →
     ∀ ne, (t.neRange i).1 = ne → ∀ p, t.neOrig ne = some p →
       (t.edgeFlipped[e]! = false → p = g.edges[e]!) ∧
       (t.edgeFlipped[e]! = true → p = ((g.edges[e]!).2, (g.edges[e]!).1)) := by
@@ -935,10 +920,10 @@ theorem q_endpoints (hr : items.RepOK g) : ∀ e, e < g.ne → ∀ i, t.edgeInde
   cases hn; subst hne
   have hq := h.edgeItem_lt he
   have hQ := h.type_edgeItem he
-  obtain ⟨u, v, hu, hpe, hl, -, hne1⟩ := h.q_pair hr he
+  obtain ⟨u, v, hu, hpe, hl, -, hne1⟩ := h.q_pair he
   have h1 : 1 ≤ items.nEdges g (edgeItem g e) := by omega
   have hpos := nvList_pos (g := g) hu
-  have hnvs := h.edge0_nvs hr hq (by rw [hQ]; decide) h1
+  have hnvs := h.edge0_nvs hq (by rw [hQ]; decide) h1
   have hp' := h.neOrig_eq hq (k := 0) (a := 0) (b := (items.nvList g (edgeItem g e)).length - 1) h1
     (by omega) (by omega) (by rw [Nat.add_zero]; exact hnvs)
   rw [Nat.add_zero] at hp'
@@ -965,7 +950,7 @@ theorem q_endpoints (hr : items.RepOK g) : ∀ e, e < g.ne → ∀ i, t.edgeInde
     · exact absurd (Prod.mk.inj hpe).1 hue
     · exact hpe
 
-theorem separation (hr : items.RepOK g) : ∀ i ne, i < t.size → t.capNe i = some ne →
+theorem separation : ∀ i ne, i < t.size → t.capNe i = some ne →
     ∀ p, t.neOrig ne = some p →
     ∀ v e e', SpqrTree.Graph.Incident g v e → SpqrTree.Graph.Incident g v e' →
       t.EdgeIn i e → ¬ t.EdgeIn i e' → v = p.1 ∨ v = p.2 := by
@@ -980,12 +965,12 @@ theorem separation (hr : items.RepOK g) : ∀ i ne, i < t.size → t.capNe i = s
   have hn' : (items.type a).isNode = true := by
     simp only [Items.hasCap, Bool.and_eq_true] at hc; exact hc.1
   have hv : v < g.nv := by
-    have := h.edges_lt hr he; rcases hinc with rfl | rfl <;> omega
+    have := h.edges_lt he; rcases hinc with rfl | rfl <;> omega
   have hcc : items.capCount a = 1 := by simp [Items.capCount, hc]
   have h1 : 1 ≤ items.nEdges g a := by rw [h.nEdges_node ha hn', hcc]; omega
   obtain ⟨u, hu⟩ := h.vs_fst ha hn'
   have hpos := nvList_pos (g := g) hu
-  have hnvs := h.edge0_nvs hr ha hn' h1
+  have hnvs := h.edge0_nvs ha hn' h1
   have hp' := h.neOrig_eq ha (k := 0) (a := 0) (b := (items.nvList g a).length - 1) h1
     (by omega) (by omega) (by rw [Nat.add_zero]; exact hnvs)
   rw [Nat.add_zero] at hp'
@@ -1023,14 +1008,14 @@ theorem child_type_ne_F {i c : ItemId} (hi : i < items.size) (hc : c ∈ items.c
       simp [hF] at this
 
 /-- The cap of a capped node joins `vs.1` to `vs.2` (or to itself for a one-vertex node). -/
-theorem cap_orig (hr : items.RepOK g) {i : ItemId} (hi : i < items.size)
+theorem cap_orig {i : ItemId} (hi : i < items.size)
     (hn : (items.type i).isNode = true) (hc : items.hasCap i = true) :
     ∃ x, (items.vs i).1 = some x ∧ t.neOrig (t.neRange (idx i)).1 = some (x, (items.vs i).2.getD x) := by
   have hcc : items.capCount i = 1 := by simp [Items.capCount, hc]
   have h1 : 1 ≤ items.nEdges g i := by rw [h.nEdges_node hi hn, hcc]; omega
   obtain ⟨x, hx⟩ := h.vs_fst hi hn
   have hpos := nvList_pos (g := g) hx
-  have hnvs := h.edge0_nvs hr hi hn h1
+  have hnvs := h.edge0_nvs hi hn h1
   have hp := h.neOrig_eq hi (k := 0) (a := 0) (b := (items.nvList g i).length - 1) h1
     (by omega) (by omega) (by rw [Nat.add_zero]; exact hnvs)
   rw [Nat.add_zero] at hp
@@ -1053,7 +1038,7 @@ theorem cap_orig (hr : items.RepOK g) {i : ItemId} (hi : i < items.size)
     all_goals obtain ⟨u, v, hv⟩ := hs; rw [hv] at hy; cases hy
 
 /-- A non-V child of a node has a cap joining its two endpoints (`O` children: a loop). -/
-theorem child_cap_orig (hr : items.RepOK g) {p c : ItemId} (hp : p < items.size)
+theorem child_cap_orig {p c : ItemId} (hp : p < items.size)
     (hn : (items.type p).isNode = true) (hc : c ∈ items.ch p) (hcV : items.type c ≠ .V) :
     ∃ x y, (items.vs c).1 = some x ∧ (items.vs c).2.getD x = y ∧
       t.neOrig (t.neRange (idx c)).1 = some (x, y) ∧ (items.type c ≠ .O → (items.vs c).2 = some y) := by
@@ -1069,7 +1054,7 @@ theorem child_cap_orig (hr : items.RepOK g) {p c : ItemId} (hp : p < items.size)
       simp [Items.hasCap, hQ, h0, NodeType.isNode]
     · have : (items.type c == .Q) = false := by simpa using hQ
       simp [Items.hasCap, hcn, this]
-  obtain ⟨x, hx, horig⟩ := h.cap_orig hr hcs hcn hcap
+  obtain ⟨x, hx, horig⟩ := h.cap_orig hcs hcn hcap
   refine ⟨x, _, hx, rfl, horig, ?_⟩
   intro hO
   cases hy : (items.vs c).2 with
@@ -1101,7 +1086,7 @@ theorem mem_nvList_of_child {p c : ItemId} (hn : (items.type p).isNode = true)
 
 /-- Virtual edge `capCount + j` of a node and the cap of its `j`-th non-V child carry the same
 original vertices. -/
-theorem virt_glue (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
+theorem virt_glue {a : ItemId} (ha : a < items.size)
     (hn : (items.type a).isNode = true) {pos : Nat → Nat} (hl : RelabelLayout g items t idx a pos)
     {j : Nat} (hj : j < ((items.ordered g a (t.nvRange (idx a)).1 pos).filter (· ≥ 1 + g.nv)).length) :
     ∃ p q, t.neOrig ((t.neRange (idx a)).1 + items.capCount a + j) = some p ∧
@@ -1116,7 +1101,7 @@ theorem virt_glue (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
   have hcge : F[j] ≥ 1 + g.nv := by simpa using List.of_mem_filter (hperm.mem_iff.1 hcF)
   have hcV : items.type F[j] ≠ .V := fun hV =>
     absurd ((h.type_V_iff ha hcm).1 hV) (not_lt.2 hcge)
-  obtain ⟨x, y, hx, hy, hcq, hO⟩ := h.child_cap_orig hr ha hn hcm hcV
+  obtain ⟨x, y, hx, hy, hcq, hO⟩ := h.child_cap_orig ha hn hcm hcV
   have hxm : x ∈ items.nvList g a := h.mem_nvList_of_child hn hcm hcV (Or.inl hx)
   have hcs := h.ch_lt ha hcm
   have hym : y ∈ items.nvList g a := by
@@ -1131,7 +1116,7 @@ theorem virt_glue (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
   have hlay := hl.edge_nvs _ hk
   rw [nodeLayout, hnv, hne, Items.edgeChildren, ← hF] at hlay
   have hnotO : items.type a ≠ .Q → items.type F[j] ≠ .O :=
-    fun hQ hO' => hQ (hr.o_parent a _ hcm hO').1
+    fun hQ hO' => hQ (h.wf.shapes.o_parent a _ hcm hO').1
   set nvSt := (t.nvRange (idx a)).1 with hnvSt
   set neSt := (t.neRange (idx a)).1 with hneSt
   set len := (items.nvList g a).length with hlen0
@@ -1140,7 +1125,7 @@ theorem virt_glue (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
   · rw [hty] at hn; cases hn
   · -- Q: a block root with one non-V child
     obtain ⟨e, he, rfl⟩ := h.type_Q_eq ha hty
-    obtain ⟨u, v, hu, -, hcase, -, hne1⟩ := h.q_pair hr he
+    obtain ⟨u, v, hu, -, hcase, -, hne1⟩ := h.q_pair he
     rcases hcase with ⟨h0, -, -⟩ | ⟨hne0, hvs, c, hc⟩
     · rw [h0] at hcm; cases hcm
     have hcap0 : items.capCount (edgeItem g e) = 0 := by
@@ -1149,7 +1134,7 @@ theorem virt_glue (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
     subst hj0
     simp only [hcap0, Nat.add_zero] at hlay hk ⊢
     have hpos := nvList_pos (g := g) hu
-    have hnvs := h.edge0_nvs hr ha hn (by omega)
+    have hnvs := h.edge0_nvs ha hn (by omega)
     have hp := h.neOrig_eq ha (k := 0) (a := 0) (b := len - 1) (by omega) (by omega) (by omega)
       (by rw [Nat.add_zero]; exact hnvs)
     rw [Nat.add_zero] at hp
@@ -1157,7 +1142,7 @@ theorem virt_glue (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
     rcases hc with ⟨hch, hnl⟩ | ⟨hch, hnl, -⟩
     · have hvlt : v < g.nv := h.nvList_lt ha (by rw [hnl]; simp)
       have hO' : items.type F[0] ≠ .O := fun hO' => by
-        have := (hr.o_parent _ _ hcm hO').2
+        have := (h.wf.shapes.o_parent _ _ hcm hO').2
         rw [hch] at this; cases this
       have hy' := hO hO'
       have hnd := h.nv_nodup hcs
@@ -1187,7 +1172,7 @@ theorem virt_glue (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
   · rw [h.shapes.i_o_leaf a ha (Or.inr hty)] at hcm; cases hcm
   · -- S
     rw [hty] at hlay
-    obtain ⟨u, v, xs, hvs, hnl, hxs, hvirt⟩ := h.nvList_S hr ha hty
+    obtain ⟨u, v, xs, hvs, hnl, hxs, hvirt⟩ := h.nvList_S ha hty
     have hcap1 : items.capCount a = 1 := by
       simp [Items.capCount, Items.hasCap, hty, NodeType.isNode]
     have hFeq : F = (items.ch a).filter fun c => items.type c ≠ .V := by
@@ -1275,7 +1260,7 @@ theorem virt_glue (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
     refine ⟨_, (x, y), hp, hcq, Or.inl ?_⟩
     rw [(List.getElem_eq_iff _).2 hxp, (List.getElem_eq_iff _).2 hyp]
 
-theorem twin_glue (hr : items.RepOK g) : ∀ ne ne', t.twin ne = some ne' →
+theorem twin_glue : ∀ ne ne', t.twin ne = some ne' →
     ∀ p q, t.neOrig ne = some p → t.neOrig ne' = some q → Items.PairEq p q := by
   intro ne ne' ht p q hp hq
   obtain ⟨a, ha, h1, h2⟩ := h.ne_mem_range (twin_some_lt ht)
@@ -1295,7 +1280,7 @@ theorem twin_glue (hr : items.RepOK g) : ∀ ne ne', t.twin ne = some ne' →
   · -- `ne` is a virtual edge of `a`
     have hj : ne - ((t.neRange (idx a)).1 + items.capCount a) <
         ((items.ordered g a (t.nvRange (idx a)).1 pos).filter (· ≥ 1 + g.nv)).length := by omega
-    obtain ⟨p', q', hp', hq', hpq⟩ := h.virt_glue hr ha hn hl hj
+    obtain ⟨p', q', hp', hq', hpq⟩ := h.virt_glue ha hn hl hj
     have hne : (t.neRange (idx a)).1 + items.capCount a +
         (ne - ((t.neRange (idx a)).1 + items.capCount a)) = ne := by omega
     rw [hne] at hp'
@@ -1326,7 +1311,7 @@ theorem twin_glue (hr : items.RepOK g) : ∀ ne ne', t.twin ne = some ne' →
       have hmem : a ∈ (items.ordered g p0 (t.nvRange (idx p0)).1 pos0).filter (· ≥ 1 + g.nv) :=
         List.mem_filter.2 ⟨hperm.mem_iff.2 hp0, by simpa using hage⟩
       obtain ⟨j, hj, hja⟩ := List.getElem_of_mem hmem
-      obtain ⟨p', q', hp', hq', hpq⟩ := h.virt_glue hr hp0s hn0 hl0 hj
+      obtain ⟨p', q', hp', hq', hpq⟩ := h.virt_glue hp0s hn0 hl0 hj
       have htw := (hl0.twin hn0 j hj).2
       rw [hja] at htw hq'
       rw [ht] at htw
@@ -1355,7 +1340,7 @@ theorem idxOf_eq_of_pos {a : ItemId} (ha : a < items.size)
   have := (h.nv_nodup ha).idxOf_getElem _ hlt
   rwa [hget] at this
 
-theorem r_virt_nvs (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
+theorem r_virt_nvs {a : ItemId} (ha : a < items.size)
     (hR : items.type a = .R) {pos : Nat → Nat} (hl : RelabelLayout g items t idx a pos)
     {j : Nat}
     (hj : j < ((items.ordered g a (t.nvRange (idx a)).1 pos).filter (· ≥ 1 + g.nv)).length) :
@@ -1372,8 +1357,8 @@ theorem r_virt_nvs (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
   have hcV : items.type F[j] ≠ .V := fun hV =>
     absurd ((h.type_V_iff ha hcm).1 hV) (not_lt.2 hcge)
   have hcO : items.type F[j] ≠ .O := fun hO => by
-    have := (hr.o_parent a _ hcm hO).1; rw [hR] at this; cases this
-  obtain ⟨x, y, hx, -, -, hO⟩ := h.child_cap_orig hr ha hn hcm hcV
+    have := (h.wf.shapes.o_parent a _ hcm hO).1; rw [hR] at this; cases this
+  obtain ⟨x, y, hx, -, -, hO⟩ := h.child_cap_orig ha hn hcm hcV
   have hy' := hO hcO
   have hxm := h.mem_nvList_of_child hn hcm hcV (Or.inl hx)
   have hym := h.mem_nvList_of_child hn hcm hcV (Or.inr hy')
@@ -1401,7 +1386,7 @@ theorem r_virt_nvs (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
   rw [hs] at hlay
   exact hlay
 
-theorem r_three_connected (hr : items.RepOK g) (hR : items.RThreeConnected g) :
+theorem r_three_connected (hR : items.RThreeConnected g) :
     ∀ i, i < t.size → t.type i = .R →
       SpqrTree.ThreeConnected (t.nVerts i)
         ((t.skeleton i).map fun p => (p.1 - (t.nvRange i).1, p.2 - (t.nvRange i).1)) := by
@@ -1430,7 +1415,7 @@ theorem r_three_connected (hr : items.RepOK g) (hR : items.RThreeConnected g) :
     have := hnd.idxOf_getElem 0 (by omega); rwa [hu0] at this
   have hidx_v : (items.nvList g a).idxOf v = (items.nvList g a).length - 1 := by
     have := hnd.idxOf_getElem ((items.nvList g a).length - 1) (by omega); rwa [hvl] at this
-  have hcap := h.edge0_nvs hr ha hnode (by omega)
+  have hcap := h.edge0_nvs ha hnode (by omega)
   have hnV : t.nVerts (idx a) = (items.nvList g a).length := by
     rw [SpqrTree.nVerts, hnv]; omega
   rw [hnV, SpqrTree.ThreeConnected_congr (es' := items.rSkeleton g a)]
@@ -1448,7 +1433,7 @@ theorem r_three_connected (hr : items.RepOK g) (hR : items.RThreeConnected g) :
       simp only [Option.getD_some, hidx_u, hidx_v]
       exact Prod.ext (by dsimp only; omega) (by dsimp only; omega)
     · obtain ⟨j, rfl⟩ : ∃ j, k = 1 + j := ⟨k - 1, by omega⟩
-      obtain ⟨x, y, hvsj, hxm, hym, hnvs⟩ := h.r_virt_nvs hr ha hty hl (j := j) (by show j < F.length; omega)
+      obtain ⟨x, y, hvsj, hxm, hym, hnvs⟩ := h.r_virt_nvs ha hty hl (j := j) (by show j < F.length; omega)
       rw [hnvs] at hq
       refine ⟨((items.vs F[j]).1.getD 0, (items.vs F[j]).2.getD 0), List.mem_cons_of_mem _ ?_, ?_⟩
       · rw [Items.virtualEdges, List.mem_map]
@@ -1466,7 +1451,7 @@ theorem r_three_connected (hr : items.RepOK g) (hR : items.RThreeConnected g) :
       obtain ⟨c, hc, rfl⟩ := hq
       have hcF : c ∈ F := hperm.mem_iff.2 hc
       obtain ⟨j, hj, rfl⟩ := List.mem_iff_getElem.1 hcF
-      obtain ⟨x, y, hvsj, hxm, hym, hnvs⟩ := h.r_virt_nvs hr ha hty hl hj
+      obtain ⟨x, y, hvsj, hxm, hym, hnvs⟩ := h.r_virt_nvs ha hty hl hj
       refine ⟨_, (skeleton_mem _ _).2 ⟨1 + j, by rw [hne, Nat.add_sub_cancel_left]; omega, rfl⟩, ?_⟩
       rw [hnvs, hvsj]
       simp only [Option.getD_some]
@@ -1474,32 +1459,31 @@ theorem r_three_connected (hr : items.RepOK g) (hR : items.RThreeConnected g) :
 
 /-! ### Assembly -/
 
-/-- `Represents` from the per-node interface, `Items.RepOK`, and item-level R 3-connectivity. -/
-theorem represents (hr : items.RepOK g) (hR : items.RThreeConnected g) :
+/-- `Represents` from the per-node interface and item-level R 3-connectivity. -/
+theorem represents (hR : items.RThreeConnected g) :
     t.Represents g where
   nv := h.ridx.nv
   ne := h.ridx.ne
-  q_endpoints := h.q_endpoints hr
-  twin_glue := h.twin_glue hr
+  q_endpoints := h.q_endpoints
+  twin_glue := h.twin_glue
   nv_orig_inj := h.nv_orig_inj fun _ hi => h.nv_nodup hi
-  separation := h.separation hr
+  separation := h.separation
   interior := h.interior
-  r_three_connected := h.r_three_connected hr hR
+  r_three_connected := h.r_three_connected hR
   canonical := h.canonical
 
 /-- `Represents` with the R clause supplied at the output level (the form `Correctness.lean`
 assumes). -/
-theorem represents_of_r (hr : items.RepOK g)
-    (hR : ∀ i, i < t.size → t.type i = .R →
+theorem represents_of_r     (hR : ∀ i, i < t.size → t.type i = .R →
       SpqrTree.ThreeConnected (t.nVerts i)
         ((t.skeleton i).map fun p => (p.1 - (t.nvRange i).1, p.2 - (t.nvRange i).1))) :
     t.Represents g where
   nv := h.ridx.nv
   ne := h.ridx.ne
-  q_endpoints := h.q_endpoints hr
-  twin_glue := h.twin_glue hr
+  q_endpoints := h.q_endpoints
+  twin_glue := h.twin_glue
   nv_orig_inj := h.nv_orig_inj fun _ hi => h.nv_nodup hi
-  separation := h.separation hr
+  separation := h.separation
   interior := h.interior
   r_three_connected := hR
   canonical := h.canonical
@@ -1513,21 +1497,19 @@ theorem relabelOK_of_wf (g : Graph) (items : Items) (h : items.WF g) :
 
 /-- Phase-D main result: the relabelled tree represents `g`, given the item contracts. -/
 theorem relabelTree_represents' (g : Graph) (items : Items) (h : items.WF g)
-    (hr : items.RepOK g) (hR : items.RThreeConnected g) :
+    (hR : items.RThreeConnected g) :
     (relabelTree g items).Represents g := by
   obtain ⟨idx, hok⟩ := relabelOK_of_wf g items h
-  exact hok.represents hr hR
+  exact hok.represents hR
 
-/-- Variant with the output-level R clause, matching `Correctness.relabelTree_represents` up to the
-extra `Items.RepOK` hypothesis. -/
+/-- Variant with the output-level R clause (the hypothesis `spqrTree_r_three_connected` provides). -/
 theorem relabelTree_represents_of_r (g : Graph) (items : Items) (h : items.WF g)
-    (hr : items.RepOK g)
-    (hR : ∀ i, i < (relabelTree g items).size → (relabelTree g items).type i = .R →
+        (hR : ∀ i, i < (relabelTree g items).size → (relabelTree g items).type i = .R →
       SpqrTree.ThreeConnected ((relabelTree g items).nVerts i)
         (((relabelTree g items).skeleton i).map fun p =>
           (p.1 - ((relabelTree g items).nvRange i).1, p.2 - ((relabelTree g items).nvRange i).1))) :
     (relabelTree g items).Represents g := by
   obtain ⟨idx, hok⟩ := relabelOK_of_wf g items h
-  exact hok.represents_of_r hr hR
+  exact hok.represents_of_r hR
 
 end Spqr

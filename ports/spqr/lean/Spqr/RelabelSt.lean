@@ -18,8 +18,7 @@ is transported along the per-node relabel interface (`relabel_node_spec`, `relab
   `RelabelLayout.adj_bounds/adj_dat`, `Layout.Local`, and `relabelTree_adj`) and the per-type row
   descriptions of `LayoutShape` / `LayoutR.layoutNode_R_bracket`.
 
-`relabel_st'` needs `Items.RepOK` only for Q items (`nEdges = 1`, two node-vertices); see
-`PROOF.md` §7.3.
+See `PROOF.md` §7.3.
 -/
 
 namespace Spqr

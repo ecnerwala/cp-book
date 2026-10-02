@@ -2,6 +2,7 @@ import Spqr.Build
 import Spqr.Spec
 import Spqr.ItemSpec
 import Spqr.Proofs.Dfs
+import Spqr.RelabelRep
 
 /-!
 # Correctness theorems
@@ -34,15 +35,13 @@ theorem relabelTree_wf (g : Graph) (items : Items) (h : items.WF g) :
     (relabelTree g items).WF := by
   sorry
 
-/-- ... that represents `g` (3-connectivity of R skeletons is the one property not implied by the
-item-level `Shapes`; it is proven from the walk invariants in `Spqr.Proofs.Rigid`). -/
+/-- ... that represents `g`. The one hypothesis beyond `Items.WF` is the item-level 3-connectivity
+of the R items' skeletons (`Items.RThreeConnected`, `RelabelRep.lean`), the walk-side statement of
+`items_r_three_connected` (`Spqr.Proofs.RItems`); transported, not implied by `Items.Shapes`. -/
 theorem relabelTree_represents (g : Graph) (items : Items) (h : items.WF g)
-    (hR : ∀ i, i < (relabelTree g items).size → (relabelTree g items).type i = .R →
-      SpqrTree.ThreeConnected ((relabelTree g items).nVerts i)
-        (((relabelTree g items).skeleton i).map fun p =>
-          (p.1 - ((relabelTree g items).nvRange i).1, p.2 - ((relabelTree g items).nvRange i).1))) :
-    (relabelTree g items).Represents g := by
-  sorry
+    (hR : Items.RThreeConnected g items) :
+    (relabelTree g items).Represents g :=
+  relabelTree_represents' g items h hR
 
 theorem spqrTree_r_three_connected (g : Graph) (tern : Bool) (vo eo : List Nat) :
     let t := g.spqrTree tern vo eo
@@ -62,6 +61,6 @@ theorem spqrTree_represents (g : Graph) (tern : Bool) (vo eo : List Nat) :
     (g.spqrTree tern vo eo).Represents g := by
   have h := spqrTree_r_three_connected g tern vo eo
   rw [spqrTree_eq] at h ⊢
-  exact relabelTree_represents g _ (walk_items_wf g tern vo eo) h
+  exact relabelTree_represents_of_r g _ (walk_items_wf g tern vo eo) h
 
 end Spqr
