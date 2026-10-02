@@ -1441,6 +1441,119 @@ theorem foldl_fillStep_neInv (nvSt nvEn neSt neEn node : Nat) (E : List (Nat × 
     have := ih (P ++ [p]) _ (by simpa using hPR) hfi hstep
     simpa using this
 
+/-- Entries of the finished R layout: fill slots carry a child edge hitting their row (`ne`s
+strictly decreasing along a row), slot `0` and slot `2 neEn - 1 - 2 neSt` carry the cap. -/
+theorem run_entries (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn) (hne : neEn = neSt + E.length + 1) :
+    (∀ i, 2 * nvSt + 1 ≤ i → i ≤ 2 * nvEn → ∀ k, k < cnt i E →
+      neSt + 1 ≤ ((run node nvSt nvEn neSt neEn E).adjDat[slot nvSt nvEn neSt E i k]!).ne ∧
+      ((run node nvSt nvEn neSt neEn E).adjDat[slot nvSt nvEn neSt E i k]!).ne < neEn ∧
+      hits i (chEdge neSt E
+        ((run node nvSt nvEn neSt neEn E).adjDat[slot nvSt nvEn neSt E i k]!).ne) = true ∧
+      ((run node nvSt nvEn neSt neEn E).adjDat[slot nvSt nvEn neSt E i k]!).destNv =
+        other i (chEdge neSt E
+          ((run node nvSt nvEn neSt neEn E).adjDat[slot nvSt nvEn neSt E i k]!).ne)) ∧
+    (∀ i, 2 * nvSt + 1 ≤ i → i ≤ 2 * nvEn → ∀ k k', k' < k → k < cnt i E →
+      ((run node nvSt nvEn neSt neEn E).adjDat[slot nvSt nvEn neSt E i k]!).ne <
+      ((run node nvSt nvEn neSt neEn E).adjDat[slot nvSt nvEn neSt E i k']!).ne) ∧
+    (run node nvSt nvEn neSt neEn E).adjDat[0]! = ⟨neSt, nvEn - 1⟩ ∧
+    (run node nvSt nvEn neSt neEn E).adjDat[2 * neEn - 1 - 2 * neSt]! = ⟨neSt, nvSt⟩ := by
+  have hA' := allE_bounds nvSt nvEn E hv hE
+  have hend := start_end nvSt nvEn neSt E hv hE
+  have htwo := start_two nvSt nvEn neSt E hv hE
+  have hlow := cnt_low_zero nvSt nvEn E hv hE
+  simp only [run]
+  set l₀ := inc nvSt (inc nvSt (Layout.empty (nvEn - nvSt) (neEn - neSt)) (2 * nvSt + 2))
+    (2 * nvEn - 1) with hl₀
+  have hl₀' : l₀ = countStep nvSt (Layout.empty (nvEn - nvSt) (neEn - neSt)) (nvSt, nvEn - 1) := by
+    simp only [hl₀, countStep]
+    rw [show 2 * (nvEn - 1) + 1 = 2 * nvEn - 1 by omega]
+  have hsz0 : l₀.adjBounds.size = 2 * (nvEn - nvSt) + 1 := by simp [hl₀, inc, Layout.empty]
+  have hget0 : ∀ k, l₀.adjBounds[k]! = cnt (k + 2 * nvSt) [(nvSt, nvEn - 1)] := by
+    intro k
+    rw [hl₀', countStep_get nvSt _ _ ⟨Nat.le_refl _, by simp; omega⟩ k
+      (by simp [Layout.empty]; omega) (by simp [Layout.empty]; omega), cnt_cons, cnt_nil]
+    simp only [Layout.empty, getElem!_replicate']
+    split <;> simp
+  set l₁ := E.foldl (countStep nvSt) l₀ with hl₁
+  obtain ⟨e1, d1, sz1, g1⟩ := foldl_countStep nvSt nvEn E hE l₀ hsz0
+  have hget1 : ∀ k, l₁.adjBounds[k]! = cnt (k + 2 * nvSt) (allE nvSt nvEn E) := by
+    intro k; rw [g1, hget0, allE, cnt_cons, cnt_cons, cnt_nil]; omega
+  have hsz1 : l₁.adjBounds.size = 2 * (nvEn - nvSt) + 1 := sz1.trans hsz0
+  obtain ⟨e2, d2, sz2, o2, g2⟩ := foldl_prefixStep nvSt (2 * nvEn + 1 - (2 * nvSt + 1)) (2 * nvSt + 1)
+    l₁ (2 * neSt) (Nat.le_refl _) (by omega)
+  set l₂ := ((List.range' (2 * nvSt + 1) (2 * nvEn + 1 - (2 * nvSt + 1))).foldl (prefixStep nvSt)
+    (l₁, 2 * neSt)).1 with hl₂
+  have hget2 : ∀ i, 2 * nvSt + 1 ≤ i → i ≤ 2 * nvEn →
+      l₂.adjBounds[i - 2 * nvSt]! = start nvSt neSt (allE nvSt nvEn E) i := by
+    intro i hi1 hi2
+    rw [(g2 (i - 2 * nvSt)).2 (by omega) (by omega), show i - 2 * nvSt + 2 * nvSt = i by omega]
+    unfold start
+    congr 2
+    apply List.map_congr_left
+    intro j hj
+    have := (List.mem_range'_1.1 hj).1
+    rw [hget1, show j - 2 * nvSt + 2 * nvSt = j by omega]
+  have hsz2 : l₂.adjBounds.size = 2 * (nvEn - nvSt) + 1 := sz2.trans hsz1
+  have hdat2 : l₂.adjDat = Array.replicate (2 * (neEn - neSt)) default := by
+    rw [d2, d1]; simp [hl₀, inc, Layout.empty]
+  have hinv0 : FillInv nvSt nvEn neSt E [] (inc nvSt l₂ (2 * nvSt + 2)) := by
+    refine ⟨by simp [inc, hsz2], by simp [inc, hdat2]; omega, ?_, ?_⟩
+    · intro i hi1 hi2
+      unfold inc
+      simp only
+      rw [cnt_nil, Nat.add_zero]
+      by_cases hi : i = 2 * nvSt + 2
+      · subst hi
+        rw [getElem!_modify_self' _ _ _ (by rw [hsz2]; omega), hget2 _ (by omega) (by omega)]
+        simp [bump]
+      · rw [getElem!_modify_ne' _ _ _ _ (by omega), hget2 _ hi1 hi2]
+        simp [bump, hi]
+    · intro i _ _ k q hq; simp at hq
+  have hinv := foldl_fillStep_inv nvSt nvEn neSt node E hv hE [] E.reverse _ neEn (by simp) hinv0
+  rw [List.nil_append] at hinv
+  have hn0 : NeInv nvSt nvEn neSt neEn E [] (neEn - ([] : List (Nat × Nat)).length)
+      (inc nvSt l₂ (2 * nvSt + 2)) :=
+    ⟨fun i _ _ k hk => by rw [cnt_nil] at hk; omega,
+     fun i _ _ k k' _ hk => by rw [cnt_nil] at hk; omega⟩
+  have hn := foldl_fillStep_neInv nvSt nvEn neSt neEn node E hv hE hne [] E.reverse _ (by simp)
+    hinv0 hn0
+  simp only [List.length_nil, Nat.sub_zero, List.nil_append, List.length_reverse] at hn
+  set l₄ := (E.reverse.foldl (fillStep nvSt neSt node) (inc nvSt l₂ (2 * nvSt + 2), neEn)).1 with hl₄
+  have hsz4 := hinv.size_d
+  have hslot : ∀ i, 2 * nvSt + 1 ≤ i → i ≤ 2 * nvEn → ∀ k, k < cnt i E →
+      1 ≤ slot nvSt nvEn neSt E i k ∧ slot nvSt nvEn neSt E i k < 2 * neEn - 1 - 2 * neSt := by
+    intro i hi1 hi2 k hk
+    have hge := start_ge nvSt neSt (allE nvSt nvEn E) i
+    have hc := cnt_allE nvSt nvEn E hv i
+    have hlt := slot_lt_top' nvSt nvEn neSt E hv hE (i := i) (a := bump nvSt i + k) hi1 hi2
+      (by rw [hc]; omega)
+    unfold slot
+    refine ⟨?_, by omega⟩
+    by_cases h2 : i = 2 * nvSt + 2
+    · rw [show bump nvSt i = 1 by simp [bump, h2]]; omega
+    · rcases Nat.lt_or_ge i (2 * nvSt + 3) with h | h
+      · have : i = 2 * nvSt + 1 := by omega
+        subst this
+        rw [cnt_allE _ _ _ hv] at hlow
+        omega
+      · have := slot_pos nvSt nvEn neSt E hv h
+        omega
+  simp only [inc, Layout.setNe, Nat.sub_self]
+  refine ⟨fun i hi1 hi2 k hk => ?_, fun i hi1 hi2 k k' hkk' hk => ?_, ?_, ?_⟩
+  · have hs := hslot i hi1 hi2 k hk
+    rw [Array.getElem!_set!_ne _ _ _ _ (by omega), Array.getElem!_set!_ne _ _ _ _ (by omega)]
+    have := hn.dat i hi1 hi2 k (by rw [cnt_reverse]; exact hk)
+    exact ⟨by omega, this.2.1, this.2.2.1, this.2.2.2⟩
+  · have hs := hslot i hi1 hi2 k hk
+    have hs' := hslot i hi1 hi2 k' (by omega)
+    rw [Array.getElem!_set!_ne _ _ _ _ (by omega), Array.getElem!_set!_ne _ _ _ _ (by omega),
+      Array.getElem!_set!_ne _ _ _ _ (by omega), Array.getElem!_set!_ne _ _ _ _ (by omega)]
+    exact hn.dec i hi1 hi2 k k' hkk' (by rw [cnt_reverse]; exact hk)
+  · rw [Array.getElem!_set!_ne _ _ _ _ (by omega),
+      Array.getElem!_set!_self _ _ _ (by rw [hsz4]; omega)]
+  · rw [Array.getElem!_set!_self _ _ _ (by rw [Array.size_set!, hsz4]; omega)]
+
 end RNe
 
 end LayoutShape
