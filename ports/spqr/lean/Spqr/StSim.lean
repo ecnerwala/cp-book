@@ -211,12 +211,14 @@ def InBlock (g : Graph) (items : Items) (b : StBlock) (i : ItemId) : Prop :=
   ∃ L, Expands items i L ∧ (∃ A B, b.items = A ++ L ++ B) ∧ VsOrientedAt g items b i L
 
 /-- The items relative to the stack and the blocks: stack items are roots and distinct; every
-S / P / R item is live (below a stack item) or finished in one of `blocks`; the stack's subtrees are
-in range. -/
+S / P / R item is live (below a stack item) or finished in one of `blocks`; the stack's subtrees and
+all children are in range, child lists have no repeats. -/
 structure StItems (g : Graph) (s : WalkState) (blocks : List StBlock) : Prop where
   roots : ∀ x ∈ readStack s.tstack, ∀ p, ¬ Items.IsParent s.items p x
   nodup : (readStack s.tstack).Nodup
   bounded : ∀ x ∈ readStack s.tstack, ∀ y, Items.Below s.items x y → y < s.items.size
+  chLt : ∀ p c, Items.IsParent s.items p c → c < s.items.size
+  chNodup : ∀ p, (Items.ch s.items p).Nodup
   closed : ∀ i, i < s.items.size →
     Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R →
     (∃ x ∈ readStack s.tstack, Items.Below s.items x i) ∨ ∃ b ∈ blocks, InBlock g s.items b i

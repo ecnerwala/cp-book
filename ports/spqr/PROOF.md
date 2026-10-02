@@ -1653,8 +1653,8 @@ the finished trees of the forest): `s.tstack = new ++ base` with `StRead s.items
 done hasVert base s` is the same at the start of an out-edge of `v` with `refOuts g v d dirs done
 false` (pieces, and its `hasVert` equals the walk's). `StItems`: the items on the stack are roots
 (`¬ IsParent p x`), `readStack tstack` is `Nodup` (what `readStack_reopen` needs — the reopened
-children are not elsewhere on the stack), the stack's subtrees are in range (`bounded`, so `allocItem`
-does not touch them), and every S / P / R item is *live* (`Below x i` for some
+children are not elsewhere on the stack), the stack's subtrees and all children are in range (`bounded`, `chLt`, so `allocItem` does not
+touch them), child lists have no repeats (`chNodup`, what reopening needs), and every S / P / R item is *live* (`Below x i` for some
 stack item `x`) or *finished*: `InBlock g items b i` for a block `b`, i.e. `b.items = A ++ L ++ B`
 with `Expands items i L` and `VsOrientedAt g items b i L` (the body of `VsOriented` for one block
 with the leaf list `L` in place of `leaves items items.size i`, `vsOriented_iff`; the final step
@@ -1736,6 +1736,7 @@ Classical.choice, Quot.sound.
 | `stItem_of_block` (the restriction argument for one block, §7.6), `stItem_of_refOrder` (on the block from `VsOriented`, with `refBlocks_st` as `hbl` and `refBlocks_root_edge` as `hre`) | `StRestrict.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | `Expands`/`ExpandsList`, `DirsOf`, `StRead`, `VsOrientedAt` (`vsOriented_iff`), `InBlock`, `StItems`, `PathFrame`/`truncTree`, `StSim`, `StSimOuts` (the simulation relation, §7.6); `check_stsim` / `compare_stsim.sh` | `StSim.lean`, `CheckStSim.lean` | def / tested seeds 0..1000 at every `finishEdge` boundary (0 violations) |
 | `ExpandsList.{append, append_inv, cons_iff, det, congr, modify_of_not_below, modify_root, push, expandItem_self_iff, close}` (expansion algebra: framing under `modify`/`push`, `expandItem` of a node is invisible, closing `i` with children `ch` keeps the reading) | `StSim.lean` | proved |
+| `StClose.lean`: `Items.Below.{modify_of_not_below, of_modify, push, of_push, lt_of_chLt}`, `VsOrientedAt.congr`, `InBlock.{congr, modify_root, push}` (framing of the finished-item facts under `modify` of a root / `push`), `readStack_{cons_perm, close, close_perm}`, `StRead.finishTstackTop` (the reading above `base` survives the close of a one-sided top), `StItems.close` (the item facts survive it: `item` is a root not on the stack, the stack below holds roots; `closed` is assumed with `item` exempt) | `StClose.lean` | proved |
 | per-primitive preservation of `StSim` through `finishEdge` (back-edge P merge, loop 1 type-2 merges, loop 2 type-1 closes, loop 3 / `maybeUnwrapNxt`, `finishTstackTop`, `closeVert`, block boundary), `walkTree` induction | — | open |
 | reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop`, `readStack_reopen`/`readStack_modifyNxt_reopen` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes and reopens) | `StRef.lean` | proved |
 
