@@ -2,6 +2,7 @@ import Spqr.RelabelSpec
 import Spqr.StSpec
 import Spqr.ItemTree
 import Spqr.Proofs.Dfs
+import Spqr.LayoutShape
 
 /-!
 # Relabel phase D: `Represents` transport from the per-node interface
@@ -45,35 +46,80 @@ structure Items.RepOK (g : Graph) (items : Items) : Prop where
     items.vs i = (some u, some v) ∧ ((items.ch i).filter fun c => items.type c = .V) = xs.map vertItem ∧
     items.virtualEdges i = List.zip (u :: xs) (xs ++ [v])
 
-/-! ### `layoutNode` facts, in `Layout`-local form (proved by the `LayoutShape` session) -/
+/-! ### `layoutNode` facts, in `Layout`-local form (derived from `Spqr.LayoutShape`) -/
 
 namespace LayoutFacts
 
+open LayoutShape LayoutR
+
 theorem one_vert (ty : NodeType) (ht : ty.isNode = true) (node nvSt neSt neEn : Nat)
-    (ec : List (Nat × Nat)) (hne : neSt < neEn) :
+    (ec : List (Nat × Nat)) (hne : neEn - neSt = 1) :
     ((layoutNode ty node nvSt (nvSt + 1) neSt neEn ec).edges[0]!).nvs = (nvSt, nvSt) := by
-  sorry
+  rw [layoutNode_loop_eq ty _ _ _ _ _ ec (by cases ty <;> simp [NodeType.isNode] at ht ⊢)
+    (by omega), runLoop_edges_get _ _ _ _ _ hne]
 
 theorem qi_edge (ty : NodeType) (ht : ty = .Q ∨ ty = .I) (node nvSt neSt neEn : Nat)
-    (ec : List (Nat × Nat)) (hne : neSt < neEn) :
+    (ec : List (Nat × Nat)) (hne : neEn - neSt = 1) :
     ((layoutNode ty node nvSt (nvSt + 2) neSt neEn ec).edges[0]!).nvs = (nvSt, nvSt + 1) := by
-  sorry
+  rw [layoutNode_QI_eq ty _ _ _ _ _ ec ht (by omega), runQI_edges_get _ _ _ _ _ hne]
 
 theorem p_edge (node nvSt neSt neEn : Nat) (ec : List (Nat × Nat)) (k : Nat) (hk : k < neEn - neSt) :
     ((layoutNode .P node nvSt (nvSt + 2) neSt neEn ec).edges[k]!).nvs = (nvSt, nvSt + 1) := by
-  sorry
+  rw [layoutNode_P_eq _ _ _ _ _ _ (by omega)]
+  obtain ⟨-, -, -, ge, -⟩ := runP_spec node nvSt (nvSt + 2) neSt neEn (by omega)
+  rw [ge k hk]
 
 theorem s_edge (node nvSt nvEn neSt neEn : Nat) (ec : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
     (hne : neEn - neSt = nvEn - nvSt) (k : Nat) (hk : k < neEn - neSt) :
     ((layoutNode .S node nvSt nvEn neSt neEn ec).edges[k]!).nvs =
       if k = 0 then (nvSt, nvEn - 1) else (nvSt + k - 1, nvSt + k) := by
-  sorry
+  rw [layoutNode_S_eq _ _ _ _ _ _ (by omega)]
+  obtain ⟨-, -, -, ge, -⟩ := runS_spec node nvSt nvEn neSt neEn (by omega)
+  rw [ge k hk]; split_ifs <;> rfl
 
+theorem foldl_countStep_edges (nvSt : Nat) (L : List (Nat × Nat)) (l : Layout) :
+    (L.foldl (countStep nvSt) l).edges = l.edges := by
+  induction L generalizing l with
+  | nil => rfl
+  | cons p L ih => rw [List.foldl_cons, ih, countStep_edges]
+
+/-- `LayoutShape.run_edges` without the orientation hypothesis (the edge slots do not depend on
+the adjacency counts). -/
 theorem r_edge (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
     (hne : neEn = neSt + E.length + 1) (k : Nat) (hk : k < E.length + 1) :
     ((layoutNode .R node nvSt nvEn neSt neEn E).edges[k]!).nvs =
       if k = 0 then (nvSt, nvEn - 1) else E[k - 1]! := by
-  sorry
+  rw [layoutNode_R_eq _ _ _ _ _ _ hv]
+  simp only [run]
+  set l₀ := inc nvSt (inc nvSt (Layout.empty (nvEn - nvSt) (neEn - neSt)) (2 * nvSt + 2))
+    (2 * nvEn - 1) with hl₀
+  have hsz0 : l₀.adjBounds.size = 2 * (nvEn - nvSt) + 1 := by simp [hl₀, inc, Layout.empty]
+  have he0 : l₀.edges = (Layout.empty (nvEn - nvSt) (neEn - neSt)).edges := rfl
+  set l₁ := E.foldl (countStep nvSt) l₀ with hl₁
+  have e1 : l₁.edges = l₀.edges := foldl_countStep_edges nvSt E l₀
+  have sz1 : l₁.adjBounds.size = l₀.adjBounds.size := (foldl_countStep_sizes nvSt E l₀).1
+  obtain ⟨e2, -, -, -, -⟩ := foldl_prefixStep nvSt (2 * nvEn + 1 - (2 * nvSt + 1)) (2 * nvSt + 1)
+    l₁ (2 * neSt) (Nat.le_refl _) (by rw [sz1, hsz0]; omega)
+  set l₂ := ((List.range' (2 * nvSt + 1) (2 * nvEn + 1 - (2 * nvSt + 1))).foldl (prefixStep nvSt)
+    (l₁, 2 * neSt)).1 with hl₂
+  have he2 : (inc nvSt l₂ (2 * nvSt + 2)).edges = (Layout.empty (nvEn - nvSt) (neEn - neSt)).edges := by
+    show l₂.edges = _
+    rw [e2, e1, he0]
+  have hesz : (inc nvSt l₂ (2 * nvSt + 2)).edges.size = E.length + 1 := by
+    rw [he2, empty_edges_size]; omega
+  obtain ⟨sz3, g3⟩ := foldl_fillStep_edges nvSt neSt node E.reverse (inc nvSt l₂ (2 * nvSt + 2)) neEn
+    (by simp; omega) (by rw [hesz]; omega)
+  set l₃ := (E.reverse.foldl (fillStep nvSt neSt node) (inc nvSt l₂ (2 * nvSt + 2), neEn)).1 with hl₃
+  show (l₃.setNe neSt node neSt (nvSt, nvEn - 1) (2 * neSt, 2 * neEn - 1)).edges[k]!.nvs = _
+  rw [setNe_edges_get _ _ _ _ _ _ _ (by rw [sz3, hesz]; exact hk), Nat.sub_self]
+  by_cases hk0 : k = 0
+  · rw [ite_of_pos hk0, ite_of_pos hk0]
+  · rw [ite_of_neg hk0, ite_of_neg hk0, g3 k (by rw [hesz]; exact hk)]
+    simp only [List.length_reverse]
+    rw [ite_of_pos (by omega), List.getD_eq_getElem?_getD, List.getElem?_reverse (by omega),
+      show E.length - 1 - (neEn - 1 - neSt - k) = k - 1 by omega]
+    simp only [getElem!_def]
+    cases E[k - 1]? <;> rfl
 
 end LayoutFacts
 
@@ -798,14 +844,20 @@ theorem edge0_nvs (hr : items.RepOK g) {i : ItemId} (hi : i < items.size)
   · rw [hty] at hn; cases hn
   · rw [hty] at hn; cases hn
   · obtain ⟨e, he, rfl⟩ := h.type_Q_eq hi hty
-    obtain ⟨u, v, -, -, hl, -, -⟩ := h.q_pair hr he
+    obtain ⟨u, v, -, -, hl, -, hne1⟩ := h.q_pair hr he
     rcases hl with ⟨-, -, hl2⟩ | ⟨-, -, c, ⟨-, hl2⟩ | ⟨-, hl1, -⟩⟩
     · rw [hl2]; exact LayoutFacts.qi_edge _ (Or.inl rfl) _ _ _ _ _ (by omega)
     · rw [hl2]; exact LayoutFacts.qi_edge _ (Or.inl rfl) _ _ _ _ _ (by omega)
     · rw [hl1]; exact LayoutFacts.one_vert _ (by decide) _ _ _ _ _ (by omega)
-  · obtain ⟨u, v, -, hl2⟩ := h.nvList_I hi hty
+  · have hne1 : items.nEdges g i = 1 := by
+      rw [h.nEdges_node hi hn, Items.virtualEdges, h.shapes.i_o_leaf i hi (Or.inl hty)]
+      simp [Items.capCount, Items.hasCap, hty, NodeType.isNode]
+    obtain ⟨u, v, -, hl2⟩ := h.nvList_I hi hty
     rw [hl2]; exact LayoutFacts.qi_edge _ (Or.inr rfl) _ _ _ _ _ (by omega)
-  · obtain ⟨v, -, hl1⟩ := h.nvList_O hi hty
+  · have hne1 : items.nEdges g i = 1 := by
+      rw [h.nEdges_node hi hn, Items.virtualEdges, h.shapes.i_o_leaf i hi (Or.inr hty)]
+      simp [Items.capCount, Items.hasCap, hty, NodeType.isNode]
+    obtain ⟨v, -, hl1⟩ := h.nvList_O hi hty
     rw [hl1]; exact LayoutFacts.one_vert _ (by decide) _ _ _ _ _ (by omega)
   · obtain ⟨u, v, xs, -, hnl, hxs, hvirt⟩ := h.nvList_S hr hi hty
     have hlen : (items.nvList g i).length = xs.length + 2 := by rw [hnl]; simp
