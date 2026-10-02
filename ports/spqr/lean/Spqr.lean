@@ -54,6 +54,7 @@ import Spqr.PlanarRelabelProj
 import Spqr.PlanarRotSpec
 import Spqr.LayoutSize
 import Spqr.PlanarRotInv
+import Spqr.PlanarRotFold
 import Spqr.Proofs.Planar
 import Spqr.PlanarLayout
 import Spqr.PlanarInv
