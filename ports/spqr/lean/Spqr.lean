@@ -40,6 +40,7 @@ import Spqr.SepPairExhaust
 import Spqr.Proofs.SepPairExhaust
 import Spqr.StSpec
 import Spqr.LayoutShape
+import Spqr.RelabelAdj
 import Spqr.StRef
 import Spqr.StWalk
 import Spqr.StEar
