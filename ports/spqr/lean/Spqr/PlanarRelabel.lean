@@ -78,26 +78,29 @@ def liftR (m : RelabelM α) : PlanarRelabelM α := fun s =>
 def getAux : PlanarRelabelM PlanarRelabelAux := do return (← get).aux
 def modifyAux (f : PlanarRelabelAux → PlanarRelabelAux) : PlanarRelabelM Unit :=
   modify fun s => { s with aux := f s.aux }
+def liftAux (m : StateM PlanarRelabelAux α) : PlanarRelabelM α := fun s =>
+  let (a, aux) := m s.aux
+  (a, { s with aux := aux })
 
 /-- Link the cap's four quarter-edges `8 ne + s` to the node's recorded matches; `false` if the
 node was found nonplanar. -/
-def setupNode (g : Graph) (type : NodeType) (cur : ItemId) : PlanarRelabelM Bool := do
+def setupNode (g : Graph) (type : NodeType) (cur : ItemId) : PlanarRelabelM Bool := liftAux do
   match type with
   | .S | .P | .R =>
-    match (← getAux).nodePlanarity[cur - (1 + g.nv + g.ne)]! with
+    match (← get).nodePlanarity[cur - (1 + g.nv + g.ne)]! with
     | .planar m =>
       for s in [0 : 4] do
-        modifyAux fun a => { a with qem := (a.qem.set! (8 * g.ne + s) (some m[s]!)).set! m[s]! (some (8 * g.ne + s)) }
+        modify fun a => { a with qem := (a.qem.set! (8 * g.ne + s) (some m[s]!)).set! m[s]! (some (8 * g.ne + s)) }
       return true
     | _ => return false
   | _ => return true
 
 /-- Flipped children of an R node have their virtual edge's direction bits swapped. -/
-def applyFlips (g : Graph) (it : Item) (flips : List Bool) : PlanarRelabelM Unit := do
+def applyFlips (g : Graph) (it : Item) (flips : List Bool) : PlanarRelabelM Unit := liftAux do
   for (c, flip) in it.ch.zip flips do
     if c ≥ 1 + g.nv && flip then
       let ve := c - (1 + g.nv)
-      modifyAux fun a => { a with qem := (a.qem.swapIfInBounds (4 * ve + 0) (4 * ve + 1)).swapIfInBounds (4 * ve + 2) (4 * ve + 3) }
+      modify fun a => { a with qem := (a.qem.swapIfInBounds (4 * ve + 0) (4 * ve + 1)).swapIfInBounds (4 * ve + 2) (4 * ve + 3) }
 
 end PlanarRelabelM
 
