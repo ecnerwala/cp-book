@@ -1,13 +1,15 @@
 import Spqr.PlanarInv
 import Spqr.PlanarEmbed
+import Spqr.PlanarShape
 
 /-!
 # The gluing invariant of `planarEmbed`
 
 `planarEmbed` runs `embedItem` over the items in reverse preorder. `GluedUpTo i s` is the state
 invariant after the items `≥ i` have been processed; the per-item steps are stated separately
-(`embedItem_step_*`, admitted modulo the gluing lemmas of `PlanarInv`), and the fold is proved
-(`forM_reverse_range_inv`).
+(`embedItem_step_*`, under `SpqrTree.WF` and `SpqrTree.ChildShape` of the tree — they are false
+for an arbitrary `PlanarSpqrTree`), the fold is proved (`forM_reverse_range_inv`), and the steps
+are assembled in `PlanarEmbedFold.lean`.
 -/
 
 namespace Spqr
@@ -36,10 +38,12 @@ def EmbedState.exposedAt (s : EmbedState) (j q : Nat) : Prop :=
 /-- The gluing invariant after the items `≥ i` have been processed: for every maximal processed
 item `j`, the glued rotation restricted to the real edges below `j` agrees with a planar
 embedding `ρ` of that piece; exactly the exposed ends `outerE[j]` are still unset, and they lie
-on a common face of `ρ`. Quarter-edges of edges not below any processed item are unset. -/
+on a common face of `ρ`. Quarter-edges of edges not below any processed item are unset, and
+unprocessed items have no exposed ends yet. -/
 structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) : Prop where
   rot_size : s.rotAdj.size = 4 * t.ne
   outer_size : s.outerE.size = t.size
+  outer_unprocessed : ∀ j, j < i → ∀ q, ¬ s.exposedAt j q
   unset : ∀ q, (∀ j, i ≤ j → j < t.size → QE.edge q ∉ t.edgesBelow j) →
     s.rotAdj[q]? = none ∨ s.rotAdj[q]? = some none
   piece : ∀ j, t.Maximal i j → ∃ ρ : RotationSystem,
@@ -59,6 +63,11 @@ def initState : EmbedState :=
 theorem gluedUpTo_init (g : Graph) : t.GluedUpTo g t.size t.initState where
   rot_size := by simp [initState]
   outer_size := by simp [initState]
+  outer_unprocessed := by
+    intro j _ q ⟨k, hk⟩
+    simp only [initState, Array.getElem?_replicate] at hk
+    split at hk <;> simp only [Option.bind_some, Option.bind_none, Array.getElem?_replicate] at hk <;>
+      split at hk <;> simp at hk
   unset := by
     intro q _
     simp only [initState, Array.getElem?_replicate]
@@ -70,29 +79,24 @@ theorem gluedUpTo_init (g : Graph) : t.GluedUpTo g t.size t.initState where
 
 /-- `F` step: the children are whole components; their exposed ends are closed
 (`disjointUnion_planar`). Admitted. -/
-theorem embedItem_step_F (g : Graph) (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .F)
+theorem embedItem_step_F (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
+    (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .F)
     (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
     t.GluedUpTo g i ((t.embedItem i).run s).2 := by
   sorry
 
 /-- `V` step: the blocks hanging off the vertex are chained through their exposed ends, i.e.
 1-sums at the vertex (`oneSum_planar`), and the two outermost ends stay exposed. Admitted. -/
-theorem embedItem_step_V (g : Graph) (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .V)
+theorem embedItem_step_V (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
+    (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .V)
     (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
     t.GluedUpTo g i ((t.embedItem i).run s).2 := by
   sorry
 
 /-- `Q` step: the real edge `origId i` is added with its four quarter-edges; the two `I`/`O`
 children (the loops / blocks at its endpoints) are 1-summed at the endpoints. Admitted. -/
-theorem embedItem_step_Q (g : Graph) (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .Q)
-    (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
-    t.GluedUpTo g i ((t.embedItem i).run s).2 := by
-  sorry
-
-/-- `O`/`I` step: leaves without edges; `embedItem` is the identity. Admitted (needs
-`edgesBelow i = []` for leaves). -/
-theorem embedItem_step_leaf (g : Graph) (i : Nat) (hi : i < t.size)
-    (hty : t.types[i]! = .O ∨ t.types[i]! = .I)
+theorem embedItem_step_Q (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
+    (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .Q)
     (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
     t.GluedUpTo g i ((t.embedItem i).run s).2 := by
   sorry
@@ -100,25 +104,13 @@ theorem embedItem_step_leaf (g : Graph) (i : Nat) (hi : i < t.size)
 /-- `S`/`P`/`R` step: the node's local rotation (`nodePlanar_sound`) is 2-summed with each
 child's piece through the twin virtual edge (`twoSum_planar`), and the cap's quarter-edges become
 the exposed ends. Admitted. -/
-theorem embedItem_step_node (g : Graph) (i : Nat) (hi : i < t.size)
+theorem embedItem_step_node (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
+    (i : Nat) (hi : i < t.size)
     (hty : t.types[i]! = .S ∨ t.types[i]! = .P ∨ t.types[i]! = .R)
     (hall : t.nodePlanar.all id = true)
     (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
     t.GluedUpTo g i ((t.embedItem i).run s).2 := by
   sorry
-
-theorem embedItem_step (g : Graph) (i : Nat) (hi : i < t.size) (hall : t.nodePlanar.all id = true)
-    (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
-    t.GluedUpTo g i ((t.embedItem i).run s).2 := by
-  match hty : t.types[i]! with
-  | .F => exact t.embedItem_step_F g i hi hty s h
-  | .V => exact t.embedItem_step_V g i hi hty s h
-  | .Q => exact t.embedItem_step_Q g i hi hty s h
-  | .O => exact t.embedItem_step_leaf g i hi (Or.inl hty) s h
-  | .I => exact t.embedItem_step_leaf g i hi (Or.inr hty) s h
-  | .S => exact t.embedItem_step_node g i hi (Or.inl hty) hall s h
-  | .P => exact t.embedItem_step_node g i hi (Or.inr (Or.inl hty)) hall s h
-  | .R => exact t.embedItem_step_node g i hi (Or.inr (Or.inr hty)) hall s h
 
 /-- The reverse-preorder fold of `embedItem` preserves any step-invariant. -/
 theorem forM_reverse_range_inv (P : Nat → EmbedState → Prop) (n : Nat)
@@ -133,11 +125,6 @@ theorem forM_reverse_range_inv (P : Nat → EmbedState → Prop) (n : Nat)
     rw [List.range_succ, List.reverse_append, List.reverse_singleton, List.singleton_append]
     simp only [List.forM_eq_forM, List.forM_cons, StateT.run_bind]
     exact ih (fun i s hi => step i s (by omega)) _ (step n s₀ (by omega) h)
-
-theorem gluedUpTo_planarEmbed (g : Graph) (hall : t.nodePlanar.all id = true) :
-    t.GluedUpTo g 0 (((List.range t.size).reverse.forM t.embedItem).run t.initState).2 :=
-  t.forM_reverse_range_inv (fun i s => t.GluedUpTo g i s) t.size
-    (fun i s hi h => t.embedItem_step g i hi hall s h) _ (t.gluedUpTo_init g)
 
 end PlanarSpqrTree
 
