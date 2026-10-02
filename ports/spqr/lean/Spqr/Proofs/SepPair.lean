@@ -92,6 +92,16 @@ theorem SeparationPair.exists_not_sepClass {a b : Nat} (h : g.SeparationPair a b
   · exact ⟨e₁, e₂, h₁, h₂, h⟩
   · exact ⟨e₁, e₂, h₁, h₂, h⟩
 
+/-- A block with an edge between distinct vertices has no self-loop. -/
+theorem TwoConnected.not_loop' (h2 : g.TwoConnected) {e e' x y z : Nat} (he : g.Joins e x x)
+    (he' : g.Joins e' y z) (hyz : y ≠ z) : False := by
+  rcases h2 x e e' he.lt he'.lt with rfl | ⟨u, v, hu, hv, hr⟩
+  · rcases he.eq_or he' with ⟨h1, h2⟩ | ⟨h1, h2⟩
+    · exact hyz (h1.symm.trans h2)
+    · exact hyz (h2.symm.trans h1)
+  · obtain ⟨w, hw⟩ := hu
+    rcases he.eq_or hw with ⟨h, -⟩ | ⟨-, h⟩ <;> exact hr.ok_left h.symm
+
 /-- A block with two edges has no loops. -/
 theorem TwoConnected.not_loop (h2 : g.TwoConnected) (hne : 2 ≤ g.ne) {e x : Nat}
     (h : g.Joins e x x) : False := by
@@ -644,6 +654,114 @@ theorem AttachesBetween.returns {b l : Nat} {o : DfsOut} (ho : o ∈ d.outs b)
   · obtain ⟨-, -, -, -, l'', h1, h2, h3⟩ :=
       (hs.cls_type2 b o ho _).mp (by rw [hk rfl] at hc; exact hc)
     exact ⟨l'', h1, h2, h3⟩
+
+/-! ### Fact C: type-2 pairs live on first-child chains -/
+
+/-- If the *above* and *between* parts are separated by `{a, b}` (and `a` is not the root), every
+`T_x` with `x` on the tree path from `a'` to `b` returns strictly above `a`. -/
+theorem subtree_returns_above (h2 : g.TwoConnected) {q a a' b : Nat} (hqa : d.IsParent q a)
+    (hpa : d.IsParent a a') (ha'b : d.Anc a' b)
+    (hsep : ∀ e e', d.Above a' a b e g → d.Between a' b e' g → ¬g.SepClass a b e e')
+    {x : Nat} (hx : d.Anc a' x) (hxb : d.Anc x b) : ∃ l, l < d.depth a ∧ d.Returns x l := by
+  obtain ⟨e', he'⟩ := hqa.joins hs
+  have hda := hs.depth_parent _ _ hqa
+  have hda' := hs.depth_parent _ _ hpa
+  obtain ⟨u, v, hu, huv, hva, hvne⟩ := exists_edge_above hs h2 hpa he'.isEnd
+    (fun h => h.ne_of_depth_lt hs (by omega)) (fun h => by subst h; omega)
+  have hdv := hva.depth_lt hs hvne
+  have hdb := (hpa.anc.trans ha'b).depth_le hs
+  obtain ⟨e, he⟩ := huv
+  have habove : d.Above a' a b e g :=
+    ⟨v, he.symm.isEnd, hvne, fun h => by rw [h] at hdv; omega,
+      fun h => h.ne_of_depth_lt hs (by omega)⟩
+  by_cases hxu : d.Anc x u
+  · have hvu : d.Anc v u := hva.trans (hpa.anc.trans hu)
+    have hne : v ≠ u := fun h => by rw [h] at hdv; have := hu.depth_le hs; omega
+    rcases edge_up hs he hvu hne with hpar | ⟨o, ho, -, hback, rfl⟩
+    · obtain rfl := IsParent.eq_of_anc hs hu hpar fun h => h.ne_of_depth_lt hs (by omega)
+      exact absurd (hs.parent_unique _ _ _ hpar hpa) hvne
+    · exact ⟨_, hdv, u, o, ho, hxu, hback, rfl⟩
+  · exact (hsep e e habove ⟨u, he.isEnd, hu, fun h => hxu (hxb.trans h)⟩ (.refl _)).elim
+
+/-- Nothing in the subtree of a sibling `y` of `x` lies in `T_b ⊆ T_x`. -/
+theorem not_anc_of_sibling {p x y b u : Nat} (hpx : d.IsParent p x) (hpy : d.IsParent p y)
+    (hne : y ≠ x) (hxb : d.Anc x b) (hyu : d.Anc y u) : ¬d.Anc b u := by
+  intro hbu
+  have hdx := hs.depth_parent _ _ hpx
+  have hdy := hs.depth_parent _ _ hpy
+  rcases hyu.comparable hs hbu with hyb | hby
+  · exact hne (hyb.eq_of_depth_eq hs hxb (by omega))
+  · exact hne ((Anc.refl y).eq_of_depth_eq hs (hxb.trans hby) (by omega))
+
+/-- Fact C. If `{a, b}` separates the *above* part from the *between* part (as a type-2 pair
+does) and `a` is not the root, then for every tree edge `p → x` on the path from `a'` down to `b`
+with `p ≠ a`, `p → x` is the *first* out-edge of `p`. (PROOF.md allows type-1 edges of `p`
+returning exactly to `depth a` before `p → x`; they cannot occur: `T_x` returns strictly above
+`a`, so any earlier edge has `lowval < depth a` and would join *above* to *between*.) -/
+theorem type2_first_out (h2 : g.TwoConnected) {q a a' b : Nat} (hqa : d.IsParent q a)
+    (hpa : d.IsParent a a') (ha'b : d.Anc a' b)
+    (hsep : ∀ e e', d.Above a' a b e g → d.Between a' b e' g → ¬g.SepClass a b e e')
+    {p : Nat} (hp : d.Anc a' p) {o o' : DfsOut} (h : [o, o'].Sublist (d.outs p))
+    (ht' : o'.isTree = true) (hxb : d.Anc o'.dest b) : False := by
+  have hpx : d.IsParent p o'.dest := isParent_of_tree (h.subset (by simp)) ht'
+  have hda' := hs.depth_parent _ _ hpa
+  have hdx := hs.depth_parent _ _ hpx
+  have hdb := hxb.depth_le hs
+  have hdp := hp.depth_le hs
+  have hpb : d.Anc p b := hpx.anc.trans hxb
+  have hpne : p ≠ b := fun h => by subst h; omega
+  obtain ⟨r, -, hrp⟩ := (hpa.anc.trans hp).cases_tail.resolve_left fun h => by subst h; omega
+  have hr := rank_le_of_sublist hs h
+  obtain ⟨lx, kx, hcx, -⟩ := cls_ret_of_tree hs h2 hrp (h.subset (by simp)) ht'
+  obtain ⟨-, -, hminx⟩ := ret_lowpt hs (h.subset (by simp)) ht' hcx
+  obtain ⟨l', hl', hret'⟩ := subtree_returns_above hs h2 hqa hpa ha'b hsep (hp.tail hpx) hxb
+  have hlx : lx < d.depth a := by
+    by_contra hge
+    exact hminx l' (by omega) hret'
+  have hBetween : ∀ e, g.IsEnd e p → d.Between a' b e g := fun e he =>
+    ⟨p, he, hp, fun h => hpne (hpb.antisymm hs h)⟩
+  have hAbove : ∀ e w, g.IsEnd e w → d.depth w < d.depth a → d.Above a' a b e g :=
+    fun e w he hw =>
+      ⟨w, he, fun h => by rw [h] at hw; omega, fun h => by rw [h] at hw; omega,
+        fun h => h.ne_of_depth_lt hs (by omega)⟩
+  have ho : o ∈ d.outs p := h.subset (by simp)
+  have hj := hs.joins p o ho
+  cases hc : o.cls with
+  | bridge =>
+    obtain ⟨_, _, hc', -⟩ := cls_ret_of_tree hs h2 hrp ho ((hs.cls_bridge p o ho).mp hc).1
+    exact OutClass.noConfusion (hc.symm.trans hc')
+  | component =>
+    obtain ⟨_, _, hc', -⟩ := cls_ret_of_tree hs h2 hrp ho ((hs.cls_component p o ho).mp hc).1
+    exact OutClass.noConfusion (hc.symm.trans hc')
+  | selfLoop =>
+    obtain ⟨-, hdest⟩ := (hs.cls_selfLoop p o ho).mp hc
+    rw [hdest] at hj
+    obtain ⟨e', he'⟩ := hpa.joins hs
+    exact h2.not_loop' hj he' fun h => by rw [h] at hda'; omega
+  | ret l₀ k₀ =>
+    rw [hc, hcx] at hr
+    have hr' : 3 * (l₀ + 2) + k₀.rank ≤ 3 * (lx + 2) + kx.rank := hr
+    have := k₀.rank_le
+    have := kx.rank_le
+    have hl₀ : l₀ < d.depth a := by omega
+    cases ht : o.isTree
+    · have hb : o.cls = .ret l₀ .backEdge := by
+        cases k₀ with
+        | backEdge => exact hc
+        | type1Child => exact absurd ((hs.cls_type1 p o ho l₀).mp hc).1 (by rw [ht]; decide)
+        | type2Child => exact absurd ((hs.cls_type2 p o ho l₀).mp hc).1 (by rw [ht]; decide)
+      obtain ⟨-, -, hdep⟩ := (hs.cls_backEdge p o ho l₀).mp hb
+      exact hsep _ _ (hAbove _ _ hj.symm.isEnd (by omega)) (hBetween _ hj.isEnd) (.refl _)
+    · obtain ⟨-, ⟨u, o₁, ho₁, hyu, -, hdep₁⟩, -⟩ := ret_lowpt hs ho ht hc
+      have hj₁ := hs.joins u o₁ ho₁
+      have hpy : d.IsParent p o.dest := isParent_of_tree ho ht
+      have hne : o.dest ≠ o'.dest := fun hdx => by
+        have := hs.tree_inj p o ho o' (h.subset (by simp)) ht ht' hdx
+        exact (List.nodup_cons.mp ((hs.nodup p).sublist h)).1
+          (by rw [this]; exact List.mem_singleton.mpr rfl)
+      exact hsep _ _ (hAbove _ _ hj₁.symm.isEnd (by omega))
+        ⟨u, hj₁.isEnd, (hp.tail hpy).trans hyu, not_anc_of_sibling hs hpx hpy hne hxb hyu⟩
+        (.refl _)
 
 end Spec
 

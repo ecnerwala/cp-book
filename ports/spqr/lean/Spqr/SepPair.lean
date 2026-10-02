@@ -86,6 +86,10 @@ structure Spec (g : Graph) : Prop where
   edge_out : ∀ e, e < g.ne → ∃ v, ∃ o ∈ d.outs v, o.e = e
   /-- ... exactly once. -/
   out_inj : ∀ v v', ∀ o ∈ d.outs v, ∀ o' ∈ d.outs v', o.e = o'.e → v = v' ∧ o = o'
+  nodup : ∀ v, (d.outs v).Nodup
+  /-- A child is entered by one tree edge. -/
+  tree_inj : ∀ v, ∀ o ∈ d.outs v, ∀ o' ∈ d.outs v,
+    o.isTree = true → o'.isTree = true → o.dest = o'.dest → o = o'
   /-- Back edges go to an ancestor-or-self: no cross edges. -/
   back_anc : ∀ v, ∀ o ∈ d.outs v, o.isTree = false → d.Anc o.dest v
   parent_unique : ∀ p p' c, d.IsParent p c → d.IsParent p' c → p = p'
