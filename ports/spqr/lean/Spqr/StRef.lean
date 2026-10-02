@@ -1,4 +1,5 @@
 import Spqr.ItemSpec
+import Spqr.Frame
 
 /-!
 # The st-order reference
@@ -20,6 +21,7 @@ walk's child list of an S / P / R item is the restriction of `refOrder` to the i
 -/
 
 namespace Spqr
+open WalkM
 
 /-- One push onto the ear stack, abstracted: `items` (already in st-order) on side `side`. -/
 structure StPiece where
@@ -88,6 +90,106 @@ def refBlocks (g : Graph) (forest : List DfsTree) : List (List ItemId) :=
 /-- The reference st-order of the leaf items (blocks concatenated; no item lies in two blocks). -/
 def refOrder (g : Graph) (forest : List DfsTree) : List ItemId :=
   (refBlocks g forest).flatMap id
+
+/-! ### Reading a tstack as pieces (the simulation relation for `walk_st'`) -/
+
+/-- The st-order read off a tstack (top first): entries nest, higher entries outside lower ones
+(`mergeTstackTops` puts the top entry's spans outside the next one's). -/
+def readL : List TEntry → List ItemId
+  | [] => []
+  | t :: below => t.spans.1 ++ readL below
+def readR : List TEntry → List ItemId
+  | [] => []
+  | t :: below => readR below ++ t.spans.2
+def readStack (ts : List TEntry) : List ItemId := readL ts ++ readR ts
+
+theorem stNestL_append (ps qs : List StPiece) : stNestL (ps ++ qs) = stNestL qs ++ stNestL ps := by
+  induction ps with
+  | nil => simp [stNestL]
+  | cons p ps ih => simp [stNestL, ih]
+
+theorem stNestR_append (ps qs : List StPiece) : stNestR (ps ++ qs) = stNestR ps ++ stNestR qs := by
+  induction ps with
+  | nil => simp [stNestR]
+  | cons p ps ih => simp [stNestR, ih]
+
+/-- Pushing the pieces `qs` on top of `ps` puts them outside. -/
+theorem stNest_append (ps qs : List StPiece) :
+    stNest (ps ++ qs) = stNestL qs ++ stNest ps ++ stNestR qs := by
+  simp [stNest, stNestL_append, stNestR_append]
+
+theorem stNest_single (side : Bool) (items : List ItemId) :
+    stNest [⟨side, items⟩] = items := by
+  cases side <;> simp [stNest, stNestL, stNestR]
+
+/-- Reading the stack with one more entry on top: the entry is the piece `⟨dir, items⟩` if its
+spans are `setSides dir items []`. -/
+theorem readStack_cons_setSides (v d idx : Nat) (dir : Bool) (items : List ItemId)
+    (ts : List TEntry) :
+    readStack (⟨v, d, idx, setSides dir items []⟩ :: ts) =
+      stNestL [⟨dir, items⟩] ++ readStack ts ++ stNestR [⟨dir, items⟩] := by
+  cases dir <;> simp [readStack, readL, readR, setSides, stNestL, stNestR]
+
+/-- `pushTstack` / `pushEdgeTstack` push the piece `⟨stackDir[d], [i]⟩`. -/
+theorem readStack_pushTstack (s : WalkState) (v d : Nat) (i : ItemId) :
+    readStack ((pushTstack v d i).run s).2.tstack =
+      stNestL [⟨s.stackDir[d]!, [i]⟩] ++ readStack s.tstack ++ stNestR [⟨s.stackDir[d]!, [i]⟩] := by
+  rw [run_pushTstack]
+  exact readStack_cons_setSides _ _ _ _ _ _
+
+/-- `mergeTstackTops` does not change the reading. -/
+theorem readStack_mergeTops (b a : TEntry) (rest : List TEntry) :
+    readStack (mergeTops (b :: a :: rest)) = readStack (b :: a :: rest) := by
+  simp [mergeTops, readStack, readL, readR]
+
+theorem readStack_mergeTstackTops (s : WalkState) (h : 2 ≤ s.tstack.length) :
+    readStack (mergeTstackTops.run s).2.tstack = readStack s.tstack := by
+  rw [run_mergeTstackTops]
+  match s.tstack, h with
+  | b :: a :: rest, _ => exact readStack_mergeTops b a rest
+
+/-- The vertex-close fold (`closeVertTail`) turns the top entry into the single piece
+`⟨dir, spans.1 ++ spans.2⟩`. -/
+theorem readStack_fold (dir : Bool) (curV : Nat) (t : TEntry) (rest : List TEntry) :
+    readStack ({ t with vStart := curV, spans := setSides dir (t.spans.1 ++ t.spans.2) [] } :: rest) =
+      stNestL [⟨dir, t.spans.1 ++ t.spans.2⟩] ++ readStack rest ++
+        stNestR [⟨dir, t.spans.1 ++ t.spans.2⟩] :=
+  readStack_cons_setSides _ _ _ _ _ _
+
+/-- Replace the item `i` by `ch` (the children it was closed with). -/
+def expandItem (i : ItemId) (ch : List ItemId) (l : List ItemId) : List ItemId :=
+  l.flatMap fun x => if x = i then ch else [x]
+
+theorem expandItem_append (i : ItemId) (ch l₁ l₂ : List ItemId) :
+    expandItem i ch (l₁ ++ l₂) = expandItem i ch l₁ ++ expandItem i ch l₂ := by
+  simp [expandItem]
+
+theorem expandItem_of_not_mem (i : ItemId) (ch l : List ItemId) (h : i ∉ l) :
+    expandItem i ch l = l := by
+  induction l with
+  | nil => rfl
+  | cons x l ih =>
+    simp only [List.mem_cons, not_or] at h
+    have := ih h.2
+    simp only [expandItem, List.flatMap_cons, Ne.symm h.1, ite_false, List.singleton_append] at this ⊢
+    rw [this]
+
+/-- `finishTstackTop item` on a one-sided top entry: expanding `item` back to the entry's items
+recovers the reading (the item is new, so it occurs nowhere else). -/
+theorem readStack_finishTstackTop (s : WalkState) (item : ItemId) (t : TEntry) (rest : List TEntry)
+    (ht : s.tstack = t :: rest)
+    (hside : getSide t.spans (!s.stackDir[t.topDepth]!) = [])
+    (hnew : item ∉ readStack rest) :
+    expandItem item (getSide t.spans s.stackDir[t.topDepth]!)
+        (readStack ((finishTstackTop item).run s).2.tstack) =
+      readStack s.tstack := by
+  rcases s with ⟨g, tern, items, sv, sd, nei, fo, ts, tb, tsl⟩
+  simp only at ht; subst ht
+  show expandItem _ _ (readStack ({ t with spans := setSides sd[t.topDepth]! [item] [] } :: rest)) = _
+  rw [readStack_cons_setSides, expandItem_append, expandItem_append, expandItem_of_not_mem _ _ _ hnew]
+  simp only at hside
+  cases hd : sd[t.topDepth]! <;> simp [hd, getSide] at hside ⊢ <;>
+    simp [readStack, readL, readR, expandItem, stNestL, stNestR, hside]
 
 /-! ### The statement: the walk's child lists are restrictions of `refOrder` -/
 
