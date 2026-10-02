@@ -171,9 +171,7 @@ theorem layoutNode_r_bracket (node nvSt nvEn neSt neEn : Nat) (edgeChildren : Li
 
 /-! ### The theorems -/
 
-/-- Phase 3: relabelling well-formed items in s-t order gives st-ordered output. -/
-theorem relabel_st (g : Graph) (items : Items) (hst : items.StNumbered) (h : items.WF g) :
-    (relabelTree g items).StOrder := by
-  sorry
+/-! Phase 3 (`relabel_st : Items.StNumbered → Items.WF g → (relabelTree g items).StOrder`) is proved
+in `Spqr/RelabelSt.lean` from the per-node relabel interface. -/
 
 end Spqr

@@ -678,9 +678,9 @@ theorem stOrder (hst : items.StNumbered)
 
 end RelabelOK
 
-/-- `relabel_st` (`Spqr/StSpec.lean`) from the per-node interface, modulo `relabel_node_spec`
-(via `relabelTree_adj` for the CSR row starts). -/
-theorem relabel_st' (g : Graph) (items : Items) (hst : items.StNumbered) (h : items.WF g) :
+/-- Phase 3: relabelling well-formed items in s-t order gives st-ordered output. From the per-node
+interface, modulo `relabel_node_spec` (via `relabelTree_adj` for the CSR row starts). -/
+theorem relabel_st (g : Graph) (items : Items) (hst : items.StNumbered) (h : items.WF g) :
     (relabelTree g items).StOrder := by
   obtain ⟨idx, hok⟩ := relabelOK_of_wf g items h
   exact hok.stOrder hst (relabelTree_adj g items h (hok.rOriented hst)).1
