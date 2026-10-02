@@ -753,15 +753,22 @@ pairs followed by the parent pair, provided every edge of `U` belongs to an item
 permutation. Its coverage hypothesis is precisely:
 `∀ e, e < g.ne → items.EdgeBelow g i e → ∃ c ∈ items.ch i, items.type c ≠ .V ∧ items.EdgeBelow g c e`.
 These two theorems also have only standard axioms.
+`Graph.ThreeConnected.twoConnected` proves that HT 3-connectivity implies edge-based
+2-connectivity when there are at least three edges. First, deleting the endpoints of a third
+edge rules out disconnected edge components. If deleting one vertex separates two edges,
+each resulting edge class must be a singleton: otherwise isolate an edge incident to the
+deleted vertex and obtain three separation classes. A third edge then gives a contradiction.
+The three-edge lower bound is necessary (two disjoint edges have no HT separation pair).
 `Items.RSkel3.rThreeConnected` now gives the item-specific bridge from `RSkel3` to the
-cut-based item skeleton specification, assuming `Items.WF`, block 2-connectivity,
-well-formedness of the child-plus-parent pieces, and the coverage clause above.
+cut-based item skeleton specification, assuming `Items.WF` and the coverage clause above.
+The skeleton's edge count supplies its 2-connectivity via `ThreeConnected.twoConnected`;
+neither block 2-connectivity nor child-plus-parent piece WF is needed for this bridge.
 It derives the active vertex list: endpoints are on the cap or a child edge; a V child has
 an incident edge covered by a non-V child, and the `interior`/`separation` clauses force that
 vertex to be a terminal of such a child. The bridge handles either cap orientation using
 `SpqrTree.ThreeConnected_congr_undirected`; it does not require a simplicity hypothesis.
-These lemmas have only standard axioms. Deriving coverage and piece well-formedness for
-completed R items, and the block-local version for an arbitrary input graph, remain open.
+These lemmas have only standard axioms. Deriving coverage for completed R items, and the
+block-local version for an arbitrary input graph, remain open.
 
 ### 4.6 Ranges: `Endpoints`/`Shapes` without the tstack (`Ranges.lean`, `RangesWF.lean`)
 
@@ -1083,7 +1090,8 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 R skeleton persistence: `Pieces.contract_congr`, `Items.RSkel3.congr`, `.modify_of_not_below`, `.push_nil` | `Proofs/RItems.lean` | proved (standard axioms); walk-level ownership of later writes remains open |
 | 4.5 HT-to-cut transport: `Graph.ThreeConnected.relabel` | `Proofs/ThreeConnected.lean` | proved (standard axioms), assuming a block and its active vertex list; item-level hypotheses remain open |
 | 4.5 Item/contract edge correspondence: `Pieces.ofItems_addParent_edges`, `Items.rSkeleton_perm_contract` | `Proofs/RItems.lean` | proved (standard axioms), under non-V-child edge coverage; deriving coverage for completed R items remains open |
-| 4.5 Item HT-to-cut bridge: `Items.RSkel3.rThreeConnected` | `Proofs/RItems.lean`, `Proofs/ThreeConnected.lean` | proved (standard axioms), including active vertices and either cap orientation; takes item WF, block 2-connectivity, child-plus-parent piece WF, and non-V-child edge coverage |
+| 4.5 HT 3-connectivity implies 2-connectivity with ≥ 3 edges: `Graph.ThreeConnected.twoConnected` | `Proofs/ThreeConnected.lean` | proved (standard axioms); no block or simplicity assumption |
+| 4.5 Item HT-to-cut bridge: `Items.RSkel3.rThreeConnected` | `Proofs/RItems.lean`, `Proofs/ThreeConnected.lean` | proved (standard axioms), including active vertices and either cap orientation; takes item WF and non-V-child edge coverage |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
 | 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge`/`walkTree` induction and `walk_ranges` admitted; saturation not a field (attachment-count forms false, §4.6) |
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |

@@ -32,6 +32,79 @@ theorem EdgeConn.reach {e f u w : Nat} (h : g.EdgeConn ok e f)
   · exact (hu.reach hx hou hr.ok_left).trans
       (hr.trans (hy.reach hw hr.ok_right how))
 
+theorem IsEnd.exists_sepClass_eq {e a : Nat} (he : g.IsEnd e a) :
+    ∃ b, a ≠ b ∧ ∀ f, g.SepClass a b e f → e = f := by
+  obtain ⟨b, hj⟩ := he
+  by_cases hab : a = b
+  · subst b
+    refine ⟨a + 1, by omega, fun f hf => ?_⟩
+    rcases hf with hf | ⟨u, v, hu, _, hr⟩
+    · exact hf
+    · exact (hr.ok_left.1 ((hu.eq_or hj).elim id id)).elim
+  · exact ⟨b, hab, fun _ hf => sepClass_eq_of_joins hj hf⟩
+
+theorem exists_edge_ne (hne : 3 ≤ g.ne) (e f : Nat) :
+    ∃ k, k < g.ne ∧ k ≠ e ∧ k ≠ f := by
+  by_cases h0 : e ≠ 0 ∧ f ≠ 0
+  · exact ⟨0, by omega, h0.1.symm, h0.2.symm⟩
+  by_cases h1 : e ≠ 1 ∧ f ≠ 1
+  · exact ⟨1, by omega, h1.1.symm, h1.2.symm⟩
+  exact ⟨2, by omega, by omega, by omega⟩
+
+theorem ThreeConnected.edgeConn (h3 : g.ThreeConnected) (hne : 3 ≤ g.ne)
+    {e f : Nat} (he : e < g.ne) (hf : f < g.ne) : g.EdgeConn (fun _ => True) e f := by
+  by_contra hn
+  obtain ⟨k, hk, hke, hkf⟩ := exists_edge_ne hne e f
+  have hj : g.Joins k (g.edges[k]!).1 (g.edges[k]!).2 := joins_iff.2 ⟨hk, .inl rfl⟩
+  obtain ⟨b, hab, hiso⟩ := hj.isEnd.exists_sepClass_eq
+  exact h3 _ b ⟨hab, .inl ⟨k, e, f, hk, he, hf,
+    fun h => hke (hiso e h), fun h => hkf (hiso f h),
+    fun h => hn (h.mono fun _ _ => True.intro)⟩⟩
+
+theorem EdgeConn.cut_incident {a e f : Nat} (h : g.EdgeConn (fun _ => True) e f)
+    (hn : ¬g.EdgeConn (· ≠ a) e f) :
+    ∃ q, g.IsEnd q a ∧ g.EdgeConn (· ≠ a) e q := by
+  rcases h with rfl | ⟨x, y, hx, hy, hr⟩
+  · exact (hn (.refl _)).elim
+  by_cases hxa : x = a
+  · exact ⟨e, hxa ▸ hx, .refl _⟩
+  rcases hr.exit (ok' := (· ≠ a)) hxa with hstay | ⟨u, v, hu, ⟨q, hq⟩, _, hv⟩
+  · exact (hn (.of_reach hx hy (hstay.mono fun _ h => h.2))).elim
+  · have hva : v = a := not_not.1 hv
+    subst v
+    exact ⟨q, hq.symm.isEnd, .of_reach hx hq.isEnd (hu.mono fun _ h => h.2)⟩
+
+theorem ThreeConnected.cut_class_singleton (h3 : g.ThreeConnected) {a e f k : Nat}
+    (he : e < g.ne) (hf : f < g.ne) (hk : k < g.ne)
+    (hconn : g.EdgeConn (fun _ => True) e f) (hn : ¬g.EdgeConn (· ≠ a) e f)
+    (hkconn : g.EdgeConn (· ≠ a) e k) : e = k := by
+  by_contra hek
+  obtain ⟨q, hq, heq⟩ := hconn.cut_incident hn
+  obtain ⟨r, hr, hqr, her⟩ :
+      ∃ r, r < g.ne ∧ q ≠ r ∧ g.EdgeConn (· ≠ a) e r := by
+    by_cases hqe : q = e
+    · exact ⟨k, hk, hqe ▸ hek, hkconn⟩
+    · exact ⟨e, he, hqe, .refl _⟩
+  obtain ⟨b, hab, hiso⟩ := hq.exists_sepClass_eq
+  exact h3 a b ⟨hab, .inl ⟨q, r, f, hq.lt, hr, hf,
+    fun h => hqr (hiso r h),
+    fun h => hn (heq.trans (h.mono fun _ h => h.1)),
+    fun h => hn (her.trans (h.mono fun _ h => h.1))⟩⟩
+
+theorem ThreeConnected.twoConnected (h3 : g.ThreeConnected) (hne : 3 ≤ g.ne) :
+    g.TwoConnected := by
+  intro a e f he hf
+  by_contra hn
+  obtain ⟨k, hk, hke, hkf⟩ := exists_edge_ne hne e f
+  have hnek : ¬g.EdgeConn (· ≠ a) e k := fun h =>
+    hke (h3.cut_class_singleton he hf hk (h3.edgeConn hne he hf) hn h).symm
+  have hnfk : ¬g.EdgeConn (· ≠ a) f k := fun h =>
+    hkf (h3.cut_class_singleton hf he hk (h3.edgeConn hne hf he) (fun h => hn h.symm) h).symm
+  exact h3 a (a + 1) ⟨by omega, .inl ⟨e, f, k, he, hf, hk,
+    fun h => hn (h.mono fun _ h => h.1),
+    fun h => hnek (h.mono fun _ h => h.1),
+    fun h => hnfk (h.mono fun _ h => h.1)⟩⟩
+
 theorem TwoConnected.two_incident (h2 : g.TwoConnected) {e u v f w : Nat}
     (he : g.Joins e u v) (hf : g.IsEnd f w) (hwu : w ≠ u) (hwv : w ≠ v) :
     ∃ f, f ≠ e ∧ g.IsEnd f u := by

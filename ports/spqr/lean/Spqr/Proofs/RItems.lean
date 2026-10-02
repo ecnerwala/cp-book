@@ -119,10 +119,7 @@ def Items.RSkel3 (g : Graph) (items : Items) (i : ItemId) : Prop :=
 
 theorem Items.RSkel3.rThreeConnected {g : Graph} {items : Items} {i : ItemId}
     (h : Items.RSkel3 g items i) (hwf : items.WF g) (hi : i < items.size)
-    (hR : items.type i = .R) (h2 : g.TwoConnected)
-    (hpieces : ∀ s t, (items.vs i = (some s, some t) ∨ items.vs i = (some t, some s)) →
-      ((Pieces.ofItems g items ((items.ch i).filter fun c => decide (items.type c ≠ .V))).addParent g
-        (items.EdgeBelow g i) s t).WF g)
+    (hR : items.type i = .R)
     (hcover : ∀ e, e < g.ne → items.EdgeBelow g i e →
       ∃ c ∈ items.ch i, items.type c ≠ .V ∧ items.EdgeBelow g c e) :
     SpqrTree.ThreeConnected (items.nvList g i).length (items.rSkeleton g i) := by
@@ -202,7 +199,13 @@ theorem Items.RSkel3.rThreeConnected {g : Graph} {items : Items} {i : ItemId}
     rcases hqv with rfl | rfl
     · exact ⟨e, he.isEnd⟩
     · exact ⟨e, he.symm.isEnd⟩
-  have hcut := h3.relabel ((hpieces s t hvs).twoConnected_contract h2) (hr.nv_nodup hi)
+  have hne : 3 ≤ (P.contract g).ne := by
+    have hlen := congrArg List.length hedges
+    have := (hwf.shapes.r_shape i hi hR).2.1
+    simp only [List.length_append, List.length_cons, List.length_nil, Array.length_toList] at hlen
+    change 3 ≤ (P.contract g).edges.size
+    omega
+  have hcut := h3.relabel (h3.twoConnected hne) (hr.nv_nodup hi)
     (hr.nvList_R hi hR).choose_spec.choose_spec.2 hactive hends
   apply (SpqrTree.ThreeConnected_congr_undirected (es' := items.rSkeleton g i) ?_).1 hcut
   intro u v
