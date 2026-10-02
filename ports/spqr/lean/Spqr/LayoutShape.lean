@@ -646,6 +646,151 @@ theorem runS_row (node nvSt nvEn neSt neEn : Nat) (hv : 3 ≤ nvEn - nvSt) (he :
   rw [gd _ (by omega)]
   split_ifs <;> rec_omega
 
+/-! ### R -/
+
+section R
+open LayoutR
+
+theorem fillStep_edges_size (nvSt neSt node : Nat) (s : Layout × Nat) (p : Nat × Nat) :
+    (fillStep nvSt neSt node s p).1.edges.size = s.1.edges.size := by
+  simp [fillStep, Layout.setNe, countStep, inc]
+
+theorem fillStep_snd (nvSt neSt node : Nat) (s : Layout × Nat) (p : Nat × Nat) :
+    (fillStep nvSt neSt node s p).2 = s.2 - 1 := rfl
+
+/-- The reverse fill writes `L[i]` as node-edge `c - 1 - i`. -/
+theorem foldl_fillStep_edges (nvSt neSt node : Nat) (L : List (Nat × Nat)) :
+    ∀ (l : Layout) (c : Nat), neSt + L.length ≤ c → c ≤ neSt + l.edges.size →
+      (L.foldl (fillStep nvSt neSt node) (l, c)).1.edges.size = l.edges.size ∧
+      ∀ j, j < l.edges.size →
+        (L.foldl (fillStep nvSt neSt node) (l, c)).1.edges[j]! =
+          if c ≤ j + neSt + L.length ∧ j + neSt < c then
+            ⟨node, none, L.getD (c - 1 - neSt - j) default⟩
+          else l.edges[j]! := by
+  induction L with
+  | nil =>
+    intro l c _ _
+    refine ⟨rfl, fun j _ => ?_⟩
+    simp only [List.length_nil, List.foldl_nil]
+    rw [ite_of_neg (by omega)]
+  | cons p L ih =>
+    intro l c h1 h2
+    rw [List.foldl_cons]
+    have hsz : (fillStep nvSt neSt node (l, c) p).1.edges.size = l.edges.size :=
+      fillStep_edges_size ..
+    simp only [List.length_cons] at h1
+    obtain ⟨sz, g⟩ := ih (fillStep nvSt neSt node (l, c) p).1 (fillStep nvSt neSt node (l, c) p).2
+      (by rw [fillStep_snd]; omega) (by rw [fillStep_snd, hsz]; omega)
+    refine ⟨sz.trans hsz, fun j hj => ?_⟩
+    rw [g j (by omega), fillStep_snd]
+    simp only [fillStep, List.length_cons]
+    rw [setNe_edges_get _ _ _ _ _ _ _ (by rw [countStep_edges]; omega), countStep_edges]
+    by_cases hc : c - 1 ≤ j + neSt + L.length ∧ j + neSt < c - 1
+    · rw [ite_of_pos hc, ite_of_pos (by omega)]
+      obtain ⟨k, hk⟩ : ∃ k, c - 1 - neSt - j = k + 1 := ⟨c - 1 - 1 - neSt - j, by omega⟩
+      rw [hk, List.getD_cons_succ]
+      congr 3; omega
+    · rw [ite_of_neg hc]
+      by_cases hj0 : j = c - 1 - neSt
+      · rw [ite_of_pos hj0, ite_of_pos (by omega), show c - 1 - neSt - j = 0 by omega,
+          List.getD_cons_zero]
+      · rw [ite_of_neg hj0, ite_of_neg (by omega)]
+
+/-- Edges of an R layout: the cap `(nvSt, nvEn - 1)` at local index `0`, then `E` in order. -/
+theorem run_edges (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn) (hne : neEn = neSt + E.length + 1) :
+    (run node nvSt nvEn neSt neEn E).edges.size = E.length + 1 ∧
+    ∀ j, j < E.length + 1 → (run node nvSt nvEn neSt neEn E).edges[j]! =
+      if j = 0 then ⟨node, none, (nvSt, nvEn - 1)⟩ else ⟨node, none, E.getD (j - 1) default⟩ := by
+  simp only [run]
+  set l₀ := inc nvSt (inc nvSt (Layout.empty (nvEn - nvSt) (neEn - neSt)) (2 * nvSt + 2))
+    (2 * nvEn - 1) with hl₀
+  have hsz0 : l₀.adjBounds.size = 2 * (nvEn - nvSt) + 1 := by simp [hl₀, inc, Layout.empty]
+  have he0 : l₀.edges = (Layout.empty (nvEn - nvSt) (neEn - neSt)).edges := rfl
+  set l₁ := E.foldl (countStep nvSt) l₀ with hl₁
+  obtain ⟨e1, -, sz1, -⟩ := foldl_countStep nvSt nvEn E hE l₀ hsz0
+  obtain ⟨e2, -, -, -, -⟩ := foldl_prefixStep nvSt (2 * nvEn + 1 - (2 * nvSt + 1)) (2 * nvSt + 1)
+    l₁ (2 * neSt) (Nat.le_refl _) (by rw [sz1, hsz0]; omega)
+  set l₂ := ((List.range' (2 * nvSt + 1) (2 * nvEn + 1 - (2 * nvSt + 1))).foldl (prefixStep nvSt)
+    (l₁, 2 * neSt)).1 with hl₂
+  have he2 : (inc nvSt l₂ (2 * nvSt + 2)).edges = (Layout.empty (nvEn - nvSt) (neEn - neSt)).edges := by
+    show l₂.edges = _
+    rw [e2, e1, he0]
+  have hesz : (inc nvSt l₂ (2 * nvSt + 2)).edges.size = E.length + 1 := by
+    rw [he2, empty_edges_size]; omega
+  obtain ⟨sz3, g3⟩ := foldl_fillStep_edges nvSt neSt node E.reverse (inc nvSt l₂ (2 * nvSt + 2)) neEn
+    (by simp; omega) (by rw [hesz]; omega)
+  set l₃ := (E.reverse.foldl (fillStep nvSt neSt node) (inc nvSt l₂ (2 * nvSt + 2), neEn)).1 with hl₃
+  have hsz : (inc nvSt (l₃.setNe neSt node neSt (nvSt, nvEn - 1) (2 * neSt, 2 * neEn - 1))
+      (2 * nvEn - 1)).edges.size = E.length + 1 := by
+    show (l₃.setNe neSt node neSt (nvSt, nvEn - 1) (2 * neSt, 2 * neEn - 1)).edges.size = _
+    rw [setNe_edges_size, sz3, hesz]
+  refine ⟨hsz, fun j hj => ?_⟩
+  show (l₃.setNe neSt node neSt (nvSt, nvEn - 1) (2 * neSt, 2 * neEn - 1)).edges[j]! = _
+  rw [setNe_edges_get _ _ _ _ _ _ _ (by rw [sz3, hesz]; exact hj), Nat.sub_self]
+  by_cases hj0 : j = 0
+  · rw [ite_of_pos hj0, ite_of_pos hj0]
+  · rw [ite_of_neg hj0, ite_of_neg hj0, g3 j (by rw [hesz]; exact hj)]
+    simp only [List.length_reverse]
+    rw [ite_of_pos (by omega), List.getD_eq_getElem?_getD, List.getD_eq_getElem?_getD,
+      List.getElem?_reverse (by omega)]
+    congr 3; omega
+
+/-- The R skeleton as a list: the cap followed by `E`. -/
+theorem run_skeleton (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn) (hne : neEn = neSt + E.length + 1) :
+    (run node nvSt nvEn neSt neEn E).edges.toList.map (·.nvs) = (nvSt, nvEn - 1) :: E := by
+  obtain ⟨hsz, hget⟩ := run_edges node nvSt nvEn neSt neEn E hv hE hne
+  apply List.ext_getElem
+  · simp [hsz]
+  · intro k h1 h2
+    simp only [List.getElem_map, Array.getElem_toList]
+    rw [← getElem!_pos _ _ (by simp at h1; omega), hget k (by simp at h1; omega)]
+    cases k with
+    | zero => rfl
+    | succ k =>
+      simp only [Nat.succ_ne_zero, ↓reduceIte, Nat.add_sub_cancel, List.getElem_cons_succ]
+      rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by simpa using h2)]
+      rfl
+
+/-- Bounds of an R layout, in terms of `LayoutR.start`. -/
+theorem run_rowBound (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn) (hne : neEn = neSt + E.length + 1)
+    (r : Nat) (hr1 : 2 * nvSt ≤ r) (hr2 : r ≤ 2 * nvEn) :
+    rowBound nvSt neSt (run node nvSt nvEn neSt neEn E) r =
+      start nvSt neSt (allE nvSt nvEn E) (r + 1) := by
+  obtain ⟨hb, -⟩ := run_spec node nvSt nvEn neSt neEn E hv hE hne
+  unfold rowBound
+  split
+  · subst ‹r = 2 * nvSt›; rw [start_low _ _ _ _ (Nat.le_refl _)]
+  · rw [hb r (by omega) (by omega)]
+
+theorem run_rowBound_mono (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn) (hne : neEn = neSt + E.length + 1)
+    (r : Nat) (hr1 : 2 * nvSt ≤ r) (hr2 : r < 2 * nvEn) :
+    rowBound nvSt neSt (run node nvSt nvEn neSt neEn E) r ≤
+      rowBound nvSt neSt (run node nvSt nvEn neSt neEn E) (r + 1) := by
+  rw [run_rowBound _ _ _ _ _ _ hv hE hne _ hr1 (by omega),
+    run_rowBound _ _ _ _ _ _ hv hE hne _ (by omega) (by omega)]
+  exact start_le _ _ _ (by omega)
+
+theorem run_rowBound_last (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn) (hne : neEn = neSt + E.length + 1) :
+    rowBound nvSt neSt (run node nvSt nvEn neSt neEn E) (2 * nvEn) = 2 * neEn := by
+  rw [run_rowBound _ _ _ _ _ _ hv hE hne _ (by omega) (Nat.le_refl _),
+    start_top _ _ _ _ (allE_bounds nvSt nvEn E hv hE) (by omega), allE_length]
+  omega
+
+/-- Row destinations of an R layout (`LayoutR.row_destNv` restated on `run`). -/
+theorem run_row_destNv (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hE : ∀ q ∈ E, nvSt ≤ q.1 ∧ q.1 < q.2 ∧ q.2 < nvEn) (hne : neEn = neSt + E.length + 1)
+    (r : Nat) (hr1 : 2 * nvSt ≤ r) (hr2 : r ≤ 2 * nvEn - 1) :
+    (row nvSt neSt (run node nvSt nvEn neSt neEn E) r).map (·.destNv) = rowDest nvSt nvEn E (r + 1) := by
+  rw [← layoutNode_R_eq _ _ _ _ _ _ hv]
+  exact row_destNv node nvSt nvEn neSt neEn E hv hE hne r hr1 hr2
+
+end R
+
 end LayoutShape
 
 end Spqr
