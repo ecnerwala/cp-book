@@ -79,6 +79,7 @@ import Spqr.PlanarLayout
 import Spqr.PlanarInv
 import Spqr.PlanarInvSteps
 import Spqr.PlanarEmbedSteps
+import Spqr.PlanarEmbedVBoundary
 import Spqr.PlanarSpec
 import Spqr.Proofs.ForestSpec
 import Spqr.Contract
