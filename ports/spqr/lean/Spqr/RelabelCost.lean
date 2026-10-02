@@ -1,5 +1,5 @@
 import Lean
-import Spqr.Relabel
+import Spqr.RelabelFast
 import Spqr.WalkCost
 
 /-!
@@ -12,7 +12,7 @@ that into `O(V + E)` needs the (unproved, see `relabelRun_sizes_le`) fact that t
 tree, so that `relabel` visits each item at most once.
 -/
 
-namespace Spqr
+namespace Spqr.Fast
 open StateRun
 
 def RelabelState.pot (s : RelabelState) : Nat := 4 * s.types.size + 2 * s.chDat.size
@@ -60,8 +60,8 @@ theorem modify (f : RelabelState → RelabelState) (h : ∀ s, (f s).ticks + s.p
   run_simp; exact h s
 theorem item (i : ItemId) : ROk (RelabelM.item i) := fun s => by
   simp only [run_simp, RelabelM.item]; omega
-theorem orderedChildren (it : Item) (ch : List ItemId) (n : Nat) :
-    ROk (RelabelM.orderedChildren it ch n) := fun s => by
+theorem orderedChildren (it : Spqr.Item) (n : Nat) :
+    ROk (RelabelM.orderedChildren it n) := fun s => by
   simp only [run_simp, RelabelM.orderedChildren]
   split <;> (try dsimp only) <;> omega
 
@@ -151,36 +151,37 @@ theorem ok_relabel : ∀ fuel cur parent parNv capTwin, ROk (relabel fuel cur pa
     ok_auto
 
 /-- Phase 3 ticks at most `4` per node numbered and `2` per child slot written. -/
-theorem relabel_ticks_le_sizes (g : Graph) (items : Array Item) :
+theorem relabel_ticks_le_sizes (g : Graph) (items : Array Spqr.Item) :
     (relabelRun g items).ticks ≤
       4 * (relabelRun g items).types.size + 2 * (relabelRun g items).chDat.size := by
   have h := ok_relabel items.size rootItem none none none (RelabelState.init g items)
   unfold relabelRun
-  simp only [RelabelState.pot, RelabelState.init, List.size_toArray, List.length_nil] at h ⊢
+  simp only [RelabelState.pot, RelabelState.init, Spqr.RelabelState.init, List.size_toArray,
+    List.length_nil] at h ⊢
   omega
 
 /-- `relabel` numbers at most `items.size` nodes and writes at most `items.size` child slots.
-MISSING LEMMA (`sorry`): the items produced by `Graph.walk` form a rooted tree under `Item.ch`
+MISSING LEMMA (`sorry`): the items produced by `Graph.walkFast` form a rooted tree under `Item.ch`
 (each item is a child of at most one item, none is its own ancestor), so the preorder traversal
 visits each item at most once. That walk invariant is not proved here. -/
 theorem relabelRun_sizes_le (g : Graph) (tern : Bool) (forest : List DfsTree) :
-    (relabelRun g (g.walk tern forest).items).types.size ≤ (g.walk tern forest).items.size ∧
-    (relabelRun g (g.walk tern forest).items).chDat.size ≤ (g.walk tern forest).items.size := by
+    (relabelRun g ((g.walkFast tern forest).items.map Item.toSlow)).types.size ≤ (g.walkFast tern forest).items.size ∧
+    (relabelRun g ((g.walkFast tern forest).items.map Item.toSlow)).chDat.size ≤ (g.walkFast tern forest).items.size := by
   sorry
 
 /-- Steps per vertex / edge in phase 3: `6` per item, `items ≤ 1 + (V + E) + walk ticks`. -/
 abbrev relabelC : Nat := 6 * (walkC + 2)
 
-/-- Phase 3 is `O(V + E)`: `288 * (V + E) + 6` steps. Depends on `relabelRun_sizes_le` and
-`dfsForest_size_le`. -/
-theorem relabel_ticks_le (g : Graph) (tern : Bool) (vertOrder edgeOrder : List Nat) :
-    (relabelRun g (g.walk tern (g.dfsForest vertOrder edgeOrder)).items).ticks ≤
+/-- Phase 3 is `O(V + E)`: `288 * (V + E) + 6` steps. Depends on `relabelRun_sizes_le`. -/
+theorem relabel_ticks_le (g : Graph) (hg : g.WF) (tern : Bool) (vertOrder edgeOrder : List Nat)
+    (hvo : OrderOK g.nv vertOrder) (heo : OrderOK g.ne edgeOrder) :
+    (relabelRun g ((g.walkFast tern (g.dfsForest vertOrder edgeOrder)).items.map Item.toSlow)).ticks ≤
       relabelC * (g.nv + g.ne) + 6 := by
-  have h1 := relabel_ticks_le_sizes g (g.walk tern (g.dfsForest vertOrder edgeOrder)).items
+  have h1 := relabel_ticks_le_sizes g ((g.walkFast tern (g.dfsForest vertOrder edgeOrder)).items.map Item.toSlow)
   have h2 := relabelRun_sizes_le g tern (g.dfsForest vertOrder edgeOrder)
   have h3 := walk_items_le g tern (g.dfsForest vertOrder edgeOrder)
-  have h4 := walk_ticks_le g tern vertOrder edgeOrder
-  simp only [relabelC, walkC] at *
+  have h4 := walk_ticks_le g hg tern vertOrder edgeOrder hvo heo
+  simp only [relabelC, walkC, Array.size_map] at *
   omega
 
-end Spqr
+end Spqr.Fast

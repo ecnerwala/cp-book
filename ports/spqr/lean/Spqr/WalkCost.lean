@@ -1,5 +1,6 @@
 import Lean
-import Spqr.Walk
+import Spqr.WalkFast
+import Spqr.Proofs.Dfs
 import Spqr.StateRun
 
 /-!
@@ -15,7 +16,7 @@ as many items as it ticks"), a Hoare-style `Spec` for the loop bodies, and a sma
 `cost_auto` that walks the syntax of a `do` block and adds up the costs of its primitives.
 -/
 
-namespace Spqr
+namespace Spqr.Fast
 open StateRun
 
 def WalkState.pot (s : WalkState) : Nat := s.ticks + 4 * s.tstack.size
@@ -113,7 +114,7 @@ theorem cost_tstackSize : Cost tstackSize 0 := fun s => by simp only [run_simp, 
 theorem cost_modifyCur (g : TEntry → TEntry) : Cost (modifyCur g) 0 := fun s => by
   simp only [run_simp, modifyCur]; omega
 theorem cost_modifyNxt (g : TEntry → TEntry) : Cost (modifyNxt g) 0 := fun s => by
-  simp only [run_simp, modifyNxt]; omega
+  simp only [run_simp, modifyNxt]; split <;> (try simp only [run_simp]) <;> omega
 theorem cost_popTstack : Cost popTstack 1 := fun s => by simp only [run_simp, popTstack]; omega
 theorem cost_pushTstack (v d i : Nat) : Cost (pushTstack v d i) 5 := fun s => by
   simp only [run_simp, pushTstack]; omega
@@ -220,9 +221,9 @@ def costLeaf : Name → Option Name
   | ``pushVertTstack => some ``cost_pushVertTstack
   | ``pushEdgeTstack => some ``cost_pushEdgeTstack
   | ``mergeTstackTops => some ``cost_mergeTstackTops
-  | ``maybeUnwrapNxt => some `Spqr.WalkM.cost_maybeUnwrapNxt
-  | ``finishTstackTop => some `Spqr.WalkM.cost_finishTstackTop
-  | ``Spqr.finishEdge => some `Spqr.cost_finishEdge
+  | ``maybeUnwrapNxt => some `Spqr.Fast.WalkM.cost_maybeUnwrapNxt
+  | ``finishTstackTop => some `Spqr.Fast.WalkM.cost_finishTstackTop
+  | ``Spqr.Fast.finishEdge => some `Spqr.Fast.cost_finishEdge
   | _ => none
 
 open Lean Elab Tactic Meta in
@@ -265,7 +266,7 @@ def costAuto : Nat → MVarId → TacticM Unit
             evalTactic (← `(tactic| intro s; run_simp; omega))
     else if n == ``loop then
       let lem ← match (m.getArg! 1).getAppFn with
-        | .const ``closeCond _ => pure `Spqr.WalkM.cost_loop_close
+        | .const ``closeCond _ => pure `Spqr.Fast.WalkM.cost_loop_close
         | .const ``firstIdxCond _ => pure ``cost_loop_firstIdx
         | .const ``sizeCond _ => pure ``cost_loop_size
         | _ => throwError "cost_auto: unknown loop condition{indentExpr m}"
@@ -313,38 +314,16 @@ theorem sz_maybeUnwrapNxt (t : NodeType) (s : WalkState) :
     s.tstack.size ≤ ((maybeUnwrapNxt t).run s).2.tstack.size := by
   simp only [maybeUnwrapNxt, allocItem, nxt, stackDir, getItem, modifyNxt]
   run_simp
-  split <;> (try split) <;> simp
+  (repeat' split) <;> simp
 
 theorem sz_finishTstackTop (i : ItemId) (s : WalkState) :
     s.tstack.size ≤ ((finishTstackTop i).run s).2.tstack.size := by
   simp only [run_simp, finishTstackTop, cur, stackDir, makeVs, modifyItem, modifyCur]
   omega
 
-/-- Choosing the node type for the ear below the top does one real pop in the S case. -/
-theorem spec_closeType (d : Nat) (e : Bool) :
-    Spec (fun s => 2 ≤ s.tstack.size) (closeType d e) (fun s => 1 ≤ s.tstack.size) 1 0 := by
-  unfold closeType
-  refine (spec_bind (a1 := 0) (b1 := 0) (a2 := 1) (b2 := 0) (spec_of_cost cost_nxt sz_nxt)
-    fun t => ?_).weaken (by omega) (by omega)
-  refine spec_ite _ ?_ ?_
-  · refine (spec_bind (a1 := 0) (b1 := 0) (a2 := 1) (b2 := 0) (spec_of_cost cost_nxt sz_nxt)
-      fun t => ?_).weaken (by omega) (by omega)
-    refine (spec_bind (a1 := 0) (b1 := 0) (a2 := 1) (b2 := 0)
-      (spec_of_cost (cost_setStackDir _ _) (sz_setStackDir _ _)) fun _ => ?_).weaken (by omega) (by omega)
-    exact (spec_bind (a1 := 1) (b1 := 4) (a2 := 0) (b2 := 0) (spec_mergeTstackTops (k := 1))
-      fun _ => spec_pure _ fun _ h => h).weaken (by omega) (by omega)
-  · refine (spec_bind (a1 := 0) (b1 := 0) (a2 := 1) (b2 := 0) (spec_of_cost cost_nxt sz_nxt)
-      fun t => ?_).weaken (by omega) (by omega)
-    refine (spec_bind (a1 := 0) (b1 := 0) (a2 := 1) (b2 := 0) (spec_of_cost cost_cur sz_cur)
-      fun c => ?_).weaken (by omega) (by omega)
-    refine spec_ite _ ?_ ?_ <;> exact (spec_pure _ fun _ h => by omega).weaken (by omega) (by omega)
-
-/-- One iteration of loop 1 pays for itself: 3 ticks against at least one real pop. -/
-theorem spec_closeBody (d : Nat) (e : Bool) :
-    Spec (fun s => 2 ≤ s.tstack.size) (closeBody d e) (fun _ => True) 3 4 := by
-  unfold closeBody
-  refine (spec_bind (a1 := 1) (b1 := 0) (a2 := 2) (b2 := 4) (spec_closeType d e)
-    fun t => ?_).weaken (by omega) (by omega)
+theorem spec_rest (t : NodeType) :
+    Spec (fun s => 1 ≤ s.tstack.size)
+      (do let item ← maybeUnwrapNxt t; mergeTstackTops; finishTstackTop item) (fun _ => True) 2 4 := by
   refine (spec_bind (a1 := 1) (b1 := 0) (a2 := 1) (b2 := 4)
     (spec_of_cost (cost_maybeUnwrapNxt _) (sz_maybeUnwrapNxt _)) fun i => ?_).weaken (by omega) (by omega)
   refine (spec_bind (a1 := 1) (b1 := 4) (a2 := 0) (b2 := 0) (spec_mergeTstackTops (k := 0))
@@ -352,12 +331,33 @@ theorem spec_closeBody (d : Nat) (e : Bool) :
   exact (spec_of_cost (k := 0) (cost_finishTstackTop _) (sz_finishTstackTop _)).conseq
     (fun _ _ => Nat.zero_le _) (fun _ _ => trivial)
 
+/-- One iteration of loop 1 pays for itself: 3 ticks against at least one real pop. -/
+theorem spec_closeBody (d : Nat) (e : Bool) :
+    Spec (fun s => 2 ≤ s.tstack.size) (closeBody d e) (fun _ => True) 3 4 := by
+  unfold closeBody
+  simp only [pure_bind]
+  refine (spec_bind (a1 := 0) (b1 := 0) (a2 := 3) (b2 := 4) (spec_of_cost cost_nxt sz_nxt)
+    fun t => ?_).weaken (by omega) (by omega)
+  refine spec_ite _ ?_ ?_
+  · refine (spec_bind (a1 := 0) (b1 := 0) (a2 := 3) (b2 := 4) (spec_of_cost cost_nxt sz_nxt)
+      fun t => ?_).weaken (by omega) (by omega)
+    refine (spec_bind (a1 := 0) (b1 := 0) (a2 := 3) (b2 := 4)
+      (spec_of_cost (cost_setStackDir _ _) (sz_setStackDir _ _)) fun _ => ?_).weaken (by omega) (by omega)
+    exact (spec_bind (a1 := 1) (b1 := 4) (a2 := 2) (b2 := 4) (spec_mergeTstackTops (k := 1))
+      fun _ => spec_rest _).weaken (by omega) (by omega)
+  · refine (spec_bind (a1 := 0) (b1 := 0) (a2 := 3) (b2 := 4) (spec_of_cost cost_nxt sz_nxt)
+      fun t => ?_).weaken (by omega) (by omega)
+    refine (spec_bind (a1 := 0) (b1 := 0) (a2 := 3) (b2 := 4) (spec_of_cost cost_cur sz_cur)
+      fun c => ?_).weaken (by omega) (by omega)
+    refine spec_ite _ ?_ ?_ <;>
+      exact ((spec_rest _).conseq (fun _ h => by omega) (fun _ _ => trivial)).weaken (by omega) (by omega)
+
 theorem cost_loop_close (n d : Nat) (e : Bool) : Cost (loop n (closeCond d) (closeBody d e)) 0 :=
   cost_loop (closeCond_state d) (closeCond_true d) ((spec_closeBody d e).pays (by omega)) n
 
 end WalkM
 
-open WalkM
+open Spqr.Fast.WalkM
 
 /-- Finishing one out-edge costs a constant, amortized. -/
 theorem cost_finishEdge (v d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) :
@@ -365,6 +365,10 @@ theorem cost_finishEdge (v d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) :
   apply Cost.mono
   · unfold finishEdge; cost_auto
   · omega
+
+end Spqr.Fast
+
+namespace Spqr
 
 mutual
 def DfsTree.size : DfsTree → Nat
@@ -379,6 +383,31 @@ end
 
 theorem DfsTree.one_le_size (t : DfsTree) : 1 ≤ t.size := by
   cases t; simp only [DfsTree.size]; omega
+
+mutual
+theorem DfsTree.size_eq (t : DfsTree) : t.size = t.verts.length + t.edges.length := by
+  match t with
+  | .node v outs =>
+    simp only [DfsTree.size, DfsTree.verts, DfsTree.edges, List.length_cons, DfsOut.sizeList_eq outs]
+    omega
+theorem DfsOut.sizeList_eq (outs : List DfsOut) :
+    DfsOut.sizeList outs = (DfsOut.vertsList outs).length + (DfsOut.edgesList outs).length := by
+  match outs with
+  | [] => rfl
+  | .back e a b :: rest =>
+    simp only [DfsOut.sizeList, DfsOut.size, DfsOut.vertsList, DfsOut.edgesList, List.length_cons,
+      DfsOut.sizeList_eq rest]
+    omega
+  | .tree e a child :: rest =>
+    simp only [DfsOut.sizeList, DfsOut.size, DfsOut.vertsList, DfsOut.edgesList, List.length_cons,
+      List.length_append, DfsOut.sizeList_eq rest, DfsTree.size_eq child]
+    omega
+end
+
+end Spqr
+
+namespace Spqr.Fast
+open Spqr.Fast.WalkM
 
 /-- Steps per DFS node / out-edge. -/
 abbrev walkC : Nat := 46
@@ -417,6 +446,15 @@ end
 
 def forestSize (forest : List DfsTree) : Nat := (forest.map DfsTree.size).sum
 
+theorem forestSize_eq (forest : List DfsTree) :
+    forestSize forest = (forest.flatMap DfsTree.verts).length + (forest.flatMap DfsTree.edges).length := by
+  induction forest with
+  | nil => rfl
+  | cons t rest ih =>
+    simp only [forestSize, List.map_cons, List.sum_cons, List.flatMap_cons, List.length_append,
+      DfsTree.size_eq] at *
+    omega
+
 theorem cost_walkForest (forest : List DfsTree) : Cost (walkForest forest) ((walkC + 1) * forestSize forest) := by
   induction forest with
   | nil => exact (cost_pure _).mono (by simp [forestSize])
@@ -432,32 +470,34 @@ theorem cost_walkForest (forest : List DfsTree) : Cost (walkForest forest) ((wal
 
 /-- Phase 2 step bound, in terms of the size of the forest it walks. -/
 theorem walk_ticks_le_forest (g : Graph) (tern : Bool) (forest : List DfsTree) :
-    (g.walk tern forest).ticks ≤ (walkC + 1) * forestSize forest := by
+    (g.walkFast tern forest).ticks ≤ (walkC + 1) * forestSize forest := by
   have h := (cost_walkForest forest (WalkState.init g tern)).1
-  unfold Graph.walk
+  unfold Graph.walkFast
   simp only [WalkState.pot, WalkState.init, Array.size_empty] at h ⊢
   omega
 
 /-- The walk allocates at most one item per tick. -/
 theorem walk_items_le (g : Graph) (tern : Bool) (forest : List DfsTree) :
-    (g.walk tern forest).items.size ≤ 1 + g.nv + g.ne + (g.walk tern forest).ticks := by
+    (g.walkFast tern forest).items.size ≤ 1 + g.nv + g.ne + (g.walkFast tern forest).ticks := by
   have h := (cost_walkForest forest (WalkState.init g tern)).2
-  unfold Graph.walk
+  unfold Graph.walkFast
   simp [WalkState.Alloc, WalkState.init, initialItems] at h ⊢
   omega
 
-/-- Every `DfsTree` of a DFS forest is a distinct vertex and every `DfsOut` a distinct edge.
-MISSING LEMMA (`sorry`): this is the phase-1 invariant of `dfsVisit` (each vertex is visited once
-and each edge is emitted from exactly one endpoint); it is not proved here. -/
-theorem dfsForest_size_le (g : Graph) (vertOrder edgeOrder : List Nat) :
+/-- The DFS forest has exactly one node per vertex and one out-edge per edge
+(`dfsForest_spanning'`), so `forestSize = V + E`. -/
+theorem dfsForest_size_le (g : Graph) (hg : g.WF) (vertOrder edgeOrder : List Nat)
+    (hvo : OrderOK g.nv vertOrder) (heo : OrderOK g.ne edgeOrder) :
     forestSize (g.dfsForest vertOrder edgeOrder) ≤ g.nv + g.ne := by
-  sorry
+  obtain ⟨h1, h2⟩ := dfsForest_spanning' hg hvo heo
+  exact Nat.le_of_eq (by rw [forestSize_eq, h1.length_eq, h2.length_eq, List.length_range, List.length_range])
 
-/-- Phase 2 is `O(V + E)`: `47 * (V + E) + 0` steps. Depends on `dfsForest_size_le`. -/
-theorem walk_ticks_le (g : Graph) (tern : Bool) (vertOrder edgeOrder : List Nat) :
-    (g.walk tern (g.dfsForest vertOrder edgeOrder)).ticks ≤ (walkC + 1) * (g.nv + g.ne) + 0 :=
+/-- Phase 2 is `O(V + E)`: `47 * (V + E) + 0` steps. -/
+theorem walk_ticks_le (g : Graph) (hg : g.WF) (tern : Bool) (vertOrder edgeOrder : List Nat)
+    (hvo : OrderOK g.nv vertOrder) (heo : OrderOK g.ne edgeOrder) :
+    (g.walkFast tern (g.dfsForest vertOrder edgeOrder)).ticks ≤ (walkC + 1) * (g.nv + g.ne) + 0 :=
   Nat.le_trans (walk_ticks_le_forest ..) (by
-    have := dfsForest_size_le g vertOrder edgeOrder
+    have := dfsForest_size_le g hg vertOrder edgeOrder hvo heo
     simp only [walkC]; omega)
 
-end Spqr
+end Spqr.Fast

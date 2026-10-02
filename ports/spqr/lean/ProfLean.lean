@@ -18,12 +18,13 @@ def main : IO Unit := do
   let forest := g.dfsForest [] []
   let t2 ← IO.monoMsNow
   IO.println s!"dfs: {t2 - t1} ms (roots={forest.length})"
-  let w := g.walk (tern != 0) forest
+  let w := g.walkFast (tern != 0) forest
   let t3 ← IO.monoMsNow
   IO.println s!"walk: {t3 - t2} ms (items={w.items.size} ticks={w.ticks})"
-  let t := relabelTree g w.items
+  let items := w.items.map Fast.Item.toSlow
+  let t := Fast.relabelTreeFast g items
   let t4 ← IO.monoMsNow
-  IO.println s!"relabel: {t4 - t3} ms (nodes={t.types.size} ticks={(relabelRun g w.items).ticks})"
+  IO.println s!"relabel: {t4 - t3} ms (nodes={t.types.size} ticks={(Fast.relabelRun g items).ticks})"
   let out := String.join ((t.adjDat.toList.map fun x => s!"{x.ne},{x.destNv}").map (" " ++ ·))
   let t5 ← IO.monoMsNow
   IO.println s!"format adjDat: {t5 - t4} ms ({out.length} chars)"
