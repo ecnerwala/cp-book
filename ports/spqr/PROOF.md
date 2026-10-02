@@ -1261,7 +1261,15 @@ before every `finishEdge` (`sub` above `origTstack` reads as the child's `refTre
 out of every stack subtree by `bounded`) and the reopen path (`readStack_reopen` + `expandItem_self_iff`;
 the reopened node's children are fresh on the stack because they have a parent and stack items are
 roots); `L1Unwrap` is taken as the hypothesis `hU`, only its `getSide t.spans dir = [h]` clause is used.
-What remains is threading the relation through `finishEdge` (the loops) and
+`StLoop1.lean` threads it through loop 1: `l1St_loop` takes the ear side's `L1Ctx` (the facts of
+`EarFinish` loop 1 consumes) and `L1Inv` (its per-iteration stack shape: the piece `c` at depth `d`,
+one-sided, over the untouched rest) as hypotheses and keeps `L1StInv` — the reading above the block's
+base and `StItems` are unchanged up to expansion, `stackDir` at depths `≤ d` is unchanged (the type-2
+S-merge writes `stackDir[t.topDepth]` with `t.topDepth > d`), so the reference's `dirs` are fixed.
+`maybeUnwrapNxt` reads the side `stackDir[t.topDepth]`, which need not be the ear's side: if it is
+not, the side is empty and `L1Unwrap` (hence the head is no S / P item) forces the allocation path.
+What remains is threading the relation through the rest of `finishEdge` (`mergeLate`, `closeVert`,
+`finishP`, `finishTail`, `finishBoundary`, `finishBack`) and
 `walkTree`/`walkEarTree` under the ear-shape hypotheses — which entries loop 1 / the `firstIdx`
 loop / the `origTstack + 3` loop pop are the `EarFinish.loops`/`EarShape` facts; the new closes'
 `vs` (`makeVs` at `stackDir[topDepth]`) are oriented in the truncated reference because the closed
@@ -1326,6 +1334,7 @@ Classical.choice, Quot.sound.
 | `ExpandsList.{append, append_inv, cons_iff, det, congr, modify_of_not_below, modify_root, push, expandItem_self_iff, close}` (expansion algebra: framing under `modify`/`push`, `expandItem` of a node is invisible, closing `i` with children `ch` keeps the reading) | `StSim.lean` | proved |
 | `StClose.lean`: `Items.Below.{modify_of_not_below, of_modify, push, of_push, lt_of_chLt}`, `VsOrientedAt.congr`, `InBlock.{congr, modify_root, push}` (framing of the finished-item facts under `modify` of a root / `push`), `readStack_{cons_perm, close, close_perm}`, `StRead.finishTstackTop` (the reading above `base` survives the close of a one-sided top), `StItems.close` (the item facts survive it: `item` is a root not on the stack, the stack below holds roots; `closed` is assumed with `item` exempt) | `StClose.lean` | proved |
 | `StUnwrap.lean`: `readL_append`/`readR_append`, `readStack_cons_perm'`, `mem_readStack_cons`, `mem_expandItem`, `nodup_expandItem`, `mergeTops_cons_cons`, `TEntry.mergeInto_side_nil`, `StSim.allocMergeClose` (`allocItem; mergeTstackTops; finishTstackTop size`), `StSim.reopenMergeClose` (`modifyNxt` reopen of a single node `h`; merge; `finishTstackTop h`), `StSim.unwrapMergeClose` (`maybeUnwrapNxt ty; mergeTstackTops; finishTstackTop` on `c :: t :: _`, both one-sided on `stackDir[t.topDepth]` = the direction at the merged depth, `ty ∈ {S, P, R}`, `L1Unwrap s ty t` as the named hypothesis `hU`): the reading above `base` and `StItems` survive, the new top is `{mergeInto c t with spans := setSides dir [item] []}` with `type item = ty` — the common tail of `loop1Body` and `finishP` | `StUnwrap.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
+| `StLoop1.lean`: `L1StInv` (the st-side loop-1 invariant: the entries above a fixed suffix `B` read as fixed pieces `ps`, `StItems` for fixed `blocks`, `stackDir[k]` for `k ≤ d` kept), `L1Unwrap.transport` (`L1Unwrap` read before `finishEdge` holds at an iteration state whose kept entries are `L1Keep` and whose top items are roots or on the original stack), `loop_run_iter` (`loop fuel cond body` is `iter body k` with the condition true before each iteration), `l1St_step` (one `loop1Body` iteration under `L1Ctx`/`L1Inv` of `EarLoop1.lean`: the type-2 S-merge sets `stackDir` above `d` only, then `StSim.unwrapMergeClose`), `l1St_iter`, `l1St_loop` (the whole loop 1, with `l1_iter` supplying `L1Inv` at every iteration) | `StLoop1.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | per-primitive preservation of `StSim` through `finishEdge` (back-edge P merge, loop 1 type-2 merges, loop 2 type-1 closes, loop 3 / `maybeUnwrapNxt`, `finishTstackTop`, `closeVert`, block boundary), `walkTree` induction | — | open |
 | reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop`, `readStack_reopen`/`readStack_modifyNxt_reopen` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes and reopens) | `StRef.lean` | proved |
 
