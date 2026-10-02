@@ -230,7 +230,10 @@ flattened state machine:
     Spqr/RMax.lean, Proofs/RMax.lean
                          RCloseShape (walk-side facts of an R close, as a walk-free Prop) ⇒ no
                          skeleton pair separates the block, R skeleton ThreeConnected (proved);
-                         the walk ⇒ RCloseShape half is open
+                         the walk ⇒ RCloseShape half: RClose.lean, RInv.lean, Proofs/{RClose,RInv,RInvFrame,RItems}.lean —
+                         RBranch.rStep/rContent/threeConnected from Inv (d+1) ∧ RTop ∧ RBranch (proved),
+                         Items.RSkel3 + RBranch.rSkel3 (proved); admitted: finishEdge_rInvAt, walkTree_rInvAt,
+                         loop1_rBranch, items_r_three_connected
     Spqr/GraphLemmas.lean  ConnEdges/TwoAttached closure lemmas (no sorry)
     Spqr/Proofs/{Postorder,Interval,Type2}.lean  Fact D: edge postorder, classes are laminar intervals (no sorry)
     Spqr/Blocks.lean, Spqr/Proofs/Blocks.lean  blocks ↔ lowval ≥ d (PROOF.md §2, no sorry)
