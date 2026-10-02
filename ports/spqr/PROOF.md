@@ -313,6 +313,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | Facts A–D | — (pure graph theory over the sorted DFS tree) | to state |
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
 | `walkEarTree = walkTree`, frame rule `walkTree_local` | `EarSpec.lean` | sorry |
+| §4.2b walk invariant (`EntryInv`, `Inv`), `mergeTstackTops_sound`, `finishEdge_inv`, `walkTree_inv` | `WalkSpec.lean` | sorry |
 | Invariant W, Lemmas 4.3/4.4 (`earOut_one_entry`, `ascend_frame_one_entry`) | `EarSpec.lean` | sorry / hard |
 | 4.5 maximality / R 3-connected | `spqrTree_r_three_connected` | hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
