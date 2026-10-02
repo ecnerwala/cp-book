@@ -1221,14 +1221,48 @@ pushes the piece `⟨stackDir[d], [i]⟩`, matching the reference's `dirs[d]`), 
 matching the reference's `StPiece.mk lowDir (stNest sub)`), `readStack_finishTstackTop` (a close
 replaces the entry's items by the new item: `expandItem item … = …`) and `readStack_reopen` /
 `readStack_modifyNxt_reopen` (`maybeUnwrapNxt`'s reopen of a closed S / P node under the top is the
-inverse expansion). What remains is threading the relation through `finishEdge` (the loops) and
+inverse expansion).
+
+*The relation (`StSim.lean`, checked by `check_stsim` / `compare_stsim.sh`, seeds 0..1000, 0 violations
+at every boundary).* Expansion is the fuel-free `Expands items x L` (`L` = the leaves of `x`; V / Q
+items are their own leaf) and `ExpandsList`; `StRead items new ps := ExpandsList items (readStack new)
+(stNest ps)`; `DirsOf s d := [stackDir[0], …, stackDir[d-1]]` is the reference's `dirs`. `StSim g prev
+fs t base s` is the postcondition of `walkTree t d` (`d = fs.length`, `base` the tstack before, `prev`
+the finished trees of the forest): `s.tstack = new ++ base` with `StRead s.items new (refTree g t d
+(DirsOf s d)).1`, and `StItems g s (refBlocks g (prev ++ [truncTree fs t]))`; `StSimOuts g prev fs v
+done hasVert base s` is the same at the start of an out-edge of `v` with `refOuts g v d dirs done
+false` (pieces, and its `hasVert` equals the walk's). `StItems`: the items on the stack are roots
+(`¬ IsParent p x`) and `readStack tstack` is `Nodup` (what `readStack_reopen` needs — the reopened
+children are not elsewhere on the stack), and every S / P / R item is *live* (`Below x i` for some
+stack item `x`) or *finished*: `InBlock g items b i` for a block `b`, i.e. `b.items = A ++ L ++ B`
+with `Expands items i L` and `VsOrientedAt g items b i` (the body of `VsOriented` for one block,
+`vsOriented_iff`). The blocks are those of the **truncated tree** `truncTree fs t`: along the open
+path (`PathFrame` = vertex, finished out-edges `done`, current tree edge `o`) every vertex keeps
+`done ++ [o]` with the next frame as `o`'s child, and `t` at the bottom. Its reference order is the
+walk's *prediction* of the block order: it already accounts for the pending `closeVert` folds of
+the open frames (the only reordering primitive — a fold moves the whole sub-ear reading `L ++ R` to
+one side of the base, so an item closed at depth `d` on side `edgeDir` with `vs = (vStart, curV)`
+is on the wrong side of `V curV` before the fold and on the right side after it; a prediction from
+the current tstack alone is false there). As the walk proceeds the truncated reference only grows
+outwards (`refOuts_append`/`stNest_append`: later pieces wrap the earlier ones; a fold or a
+`hasVert` vertex piece wraps the sub-ear as a unit), so `Precedes`/`Oriented` facts of live items
+persist, and a finished block of the truncated tree is a final block (its subtree is complete).
+The checker mirrors `walkTree`/`walkOuts`/`walkOut` step by step calling the real `finishEdge`,
+checks `StSimOuts` at the start of every out-edge, `StSim` of the child plus `StRead (pre ++ new)`
+before every `finishEdge` (`sub` above `origTstack` reads as the child's `refTree` pieces) and
+`StSim` at the end of every `walkTree`, and finally that the mirrored items equal `g.walk`'s.
+
+What remains is threading the relation through `finishEdge` (the loops) and
 `walkTree`/`walkEarTree` under the ear-shape hypotheses — which entries loop 1 / the `firstIdx`
-loop / the `origTstack + 3` loop pop are the `EarFinish.loops`/`EarShape` facts — and, for
-`walk_st'`, turning the final expansion chain into `ch i = restrictCh … (refOrder …) i`: the
-children of a closed item are the items of its entry at the close, each a leaf or a closed item
-whose leaves are contiguous in the reference order, and `restrictCh` collapses each such run to the
-child. `walk_vsOriented` follows from the same thread: `makeVs` at a close uses `stackDir[topDepth]`,
-the side of the piece, and the block of `i` is the block being built when `i` closes.
+loop / the `origTstack + 3` loop pop are the `EarFinish.loops`/`EarShape` facts; the new closes'
+`vs` (`makeVs` at `stackDir[topDepth]`) are oriented in the truncated reference because the closed
+entry's leaves are the sub-ear spliced at `topDepth` — and, for `walk_st'`, turning the final
+`InBlock` into `ch i = restrictCh … (refOrder …) i`: `Expands i L` with `L` a segment of the
+`Nodup` `refOrder` and the children's expansions nonempty gives `restrictCh` = `ch` once
+`Items.leaves items items.size` is shown to agree with `Expands` (height < size in a tree).
+`walk_vsOriented` is `InBlock.oriented` at the end of the walk (everything is finished once the
+stack is empty) transported from the truncated to the final blocks (monotone clauses, plus the
+block-edge clause from disjointness of the blocks' items).
 
 **The restriction argument (`StRestrict.lean`).** `stItem_of_block` proves `Items.StItem items i`
 for one block `b` with `b.St` from `Items.WF`, `ch i = restrictCh … order i` where `order` contains
@@ -1279,6 +1313,8 @@ Classical.choice, Quot.sound.
 | `Before`, `Side`, `Nb`, `NbV`, `VInv` (`nil`, `single`, `extend`, `step`, `step_back`, `step_tree`), `block_st`, `root_block_st`, `refOut_boundary_back/tree`, `refOut_ret_back/tree`, `refOuts_nil/cons/zero`, `refTree_node` | `StRefEt.lean` | def / proved |
 | `Before.*` (`or_of_mem_mem`, `filter`, `filter_of`, `map`, `cons`, `append_left/right`, `filterMap`, …), `collapseRuns_sublist`, `before_collapseRuns`, `Precedes.of_before/before/ne/asymm/trans`, `Items.below_of_mem_leaves`, `leaves_of_type`, `leaves_succ`, `Tree.child_below_child`, `Tree.child_class`, `Tree.v_child_eq`, `Tree.type_ne_F`, `find?_leaves_vertItem`, `before_ch_of_before_order`, `edgeOf_eq_some` | `StRestrict.lean` | proved |
 | `stItem_of_block` (the restriction argument for one block, §7.6), `stItem_of_refOrder` (on the block from `VsOriented`, with `refBlocks_st` as `hbl` and `refBlocks_root_edge` as `hre`) | `StRestrict.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
+| `Expands`/`ExpandsList`, `DirsOf`, `StRead`, `VsOrientedAt` (`vsOriented_iff`), `InBlock`, `StItems`, `PathFrame`/`truncTree`, `StSim`, `StSimOuts` (the simulation relation, §7.6); `check_stsim` / `compare_stsim.sh` | `StSim.lean`, `CheckStSim.lean` | def / tested seeds 0..1000 at every `finishEdge` boundary (0 violations) |
+| per-primitive preservation of `StSim` through `finishEdge` (back-edge P merge, loop 1 type-2 merges, loop 2 type-1 closes, loop 3 / `maybeUnwrapNxt`, `finishTstackTop`, `closeVert`, block boundary), `walkTree` induction | — | open |
 | reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop`, `readStack_reopen`/`readStack_modifyNxt_reopen` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes and reopens) | `StRef.lean` | proved |
 
 ## 8. Planarity
