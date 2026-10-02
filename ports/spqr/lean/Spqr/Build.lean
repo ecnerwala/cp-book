@@ -1,4 +1,4 @@
-import Spqr.Dfs
+import Spqr.DfsFast
 import Spqr.Walk
 import Spqr.Relabel
 
@@ -8,7 +8,7 @@ namespace Spqr
 and adjacency entries are tried; `ternarize` forbids reusing S / P nodes, giving a tree with only
 binary/ternary merges. -/
 def Graph.spqrTree (g : Graph) (ternarize : Bool := false) (vertOrder edgeOrder : List Nat := []) : SpqrTree :=
-  let forest := g.dfsForest vertOrder edgeOrder
+  let forest := g.dfsForestFast vertOrder edgeOrder
   let w := g.walk ternarize forest
   relabelTree g w.items
 
