@@ -410,10 +410,11 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | 4.5 maximality / R 3-connected | `spqrTree_r_three_connected` | hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean` | def / proved split |
-| 7 relabel-side: `vchildren_nv_increasing`, `orderedChildren_sorted`, `edgeChildren_dominance` | `StSpec.lean` | proved |
-| 7 relabel-side: `layoutNode_r_bracket`, `relabel_st` | `StSpec.lean` | sorry |
+| 7 relabel-side: `vchildren_nv_increasing`, `orderedChildren_sorted`, `edgeChildren_dominance`, `layoutNode_r_bracket` | `StSpec.lean`, `StLayout.lean` | proved |
+| 7 relabel-side: `relabel_st` | `StSpec.lean` | sorry |
 | 7 walk-side: `WalkState.StInv`, data lemmas `pushTstack_onSide`, `merge_onSide`, `fold_onSide` | `StWalk.lean` | def / proved |
-| 7 walk-side: `chain_stackDir_const`, `finishEdge_topClosable`, `finishEdge_stInv`, `finishTstackTop_stItem`, `walk_st` | `StWalk.lean`, `StSpec.lean` | sorry |
+| 7 walk-side: `finishTstackTop_stItem`; ear lowvals `first_ret_lowval`, `chain_stackDir_step` | `StWalk.lean`, `StEar.lean` | proved |
+| 7 walk-side: `walkTree_stackDir_below`, `chain_stackDir_const`, `finishEdge_topClosable`, `finishEdge_stInv`, `walk_st` | `StEar.lean`, `StWalk.lean`, `StSpec.lean` | sorry |
 
 Work packages for child sessions, in dependency order:
 * **DFS**: 1.1, 1.2, no cross edges, `lowpt` characterization of `OutClass`.
@@ -484,7 +485,9 @@ The split is `walk_st : Items.StNumbered (walk …).items` (§7.4) and
   the V children of the sorted list are still in increasing position (`loc` is monotone in the
   position of a V child, and the sort is stable), which is what `nv_layout` then records as the
   node-vert order.
-* Adjacency rows (`layoutNode_r_bracket` **[sorry]**): R nodes count each edge `(a, c)`, `a < c`,
+* Adjacency rows (`layoutNode_r_bracket` **[proved]**, `StLayout.lean`: `layoutNode .R` is
+  rewritten as a fold `LayoutR.run` — count, prefix sum, reverse fill, cap — whose row contents are
+  computed exactly by `LayoutR.run_spec`): R nodes count each edge `(a, c)`, `a < c`,
   once for row `2 a + 1` (higher neighbours of `a`) and once for row `2 c` (lower neighbours of
   `c`); the counts are kept one slot up (`2 a + 2`, `2 c + 1`) so that the prefix sum turns slot
   `r + 1` into a cursor that starts at the beginning of row `r` and, after the fill, ends at its
@@ -530,6 +533,16 @@ The data half is `merge_onSide` **[proved]**: merging two entries that are on th
 on that side.
 The semantic half, `chain_stackDir_const` **[sorry]**: an entry whose pieces were all attached
 along a chain of constant `stackDir` is `OnSide` that direction.
+Its hypothesis `hchain` (constant `stackDir` along the chain) is the lowval fact, proved in
+`StEar.lean`: `DfsOut.lowval_eq_lmin` (the lowval of a well-formed out-edge is the minimum of its
+return depths, from `DfsOut.WF` = `dfsVisit_spec`'s per-edge classification), `first_ret_lowval`
+(the first returning out-edge of a child classified `ret l _` — the first child continuing the
+ear — returns to exactly `l`, using `classify_eq_ret_iff_tree` for `l = lmin` and the
+`OutClass.rank` sortedness of `DfsTree.WF` to put the minimal edge first), and `chain_stackDir_step`
+(`walkOut` at depth `d + 1` sets `stackDir[d+1] = !stackDir[l] = stackDir[d]`).
+Threading these along the chain needs the frame fact `walkTree_stackDir_below` **[sorry]**
+(walking a subtree at depth `d` leaves `stackDir` below `d` unchanged), which is a statement about
+the whole recursion, not about one `finishEdge` branch.
 Consequently the spans of an entry are one-sided inside an ear; genuinely two-sided entries arise
 only at ear boundaries, when a finished inner ear (`spans.1`, `spans.2` both non-empty after the
 wrap) is enclosed by pieces from both sides.
@@ -548,10 +561,18 @@ is `StItem`.
 `WalkState.TopClosable` is the intrinsic st-property of the top entry at a close: `entryVertList`
 (terminals from `makeVs` around the V items of `getSide spans topDir`) is an `StList` of
 `entryEdges`, with every virtual edge oriented.
-`finishTstackTop_stItem` **[sorry, mechanical]** turns `TopClosable` into `Items.StItem` for the
-closed item; `finishEdge_topClosable` **[sorry]** says the top entry is closable whenever
-`finishEdge` closes it, and `finishEdge_stInv` **[sorry]** is the preservation of `StInv` through
-`finishEdge`; `walk_st` follows from `StInv.items` at the end of the walk.
+`finishTstackTop_stItem` **[proved]** turns `TopClosable` into `Items.StItem` for the closed item
+(`finishTstackTop` writes exactly `entryVertList`/`entryEdges` into it; the item must not be one of
+the entry's own items, which `allocItem`/`maybeUnwrapNxt` guarantee); `finishEdge_topClosable`
+**[sorry]** says the top entry is closable whenever `finishEdge` closes it, and `finishEdge_stInv`
+**[sorry]** is the preservation of `StInv` through `finishEdge`; `walk_st` follows from
+`StInv.items` at the end of the walk.
+Note that `finishEdge_topClosable` as stated (from `StInv` alone) is not provable: `StInv` records
+only the order of the vertices on the two sides (`StSides`/`StEntry`), not that every interior
+vertex has a skeleton edge to each side; closability is the hole-closure content of the invariant
+and has to be added to `StInv` (per entry: every interior vertex of `spans.1 ++ hole ++ spans.2`
+other than the hole has an incident item on each side) before the `finishEdge` branches can be
+done in the `BackCheckOk` style.
 
 **What was validated empirically** (trace of the C++ walk on `gen.py` seeds 0..149, every
 tstack snapshot at the start of an out-edge; the Lean walk is byte-identical on these inputs):
@@ -593,14 +614,17 @@ left to the preservation proof.
 | `spqrTree_st` from `walk_st`, `relabel_st`, `walk_items_wf` | `StSpec.lean` | proved (modulo the three) |
 | `orderedChildren_eq_of_ne_R`, `orderedChildren_sorted` | `StSpec.lean` | proved |
 | `pairwise_dominance_of_sorted_sum`, `edgeChildren_dominance` | `StSpec.lean` | proved |
-| `layoutNode_r_bracket` | `StSpec.lean` | sorry (mechanical) |
+| `LayoutR.run`, `layoutNode_R_eq`, `run_spec`, `layoutNode_R_bracket` | `StLayout.lean` | proved |
+| `layoutNode_r_bracket` | `StSpec.lean` | proved |
 | `relabel_st` | `StSpec.lean` | sorry (7.3) |
 | `TEntry.wrap`, `OneSided`, `OnSide`, `nest` | `StWalk.lean` | def |
 | `pushTstack_onSide`, `merge_onSide`, `fold_onSide`, `getSide_setSides` | `StWalk.lean` | proved |
 | `WalkState.StSides`, `StEntry`, `StInv`, `TopClosable`, `entryVertList`, `entryEdges` | `StWalk.lean` | def |
+| `DfsOut.lowval_eq_lmin`, `first_ret_lowval`, `chain_stackDir_step` | `StEar.lean` | proved |
+| `walkTree_stackDir_below` (frame: `stackDir` below `d` unchanged by `walkTree _ d`) | `StEar.lean` | sorry |
 | `chain_stackDir_const` (`ear_uniform_side`, semantic half) | `StWalk.lean` | sorry |
-| `finishTstackTop_stItem` | `StWalk.lean` | sorry (mechanical) |
-| `finishEdge_topClosable`, `finishEdge_stInv` | `StWalk.lean` | sorry (hard) |
+| `finishTstackTop_items`, `finishTstackTop_stItem` | `StWalk.lean` | proved |
+| `finishEdge_topClosable`, `finishEdge_stInv` | `StWalk.lean` | sorry (hard; needs closability in `StInv`, see 7.4) |
 | `walk_st` | `StSpec.lean` | sorry (from `finishEdge_stInv`) |
 
 ## 8. Planarity

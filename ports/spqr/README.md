@@ -233,8 +233,10 @@ flattened state machine:
     Spqr/Proofs/Dfs.lean  phase-1 spec: dfsForest_spanning, lowpoint/classify lemmas (no sorry)
     Spqr/StSpec.lean     st-order spec: SpqrTree.StOrder (StNumbered / EdgeDominance / AdjBracket),
                          Items.StNumbered, spqrTree_st = relabel_st ∘ walk_st, relabel-side lemmas
-    Spqr/StWalk.lean     walk-side st invariant WalkState.StInv (st-ordering with a hole) and the
-                         setSides / merge / fold side lemmas
+    Spqr/StLayout.lean   fold model of the R-node layoutNode and the proof of its bracket rows
+    Spqr/StWalk.lean     walk-side st invariant WalkState.StInv (st-ordering with a hole), the
+                         setSides / merge / fold side lemmas, finishTstackTop_stItem
+    Spqr/StEar.lean      lowvals along an ear: first_ret_lowval, chain_stackDir_step
     Spqr/Planar.lean     quarter-edges, RotationSystem, IsEmbedding / IsPlanarEmbedding (Euler), Planar
     Spqr/PlanarWalk.lean, PlanarRelabel.lean, PlanarEmbed.lean
                          the planar variant: planarWalk (walk + tstack planarity state, flip bits as
@@ -258,11 +260,12 @@ Nothing about correctness is claimed until `#print axioms Spqr.spqrTree_represen
 standard axioms.
 The st-order layer (`PROOF.md` §7) is stated in `StSpec.lean`/`StWalk.lean`: `spqrTree_st` is
 derived from `walk_st` and `relabel_st`, both `sorry`; proved there are `vchildren_nv_increasing`,
-`orderedChildren_sorted`, `orderedChildren_eq_of_ne_R`, `edgeChildren_dominance` and the
-side-bookkeeping lemmas `pushTstack_onSide`, `merge_onSide`, `fold_onSide`; admitted are
-`layoutNode_r_bracket`, `relabel_st`, `chain_stackDir_const`, `finishTstackTop_stItem`,
-`finishEdge_topClosable`, `finishEdge_stInv`, `walk_st` (so `#print axioms Spqr.spqrTree_st`
-reports `sorryAx`).
+`orderedChildren_sorted`, `orderedChildren_eq_of_ne_R`, `edgeChildren_dominance`,
+`layoutNode_r_bracket` (via `StLayout.lean`), the side-bookkeeping lemmas `pushTstack_onSide`,
+`merge_onSide`, `fold_onSide`, `finishTstackTop_stItem`, and the ear lowval lemmas
+`first_ret_lowval`, `chain_stackDir_step` (`StEar.lean`); admitted are `relabel_st`,
+`walkTree_stackDir_below`, `chain_stackDir_const`, `finishEdge_topClosable`, `finishEdge_stInv`,
+`walk_st` (so `#print axioms Spqr.spqrTree_st` reports `sorryAx`).
 
 Planarity (`PROOF.md` §8): the planar variant is implemented and differential-tested against
 `cpp/dump.cpp` + `cpp/dump_embed.cpp` (`node_planar`, `ne_rot_adj`, `nonplanar_build_same` and the
