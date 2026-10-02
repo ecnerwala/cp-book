@@ -33,6 +33,9 @@ import Spqr.EarInv
 import Spqr.SepPair
 import Spqr.Proofs.PlanarMap
 import Spqr.Proofs.PlanarAppend
+import Spqr.Proofs.PieceAppend
+import Spqr.PlanarEmbedClose
+import Spqr.Proofs.PlanarEmbedCounterexample
 import Spqr.Proofs.Postorder
 import Spqr.Proofs.SepPair
 import Spqr.Blocks

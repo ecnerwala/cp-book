@@ -1,5 +1,6 @@
 import Spqr.Build
 import Spqr.Spec
+import Spqr.PlanarEmbedSteps
 
 open Spqr
 
@@ -13,6 +14,21 @@ def incident (g : Graph) (v e : Nat) : Bool :=
 
 def touches (t : SpqrTree) (g : Graph) (i v : Nat) : Bool :=
   (List.range g.ne).any fun e => edgeIn t i e && incident g v e
+
+def checkOuter (t : PlanarSpqrTree) (s : PlanarSpqrTree.EmbedState) : IO Nat := do
+  let mut bad := 0
+  for j in [0:t.size] do
+    if s.outerE[j]!.size != 4 then
+      bad := bad + 1
+      IO.println s!"outer_row_size: j={j}"
+    for k in [0:s.outerE[j]!.size] do
+      if s.outerE[j]![k]!.isSome then
+        let parentType := (t.toSpqrTree.parent j).map t.toSpqrTree.type
+        if k >= 4 || t.toSpqrTree.type j == .F ||
+            ((parentType == some NodeType.F || parentType == some NodeType.V) && k >= 2) then
+          bad := bad + 1
+          IO.println s!"outer_slots: j={j} k={k}"
+  return bad
 
 def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
   let t := relabelTree g (g.walk tern (g.dfsForest vo eo)).items
@@ -41,6 +57,13 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
                 bad := bad + 1
                 IO.println s!"q_root_attach: i={i} e={e} v={v} outside={e'}"
       | _, _ => pure ()
+  let pt := g.planarSpqrTree tern vo eo
+  let mut s := pt.initState
+  bad := bad + (← checkOuter pt s)
+  if pt.nodePlanar.all id then
+    for i in (List.range pt.size).reverse do
+      s := ((pt.embedItem i).run s).2
+      bad := bad + (← checkOuter pt s)
   return bad
 
 def main : IO UInt32 := do

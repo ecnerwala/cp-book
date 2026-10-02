@@ -1433,11 +1433,30 @@ union needed by F: from embeddings of `es₁` and `es₂` and disjoint incident 
 `f x = if x < n then x else x - n`; the disjointness hypothesis proves injectivity only on
 incident vertices, so isolated vertices need no special case.
 
+The F step was also false with the original `GluedUpTo`, independently of separation.
+On the actual single-edge tree for `nv=2`, `edges=[(0,1)]`, the items are
+`F, V(0), Q(0), I, V(1)`. Set `rotAdj=[some 1,some 0,none,none]`,
+`outerE[1]=[none,none,some 2,some 3]`, and all other rows to four `none`s.
+The old invariant holds at index 1, witnessed by `[1,0,3,2]`, but F only closes slots 0/1;
+the state is unchanged and the root cannot account for its unmatched quarter-edges 2/3.
+`Proofs/PlanarEmbedCounterexample.lean` proves both facts without `sorryAx`.
+The old invariant is retained as `GluedPieces`; `GluedUpTo` extends it with
+four-slot row sizes and exposed-slot support: slots are below 4, F exposes nothing,
+and an item whose parent is F or V exposes only slots 0/1.
+The initialization and leaf proofs preserve these fields; `badState_excluded` proves
+the counterexample is excluded. `CheckPieceSep` checks these fields after every item
+of every successful planar fold. Seeds 0..300 and the four tiny cases again give zero violations.
+The V/Q/node steps will additionally need attachment-vertex / cofacial information;
+the slot correction alone is not a claim that their current statements are sufficient.
+
 | statement | file | status |
 |---|---|---|
 | quarter-edges, `RotationSystem`, `IsEmbedding`, `IsPlanarEmbedding`, `Planar` | `Planar.lean` | def |
 | `SpqrTree.PieceSep`, `spqrTree_pieceSep` | `PieceSep.lean`, `WalkPieceSep.lean` | def / named walk admission; empirical checks above |
 | `IsPlanarEmbedding.append` (vertex-disjoint edge lists in the same vertex numbering) | `Proofs/PlanarAppend.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
+| `Piece.loc_data`, `mem_of_loc`, `loc_exists`, `loc_lt`, `loc_injective`, `loc_append_left/right`, `agrees_append` | `Proofs/PieceLoc.lean`, `Proofs/PieceAppend.lean` | **proved** |
+| `mem_edgesBelow_data`, `mem_edgesBelow_lt`, `edgeIn_of_mem_edgesBelow`, `edgesBelow_nodup` | `PlanarEmbedEdges.lean` | **proved** |
+| `closeOuter_spec`: close a single exposed facing pair, preserve its embedding, and frame all other edges | `PlanarEmbedClose.lean` | **proved** |
 | planar walk (`planarWalk`), relabel (`planarSpqrTree`), gluing (`planarEmbed`) | `PlanarWalk.lean`, `PlanarRelabel.lean`, `PlanarEmbed.lean` | def |
 | `planarWalk_base`, `planarWalk_proj` (planar walk = ordinary walk + aux) | `PlanarWalkProj.lean` | **proved** (`propext`, `Quot.sound`) |
 | `planarRelabelTree_base`, `planarRelabel_proj` | `PlanarRelabelProj.lean` | **proved** (`propext`, `Quot.sound`) |
