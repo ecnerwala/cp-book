@@ -128,8 +128,10 @@ structure WalkState.StInv (s : WalkState) (d : Nat) (ord : Nat → Nat) : Prop w
     Items.StItem s.items i
 
 /-- Admitted: along the first-child chain of an ear every vertex has the ear's lowval, so
-`stackDir` is constant along it and every piece attached along the ear lands on the same side
-(the semantic half of `ear_uniform_side`; the data half is `merge_onSide`). -/
+`stackDir` is constant along it (`hchain`, from `first_ret_lowval`, `chain_stackDir_step` and
+`walkTree_stackDir_below` in `Spqr.StEar`) and every piece attached along the ear lands on the
+same side. The conclusion is a history fact about how the entries were built (`pushTstack`,
+`merge_onSide`, `fold_onSide`), not derivable from the state alone. -/
 theorem chain_stackDir_const (s : WalkState) (l d : Nat) (hl : l < d)
     (hchain : ∀ d', l < d' → d' ≤ d → s.stackDir[d']! = s.stackDir[l + 1]!) :
     ∀ t ∈ s.tstack, l < t.topDepth → t.topDepth ≤ d →
@@ -149,10 +151,66 @@ theorem finishEdge_stInv (s : WalkState) (curV d : Nat) (o : DfsOut) (origTstack
     ((finishEdge curV d o origTstack hasVert).run s).2.StInv d ord := by
   sorry
 
-/-- Admitted: closing the top entry into `item` yields an st-numbered item. -/
+theorem finishTstackTop_items (s : WalkState) (item : ItemId) (t : TEntry) (rest : List TEntry)
+    (hts : s.tstack = t :: rest) :
+    ((WalkM.finishTstackTop item).run s).2.items =
+      s.items.modify item fun it => { it with
+        vs := setSides s.stackDir[t.topDepth]! (some (t.top s)) (some t.vStart),
+        ch := getSide t.spans s.stackDir[t.topDepth]! } := by
+  rcases s with ⟨g, tern, items, sv, sd, nei, fo, ts, tb, tsl⟩
+  simp only at hts; subst hts
+  rfl
+
+/-- Closing the closable top entry `t` into `item` (not itself one of the entry's items) yields an
+st-numbered item: `finishTstackTop` writes `entryVertList`/`entryEdges` into `item`. -/
 theorem finishTstackTop_stItem (s : WalkState) (item : ItemId) (h : s.TopClosable)
-    (hitem : item < s.items.size) :
+    (t : TEntry) (ht : s.tstack.head? = some t) (hitem : item < s.items.size)
+    (hnot : item ∉ getSide t.spans s.stackDir[t.topDepth]!) :
     Items.StItem ((WalkM.finishTstackTop item).run s).2.items item := by
-  sorry
+  obtain ⟨rest, hts⟩ : ∃ rest, s.tstack = t :: rest := by
+    cases hs : s.tstack with
+    | nil => simp [hs] at ht
+    | cons a r => simp [hs] at ht; exact ⟨r, by rw [ht]⟩
+  obtain ⟨hlist, hor⟩ := h t ht
+  have heq := finishTstackTop_items s item t rest hts
+  generalize hdir : s.stackDir[t.topDepth]! = dir at heq hnot hlist hor
+  generalize hvs : setSides dir (some (t.top s)) (some t.vStart) = vs at heq
+  generalize hitems' : ((WalkM.finishTstackTop item).run s).2.items = items' at heq
+  have hvs' : Items.vs items' item = vs := by
+    simp [heq, Items.vs, Array.getElem?_modify, Array.getElem?_eq_getElem hitem]
+  have hch' : Items.ch items' item = getSide t.spans dir := by
+    simp [heq, Items.ch, Array.getElem?_modify, Array.getElem?_eq_getElem hitem]
+  have htype' : ∀ c, Items.type items' c = Items.type s.items c := by
+    intro c
+    by_cases hc : item = c
+    · subst hc; simp [heq, Items.type, Array.getElem?_modify, Array.getElem?_eq_getElem hitem]
+    · simp [heq, Items.type, Array.getElem?_modify, hc]
+  have hvsc : ∀ c, c ≠ item → Items.vs items' c = Items.vs s.items c := by
+    intro c hc
+    simp [heq, Items.vs, Array.getElem?_modify, Ne.symm hc]
+  have hfilt : ∀ l : List ItemId,
+      (l.filter fun c => Items.type items' c = .V) = l.filter fun c => Items.type s.items c = .V :=
+    fun l => List.filter_congr fun c _ => by simp [htype']
+  have hfilt' : ∀ l : List ItemId,
+      (l.filter fun c => Items.type items' c ≠ .V) = l.filter fun c => Items.type s.items c ≠ .V :=
+    fun l => List.filter_congr fun c _ => by simp [htype']
+  have hvert : Items.vertList items' item = s.entryVertList t := by
+    simp only [Items.vertList, WalkState.entryVertList, hvs', hch', Items.vertsOf, hdir, hvs, hfilt]
+  have hedges : Items.virtualEdges items' item =
+      ((getSide t.spans dir).filter fun c => Items.type s.items c ≠ .V).map fun c =>
+        ((Items.vs s.items c).1.getD 0, (Items.vs s.items c).2.getD 0) := by
+    simp only [Items.virtualEdges, hch', hfilt']
+    exact List.map_congr_left fun c hc => by
+      rw [hvsc c fun hci => hnot (hci ▸ (List.mem_filter.1 hc).1)]
+  have hvs_shape : ∃ a b, vs = (some a, some b) := by
+    rw [← hvs]; simp only [setSides]; cases dir <;> exact ⟨_, _, rfl⟩
+  obtain ⟨a, b, hab⟩ := hvs_shape
+  have hent : s.entryEdges t = (a, b) :: Items.virtualEdges items' item := by
+    simp only [WalkState.entryEdges, hedges, hdir, hvs, hab]; rfl
+  refine ⟨a, b, by rw [hvs', hab], ?_, ?_⟩
+  · rw [hvert, ← hent]; exact hlist
+  · intro p hp
+    rw [hvert]
+    exact hor p (by rw [hent, List.tail_cons]; exact hp)
 
 end Spqr
