@@ -605,6 +605,30 @@ at the `Layout`); the layout-side facts its transport needs are the `Local` size
 `bound_last` (the `adjBounds.extract 1 …` pushed by `planarRelabel` has `2(nvEn - nvSt)` entries
 and ends at `2·neEn`).
 
+The structural half of this is done through the per-node interface of `RelabelSpec.lean`
+(`RelabelIdx`: the preorder index `idx` is a bijection with root `0`, agrees with
+`vertIndex`/`edgeIndex` on `V`/`Q` items, CSR zero/last facts; `RelabelNode`: each item's slot,
+ranges, `node_verts`, `child_par`, and a pos-dependent `RelabelLayout` whose edge/adjacency rows
+are `layoutNode`'s). `RelabelOwn.lean` takes `relabel_node_spec` (**[sorry]**, the glue
+`∃ idx, …` for the recursive fold) as a hypothesis and proves `relabelTree_own :
+Items.WF g items → Items.OwnExtra g items → Items.ROriented g items →
+(relabelTree g items).Bijections ∧ .Ownership ∧ .Twins` **[proved]**:
+* `Bijections` from `Items.Tree` only (types of `1+v`, `1+nv+e`, `RelabelIdx.vert_index/edge_index`,
+  `RelabelNode.orig`);
+* `Ownership` from `Items.Tree`, `Endpoints.vs_shape`, `Shapes.*_shape`/`i_o_leaf`/`q_children`
+  (the per-type `layoutNode` hypotheses), the `layoutNode` edge records (`layoutNode_edges`, proved
+  from `StLayout.lean`'s `layoutNode_R_eq`), and the two extra hypotheses: `Items.ROriented`
+  (`ne_nvs` for R nodes needs the ordered endpoints to lie in the node-vert list, which is the
+  st-ordering fact of §7, not part of `Items.WF`) and `Items.OwnExtra` — four facts about the walk's
+  items that `Items.WF` does not state: node-vert lists are nodup (`WF` admits `I`/`P` with `u = v`,
+  which would make `nv_distinct` false), a `Q` child of a node is a leaf, both endpoints of an R
+  node's virtual edges are node-verts (`WF` only constrains `some` endpoints), and the `vertItem v`
+  child of a block-root `Q` has `v < nv`. These are to be discharged by the walk (`WalkTyping.lean`
+  / `StSpec.lean`), not by relabel;
+* `Twins` from `Items.Tree` and `OwnExtra.q_leaf_of_node` (a capped child has at least one edge),
+  via `RelabelLayout.twin` both ways, `child_cap_twin_none`, injectivity of `idx` and disjointness
+  of the `neRange`s.
+
 ## 6. Lean plan (what is proved where)
 
 | statement | file | status |
@@ -637,6 +661,7 @@ and ends at `2·neEn`).
 | 4.5 walk side: `EntryR`/`RTop`/`RBranch`/`RInvAt`; `RBranch.rStep`, `RBranch.rContent` (all five content fields), `RBranch.threeConnected` (from `Inv' (d+1)`); `EntryR.congr`/`RInvAt.congr` + bookkeeping frames; `Items.RSkel3`, `RBranch.rSkel3` | `RInv.lean`, `Proofs/RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RItems.lean` | proved; admitted: `finishEdge_rInvAt`, `walkTree_rInvAt`, `loop1_rBranch` (history preservation), `items_r_three_connected` (all R items of the walk on a block); `spqrTree_r_three_connected` (relabel transport): hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
+| 5 relabel, structural part: `relabelTree_own : Items.WF → Items.OwnExtra → Items.ROriented → Bijections ∧ Ownership ∧ Twins` (also `relabelTree_bijections` from `WF` alone, `relabelTree_twins` from `WF` + `OwnExtra`); `layoutNode_edges` | `RelabelOwn.lean` | proved modulo `relabel_node_spec` (`RelabelSpec.lean`, sorry); `OwnExtra` is a stated hypothesis to be discharged by the walk |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
 | 7 relabel-side: `vchildren_nv_increasing`, `orderedChildren_sorted`, `edgeChildren_dominance`, `layoutNode_r_bracket` | `StSpec.lean`, `StLayout.lean` | proved |
 | 7 relabel-side: `relabel_st` | `StSpec.lean` | sorry |
