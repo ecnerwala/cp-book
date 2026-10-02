@@ -271,9 +271,11 @@ flattened state machine:
     CheckPlanarLean.lean runs the decidable Spqr.Planar spec on the planar output
 
 Proof status: the specification and theorem statements are complete; the phase theorems
-(`dfsForest_spanning`, `walk_items_wf`, `relabelTree_wf`, `relabelTree_represents`,
-`spqrTree_r_three_connected`, and everything in `EarSpec.lean`) are currently `sorry` and are being
-proved per work package (see `PROOF.md` §6 for the plan and the natural-language proof they follow).
+(`dfsForest_spanning`, `walk_items_wf`, `walk_items_rOriented`, `relabelTree_wf`,
+`relabelTree_represents`, `spqrTree_r_three_connected`, and everything in `EarSpec.lean`) are
+being proved per work package (see `PROOF.md` §6 for the plan and the natural-language proof they
+follow); `relabelTree_wf` is proved modulo the relabel-fold glue `relabel_node_spec`, the others
+are currently `sorry`.
 Nothing about correctness is claimed until `#print axioms Spqr.spqrTree_represents` shows only the
 standard axioms.
 The st-order layer (`PROOF.md` §7) is stated in `StSpec.lean`/`StWalk.lean`: `spqrTree_st` is
