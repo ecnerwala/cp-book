@@ -88,7 +88,19 @@ theorem ear_finishP_vert (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls
 theorem ear_finishP_tree (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
     (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = false) :
     FinishPOk D curV lv o.cls.isType1 (feS₂ d o s) := by
-  sorry
+  refine ⟨fun h => ?_⟩
+  exfalso
+  have hlow' : o.cls.lowval d < d := by rw [ho]; exact hlow
+  obtain ⟨c, mid, py, vy, hts, ⟨mid₀, hsub⟩, -, -, h1⟩ := hE.loops ht hlow'
+  have h' : (o.cls.isType1 && decide ((feS₂ d o s).tstack.length ≥ 2) &&
+      ((feS₂ d o s).tstack.tail.head!.vStart == curV) && ((feS₂ d o s).tstack.tail.head!.topDepth == lv)) = true := h
+  simp only [Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at h'
+  obtain ⟨⟨⟨ht1, -⟩, hvs⟩, -⟩ := h'
+  obtain ⟨hmid, -⟩ := h1 ht1
+  subst hmid
+  rw [hts] at hvs
+  simp only [List.nil_append, List.cons_append, List.tail_cons, List.head!_cons] at hvs
+  exact hE.sub_bot py (by rw [hsub]; simp) hvs
 
 /-- The P-check of a back edge. -/
 theorem getSide_setSides_self {α : Type} (dir : Bool) (a b : α) : getSide (setSides dir a b) dir = a := by
