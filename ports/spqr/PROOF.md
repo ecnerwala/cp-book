@@ -267,6 +267,18 @@ decomposition (children of a node come out in s–t order; this is what the plan
 lists. The item-level spec (`ItemSpec.lean`) therefore quantifies over `ch` as a list up to
 permutation, and the st-order is a separate theorem to be added later.
 
+What the side bookkeeping computes (the invariant for the st theorem): it is exactly the
+Even–Tarjan st-numbering of the block, read off the lowval-sorted DFS tree. In ear terms (4.1)
+the bottom of an ear is innermost; as the walk returns upwards every further piece (type-1
+child, back edge, finished sub-ear) is either *prepended* or *appended* to the current
+sequence, the side being chosen by `stackDir`/`edgeDir` via `setSides`. So a tstack entry
+stands for a list of the final ordering **with a hole in the middle** for the deeper, not yet
+finished part: `spans.1` is what lies left of the hole, `spans.2` what lies right of it, and the
+two terminals of the entry are the two ends. When the hole closes (`mergeTstackTops`,
+`finishTstackTop`) the sides concatenate around the inner piece and become the `ch` order of the
+item; every interior vertex then has a neighbour on each side, which is the st property
+(`Items.StNumbered`, checked empirically by `cpp/check_st_planar.cpp`).
+
 ### 4.5 Maximality and R skeletons [hard]
 
 Soundness (each item is a separation class, Fact B direction "⇐") comes from statement 3 of
