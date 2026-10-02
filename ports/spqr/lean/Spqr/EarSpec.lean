@@ -273,14 +273,12 @@ theorem earOut_one_entry (fuel v d : Nat) (o : DfsOut) (s : WalkState)
       (rest = s.tstack ∨ ∃ e₀, s.tstack = e₀ :: rest ∧ e₀.vStart = v ∧ e₀.topDepth = e.topDepth) := by
   sorry
 
-/-- PROOF.md Lemma 4.4: once a whole ear has been finished (the chain edge at a frame has been
-closed by `finishEdge` and the vertex's remaining out-edges processed), the frame's vertex owns
-exactly one entry: the ear as a single two-terminal piece. -/
-theorem ascend_frame_one_entry (fuel : Nat) (f : Frame) (fs : List Frame) (s : WalkState)
-    (hfuel : fuel > 0) :
-    let s₁ := ((finishEdge f.v f.d f.o f.origTstack f.hasVert >>= fun hv =>
-      earOuts fuel f.v f.d f.rest hv >>= finishVert f.v f.d).run s).2
-    ∃ e, s₁.tstack.length = f.origTstack + 1 ∧ s₁.tstack.head? = some e ∧ e.vStart = f.v := by
-  sorry
+/-! PROOF.md Lemma 4.4 ("a finished frame's vertex owns exactly one entry", formerly
+`ascend_frame_one_entry`) is false for chain frames: a frame `(v, d)` is a type-2 chain edge, so the
+ear continues above `d` and its entries returning above `d` stay open. Cycle `0-1-2-3-4-5-0` plus
+chord `5-1`: at the frame `(4, 4)` (`origTstack = 0`) the tstack after `finishEdge`, the remaining
+out-edges and `finishVert` is `[(4,4), (5,4), (5,1), (5,0), (5,5)]` — five entries. The one-entry
+collapse holds only at the ear's top, i.e. at the type-1 edge closing the chain, which is a
+non-first out-edge handled by `earOut`: that is `earOut_one_entry`. -/
 
 end Spqr
