@@ -1,5 +1,6 @@
 import Spqr.PlanarEmbedLeaf
 import Spqr.PlanarEmbedF
+import Spqr.PlanarEmbedV
 
 /-!
 # Assembling the per-item steps of `planarEmbed`

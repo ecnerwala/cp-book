@@ -119,15 +119,6 @@ theorem gluedUpTo_init (g : Graph) : t.GluedUpTo g t.size t.initState where
     intro j hj hjs
     omega
 
-/-- `V` step: the blocks hanging off the vertex are chained through their exposed ends, i.e.
-1-sums at the vertex (`oneSum_planar`), and the two outermost ends stay exposed. Admitted. -/
-theorem embedItem_step_V (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
-    (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g)
-    (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .V)
-    (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
-    t.GluedUpTo g i ((t.embedItem i).run s).2 := by
-  sorry
-
 /-- `Q` step: the real edge `origId i` is added with its four quarter-edges; the two `I`/`O`
 children (the loops / blocks at its endpoints) are 1-summed at the endpoints. Admitted. -/
 theorem embedItem_step_Q (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
