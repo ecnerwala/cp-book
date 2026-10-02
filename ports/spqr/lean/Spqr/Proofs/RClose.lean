@@ -1,4 +1,5 @@
 import Spqr.RClose
+import Spqr.EarInv
 import Spqr.Proofs.RMax
 import Spqr.Proofs.SepClasses
 
@@ -192,22 +193,29 @@ theorem RStep.inv_absurd (h : s.Inv d) (h2 : s.g.TwoConnected) (hr : s.RStep d c
   · exact hr.ne h.symm
   · exact hcurA.ne h2 he₁ hE₁ he₀ (fun h => hU₀ (.inl h)) h
 
-/-- `cur` is 2-attached at `{cur.vStart, stackVerts[d]}` under `Inv D` when the stack vertices
-`stackVerts[d+1..D]` all equal `cur.vStart`. -/
-theorem RStep.cur_attached {D : Nat} (h : s.Inv D)
+theorem EntryInv'.toEntryInv {D : Nat} {t : TEntry} (h : s.EntryInv' D [] t) : s.EntryInv D t :=
+  ⟨h.conn, fun v e e' he he' hE hE' hv hv' =>
+    match h.attached v e e' he he' hE hE' hv hv' with
+    | .inl h => h
+    | .inr ⟨_, h, _⟩ => absurd h (List.not_mem_nil)⟩
+
+/-- `cur` is 2-attached at `{cur.vStart, stackVerts[d]}` under `Inv' D` when the stack vertices
+`stackVerts[d+1..D]` all equal `cur.vStart` (`cur` is the top entry, so `Term'` is `Term`). -/
+theorem RStep.cur_attached {D : Nat} (h : s.Inv' D)
     (hmid : ∀ k, d < k → k ≤ D → s.stackVerts[k]! = cur.vStart) (hr : s.RStep d cur nxt rest) :
     s.g.TwoAttached (cur.edges s.g s.items) cur.vStart s.stackVerts[d]! := by
-  have hcur := h.entries cur (by simp [hr.tstack])
+  have hcur := (h.entries [] cur (nxt :: rest) hr.tstack).toEntryInv
   have := TwoAttached.of_term hcur.attached fun k h1 h2 =>
     .inl (hmid k (by have := hr.cur_top; omega) h2)
   rwa [hr.cur_top] at this
 
-/-- The union is 2-attached at `{nxt.vStart, stackVerts[d]}`: `nxt` may attach at `cur.vStart`,
-which is interior to `U`. -/
-theorem RStep.union_attached {D : Nat} (h : s.Inv D)
+/-- The union is 2-attached at `{nxt.vStart, stackVerts[d]}`: `nxt` may attach at `cur.vStart`
+(as `stackVerts[d+1..D]` or as the bottom of the entry above it in `Term'`), which is interior to
+`U`. -/
+theorem RStep.union_attached {D : Nat} (h : s.Inv' D)
     (hmid : ∀ k, d < k → k ≤ D → s.stackVerts[k]! = cur.vStart) (hr : s.RStep d cur nxt rest) :
     s.g.TwoAttached (s.rU cur nxt) nxt.vStart s.stackVerts[d]! := by
-  have hnxt := h.entries nxt (by simp [hr.tstack])
+  have hnxt := h.entries [cur] nxt rest hr.tstack
   have hcurA := hr.cur_attached h hmid
   intro v e e' he he' hE hE' hv hv'
   have hvc : v ≠ cur.vStart := by
@@ -217,23 +225,25 @@ theorem RStep.union_attached {D : Nat} (h : s.Inv D)
   · rcases hcurA v e e' he he' hE (fun h => hE' (.inl h)) hv hv' with h | h
     · exact absurd h hvc
     · exact .inr h
-  · rcases hnxt.attached v e e' he he' hE (fun h => hE' (.inr h)) hv hv' with h | ⟨k, h1, h2, rfl⟩
+  · rcases hnxt.attached v e e' he he' hE (fun h => hE' (.inr h)) hv hv' with
+      (h | ⟨k, h1, h2, rfl⟩) | ⟨t', ht', rfl⟩
     · exact .inl h
     · rcases Nat.eq_or_lt_of_le h1 with h1 | h1
       · exact .inr (by rw [← h1, hr.nxt_top])
       · exact absurd (hmid k (by have := hr.nxt_top; omega) h2) hvc
+    · exact absurd (congrArg TEntry.vStart (List.mem_singleton.1 ht')) hvc
 
-/-- The R case of loop 1 is an `RCloseShape`, from the invariant `Inv D` at any depth `D ≥ d` whose
-intermediate stack vertices `stackVerts[d+1..D]` all equal `cur.vStart` (at the R branch of
+/-- The R case of loop 1 is an `RCloseShape`, from the invariant `Inv' D` at any depth `D ≥ d`
+whose intermediate stack vertices `stackVerts[d+1..D]` all equal `cur.vStart` (at the R branch of
 `finishEdge` at depth `d`: `D = d+1` and `cur.vStart = stackVerts[d+1]`, the child). -/
-theorem RStep.rCloseShape' {D : Nat} (h : s.Inv D)
+theorem RStep.rCloseShape' {D : Nat} (h : s.Inv' D)
     (hmid : ∀ k, d < k → k ≤ D → s.stackVerts[k]! = cur.vStart)
     (h2 : s.g.TwoConnected) (hr : s.RStep d cur nxt rest)
     {dfs : DfsData} (hc : s.RContent dfs d cur nxt) :
     RCloseShape s.g dfs (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)) (s.rU cur nxt)
       nxt.vStart s.stackVerts[d]! := by
-  have hcur := h.entries cur (by simp [hr.tstack])
-  have hnxt := h.entries nxt (by simp [hr.tstack])
+  have hcur := h.entries [] cur (nxt :: rest) hr.tstack
+  have hnxt := h.entries [cur] nxt rest hr.tstack
   obtain ⟨e₀, he₀, hU₀⟩ := hr.proper
   obtain ⟨e₁, he₁, hE₁⟩ := hr.cur_ne
   have hcurA := hr.cur_attached h hmid
@@ -249,7 +259,7 @@ theorem RStep.rCloseShape' {D : Nat} (h : s.Inv D)
     hc.bond, hc.type2⟩
 
 /-- `RStep.threeConnected` under the invariant that actually holds at the R branch. -/
-theorem RStep.threeConnected' {D : Nat} (h : s.Inv D)
+theorem RStep.threeConnected' {D : Nat} (h : s.Inv' D)
     (hmid : ∀ k, d < k → k ≤ D → s.stackVerts[k]! = cur.vStart)
     (h2 : s.g.TwoConnected) (hr : s.RStep d cur nxt rest)
     {dfs : DfsData} (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g) (hc : s.RContent dfs d cur nxt) :

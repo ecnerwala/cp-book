@@ -6,7 +6,7 @@ import Spqr.Proofs.Type2
 # `RStep` and `RContent` from the R-maximality invariant (PROOF.md §4.5, walk side)
 
 At Loop 1's R branch, `RTop` (`EntryR` of the two top entries, their edge-disjointness) together with the
-branch shape `RBranch` and `Inv (d+1)` give `WalkState.RStep` and `WalkState.RContent`:
+branch shape `RBranch` and `Inv' (d+1)` give `WalkState.RStep` and `WalkState.RContent`:
 
 * `pieces`: the merged items are the two entries' pieces, disjoint across entries;
 * `single`: `nxt` is attached at the child too, so `EntryR.single` makes it one class, and a
@@ -184,8 +184,8 @@ theorem RBranch.laminar_union {K : Nat → Prop} {a b : Nat} (hKlt : ∀ e, K e 
 
 end Content
 
-/-- `RContent` at the R branch, from `RTop`, the branch shape, and `Inv (d+1)`. -/
-theorem RBranch.rContent (h : s.Inv (d + 1)) (h2 : s.g.TwoConnected) (hs : dfs.Spec s.g)
+/-- `RContent` at the R branch, from `RTop`, the branch shape, and `Inv' (d+1)`. -/
+theorem RBranch.rContent (h : s.Inv' (d + 1)) (h2 : s.g.TwoConnected) (hs : dfs.Spec s.g)
     (hR : s.RTop dfs cur nxt) (hb : s.RBranch d cur nxt rest) : s.RContent dfs d cur nxt := by
   have hr := hb.rStep hR
   have hcur := hR.entry_cur
@@ -349,8 +349,8 @@ theorem RBranch.rContent (h : s.Inv (d + 1)) (h2 : s.g.TwoConnected) (hs : dfs.S
       (hnxt.type2 a b (hb.entrySkelPair hR (.inr rfl) hsk) ht2 o ho hot hanc)
 
 /-- The R skeleton closed at Loop 1's R branch is 3-connected, from the walk invariants
-`RTop`, `RBranch`, and `Inv (d+1)` (no `RContent`/`RStep` hypothesis). -/
-theorem RBranch.threeConnected (h : s.Inv (d + 1)) (h2 : s.g.TwoConnected) (hs : dfs.Spec s.g)
+`RTop`, `RBranch`, and `Inv' (d+1)` (no `RContent`/`RStep` hypothesis). -/
+theorem RBranch.threeConnected (h : s.Inv' (d + 1)) (h2 : s.g.TwoConnected) (hs : dfs.Spec s.g)
     (hrt : dfs.Rooted s.g) (hR : s.RTop dfs cur nxt) (hb : s.RBranch d cur nxt rest) :
     (((Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).addParent s.g (s.rU cur nxt)
       nxt.vStart s.stackVerts[d]!).contract s.g).ThreeConnected :=
