@@ -54,8 +54,8 @@ theorem embedItem_step_leaf_of (g : Graph) (i : Nat) (hi : i < t.size)
   have houter : ∀ q, ¬ s.exposedAt i q := h.outer_unprocessed i (Nat.lt_succ_self i)
   have hq : t.types[i]! ≠ .Q := by rcases hty with hty | hty <;> rw [hty] <;> decide
   have hbelow : t.edgesBelow i = [] := t.edgesBelow_leaf i hsub hq
-  refine ⟨⟨⟨h.rot_size, h.outer_size, fun j hj => h.outer_unprocessed j (by omega), ?_, ?_⟩,
-    h.outer_row_size, h.outer_slots⟩, h.outer_at_vertex⟩
+  refine ⟨⟨⟨⟨h.rot_size, h.outer_size, fun j hj => h.outer_unprocessed j (by omega), ?_, ?_⟩,
+    h.outer_row_size, h.outer_slots⟩, h.outer_at_vertex⟩, h.outer_dir, ?_⟩
   · intro q hq'
     exact h.unset q fun j hj hjs => hq' j (by omega) hjs
   · intro j hj
@@ -72,6 +72,10 @@ theorem embedItem_step_leaf_of (g : Graph) (i : Nat) (hi : i < t.size)
       · intro q hm; exact absurd hm (hmem q)
       · intro k _
         exact ⟨fun a ha => absurd ⟨_, ha⟩ (houter a), fun b hb => absurd ⟨_, hb⟩ (houter b)⟩
+  · intro j hj hjs p hp hpt hne
+    by_cases hij : j = i
+    · subst j; exact (hne hbelow).elim
+    · exact h.outer_present j (by omega) hjs p hp hpt hne
 
 end PlanarSpqrTree
 

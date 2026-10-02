@@ -62,16 +62,23 @@ structure GluedPieces (g : Graph) (i : Nat) (s : EmbedState) : Prop where
       (∀ b, s.outerE[j]?.bind (fun o => o[2 * k + 1]?) = some (some b) →
         ∃ a, s.outerE[j]?.bind (fun o => o[2 * k]?) = some (some a)))
 
-structure GluedSlots (g : Graph) (i : Nat) (s : EmbedState) extends t.GluedPieces g i s : Prop where
+structure GluedSlots (g : Graph) (i : Nat) (s : EmbedState) : Prop extends t.GluedPieces g i s where
   outer_row_size : ∀ j, j < t.size → s.outerE[j]!.size = 4
   outer_slots : ∀ j k q, s.outerE[j]?.bind (fun o => o[k]?) = some (some q) →
     k < 4 ∧ t.toSpqrTree.type j ≠ .F ∧
       ∀ p, t.toSpqrTree.parent j = some p →
         (t.toSpqrTree.type p = .F ∨ t.toSpqrTree.type p = .V) → k < 2
 
-structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) extends t.GluedSlots g i s : Prop where
+structure GluedAttachments (g : Graph) (i : Nat) (s : EmbedState) : Prop extends t.GluedSlots g i s where
   outer_at_vertex : ∀ j p v q, t.toSpqrTree.parent j = some p → t.toSpqrTree.type p = .V →
     t.origId[p]! = some v → s.exposedAt j q → QE.vert g.edges.toList q = some v
+
+structure GluedUpTo (g : Graph) (i : Nat) (s : EmbedState) : Prop
+    extends t.GluedAttachments g i s where
+  outer_dir : ∀ (j k q : Nat), s.outerE[j]?.bind (fun o => o[k]?) = some (some q) → q % 2 = k % 2
+  outer_present : ∀ j, i ≤ j → j < t.size → ∀ p,
+    t.toSpqrTree.parent j = some p → t.toSpqrTree.type p = .V →
+    t.edgesBelow j ≠ [] → ∃ q, s.exposedAt j q
 
 /-- The initial state of `planarEmbed`. -/
 def initState : EmbedState :=
@@ -104,6 +111,13 @@ theorem gluedUpTo_init (g : Graph) : t.GluedUpTo g t.size t.initState where
     intro j p v q _ _ _ ⟨k, hk⟩
     by_cases hj : j < t.size <;> by_cases hk' : k < 4 <;>
       simp [initState, Array.getElem?_replicate, hj, hk'] at hk
+  outer_dir := by
+    intro j k q hk
+    by_cases hj : j < t.size <;> by_cases hk' : k < 4 <;>
+      simp [initState, hj, hk'] at hk
+  outer_present := by
+    intro j hj hjs
+    omega
 
 /-- `V` step: the blocks hanging off the vertex are chained through their exposed ends, i.e.
 1-sums at the vertex (`oneSum_planar`), and the two outermost ends stay exposed. Admitted. -/

@@ -15,14 +15,22 @@ def incident (g : Graph) (v e : Nat) : Bool :=
 def touches (t : SpqrTree) (g : Graph) (i v : Nat) : Bool :=
   (List.range g.ne).any fun e => edgeIn t i e && incident g v e
 
-def checkOuter (g : Graph) (t : PlanarSpqrTree) (s : PlanarSpqrTree.EmbedState) : IO Nat := do
+def checkOuter (g : Graph) (t : PlanarSpqrTree) (i : Nat)
+    (s : PlanarSpqrTree.EmbedState) : IO Nat := do
   let mut bad := 0
   for j in [0:t.size] do
+    if i <= j && ((t.toSpqrTree.parent j).map t.toSpqrTree.type == some NodeType.V) &&
+        !(t.edgesBelow j).isEmpty && !(s.outerE[j]!.any Option.isSome) then
+      bad := bad + 1
+      IO.println s!"outer_present: i={i} j={j}"
     if s.outerE[j]!.size != 4 then
       bad := bad + 1
       IO.println s!"outer_row_size: j={j}"
     for k in [0:s.outerE[j]!.size] do
       if s.outerE[j]![k]!.isSome then
+        if (s.outerE[j]![k]!).map (· % 2) != some (k % 2) then
+          bad := bad + 1
+          IO.println s!"outer_dir: j={j} k={k}"
         let parentType := (t.toSpqrTree.parent j).map t.toSpqrTree.type
         if k >= 4 || t.toSpqrTree.type j == .F ||
             ((parentType == some NodeType.F || parentType == some NodeType.V) && k >= 2) then
@@ -48,6 +56,9 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
   for i in [0:t.size] do
     if t.type i == .V then
       for a in t.children i do
+        if !((List.range g.ne).any fun e => edgeIn t a e) then
+          bad := bad + 1
+          IO.println s!"v_nonempty: i={i} a={a}"
         for b in t.children i do
           for v in [0:g.nv] do
             if a != b && touches t g a v && touches t g b v && t.origId[i]! != some v then
@@ -65,11 +76,11 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
       | _, _ => pure ()
   let pt := g.planarSpqrTree tern vo eo
   let mut s := pt.initState
-  bad := bad + (← checkOuter g pt s)
+  bad := bad + (← checkOuter g pt pt.size s)
   if pt.nodePlanar.all id then
     for i in (List.range pt.size).reverse do
       s := ((pt.embedItem i).run s).2
-      bad := bad + (← checkOuter g pt s)
+      bad := bad + (← checkOuter g pt i s)
   return bad
 
 def main : IO UInt32 := do
