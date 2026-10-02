@@ -561,10 +561,27 @@ the V items of every entry are distinct and increasing in the final order of the
 reused by a sibling can violate it, which is why `StEntry` is stated for the top entry only);
 every closed S/P/R item satisfies `Items.StItem` (986 items, 0 violations).
 The naive strengthening "every entry's `nest` reading is an st-list with the hole at the far end
-from the terminal" is **false** when the open path changes direction (an entry attached across a
-dir-0 sub-chain and a dir-1 chain has path vertices on both sides of its items, e.g. seed 20 of
-`gen.py`), so the hole must be modelled as the path itself, ordered by `stackDir` per depth;
-that refinement is left to the preservation proof.
+from the terminal" is **false** when the open path changes direction.
+Concrete failing configuration (`gen.py` seed 20, the snapshot at the start of out-edge 72 of
+the walk, current depth 11): the open DFS path is `39, 7, 8, 20, 36, 6, 4, 0, 3, 10, 27, 21`
+(depths 0..11) with `stackDir = 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0` — depths 1..6 form the ear
+with lowval 1 (`stackDir = 1`), the ear with lowval 3 starts at depth 7 (vertex 0) where
+`stackDir` flips to 0, and depth 11 (vertex 21) has lowval 5.
+The tstack entry in question is `vStart = 21, topDepth = 1` (upper terminal `stackVerts[1] = 7`),
+`spans.1 = []`,
+`spans.2 = [Q(21,5), V5, Q(5,7), Q(5,33), Q(3,33), V33, S(33,7), Q(5,6), Q(5,16), S(5,12), Q(27,12),
+V12, Q(12,16), Q(10,16), V16, Q(16,6)]`.
+Read as a closed item with the hole at the far end (`vs = (21, 7)`, children `spans.2`) its vertex
+list is `21, 5, 33, 12, 16, 7`, and vertex `16` has neighbours `5` and `12` before it but none
+after it: its other neighbours `6` (depth 5, on the `stackDir = 1` segment) and `10` (depth 9,
+on the `stackDir = 0` segment) are open path vertices, i.e. they lie *in the hole*, on different
+sides of the entry's items in the final order.
+So the entry's items are not an st-list on their own; they only become one once the path
+segments are inserted according to their per-depth `stackDir` — which is exactly what the
+corrected invariant (`StSides` for every entry, orientation only for the top entry) does not
+claim, and what the `StItem` check at every close (986 items, 0 violations) confirms.
+The hole must be modelled as the path itself, ordered by `stackDir` per depth; that refinement is
+left to the preservation proof.
 
 ### 7.5 Work packages
 
