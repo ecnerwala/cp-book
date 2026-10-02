@@ -12,3 +12,5 @@ import Spqr.ItemSpec
 import Spqr.WalkSpec
 import Spqr.Correctness
 import Spqr.EarSpec
+import Spqr.SepPair
+import Spqr.Proofs.SepPair
