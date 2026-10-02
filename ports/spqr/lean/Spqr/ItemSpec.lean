@@ -67,6 +67,12 @@ structure Endpoints : Prop where
     ((items.vs (edgeItem g e)).2 = none ↔ items.ch (edgeItem g e) ≠ []) ∧
     ((g.edges[e]!).1 = (g.edges[e]!).2 → items.ch (edgeItem g e) ≠ []) ∧
     ∀ v, (items.vs (edgeItem g e)).2 = some v → PairEq (u, v) g.edges[e]!
+  /-- A block-root Q with children `[c]` is a self-loop (the `O` branch); with `[c, vertItem w]` its
+  edge is `{u, w}` (`u` the recorded upper endpoint, `w` the child vertex of the bridge / block). -/
+  q_root : ∀ e, e < g.ne →
+    (∀ c, items.ch (edgeItem g e) = [c] → (g.edges[e]!).1 = (g.edges[e]!).2) ∧
+    (∀ c w u, items.ch (edgeItem g e) = [c, vertItem w] → (items.vs (edgeItem g e)).1 = some u →
+      PairEq (u, w) g.edges[e]!)
   /-- Each child node's endpoints are vertices of the parent node: the parent's own endpoints or
   its V children. -/
   child_vs_in_parent : ∀ p c, items.IsParent p c → items.type p ∉ [NodeType.F, .V] → items.type c ≠ .V →
@@ -101,6 +107,8 @@ structure Shapes : Prop where
   q_children : ∀ e, e < g.ne → items.ch (edgeItem g e) = [] ∨
     ∃ c, items.type c ∉ [NodeType.F, .V, .Q] ∧
       (items.ch (edgeItem g e) = [c] ∨ ∃ v, v < g.nv ∧ items.ch (edgeItem g e) = [c, vertItem v])
+  /-- `O` items hang alone under a (self-loop) Q. -/
+  o_parent : ∀ p c, items.IsParent p c → items.type c = .O → items.type p = .Q ∧ items.ch p = [c]
   /-- Block-root Qs hang under `F`/`V` items; a Q child of a node is a leaf (its cap). -/
   q_leaf_of_node : ∀ p c, items.IsParent p c → items.type p ∉ [NodeType.F, .V] →
     items.type c = .Q → items.ch c = []
@@ -114,6 +122,11 @@ structure Shapes : Prop where
     items.vs i = (some u, some v) ∧ ((items.ch i).filter fun c => items.type c = .V) = xs.map vertItem ∧
     2 ≤ xs.length ∧
     (items.virtualEdges i).Perm (List.zip (u :: xs) (xs ++ [v]))
+  /-- `S`, positionally: the non-V children in `ch` order are the path edges in path order, each
+  oriented along the path (`vs c = (some x_j, some x_{j+1})`). -/
+  s_order : ∀ i, i < items.size → items.type i = .S → ∃ u v xs,
+    items.vs i = (some u, some v) ∧ ((items.ch i).filter fun c => items.type c = .V) = xs.map vertItem ∧
+    items.virtualEdges i = List.zip (u :: xs) (xs ++ [v])
   /-- `R`: ≥ 2 V children, simple skeleton with ≥ 6 edges (no child virtual edge parallel to the
   node's own `vs`; non-V children all have two endpoints), 3-connected (checked on the output). -/
   r_shape : ∀ i, i < items.size → items.type i = .R →
