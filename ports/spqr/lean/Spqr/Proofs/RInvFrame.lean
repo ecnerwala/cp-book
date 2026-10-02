@@ -261,7 +261,12 @@ theorem walkTree_rInvAt {D : Nat} (d : Nat) (c : Nat) (outs : List DfsOut) (hi :
 tree edge `e` to the child `nxtV = stackVerts[d+1]`, every iterate of Loop 1 at which `loop1Type`
 answers `.R` has the shape `RBranch`, and its two top entries are `EntryR` and edge-disjoint
 (`RTop`). `cur`'s bottom is the child, finished, so `cur`'s `(nxtV, d)` classes are P-merged and
-`cur` is settled; `nxt`'s bottom is a finished vertex strictly below the child. -/
+`cur` is settled; `nxt`'s bottom is a finished vertex strictly below the child. The hypotheses
+below do not determine which edges the entries hold, so `interior`, `proper`, `nxt_ne`, `cur_c`
+need the Loop-1 ear content (entries with `topDepth > d` have `vStart = nxtV`; the entries with
+`topDepth ≥ d` hold exactly the tree edge and the child's subtree edges) as a further hypothesis
+or from `EarShape`; only `tstack`, `cur_top`, `nxt_top`, `ne` follow from `run_loop1Cond`,
+`loop1Type_run` and the head-`topDepth` induction. -/
 theorem loop1_rBranch {D nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv D) (hs : Shape s)
     (hok : CloseEarsOk D nxtV d e edgeDir s)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)

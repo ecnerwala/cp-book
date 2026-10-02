@@ -513,10 +513,12 @@ the closed set is `U = rU = edges cur ∪ edges nxt`, the terminals are `nxt.vSt
 `cur.vStart` is interior to `U`, both entries are nonempty, `U` is proper, and the merged items
 are pairwise edge-disjoint 2-terminal pieces (`PieceItems`). The invariant hypothesis is not
 `Inv d` (at the R branch `cur` is attached at `stackVerts[d+1] = cur.vStart`, so `Inv d` is
-contradictory there) but `Inv D` with `stackVerts[k] = cur.vStart` for `d < k ≤ D`; at the branch
-`D = d+1`. Proved: `RStep.rCloseShape' : Inv D → (∀ k, d < k → k ≤ D → stackVerts[k] = cur.vStart)
+contradictory there) but `EarInv.Inv' D` (§4.2b) with `stackVerts[k] = cur.vStart` for `d < k ≤ D`;
+at the branch `D = d+1`. `cur` is the top entry, so its `Term'` is `Term`; `nxt`'s extra `Term'`
+vertex is `cur.vStart`, interior to `U`, so `union_attached` needs no further shape fact. Proved:
+`RStep.rCloseShape' : Inv' D → (∀ k, d < k → k ≤ D → stackVerts[k] = cur.vStart)
 → TwoConnected → RStep → RContent → RCloseShape …` — the structural fields `wf`, `sub`, `conn`,
-`attached`, `touch_s`, `touch_t`, `ne`, `proper` come from `Inv D` (`EntryInv` via
+`attached`, `touch_s`, `touch_t`, `ne`, `proper` come from `Inv' D` (`EntryInv'` via
 `TwoAttached.of_term`, `ConnEdges.union`/`TwoAttached.union`, `twoAttached_union_classes`) and
 `PieceItems` (`ofItems_mem_iff`) — and `RStep.threeConnected'`.
 
@@ -532,8 +534,8 @@ below the entry has fired). `RTop dfs cur nxt` is `EntryR` of the two top entrie
 edge-disjointness; `RBranch d cur nxt rest` the branch shape (`loop1Type = .R`, `cur.vStart =
 stackVerts[d+1]`, `cur` has a closed item, `nxt` touches both terminals and has no `cur.vStart`–
 `stackVerts[d]` edge). Proved: `RBranch.rStep : RTop → RBranch → RStep`, `RBranch.rContent :
-Inv (d+1) → TwoConnected → dfs.Spec → RTop → RBranch → RContent` (all five fields), and
-`RBranch.threeConnected` (the contracted R skeleton is 3-connected) from `Inv (d+1) ∧ RTop ∧
+Inv' (d+1) → TwoConnected → dfs.Spec → RTop → RBranch → RContent` (all five fields), and
+`RBranch.threeConnected` (the contracted R skeleton is 3-connected) from `Inv' (d+1) ∧ RTop ∧
 RBranch` alone. `RInv dfs s` (all entries `EntryR`, pairwise disjoint) is not an invariant of every
 intermediate state: the single-edge entry a back edge `v → stackVerts[l]` pushes is not `maximal`
 until the P-check with the next `(v, l)` class, and the tree-edge entry of `pushEdgeTstack` is not
@@ -545,13 +547,20 @@ them across the bookkeeping steps of `finishEdge` (`modifyItem` of a free item, 
 `finishEdge_rInvAt` (the content blocks of `finishEdge` keep `RInvAt curV`), `walkTree_rInvAt`
 (finishing a child settles its entries), `loop1_rBranch` (every `.R` iterate of Loop 1 is
 `RBranch ∧ RTop`); `loop1_r_threeConnected` combines the last with `RBranch.threeConnected`
-(`closeEars_iter_step` gives `Inv (d+1)` at the iterate).
+(`closeEars_iter_step` gives `Inv (d+1)` at the iterate via `Step`; to be restated for `Inv'`).
+`loop1_rBranch`'s hypotheses (`Inv D`, `Shape`, `CloseEarsOk`, `RInvAt`) say nothing about which
+edges the Loop-1 entries hold, so `interior`, `proper`, `nxt_ne` and `cur_c` (after an S merge the
+head's `vStart` is the S entry's) are not derivable from them: its proof needs the Loop-1 ear
+content (entries with `topDepth > d` at `closeEars` have `vStart = nxtV`; the entries with
+`topDepth ≥ d` hold exactly the tree edge and the child's subtree edges) as an extra hypothesis
+or from `EarShape`. The shape fields (`tstack`, `cur_top`, `nxt_top`, `ne`) follow from
+`run_loop1Cond`, `loop1Type_run` and the head-`topDepth` induction over the iterates.
 
 Item level (`Proofs/RItems.lean`). `Items.RSkel3 g items i`: the skeleton of the R item `i` (its
 non-`V` children as pieces, the complement of its edge set as the parent piece at `i`'s terminals,
 contracted) is 3-connected. `RBranch.rSkel3` proves it for the item Loop 1's R branch closes
-(`rCloseItems`: `allocItem .R`, merge, `finishTstackTop`), from `RBranch.threeConnected` and
-`Shape`. Admitted: `items_r_three_connected` (every R item of `g.walk` on a block is `RSkel3`;
+(`rCloseItems`: `allocItem .R`, merge, `finishTstackTop`), from `RBranch.threeConnected`
+(under `Inv' (d+1)`) and `Shape`. Admitted: `items_r_three_connected` (every R item of `g.walk` on a block is `RSkel3`;
 needs `loop1_rBranch`, the same argument for the type-1 R close of `finishEdge`, and that closed
 items are never modified again). For a graph with several blocks the parent piece must be the
 complement within the item's block; `RSkel3` with the whole graph is the block statement only.
@@ -624,8 +633,8 @@ and ends at `2·neEn`).
 | Lemma 4.4 (`ascend_frame_one_entry`: a finished frame's vertex owns one entry) | `EarSpec.lean` | **false** for chain frames (cycle `0..5` + chord `5-1`, frame `(4,4)`: five entries); removed, the collapse holds only at the ear's top (= `earOut_one_entry`) |
 | boundary branch of `finishEdge` keeps `Inv D ∧ Shape` (`finishBoundary_inv`, via `BStep`, under `BoundaryOk`: popped entries exist, Q/V items are roots not on any span) | `WalkInv.lean` | proved (`BoundaryOk ← ear_boundary` sorry); the former `Step` form is false (the Q item goes under `vertItem curV`), as is `VertBook`'s `hasVert = false → ch (vertItem v) = []` (bridge `1-2` before back edge `1→0`) — replaced by connectivity + `TwoAttached v v` of the vertex item |
 | corrected attachment set `TEntry.Term'`, `EntryInv'`, `Inv'` (`Inv'.of_inv`, `Inv'.mono`); empirical check `checks/InvCheck.lean` | `EarInv.lean` | def + proved; the walk induction for `Inv'` is open |
-| 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape'`/`RStep.threeConnected'` (`Proofs/RClose.lean`) give it for Loop 1's R step from `Inv D` + `stackVerts[d+1..D] = cur.vStart` + `RStep` + `RContent` (`Inv d` is contradictory there) |
-| 4.5 walk side: `EntryR`/`RTop`/`RBranch`/`RInvAt`; `RBranch.rStep`, `RBranch.rContent` (all five content fields), `RBranch.threeConnected`; `EntryR.congr`/`RInvAt.congr` + bookkeeping frames; `Items.RSkel3`, `RBranch.rSkel3` | `RInv.lean`, `Proofs/RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RItems.lean` | proved; admitted: `finishEdge_rInvAt`, `walkTree_rInvAt`, `loop1_rBranch` (history preservation), `items_r_three_connected` (all R items of the walk on a block); `spqrTree_r_three_connected` (relabel transport): hard |
+| 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape'`/`RStep.threeConnected'` (`Proofs/RClose.lean`) give it for Loop 1's R step from `EarInv.Inv' D` + `stackVerts[d+1..D] = cur.vStart` + `RStep` + `RContent` (`Inv d` is contradictory there) |
+| 4.5 walk side: `EntryR`/`RTop`/`RBranch`/`RInvAt`; `RBranch.rStep`, `RBranch.rContent` (all five content fields), `RBranch.threeConnected` (from `Inv' (d+1)`); `EntryR.congr`/`RInvAt.congr` + bookkeeping frames; `Items.RSkel3`, `RBranch.rSkel3` | `RInv.lean`, `Proofs/RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RItems.lean` | proved; admitted: `finishEdge_rInvAt`, `walkTree_rInvAt`, `loop1_rBranch` (history preservation), `items_r_three_connected` (all R items of the walk on a block); `spqrTree_r_three_connected` (relabel transport): hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
