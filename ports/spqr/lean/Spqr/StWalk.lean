@@ -112,16 +112,19 @@ structure WalkState.StSides (s : WalkState) (ord : Nat → Nat) (t : TEntry) : P
   sorted : (Items.vertsOf s.items (t.spans.1 ++ t.spans.2)).Pairwise fun x y => ord x < ord y
 
 /-- The top entry is in addition oriented: read along `stackDir[topDepth]`, its vertices lie
-strictly between the upper terminal `top` and the lower terminal `vStart`. -/
+strictly between the upper terminal `top` and the lower terminal `vStart`.  A vertex entry
+(`vStart = stackVerts[topDepth]`, its own V item as the only item) is exempt where the terminals
+coincide with the vertex. -/
 structure WalkState.StEntry (s : WalkState) (ord : Nat → Nat) (t : TEntry) : Prop
     extends s.StSides ord t where
-  oriented : ∀ x ∈ Items.vertsOf s.items (t.spans.1 ++ t.spans.2),
+  oriented : ∀ x ∈ Items.vertsOf s.items (t.spans.1 ++ t.spans.2), x ≠ t.top s →
     (s.stackDir[t.topDepth]! = false → ord (t.top s) < ord x) ∧
     (s.stackDir[t.topDepth]! = true → ord x < ord (t.top s))
-  bottom : ∀ x ∈ Items.vertsOf s.items (t.spans.1 ++ t.spans.2),
+  bottom : ∀ x ∈ Items.vertsOf s.items (t.spans.1 ++ t.spans.2), x ≠ t.vStart →
     (s.stackDir[t.topDepth]! = false → ord x < ord t.vStart) ∧
     (s.stackDir[t.topDepth]! = true → ord t.vStart < ord x)
-  ends : (s.stackDir[t.topDepth]! = false → ord (t.top s) < ord t.vStart) ∧
+  ends : t.vStart ≠ t.top s →
+    (s.stackDir[t.topDepth]! = false → ord (t.top s) < ord t.vStart) ∧
     (s.stackDir[t.topDepth]! = true → ord t.vStart < ord (t.top s))
 
 /-- The vertices of an entry: its V items, both sides. -/
@@ -140,15 +143,16 @@ def WalkState.EntryReach (s : WalkState) (d : Nat) (t : TEntry) (x : Nat) : Prop
     ∃ k, t.topDepth < k ∧ k ≤ d ∧ s.stackVerts[k]! = x
 
 /-- Hole closure of a live entry relative to the numbering `ord`: its skeleton edges are oriented
-along `ord` and stay within reach, and every vertex of the entry has a lower and a higher
-neighbour along them (the hole, i.e. the open path through `(topDepth, d]`, may supply the
-endpoint). -/
+along `ord` and stay within reach, and every vertex of the entry other than its lower terminal
+has a lower and a higher neighbour along them (the hole, i.e. the open path through
+`(topDepth, d]`, may supply the endpoint).  The lower terminal is exempt because a vertex entry
+`[V v]` with `vStart = v` carries no edge until the vertex is finished. -/
 structure WalkState.StHole (s : WalkState) (ord : Nat → Nat) (d : Nat) (t : TEntry) : Prop where
   edges : ∀ p ∈ s.itemEdges (t.spans.1 ++ t.spans.2),
     ord p.1 < ord p.2 ∧ s.EntryReach d t p.1 ∧ s.EntryReach d t p.2
-  lower : ∀ x ∈ s.entryVerts t, ∃ p ∈ s.itemEdges (t.spans.1 ++ t.spans.2),
+  lower : ∀ x ∈ s.entryVerts t, x ≠ t.vStart → ∃ p ∈ s.itemEdges (t.spans.1 ++ t.spans.2),
     (p.1 = x ∧ ord p.2 < ord x) ∨ (p.2 = x ∧ ord p.1 < ord x)
-  upper : ∀ x ∈ s.entryVerts t, ∃ p ∈ s.itemEdges (t.spans.1 ++ t.spans.2),
+  upper : ∀ x ∈ s.entryVerts t, x ≠ t.vStart → ∃ p ∈ s.itemEdges (t.spans.1 ++ t.spans.2),
     (p.1 = x ∧ ord x < ord p.2) ∨ (p.2 = x ∧ ord x < ord p.1)
 
 /-- Close-site condition on the hole of `t` (the st-side of `WalkSpec.FinishTopOk.mid`): every
@@ -291,12 +295,13 @@ theorem entryEdges_eq (s : WalkState) (t : TEntry) :
 
 /-- Closability of a one-sided live entry from the invariant: `StEntry` gives the `ord`-increasing
 vertex list between the terminals, `StHole` the neighbours, and the close-site condition
-`HoleClosed` keeps the edges inside the list.  (The earlier statement `StInv d ord → TopClosable`
-is not provable: the top entry's edges may reach into its hole before the hole has been closed,
-see `PROOF.md` §7.4.) -/
+`HoleClosed` keeps the edges inside the list; the terminals are distinct and not among the
+entry's vertices.  (The earlier statement `StInv d ord → TopClosable` is not provable: the top
+entry's edges may reach into its hole before the hole has been closed, see `PROOF.md` §7.4.) -/
 theorem stInv_topClosable (s : WalkState) (d : Nat) (ord : Nat → Nat) (hinv : s.StInv d ord)
     (t : TEntry) (ht : s.tstack.head? = some t) (htd : t.topDepth ≤ d)
-    (hside : t.OnSide s.stackDir[t.topDepth]!) (hclosed : s.HoleClosed d t) :
+    (hside : t.OnSide s.stackDir[t.topDepth]!) (hclosed : s.HoleClosed d t)
+    (hne : t.vStart ≠ t.top s) (hvv : t.vStart ∉ s.entryVerts t) (htop : t.top s ∉ s.entryVerts t) :
     Items.StList (s.entryVertList t) (s.entryEdges t) ∧
     ∀ p ∈ (s.entryEdges t).tail, (s.entryVertList t).idxOf p.1 < (s.entryVertList t).idxOf p.2 := by
   have htm : t ∈ s.tstack := List.mem_of_mem_head? ht
@@ -327,11 +332,11 @@ theorem stInv_topClosable (s : WalkState) (d : Nat) (ord : Nat → Nat) (hinv : 
     obtain ⟨h1, h2, h3⟩ := hhole.edges p hp
     exact ⟨h1, hm _ (hreach p.1 h2 ⟨p, hp, Or.inl rfl⟩), hm _ (hreach p.2 h3 ⟨p, hp, Or.inr rfl⟩)⟩
   have hsorted : (s.entryVerts t).Pairwise fun x y => ord x < ord y := hent.sorted
-  have hor := hent.oriented
-  have hbot := hent.bottom
-  have hends := hent.ends
-  have hlow := hhole.lower
-  have hup := hhole.upper
+  have hor : ∀ x ∈ s.entryVerts t, _ := fun x hx => hent.oriented x hx (ne_of_mem_of_not_mem hx htop)
+  have hbot : ∀ x ∈ s.entryVerts t, _ := fun x hx => hent.bottom x hx (ne_of_mem_of_not_mem hx hvv)
+  have hends := hent.ends hne
+  have hlow : ∀ x ∈ s.entryVerts t, _ := fun x hx => hhole.lower x hx (ne_of_mem_of_not_mem hx hvv)
+  have hup : ∀ x ∈ s.entryVerts t, _ := fun x hx => hhole.upper x hx (ne_of_mem_of_not_mem hx hvv)
   rw [entryVertList_eq, entryEdges_eq, hsideq]
   generalize hdir : s.stackDir[t.topDepth]! = dir at hor hbot hends ⊢
   cases dir
