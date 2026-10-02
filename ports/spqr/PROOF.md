@@ -284,6 +284,30 @@ to `Inv' d` after a tree edge (`WalkInv.ear_lower'`, admitted: Loop 1 leaves eve
 Loop 1's R close the only context terminal of `nxt` is `cur`'s, interior to the union (`RStep.union_attached`).
 The walk induction `WalkInv.walkTree_inv'` is restated for `Inv' d` and proved modulo the `ear_*` admissions.
 
+**Ear content, restated (ear session 4, `EarInv.lean`, `checks/EarCheck.lean`).** The first
+version of `WalkState.EarFinish` had fields that are false for the real walk (3000 random
+multigraphs, every `finishEdge`): `base_top` (`∀ t ∈ base, topDepth ≤ d` — a vertex entry `V y` of a
+finished deeper vertex stays buried under a lower piece: seed 1, `finishEdge` of `3→2` at `d = 1`
+with `(1,4)=[V 1]` on the stack), `loop1_bot` (`topDepth > d ⇒ vStart = child` in loop 1's range —
+an S-merged entry keeps a deeper chain vertex as `vStart`), `touch_top` for all entries of
+`topDepth ≤ d+1` (buried `V` entries hold only block `Q` items), `vert`/`vert_free` with
+`vStart = curV` (after a late merge the entry holding `V curV` has a chain vertex as `vStart`),
+`loop1_side` without `lowval < d`. They were dropped or weakened (`loop1_touch` only in loop 1's
+range, `vert` only `topDepth ≤ d`) and the following fields added, all with 0 violations: `sub_bot`,
+`path` (distinct path vertices, for `FinishTopOk.mid`), `span_disj`, `p_entry` (the P-merge target
+`(curV, lowval)` in `base` is a single root item on side `stackDir[lowval]` attached only at `curV`,
+`stackVerts[lowval]`), and the author's two structural facts: `bottom` — for a returning tree edge
+the child's entries end, bottom-up, with the vertex entry of the chain bottom `y` and the `(y,
+lowval)` piece (a single root item on side `stackDir[lowval]`, touching `y` and `stackVerts[lowval]`;
+`EarBottom`), and both are byte-identical to when `y`'s walk ended at every inner `finishEdge` and
+after loops 1–2 (checked on 6945 returning tree edges); `loops` — after loops 1–2 the child's entries
+are `[c, py, vy]` for a type-1 edge (`c` reaches `curV` and `o.dest`; the three cover the sub-ear
+edges) and `c :: mid ++ [py, vy]` for type 2, with `lowval ≤ c.topDepth
+≤ d`. Not true (so not stated): `c.topDepth = d`, `c.vStart = o.dest`, `c` one-sided on
+`stackDir[d]`, `c` not touching `stackVerts[lowval]` (loop 2 can merge a lowval piece into `c`, making it two-sided with `topDepth =
+lowval`: seed 2, `finishEdge` of `4→1` at `d = 1`). `FinishBook` now carries `EarAt` (`origTstack`
+indexed), `finishOk_of_guards` and the `ear_*` admissions take `EarFinish` as hypothesis.
+
 *Soundness*: every `mergeTstackTops` joins two entries sharing a terminal, so the union is again
 connected and attached inside the union of the two `Term` sets, which the `min topDepth` rule
 re-expresses as `Term` of the merged entry (`mergeTstackTops_sound`, hypotheses `MergeOk`).
@@ -681,7 +705,7 @@ was false for a bridge block (`[I, vertItem v]` under a Q with `vs = (some u, no
 | Lemma 4.4 (`ascend_frame_one_entry`: a finished frame's vertex owns one entry) | `EarSpec.lean` | **false** for chain frames (cycle `0..5` + chord `5-1`, frame `(4,4)`: five entries); removed, the collapse holds only at the ear's top (= `earOut_one_entry`) |
 | boundary branch of `finishEdge` keeps `Inv' D ∧ Shape` (`finishBoundary_inv`, via `BStep`, under `BoundaryOk`: popped entries exist, Q/V items are roots not on any span, popped blocks' terminals touched by no entry below) | `WalkInv.lean` | proved (`BoundaryOk ← ear_boundary` sorry); the former `Step` form is false (the Q item goes under `vertItem curV`), as is `VertBook`'s `hasVert = false → ch (vertItem v) = []` (bridge `1-2` before back edge `1→0`) — replaced by connectivity + `TwoAttached v v` of the vertex item |
 | corrected attachment set `TEntry.Term'`, `EntryInv'`, `Stack`, `Inv'` (`Inv'.of_inv`, `Inv'.mono`, `Stack_iff`, `Inv'.setSv`); empirical check `checks/InvCheck.lean` | `WalkSpec.lean`, `WalkInv.lean` | def + proved; `Step`/`BStep`/`walkTree_inv'` stated through it |
-| 4.1–4.3 ear content at a `finishEdge` (`WalkState.EarFinish`/`EarAt`: `sub ++ base` split, pairwise edge-disjointness, span ownership `subEdges` of the child's entries, loop-1 range `topDepth > d ⇒ vStart = child` and `origTstack`-indexed side `stackDir[d]`, terminal touching, V/Q item freshness, block-boundary separation) | `EarInv.lean` | **stated** (consumers mapped field by field in the file header: `MergeTopOk`/`RetargetOk.disj`, `loop1_rBranch`, `ear_lower'`, `walk_sides`' `CloseOK`, `BoundaryOk.gone/gone₂`); not yet carried by the walk (`EarShape.finishEdge`/`walkEarTree_guards` admitted) and the `ear_*` derivations not done; missing: the three-entry shape at a type-1 vertex close (`CloseVertOk.merge₁/merge₂/retarget.old`) and loop 2's `firstIdx` order |
+| 4.1–4.3 ear content at a `finishEdge` (`WalkState.EarFinish`/`EarAt`/`EarBottom`: `sub ++ base` split, pairwise edge/span disjointness, span ownership `subEdges`, distinct path vertices, loop-1 range side `stackDir[d]` and touching, P-merge target `p_entry`, ear-bottom anchor `bottom`, post-loop shape `loops`, V/Q item freshness, block-boundary separation) | `EarInv.lean` | **stated**, every field 0 violations on 3000 random multigraphs (`checks/EarCheck.lean`); `FinishBook.ear` carries it, `finishOk_of_guards`/`ear_*` take it as hypothesis; false first versions (`base_top`, `loop1_bot`, `touch_top`, `vert.vStart`) dropped with counterexamples (§4.2b); not yet carried by the walk (`EarShape.finishEdge`/`walkEarTree_guards` admitted) and the `ear_*` derivations not done; missing: loop 2's `firstIdx` order |
 | 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape'`/`RStep.threeConnected'` (`Proofs/RClose.lean`) give it for Loop 1's R step from `Inv' D` + `stackVerts[d+1..D] = cur.vStart` + `RStep` + `RContent` (`Inv d` is contradictory there) |
 | 4.5 walk side: `EntryR`/`RTop`/`RBranch`/`RInvAt`; `RBranch.rStep`, `RBranch.rContent` (all five content fields), `RBranch.threeConnected` (from `Inv' (d+1)`); `EntryR.congr`/`RInvAt.congr` + bookkeeping frames; `Items.RSkel3`, `RBranch.rSkel3` | `RInv.lean`, `Proofs/RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RItems.lean` | proved; admitted: `finishEdge_rInvAt`, `walkTree_rInvAt`, `loop1_rBranch` (history preservation), `items_r_three_connected` (all R items of the walk on a block); `spqrTree_r_three_connected` (relabel transport): hard |
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |

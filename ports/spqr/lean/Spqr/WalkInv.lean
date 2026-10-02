@@ -1,5 +1,6 @@
 import Spqr.WalkSpec
 import Spqr.Frame
+import Spqr.EarInv
 
 /-!
 # From the tstack guards to `FinishOk`
@@ -47,13 +48,14 @@ theorem Step.vertTransport {v : Nat} {s' : WalkState} (st : Step D v s s')
 section Ear
 
 variable {curV d lv : Nat} {kind : RetKind} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
+  {sub base : List TEntry}
 
 /-! Ear facts (Invariant W / `EarShape`), one per `FinishOk` field that `FinishGuards` does not
 cover. Each is stated at the state where the block runs. -/
 
 /-- Loop 1: every iteration merges/unwraps/closes a finished sub-ear (`Loop1BodyOk`). -/
 theorem ear_loop1 (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
-    (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv' D) (hs : Shape s) (k : Nat)
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (k : Nat)
     (hk : ∀ j, j ≤ k → result (loop1Cond d)
       (iter (Spqr.loop1Body d s.stackDir[d]!) j (ceS₁ o.dest d o.e (feS₀ d o s))) = true) :
     Loop1BodyOk D d s.stackDir[d]! (iter (Spqr.loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s))) := by
@@ -61,37 +63,37 @@ theorem ear_loop1 (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree
 
 /-- Loop 2: every late merge joins entries sharing a terminal (`MergeTopOk`). -/
 theorem ear_mergeLate (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
-    (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv' D) (hs : Shape s) :
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) :
     MergeLateOk D d (feS₁ d o s) := by
   sorry
 
 /-- The vertex close: loop 3 merges, the unwrap, the two merges, the retarget and the type-1 close. -/
 theorem ear_closeVert (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
-    (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = true) :
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = true) :
     CloseVertOk D curV s.stackDir[d]! o.cls.isType1 origTstack (feSingle d o s) (feS₂ d o s) := by
   sorry
 
 /-- The P-check after the vertex close. -/
 theorem ear_finishP_vert (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
-    (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = true) :
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = true) :
     FinishPOk D curV lv o.cls.isType1 (feS₃ curV d o origTstack s) := by
   sorry
 
 /-- The P-check of a first tree edge (no vertex entry yet). -/
 theorem ear_finishP_tree (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
-    (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = false) :
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = false) :
     FinishPOk D curV lv o.cls.isType1 (feS₂ d o s) := by
   sorry
 
 /-- The P-check of a back edge. -/
 theorem ear_finishP_back (ho : o.cls = .ret lv kind) (hlow : lv < d) (hb : o.cls.isTree = false)
-    (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv' D) (hs : Shape s) :
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) :
     FinishPOk D curV lv o.cls.isType1 (feBack curV lv d o s) := by
   sorry
 
 /-- The merge of the vertex entry into the type-2 first-edge entry. -/
 theorem ear_tail_tree (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.isTree = true)
-    (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = false)
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s) (hv : hasVert = false)
     (hsingle : feSingle d o s = false) :
     MergeTopOk D (after (pushVertTstack curV d) (after (finishP curV lv o.cls.isType1) (feS₂ d o s))) := by
   sorry
@@ -100,7 +102,8 @@ theorem ear_tail_tree (ho : o.cls = .ret lv kind) (hlow : lv < d) (ht : o.cls.is
 (`he`, `hq`, `hends`, `hvert`) and the ear facts. The vertex item's connectivity/2-attachment is
 transported to the tail through the `Step`s of the preceding blocks. -/
 theorem finishOk_of_guards (ho : o.cls = .ret lv kind) (hlow : lv < d)
-    (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv' D) (hs : Shape s)
+    (hg : FinishGuards d o origTstack hasVert s) (hE : s.EarFinish curV d o hasVert sub base)
+    (hi : s.Inv' D) (hs : Shape s)
     (hdD : d ≤ D) (hv : curV < s.g.nv) (he : o.e < s.g.ne)
     (hq : Items.ch s.items (edgeItem s.g o.e) = [])
     (hends : Items.PairEq (if o.cls.isTree then (o.dest, s.stackVerts[d]!) else (curV, s.stackVerts[lv]!))
@@ -115,16 +118,16 @@ theorem finishOk_of_guards (ho : o.cls = .ret lv kind) (hlow : lv < d)
     exact hq
   have hears : o.cls.isTree = true → CloseEarsOk D o.dest d o.e s.stackDir[d]! (feS₀ d o s) := fun ht =>
     ⟨he, hq₀, by show Items.PairEq (o.dest, s.stackVerts[d]!) s.g.edges[o.e]!; simpa [ht] using hends,
-     hdD, ear_loop1 ho hlow ht hg hi hs⟩
+     hdD, ear_loop1 ho hlow ht hg hE hi hs⟩
   have st₀ : Step D curV s (feS₀ d o s) :=
     Step.modifyVs hi hs (edgeItem s.g o.e) _ (by show 1 + s.g.nv + o.e < _; omega)
   have hv₀ : curV < (feS₀ d o s).g.nv := by rw [st₀.g]; exact hv
   refine
     { e_lt := he
       ears := hears
-      late := fun ht => ear_mergeLate ho hlow ht hg hi hs
-      vert := fun ht hv' => ear_closeVert ho hlow ht hg hi hs hv'
-      rest_vert := fun ht hv' => ⟨ear_finishP_vert ho hlow ht hg hi hs hv',
+      late := fun ht => ear_mergeLate ho hlow ht hg hE hi hs
+      vert := fun ht hv' => ear_closeVert ho hlow ht hg hE hi hs hv'
+      rest_vert := fun ht hv' => ⟨ear_finishP_vert ho hlow ht hg hE hi hs hv',
         fun h => by simp [hv'] at h, fun h => by simp [hv'] at h, fun h => by simp [hv'] at h⟩
       rest_tree := fun ht hv' => ?_
       q := fun _ => hq
@@ -134,20 +137,20 @@ theorem finishOk_of_guards (ho : o.cls = .ret lv kind) (hlow : lv < d)
   · have st₁ : Step D curV _ (feS₁ d o s) := Step.closeEars st₀.inv st₀.shape hv₀ (hears ht)
     have hv₁ : curV < (feS₁ d o s).g.nv := by rw [st₁.g]; exact hv₀
     have st₂ : Step D curV _ (feS₂ d o s) :=
-      Step.mergeLate st₁.inv st₁.shape hv₁ (ear_mergeLate ho hlow ht hg hi hs)
+      Step.mergeLate st₁.inv st₁.shape hv₁ (ear_mergeLate ho hlow ht hg hE hi hs)
     have hv₂ : curV < (feS₂ d o s).g.nv := by rw [st₂.g]; exact hv₁
-    have hp := ear_finishP_tree (curV := curV) ho hlow ht hg hi hs hv'
+    have hp := ear_finishP_tree (curV := curV) ho hlow ht hg hE hi hs hv'
     have st₃ := Step.finishP (v := curV) st₂.inv st₂.shape hv₂ hp
     have st := st₀.trans (st₁.trans (st₂.trans st₃))
     obtain ⟨hc, ha⟩ := hvert hv'
     exact ⟨hp, finishTailOk_of_vert (fun _ => (st.vertTransport hc ha).1) (fun _ => (st.vertTransport hc ha).2)
-      fun _ => ear_tail_tree ho hlow ht hg hi hs hv'⟩
+      fun _ => ear_tail_tree ho hlow ht hg hE hi hs hv'⟩
   · have st₁ : Step D curV _ (after (pushEdgeTstack curV lv o.e) (feS₀ d o s)) :=
       Step.pushEdge st₀.inv st₀.shape curV lv o.e he hq₀
         (by show Items.PairEq (curV, s.stackVerts[lv]!) s.g.edges[o.e]!; simpa [hb] using hends) (by omega)
     have st₂ : Step D curV _ (feBack curV lv d o s) := Step.frame st₁.inv st₁.shape rfl rfl rfl rfl
     have hv₂ : curV < (feBack curV lv d o s).g.nv := by rw [st₂.g, st₁.g]; exact hv₀
-    have hp := ear_finishP_back (curV := curV) ho hlow hb hg hi hs
+    have hp := ear_finishP_back (curV := curV) ho hlow hb hg hE hi hs
     have st₃ := Step.finishP (v := curV) st₂.inv st₂.shape hv₂ hp
     have st := st₀.trans (st₁.trans (st₂.trans st₃))
     exact ⟨hp, finishTailOk_of_vert (fun h => (st.vertTransport (hvert h).1 (hvert h).2).1)
@@ -211,7 +214,7 @@ theorem ret_of_lowval_lt {o : DfsOut} {d : Nat} (h : o.cls.lowval d < d) :
   all_goals first | omega | exact ⟨_, _, rfl, h⟩
 
 /-- Bookkeeping facts needed by `finishEdge_inv` at the state where `finishEdge` runs. -/
-structure FinishBook (curV d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop where
+structure FinishBook (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool) (s : WalkState) : Prop where
   v_lt : curV < s.g.nv
   e_lt : o.e < s.g.ne
   q : Items.ch s.items (edgeItem s.g o.e) = []
@@ -221,6 +224,8 @@ structure FinishBook (curV d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState
   vert : hasVert = false → s.g.ConnEdges (Items.EdgeBelow s.g s.items (vertItem curV)) ∧
     s.g.TwoAttached (Items.EdgeBelow s.g s.items (vertItem curV)) curV curV
   tree : o.cls.isTree = true ↔ ∃ e cls c, o = .tree e cls c
+  /-- The ear content of the stack (`EarInv.lean`). -/
+  ear : s.EarAt curV d o origTstack hasVert
 
 /-- Before the vertex entry of `v` is pushed, `v` is in range and its item is a connected piece
 attached only at `v` (empty before the first out-edge; the blocks closed by the boundary edges of
@@ -249,8 +254,8 @@ def BookOut (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
     | .tree _ _ child =>
       wp (modify fun s => { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }) (fun _ s₂ =>
         BookTree child (d + 1) s₂ ∧
-        wp (walkTree child (d + 1)) (fun _ s₃ => FinishBook v d o hasVert' s₃) s₂) s₁
-    | .back .. => FinishBook v d o hasVert' s₁) s
+        wp (walkTree child (d + 1)) (fun _ s₃ => FinishBook v d o s₁.tstack.length hasVert' s₃) s₂) s₁
+    | .back .. => FinishBook v d o s₁.tstack.length hasVert' s₁) s
 end
 
 /-- Bookkeeping of the walk, to be discharged from the DFS well-formedness and endpoint facts
@@ -270,7 +275,7 @@ multigraphs (`checks/InvCheck.lean`); replaces the false `ear_lower` (`Term d` w
 counterexample: the type-2 chain `2→3→4→5→6` of the cycle `0..6` with chords `6-1`, `5-2`). -/
 theorem ear_lower' {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
     (ht : o.cls.isTree = true) (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv' (d + 1))
-    (hs : Shape s) (hb : FinishBook curV d o hasVert s)
+    (hs : Shape s) (hb : FinishBook curV d o origTstack hasVert s)
     (hpost : (after (finishEdge curV d o origTstack hasVert) s).Inv' (d + 1)) :
     (after (finishEdge curV d o origTstack hasVert) s).Inv' d := by
   sorry
@@ -335,7 +340,7 @@ the vertex item only after the boundary edges; the popped block is separated fro
 by the articulation vertex `curV`, so its terminals are touched by none of them). -/
 theorem ear_boundary {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
     (hge : d ≤ o.cls.lowval d) (hg : FinishGuards d o origTstack hasVert s) (hi : s.Inv' D)
-    (hs : Shape s) (hb : FinishBook curV d o hasVert s) : BoundaryOk D curV d o s := by
+    (hs : Shape s) (hb : FinishBook curV d o origTstack hasVert s) : BoundaryOk D curV d o s := by
   sorry
 
 section Boundary
@@ -422,7 +427,7 @@ end Boundary
 `finishBoundary`: `Inv' D` and `Shape` are kept. (Not a `Step d curV`: the `Q` item is appended to
 `vertItem curV`, so `Items.Below (vertItem curV)` grows.) -/
 theorem finishBoundary_inv {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
-    (hge : d ≤ o.cls.lowval d) (hi : s.Inv' D) (hs : Shape s) (hb : FinishBook curV d o hasVert s)
+    (hge : d ≤ o.cls.lowval d) (hi : s.Inv' D) (hs : Shape s) (hb : FinishBook curV d o origTstack hasVert s)
     (hok : BoundaryOk D curV d o s) :
     (after (finishEdge curV d o origTstack hasVert) s).Inv' D ∧
       Shape (after (finishEdge curV d o origTstack hasVert) s) := by
@@ -586,15 +591,16 @@ theorem walkOutPre_inv {v d : Nat} {o : DfsOut} {hasVert : Bool} (hi : s.Inv' d)
 
 theorem finishEdge_step {v d : Nat} {o : DfsOut} {n : Nat} {hasVert : Bool} {D : Nat}
     (hD : D = if o.cls.isTree then d + 1 else d) (hi : s.Inv' D) (hs : Shape s)
-    (hg : FinishGuards d o n hasVert s) (hb : FinishBook v d o hasVert s) :
+    (hg : FinishGuards d o n hasVert s) (hb : FinishBook v d o n hasVert s) :
     (after (finishEdge v d o n hasVert) s).Inv' d ∧ Shape (after (finishEdge v d o n hasVert) s) := by
   have hdD : d ≤ D := by split at hD <;> omega
   have hst : (after (finishEdge v d o n hasVert) s).Inv' D ∧ Shape (after (finishEdge v d o n hasVert) s) := by
     by_cases hge : d ≤ o.cls.lowval d
     · exact finishBoundary_inv (origTstack := n) hge hi hs hb (ear_boundary hge hg hi hs hb)
     · obtain ⟨lv, kind, ho, hl⟩ := ret_of_lowval_lt (Nat.lt_of_not_le hge)
+      obtain ⟨sub, base, -, hE⟩ := hb.ear
       have st := finishEdge_inv v d lv kind o n hasVert ho hl hb.v_lt hi hs
-        (finishOk_of_guards ho hl hg hi hs hdD hb.v_lt hb.e_lt hb.q (hb.ends lv kind ho) hb.vert)
+        (finishOk_of_guards ho hl hg hE hi hs hdD hb.v_lt hb.e_lt hb.q (hb.ends lv kind ho) hb.vert)
       exact ⟨st.inv, st.shape⟩
   refine ⟨?_, hst.2⟩
   by_cases ht : o.cls.isTree = true
