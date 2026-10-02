@@ -2,14 +2,15 @@ import Mathlib.Data.List.Sort
 import Mathlib.Data.List.Nodup
 import Spqr.RelabelSpec
 import Spqr.ItemTree
+import Spqr.StLayout
 
 /-!
 # Phase 3b: `Bijections`, `Ownership`, `Twins` of `relabelTree` from the per-node interface
 
 Everything here is derived from `relabel_node_spec` (taken as a hypothesis through its `∃ idx`)
 and `Items.WF`, plus the extra item-level hypotheses collected in `Items.OwnExtra` that
-`Items.WF` does not promise (see its docstring), and the `layoutNode` edge facts
-`layoutNode_edges` (a `Layout`-local statement in the scope of the `LayoutShape` work).
+`Items.WF` does not promise (see its docstring). The one `Layout`-local fact needed, the edge
+records of `layoutNode` (`layoutNode_edges`), is proved here from `LayoutR.layoutNode_R_eq`.
 -/
 
 namespace Spqr
@@ -493,16 +494,187 @@ def layoutNvs (ty : NodeType) (nvSt nvEn : Nat) (ec : List (Nat × Nat)) (k : Na
   else if ty = .S then (if k = 0 then (nvSt, nvEn - 1) else (nvSt + k - 1, nvSt + k))
   else (if k = 0 then (nvSt, nvEn - 1) else ec[k - 1]?.getD (0, 0))
 
-/-- Edge `k` of `layoutNode` for a node type: owned by `node`, no twin, endpoints `layoutNvs`.
-Stated `Layout`-locally (session C's territory); admitted here. -/
+namespace LayoutEdges
+
+open LayoutR
+
+theorem setNe_edges (l : Layout) (neSt node ne : Nat) (nvs nds : Nat × Nat) :
+    (l.setNe neSt node ne nvs nds).edges = l.edges.set! (ne - neSt) ⟨node, none, nvs⟩ := rfl
+
+theorem inc_edges (nvSt : Nat) (l : Layout) (i : Nat) : (inc nvSt l i).edges = l.edges := rfl
+
+theorem empty_edges_size (nVerts nEdges : Nat) : (Layout.empty nVerts nEdges).edges.size = nEdges := by
+  simp [Layout.empty]
+
+theorem foldl_adj_edges {α : Type} (f : Layout → α → Array Nat) (L : List α) :
+    ∀ l : Layout, (L.foldl (fun b a => Layout.mk b.edges (f b a) b.adjDat) l).edges = l.edges := by
+  induction L with
+  | nil => intro l; rfl
+  | cons a L ih => intro l; rw [List.foldl_cons, ih]
+
+theorem foldl_countStep_edges (nvSt : Nat) (P : List (Nat × Nat)) :
+    ∀ l : Layout, (P.foldl (countStep nvSt) l).edges = l.edges := by
+  induction P with
+  | nil => intro l; rfl
+  | cons p P ih => intro l; rw [List.foldl_cons, ih, countStep_edges]
+
+theorem foldl_prefixStep_edges (nvSt : Nat) (L : List Nat) :
+    ∀ s : Layout × Nat, (L.foldl (prefixStep nvSt) s).1.edges = s.1.edges := by
+  induction L with
+  | nil => intro s; rfl
+  | cons i L ih => intro s; rw [List.foldl_cons, ih]; rfl
+
+theorem foldl_setNe_edges (neSt node : Nat) (f nd : Nat → Nat × Nat) :
+    ∀ (m s : Nat) (l : Layout), s + m ≤ l.edges.size → ∀ k,
+      ((List.range' s m).foldl (fun l i => l.setNe neSt node (neSt + i) (f i) (nd i)) l).edges[k]! =
+        if s ≤ k ∧ k < s + m then ⟨node, none, f k⟩ else l.edges[k]! := by
+  intro m
+  induction m with
+  | zero => intro s l _ k; simp
+  | succ m ih =>
+    intro s l hl k
+    rw [List.range'_succ, List.foldl_cons]
+    have hsz : (l.setNe neSt node (neSt + s) (f s) (nd s)).edges.size = l.edges.size := by
+      rw [setNe_edges, Array.size_set!]
+    rw [ih (s + 1) _ (by rw [hsz]; omega) k, setNe_edges, Nat.add_sub_cancel_left]
+    by_cases hks : k = s
+    · subst hks
+      rw [ite_eq_right (by omega), ite_eq_left (by omega), Array.getElem!_set!_self _ _ _ (by omega)]
+    · rw [Array.getElem!_set!_ne _ _ _ _ (Ne.symm hks)]
+      by_cases h : s + 1 ≤ k ∧ k < s + 1 + m
+      · rw [ite_eq_left h, ite_eq_left (by omega)]
+      · rw [ite_eq_right h, ite_eq_right (by omega)]
+
+theorem foldl_fillStep_edges (nvSt neSt node : Nat) :
+    ∀ (E : List (Nat × Nat)) (l : Layout) (c : Nat), neSt + E.length < c → c - neSt ≤ l.edges.size →
+      (E.reverse.foldl (fillStep nvSt neSt node) (l, c)).2 = c - E.length ∧
+      (E.reverse.foldl (fillStep nvSt neSt node) (l, c)).1.edges.size = l.edges.size ∧
+      ∀ k, (E.reverse.foldl (fillStep nvSt neSt node) (l, c)).1.edges[k]! =
+        if c - E.length ≤ neSt + k ∧ neSt + k < c then
+          ⟨node, none, E[neSt + k - (c - E.length)]?.getD (0, 0)⟩
+        else l.edges[k]! := by
+  intro E
+  induction E with
+  | nil =>
+    intro l c _ _
+    refine ⟨by simp, rfl, fun k => ?_⟩
+    rw [ite_eq_right (by simp)]; rfl
+  | cons p E ih =>
+    intro l c hc hl
+    rw [List.reverse_cons, List.foldl_append, List.foldl_cons, List.foldl_nil]
+    obtain ⟨h2, hsz, hk⟩ := ih l c (by simp at hc; omega) hl
+    set r := E.reverse.foldl (fillStep nvSt neSt node) (l, c) with hr
+    have hstep : fillStep nvSt neSt node r p =
+        ((countStep nvSt r.1 p).setNe neSt node (r.2 - 1) (p.1, p.2)
+          (r.1.adjBounds[2 * p.1 + 2 - 2 * nvSt]!, r.1.adjBounds[2 * p.2 + 1 - 2 * nvSt]!),
+          r.2 - 1) := rfl
+    rw [hstep]
+    simp only [List.length_cons] at hc ⊢
+    refine ⟨by simp only [h2]; omega, ?_, fun k => ?_⟩
+    · simp only [setNe_edges, Array.size_set!, countStep_edges, hsz]
+    · simp only [setNe_edges, countStep_edges, h2, Prod.mk.eta]
+      by_cases hkc : neSt + k = c - (E.length + 1)
+      · rw [show c - E.length - 1 - neSt = k by omega,
+          Array.getElem!_set!_self _ _ _ (by rw [hsz]; omega), ite_eq_left ⟨by omega, by omega⟩,
+          show neSt + k - (c - (E.length + 1)) = 0 by omega, List.getElem?_cons_zero,
+          Option.getD_some]
+      · rw [Array.getElem!_set!_ne _ _ _ _ (by omega), hk k]
+        by_cases h : c - E.length ≤ neSt + k ∧ neSt + k < c
+        · rw [ite_eq_left h, ite_eq_left ⟨by omega, by omega⟩,
+            show neSt + k - (c - (E.length + 1)) = (neSt + k - (c - E.length)) + 1 by omega,
+            List.getElem?_cons_succ]
+        · rw [ite_eq_right h, ite_eq_right (by omega)]
+
+/-- The layout after the counting and prefix-sum passes of `run`. -/
+def prefixed (nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) : Layout :=
+  ((List.range' (2 * nvSt + 1) (2 * nvEn + 1 - (2 * nvSt + 1))).foldl (prefixStep nvSt)
+    (E.foldl (countStep nvSt) (inc nvSt (inc nvSt (Layout.empty (nvEn - nvSt) (neEn - neSt))
+      (2 * nvSt + 2)) (2 * nvEn - 1)), 2 * neSt)).1
+
+theorem run_eq (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) :
+    run node nvSt nvEn neSt neEn E =
+      inc nvSt ((E.reverse.foldl (fillStep nvSt neSt node)
+        (inc nvSt (prefixed nvSt nvEn neSt neEn E) (2 * nvSt + 2), neEn)).1.setNe
+          neSt node neSt (nvSt, nvEn - 1) (2 * neSt, 2 * neEn - 1)) (2 * nvEn - 1) := rfl
+
+theorem prefixed_edges_size (nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) :
+    (prefixed nvSt nvEn neSt neEn E).edges.size = neEn - neSt := by
+  unfold prefixed
+  rw [foldl_prefixStep_edges, foldl_countStep_edges, inc_edges, inc_edges, empty_edges_size]
+
+/-- Edges of the R layout: the cap at `0`, then the children in order. -/
+theorem run_edges (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat))
+    (hne : neEn = neSt + E.length + 1) (k : Nat) (hk : k < neEn - neSt) :
+    (run node nvSt nvEn neSt neEn E).edges[k]! =
+      ⟨node, none, if k = 0 then (nvSt, nvEn - 1) else E[k - 1]?.getD (0, 0)⟩ := by
+  rw [run_eq, inc_edges, setNe_edges, Nat.sub_self]
+  have hl₂ := prefixed_edges_size nvSt nvEn neSt neEn E
+  obtain ⟨-, hsz, hfill⟩ := foldl_fillStep_edges nvSt neSt node E
+    (inc nvSt (prefixed nvSt nvEn neSt neEn E) (2 * nvSt + 2)) neEn (by omega)
+    (by rw [inc_edges, hl₂])
+  rw [inc_edges, hl₂] at hsz
+  by_cases hk0 : k = 0
+  · subst hk0
+    rw [Array.getElem!_set!_self _ _ _ (by rw [hsz]; omega), ite_eq_left rfl]
+  · rw [Array.getElem!_set!_ne _ _ _ _ (Ne.symm hk0), hfill k, ite_eq_left ⟨by omega, by omega⟩,
+      show neSt + k - (neEn - E.length) = k - 1 by omega, ite_eq_right hk0]
+
+end LayoutEdges
+
+open LayoutEdges LayoutR in
+/-- Edge `k` of `layoutNode` for a node type: owned by `node`, no twin, endpoints `layoutNvs`. -/
 theorem layoutNode_edges (ty : NodeType) (node nvSt nvEn neSt neEn : Nat) (ec : List (Nat × Nat))
     (hty : ty.isNode = true) (h1 : nvEn - nvSt = 1 → neEn - neSt ≤ 1)
     (hQI : ty = .Q ∨ ty = .I → neEn - neSt ≤ 1)
     (hR : ty = .R → nvSt + 2 ≤ nvEn ∧ neEn = neSt + ec.length + 1)
+    (hO : ty = .O → nvEn - nvSt = 1)
     (k : Nat) (hk : k < neEn - neSt) :
     (layoutNode ty node nvSt nvEn neSt neEn ec).edges[k]! =
       ⟨node, none, layoutNvs ty nvSt nvEn ec k⟩ := by
-  sorry
+  unfold layoutNvs
+  by_cases hv1 : nvEn - nvSt = 1
+  · have hk0 : k = 0 := by have := h1 hv1; omega
+    subst hk0
+    rw [ite_eq_left hv1]
+    cases ty <;> simp [NodeType.isNode] at hty <;>
+      (simp only [layoutNode, Id.run, Std.Legacy.Range.forIn_eq_forIn_range', Std.Legacy.Range.size,
+        bind, pure, BEq.beq, reduceCtorEq, forIn_id_yield]
+       simp only [hv1, decide_true, ↓reduceIte]
+       rw [setNe_edges, Nat.sub_self]
+       exact Array.getElem!_set!_self _ _ _ (by simp [Layout.empty]; omega))
+  · rw [ite_eq_right hv1]
+    cases ty <;> simp [NodeType.isNode] at hty
+    case O => exact absurd (hO rfl) hv1
+    case R =>
+      obtain ⟨hv, hne⟩ := hR rfl
+      rw [layoutNode_R_eq _ _ _ _ _ _ hv, run_edges _ _ _ _ _ _ hne k hk]
+      simp
+    all_goals
+      simp only [layoutNode, Id.run, Std.Legacy.Range.forIn_eq_forIn_range', Std.Legacy.Range.size,
+        bind, pure, BEq.beq, reduceCtorEq, forIn_id_yield]
+      simp only [hv1, decide_false, decide_true, Bool.false_eq_true, ↓reduceIte, Nat.add_sub_cancel,
+        Nat.div_one, Nat.sub_zero, or_true, or_false, Bool.or_self, Bool.or_true, Bool.or_false]
+    case Q =>
+      have hk0 : k = 0 := by have := hQI (Or.inl rfl); omega
+      subst hk0
+      rw [setNe_edges, Nat.sub_self]
+      exact Array.getElem!_set!_self _ _ _ (by simp [Layout.empty]; omega)
+    case I =>
+      have hk0 : k = 0 := by have := hQI (Or.inr rfl); omega
+      subst hk0
+      rw [setNe_edges, Nat.sub_self]
+      exact Array.getElem!_set!_self _ _ _ (by simp [Layout.empty]; omega)
+    case P =>
+      rw [foldl_setNe_edges _ _ _ _ _ _ _ (by simp [Layout.empty]) k,
+        ite_eq_left ⟨Nat.zero_le _, by omega⟩]
+    case S =>
+      rw [foldl_setNe_edges _ _ _ _ _ _ _
+        (by rw [setNe_edges, Array.size_set!, foldl_adj_edges]; simp [Layout.empty]; omega) k]
+      by_cases hk0 : k = 0
+      · subst hk0
+        rw [ite_eq_right (by omega), setNe_edges, Nat.sub_self,
+          Array.getElem!_set!_self _ _ _ (by rw [foldl_adj_edges]; simp [Layout.empty]; omega), ite_eq_left rfl]
+      · rw [ite_eq_left ⟨by omega, by omega⟩, ite_eq_right hk0]
 
 /-! ### Range endpoints as `[·]!` -/
 
@@ -747,6 +919,7 @@ theorem nodeEdge_at (hx : items.OwnExtra g) {i : ItemId} (hi : i < items.size) {
       have hc := Items.hasCap_of_ne_Q hn (by rw [hR]; decide)
       refine ⟨by omega, ?_⟩
       rw [hec, hne, Items.nEdges_eq hn]; simp only [Items.capCount, hc, ↓reduceIte]; omega)
+    (fun hO => by have := hy.2.2.2.2.2 hO; omega)
     k (by omega)
   refine ⟨pos, hl, ?_, ?_⟩
   · rw [hl.edge_node k hk]; unfold nodeLayout; rw [hL]
