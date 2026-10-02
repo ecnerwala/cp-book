@@ -66,6 +66,100 @@ def Items.RSkel3 (g : Graph) (items : Items) (i : ItemId) : Prop :=
     (((Pieces.ofItems g items ((items.ch i).filter fun c => decide (items.type c ≠ .V))).addParent g
       (items.EdgeBelow g i) s t).contract g).ThreeConnected
 
+theorem Pieces.contract_congr {g : Graph} {P Q : Pieces} (hk : P.k = Q.k)
+    (hp : ∀ e, e < g.ne → P.piece e = Q.piece e)
+    (hxy : ∀ i, i < P.k → (P.x i, P.y i) = (Q.x i, Q.y i)) :
+    P.contract g = Q.contract g := by
+  have ho : P.origins g = Q.origins g := by
+    unfold Pieces.origins
+    rw [hk]
+    congr 2
+    exact List.filter_congr fun e he => by rw [hp e (List.mem_range.1 he)]
+  unfold Pieces.contract
+  congr 2
+  rw [← ho]
+  apply List.map_congr_left
+  intro o ho
+  cases o with
+  | inl e => rfl
+  | inr i =>
+    apply hxy
+    simpa [Pieces.origins] using ho
+
+theorem Items.RSkel3.congr {g : Graph} {items items' : Items} {i : ItemId}
+    (h : Items.RSkel3 g items i) (hch : items'.ch i = items.ch i)
+    (hty : ∀ c ∈ items.ch i, items'.type c = items.type c)
+    (hvs : items'.vs i = items.vs i)
+    (hcv : ∀ c ∈ items.ch i, items.type c ≠ .V → items'.vs c = items.vs c)
+    (hE : ∀ c ∈ items.ch i, items.type c ≠ .V →
+      ∀ e, e < g.ne → (items'.EdgeBelow g c e ↔ items.EdgeBelow g c e))
+    (hU : ∀ e, e < g.ne → (items'.EdgeBelow g i e ↔ items.EdgeBelow g i e)) :
+    Items.RSkel3 g items' i := by
+  classical
+  obtain ⟨s, t, hv, hc⟩ := h
+  refine ⟨s, t, by rwa [hvs], ?_⟩
+  have hL : (items'.ch i).filter (fun c => decide (items'.type c ≠ .V)) =
+      (items.ch i).filter (fun c => decide (items.type c ≠ .V)) := by
+    rw [hch]
+    exact List.filter_congr fun c hc => by rw [hty c hc]
+  rw [hL]
+  convert hc using 1
+  refine Pieces.contract_congr ?_ ?_ ?_
+  · rfl
+  · intro e he
+    have hf : ((items.ch i).filter fun c => decide (items.type c ≠ .V)).findIdx?
+        (fun c => decide (items'.EdgeBelow g c e)) =
+        ((items.ch i).filter fun c => decide (items.type c ≠ .V)).findIdx?
+        (fun c => decide (items.EdgeBelow g c e)) := by
+      apply findIdx?_congr_mem
+      intro c hc
+      rw [decide_eq_decide]
+      apply hE c
+      · exact (List.mem_filter.1 hc).1
+      · exact of_decide_eq_true (List.mem_filter.1 hc).2
+      · exact he
+    dsimp only [Pieces.addParent, Pieces.ofItems]
+    simp only [hU e he, hf]
+  · intro k hk
+    dsimp only [Pieces.addParent, Pieces.ofItems] at hk ⊢
+    by_cases hki : k = ((items.ch i).filter fun c => decide (items.type c ≠ .V)).length
+    · simp only [hki, ↓reduceIte]
+    · have hkl : k < ((items.ch i).filter fun c => decide (items.type c ≠ .V)).length := by omega
+      have hm := List.getElem_mem (l := (items.ch i).filter fun c => decide (items.type c ≠ .V)) hkl
+      obtain ⟨hm, ht⟩ := List.mem_filter.1 hm
+      rw [decide_eq_true_eq] at ht
+      simp only [hki, ↓reduceIte, getElem!_pos ((items.ch i).filter fun c => decide (items.type c ≠ .V)) k hkl,
+        hcv _ hm ht]
+
+theorem Items.RSkel3.modify_of_not_below {g : Graph} {items : Items} {i j : ItemId}
+    (h : Items.RSkel3 g items i) (hj : ¬items.Below i j) (f : Item → Item) :
+    Items.RSkel3 g (items.modify j f) i := by
+  have hij : i ≠ j := fun he => hj (he ▸ Relation.ReflTransGen.refl)
+  have hcj : ∀ c ∈ items.ch i, c ≠ j := fun c hc he =>
+    hj (Relation.ReflTransGen.single (he ▸ hc))
+  refine h.congr (Items.ch_modify_of_ne j f hij)
+    (fun c hc => Items.type_modify_of_ne j f (hcj c hc))
+    (Items.vs_modify_of_ne j f hij)
+    (fun c hc _ => Items.vs_modify_of_ne j f (hcj c hc)) ?_ ?_
+  · intro c hc _ e _
+    exact Items.Below_modify_of_not_below j f fun hb =>
+      hj (Relation.ReflTransGen.head hc hb)
+  · intro e _
+    exact Items.Below_modify_of_not_below j f hj
+
+theorem Items.RSkel3.push_nil {g : Graph} {items : Items} {i : ItemId}
+    (h : Items.RSkel3 g items i) (hi : i < items.size)
+    (hc : ∀ c ∈ items.ch i, c < items.size) (x : Item) (hx : x.ch = []) :
+    Items.RSkel3 g (items.push x) i := by
+  refine h.congr (Items.ch_push_nil x hx i)
+    (fun c hm => Items.type_push_of_ne x (Nat.ne_of_lt (hc c hm)))
+    (Items.vs_push_of_ne x (Nat.ne_of_lt hi))
+    (fun c hm _ => Items.vs_push_of_ne x (Nat.ne_of_lt (hc c hm))) ?_ ?_
+  · intro c _ _ e _
+    exact Items.Below_push_nil x hx
+  · intro e _
+    exact Items.Below_push_nil x hx
+
 namespace WalkState
 
 variable {s : WalkState} {d : Nat} {cur nxt : TEntry} {rest : List TEntry} {dfs : DfsData}
