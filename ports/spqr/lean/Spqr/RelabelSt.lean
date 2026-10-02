@@ -1,11 +1,12 @@
 import Spqr.RelabelRep
 import Spqr.StSpec
+import Spqr.RelabelAdj
 
 /-!
 # Relabel phase D: st-order transport (`relabel_st'`)
 
 `Items.StNumbered` (per-item st-numbering of the S/P/R item vertex lists, `Spqr/StSpec.lean`)
-is transported along the per-node relabel interface (`relabel_node_spec`, `relabel_adj_spec`) to
+is transported along the per-node relabel interface (`relabel_node_spec`, `relabelTree_adj`) to
 `SpqrTree.StOrder` of `relabelTree g items`:
 
 * `StOrder.st`: the skeleton of each S/P/R node is st-numbered (`skeleton_S/P/R` give the skeleton
@@ -14,7 +15,7 @@ is transported along the per-node relabel interface (`relabel_node_spec`, `relab
 * `StOrder.dom`: edge dominance (`ownEdges` of S/P/R from the lists above; small nodes trivially);
 * `StOrder.adj`: the per-node-vertex adjacency rows, via the shared row transport
   `adjRow_eq_layout` (global CSR row = `LayoutR.row` of `layoutNode`, from
-  `RelabelLayout.adj_bounds/adj_dat`, `Layout.Local`, and `relabel_adj_spec`) and the per-type row
+  `RelabelLayout.adj_bounds/adj_dat`, `Layout.Local`, and `relabelTree_adj`) and the per-type row
   descriptions of `LayoutShape` / `LayoutR.layoutNode_R_bracket`.
 
 `relabel_st'` needs `Items.RepOK` only for Q items (`nEdges = 1`, two node-vertices); see
@@ -83,7 +84,7 @@ include h
 theorem vertList_eq {i : ItemId} (hi : i < items.size) : items.vertList i = items.nvList g i := by
   rw [Items.vertList, nvList_eq, h.filter_lt_eq hi]
 
-/-- `Items.StNumbered` orients the R nodes (`relabel_adj_spec`'s hypothesis). -/
+/-- `Items.StNumbered` orients the R nodes (`relabelTree_adj`'s hypothesis). -/
 theorem rOriented (hst : items.StNumbered) : items.ROriented g := by
   intro i hi hR
   obtain ⟨u, v, -, ⟨hnd, -, -⟩, hor⟩ := hst i hi (Or.inr (Or.inr hR))
@@ -99,11 +100,11 @@ theorem nvList_V {i : ItemId} (hi : i < items.size) (hV : items.type i = .V) :
     by_cases h0 : i = 0
     · subst h0; exact absurd (hV.symm.trans h.tree.root) (by decide)
     by_cases h1 : i < 1 + g.nv
-    · exact ⟨i - 1, by iomega, by iomega⟩
+    · exact ⟨i - 1, by riomega, by riomega⟩
     by_cases h2 : i < 1 + g.nv + g.ne
-    · have : i = edgeItem g (i - (1 + g.nv)) := by iomega
-      rw [this, h.type_edgeItem (by iomega)] at hV; cases hV
-    · have := h.tree.node i (by iomega) hi; simp [hV] at this
+    · have : i = edgeItem g (i - (1 + g.nv)) := by riomega
+      rw [this, h.type_edgeItem (by riomega)] at hV; cases hV
+    · have := h.tree.node i (by riomega) hi; simp [hV] at this
   obtain ⟨v, hv, rfl⟩ := hi'
   rw [nvList_eq, hs, h.filter_V_eq_nil hi]
   · rfl
@@ -226,7 +227,7 @@ theorem skeleton_R {a : ItemId} (ha : a < items.size) (hR : items.type a = .R) {
 /-! ### R nodes of an st-numbered item tree -/
 
 /-- `pos` on an R node's vertex list is `nvSt + idxOf`. -/
-theorem pos_eq {a : ItemId} (ha : a < items.size) (hR : items.type a = .R)
+theorem pos_eq {a : ItemId} (_ha : a < items.size) (hR : items.type a = .R)
     (hnd : (items.nvList g a).Nodup) {pos : Nat → Nat} (hl : RelabelLayout g items t idx a pos)
     {x : Nat} (hx : x ∈ items.nvList g a) :
     pos x = (t.nvRange (idx a)).1 + (items.nvList g a).idxOf x := by
@@ -429,13 +430,13 @@ theorem dom_small {a : ItemId} (ha : a < items.size) (hle : items.nEdges g a ≤
   rw [List.length_drop, skeleton_length, (h.node a ha).ne_range]
   omega
 
-theorem dom_node (hst : items.StNumbered) (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
+theorem dom_node (hst : items.StNumbered) {a : ItemId} (ha : a < items.size)
     {pos : Nat → Nat} (hl : RelabelLayout g items t idx a pos) : t.EdgeDominance (idx a) := by
   cases hty : items.type a
   · exact h.dom_small ha (by rw [nEdges_not_node (g := g) (i := a) (by rw [hty]; rfl)]; omega)
   · exact h.dom_small ha (by rw [nEdges_not_node (g := g) (i := a) (by rw [hty]; rfl)]; omega)
   · obtain ⟨e, he, rfl⟩ := h.type_Q_eq ha hty
-    obtain ⟨u, v, -, -, -, -, hne1⟩ := h.q_pair hr he
+    have hne1 := h.nEdges_Q he
     exact h.dom_small ha (by omega)
   · exact h.dom_small ha (by rw [h.nEdges_IO ha (Or.inl hty)])
   · exact h.dom_small ha (by rw [h.nEdges_IO ha (Or.inr hty)])
@@ -487,7 +488,7 @@ theorem nodeOfNv_range {nv n : Nat} (hnv : nv < t.nodeVerts.size) (hn : t.nodeOf
   exact this
 
 /-- Row transport: a global adjacency row of a node-vertex of `a` is the corresponding row of
-`layoutNode` (given `relabel_adj_spec`'s row-start fact for `a`). -/
+`layoutNode` (given `relabelTree_adj`'s row-start fact for `a`). -/
 theorem adjRow_eq_layout {a : ItemId} (ha : a < items.size) {pos : Nat → Nat}
     (hl : RelabelLayout g items t idx a pos)
     (hL : (nodeLayout g items t idx a pos).Local (idx a) (t.nvRange (idx a)).1 (t.nvRange (idx a)).2
@@ -607,7 +608,7 @@ theorem adj_P (hty : items.type a = .P) : t.AdjBracket nv := by
     (t.neRange (idx a)).1 (t.neRange (idx a)).2
     (items.edgeChildren g pos (items.ordered g a (t.nvRange (idx a)).1 pos)) (by omega)
   rw [h.adj_rows ha hl hL hA hlo hhi, nodeLayout, hty, hPeq, r0, r1]
-  split_ifs <;> simp [List.pairwise_map] <;> first | omega | exact fun _ _ => by omega
+  split_ifs <;> simp [List.pairwise_map] <;> omega
 
 theorem adj_R (hst : items.StNumbered) (hty : items.type a = .R) : t.AdjBracket nv := by
   have hnv := (h.node a ha).nv_range
@@ -627,7 +628,7 @@ theorem adj_R (hst : items.StNumbered) (hty : items.type a = .R) : t.AdjBracket 
 
 end PerType
 
-theorem adj_node (hst : items.StNumbered) (hr : items.RepOK g) {a : ItemId} (ha : a < items.size)
+theorem adj_node (hst : items.StNumbered) {a : ItemId} (ha : a < items.size)
     {pos : Nat → Nat} (hl : RelabelLayout g items t idx a pos)
     (hA : t.adjBounds[2 * (t.nvRange (idx a)).1]! = 2 * (t.neRange (idx a)).1)
     {nv : Nat} (h1 : 1 < t.nVerts (idx a)) (hlo : (t.nvRange (idx a)).1 ≤ nv)
@@ -639,12 +640,9 @@ theorem adj_node (hst : items.StNumbered) (hr : items.RepOK g) {a : ItemId} (ha 
   · exact h.adj_F ha hl hA hlo hhi hty
   · exfalso; rw [h.nvList_V ha hty] at h1; simp at h1
   · obtain ⟨e, he, rfl⟩ := h.type_Q_eq ha hty
-    obtain ⟨u, v, -, -, hc, -, hne1⟩ := h.q_pair hr he
-    refine h.adj_QI ha hl hA hlo hhi (Or.inl hty) ?_ hne1
-    rcases hc with ⟨-, -, hl2⟩ | ⟨-, -, c, ⟨-, hl2⟩ | ⟨-, hl1, -⟩⟩
-    · rw [hl2]; rfl
-    · rw [hl2]; rfl
-    · rw [hl1] at h1; simp at h1
+    refine h.adj_QI ha hl hA hlo hhi (Or.inl hty) ?_ (h.nEdges_Q he)
+    have := h.nvList_Q_le he
+    omega
   · obtain ⟨u, v, -, hl2⟩ := h.nvList_I ha hty
     exact h.adj_QI ha hl hA hlo hhi (Or.inr hty) (by rw [hl2]; rfl) (h.nEdges_IO ha (Or.inl hty))
   · obtain ⟨v, -, hl1⟩ := h.nvList_O ha hty
@@ -655,7 +653,7 @@ theorem adj_node (hst : items.StNumbered) (hr : items.RepOK g) {a : ItemId} (ha 
 
 /-! ### Assembly -/
 
-theorem stOrder (hst : items.StNumbered) (hr : items.RepOK g)
+theorem stOrder (hst : items.StNumbered)
     (hA : ∀ n, n < t.size → t.adjBounds[2 * (t.nvRange n).1]! = 2 * (t.neRange n).1) :
     t.StOrder where
   st := by
@@ -671,20 +669,20 @@ theorem stOrder (hst : items.StNumbered) (hr : items.RepOK g)
     intro n hn
     obtain ⟨a, ha, rfl⟩ := h.idx_surj hn
     obtain ⟨pos, hl⟩ := (h.node a ha).layout
-    exact h.dom_node hst hr ha hl
+    exact h.dom_node hst ha hl
   adj := by
     intro nv n hnv hn h1
     obtain ⟨a, ha, rfl, hlo, hhi⟩ := h.nodeOfNv_range hnv hn
     obtain ⟨pos, hl⟩ := (h.node a ha).layout
-    exact h.adj_node hst hr ha hl (hA _ (h.idx_lt ha)) h1 hlo hhi
+    exact h.adj_node hst ha hl (hA _ (h.idx_lt ha)) h1 hlo hhi
 
 end RelabelOK
 
-/-- `relabel_st` (`Spqr/StSpec.lean`) from the per-node interface, modulo `relabel_node_spec`,
-`relabel_adj_spec`, and the extra Q-item facts of `Items.RepOK`. -/
-theorem relabel_st' (g : Graph) (items : Items) (hst : items.StNumbered) (h : items.WF g)
-    (hr : items.RepOK g) : (relabelTree g items).StOrder := by
+/-- `relabel_st` (`Spqr/StSpec.lean`) from the per-node interface, modulo `relabel_node_spec`
+(via `relabelTree_adj` for the CSR row starts). -/
+theorem relabel_st' (g : Graph) (items : Items) (hst : items.StNumbered) (h : items.WF g) :
+    (relabelTree g items).StOrder := by
   obtain ⟨idx, hok⟩ := relabelOK_of_wf g items h
-  exact hok.stOrder hst hr (relabel_adj_spec g items h (hok.rOriented hst)).1
+  exact hok.stOrder hst (relabelTree_adj g items h (hok.rOriented hst)).1
 
 end Spqr
