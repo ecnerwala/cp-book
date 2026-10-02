@@ -30,7 +30,7 @@ theorem dfsForest_spanning (g : Graph) (hg : g.WF) (vo eo : List Nat) (hvo : Ord
   dfsForest_spanning' hg hvo heo
 
 /-- Phase 3: relabelling a well-formed, R-oriented item tree gives a well-formed output ...
-(`RelabelWF.lean`, modulo `relabel_node_spec`). -/
+(`RelabelWF.lean`; `relabel_node_spec` is proved in `RelabelMain.lean`). -/
 theorem relabelTree_wf (g : Graph) (items : Items) (h : items.WF g) (hor : items.ROriented g) :
     (relabelTree g items).WF := by
   obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h

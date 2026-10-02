@@ -1,6 +1,7 @@
 import Mathlib.Data.List.Sort
 import Mathlib.Data.List.Nodup
 import Spqr.RelabelSpec
+import Spqr.RelabelMain
 import Spqr.ItemTree
 import Spqr.LayoutShape
 

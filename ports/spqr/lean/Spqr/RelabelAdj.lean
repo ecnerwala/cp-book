@@ -238,4 +238,6 @@ theorem relabelTree_adj (g : Graph) (items : Items) (h : items.WF g) (hor : item
   obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
   exact (RelabelAll.mk h hidx hnode).adj_spec hor
 
+alias relabel_adj_spec := relabelTree_adj
+
 end Spqr

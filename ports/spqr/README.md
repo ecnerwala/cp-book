@@ -271,15 +271,15 @@ flattened state machine:
     CheckPlanarLean.lean runs the decidable Spqr.Planar spec on the planar output
 
 Proof status: the specification and theorem statements are complete; the phase theorems
-(`walk_items_wf` (`WalkWF.lean`), `spqrTree_r_three_connected`, `relabel_node_spec`, and
+(`walk_items_wf` (`WalkWF.lean`), `spqrTree_r_three_connected`, and
 everything in `EarSpec.lean`) are currently `sorry` and are being proved per work package
-(`relabelTree_wf`, `relabelTree_represents` and `relabel_st` are proved from `Items.WF` modulo `relabel_node_spec`;
+(`relabelTree_wf`, `relabelTree_represents` and `relabel_st` are proved from `Items.WF` (the relabel fold characterization `relabel_node_spec` is proved in `RelabelMain.lean`);
 the three `Items.WF` clauses added for them, `q_root`/`o_parent`/`s_order`, are checked on the walk
 output by `lake build check_repok` + `CheckRepOK` over `gen.py` seeds) (see `PROOF.md` §6 for the plan and the natural-language proof they follow).
 Nothing about correctness is claimed until `#print axioms Spqr.spqrTree_represents` shows only the
 standard axioms.
 The st-order layer (`PROOF.md` §7) is stated in `StSpec.lean`/`StWalk.lean`: `spqrTree_st` is
-derived from `walk_st` (`sorry`) and `relabel_st` (`RelabelSt.lean`, proved modulo `relabel_node_spec`); proved there are `vchildren_nv_increasing`,
+derived from `walk_st` (`sorry`) and `relabel_st` (`RelabelSt.lean`, proved); proved there are `vchildren_nv_increasing`,
 `orderedChildren_sorted`, `orderedChildren_eq_of_ne_R`, `edgeChildren_dominance`,
 `layoutNode_r_bracket` (via `StLayout.lean`), the side-bookkeeping lemmas `pushTstack_onSide`,
 `merge_onSide`, `fold_onSide`, `finishTstackTop_stItem`, and the ear lowval lemmas

@@ -127,3 +127,14 @@ theorem relabel_node_spec_proved (hwf : items.WF g) :
     adj_dat_size := hc.adjDat_size }
 
 end Spqr.Ghost
+
+namespace Spqr
+
+/-- Phase 3, per node: `relabelTree` numbers a well-formed item tree in preorder and writes each
+node's record. -/
+theorem relabel_node_spec (g : Graph) (items : Items) (h : items.WF g) :
+    ∃ idx, idx rootItem = 0 ∧ RelabelIdx g items (relabelTree g items) idx ∧
+      ∀ i, i < items.size → RelabelNode g items (relabelTree g items) idx i :=
+  Ghost.relabel_node_spec_proved h
+
+end Spqr

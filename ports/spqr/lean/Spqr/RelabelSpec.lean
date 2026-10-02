@@ -175,21 +175,4 @@ structure RelabelIdx (g : Graph) (items : Items) (t : SpqrTree) (idx : ItemId �
   ne_last : t.neBounds[t.size]! = t.nodeEdges.size
   adj_dat_size : t.adjDat.size = 2 * t.nodeEdges.size
 
-/-- Phase 3, per node: `relabelTree` numbers a well-formed item tree in preorder and writes each
-node's record. -/
-theorem relabel_node_spec (g : Graph) (items : Items) (h : items.WF g) :
-    ∃ idx, idx rootItem = 0 ∧ RelabelIdx g items (relabelTree g items) idx ∧
-      ∀ i, i < items.size → RelabelNode g items (relabelTree g items) idx i := by
-  sorry
-
-/-- The CSR facts about `adjBounds` that need the R children oriented: each node's rows start at
-`2 neSt`, and the last bound is the end of `adjDat`. -/
-theorem relabel_adj_spec (g : Graph) (items : Items) (h : items.WF g) (hor : items.ROriented g) :
-    (∀ n, n < (relabelTree g items).size →
-      (relabelTree g items).adjBounds[2 * ((relabelTree g items).nvRange n).1]! =
-        2 * ((relabelTree g items).neRange n).1) ∧
-    (relabelTree g items).adjBounds[2 * (relabelTree g items).nodeVerts.size]! =
-      (relabelTree g items).adjDat.size := by
-  sorry
-
 end Spqr

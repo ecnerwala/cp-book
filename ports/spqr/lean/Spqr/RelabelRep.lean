@@ -1,4 +1,5 @@
 import Spqr.RelabelSpec
+import Spqr.RelabelMain
 import Spqr.ItemTree
 import Spqr.Proofs.Dfs
 import Spqr.LayoutShape
