@@ -1,6 +1,7 @@
 import Spqr.PlanarLayout
 import Spqr.PlanarWalk
 import Spqr.Proofs.PlanarUnion
+import Spqr.Proofs.PlanarOneSum
 
 /-!
 # Invariant P and the gluing lemmas
@@ -158,14 +159,110 @@ theorem twoSum_planar (n₁ n₂ : Nat) (es₁ es₂ : List (Nat × Nat)) (rs₁
     Planar (twoSumEdges n₁ es₁ es₂ e₁ e₂ u₁ v₁ u₂ v₂) (n₁ + n₂ - 2) := by
   sorry
 
+/-- Delete the vertex `w`, shifting the vertices after it down by one. -/
+def collapse (w x : Nat) : Nat := if x < w then x else x - 1
+
+theorem oneSumEdges_eq (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) (v₁ v₂ : Nat) (hv₁ : v₁ < n₁)
+    (hes₁ : ∀ p ∈ es₁, p.1 < n₁ ∧ p.2 < n₁) :
+    oneSumEdges n₁ es₁ es₂ v₁ v₂ =
+      mapEdges (collapse (n₁ + v₂) ∘ ident v₁ (n₁ + v₂)) (es₁ ++ shiftEdges n₁ es₂) := by
+  have hg : ∀ w, glueVert n₁ [(v₁, v₂)] w = collapse (n₁ + v₂) (ident v₁ (n₁ + v₂) (n₁ + w)) := by
+    intro w
+    unfold glueVert collapse ident
+    by_cases h : w = v₂
+    · subst h
+      rw [List.find?_cons_of_pos (by simp)]
+      simp
+      omega
+    · rw [List.find?_cons_of_neg (by simp [Ne.symm h]), List.find?_nil]
+      simp only [List.filter_cons, List.filter_nil, decide_eq_true_eq]
+      split_ifs <;> simp_all <;> omega
+  have hl : ∀ x, x < n₁ → collapse (n₁ + v₂) (ident v₁ (n₁ + v₂) x) = x := by
+    intro x hx
+    unfold collapse ident
+    simp only [show ¬x = n₁ + v₂ by omega, ↓reduceIte]
+    split_ifs <;> omega
+  unfold oneSumEdges glueEdges mapEdges
+  rw [List.map_append]
+  congr 1
+  · refine ((List.map_congr_left fun p hp => ?_).trans (List.map_id es₁)).symm
+    obtain ⟨h1, h2⟩ := hes₁ p hp
+    simp [hl _ h1, hl _ h2]
+  · unfold shiftEdges
+    rw [List.map_map]
+    apply List.map_congr_left
+    intro p hp
+    simp [Function.comp, hg]
+
 /-- **1-sum gluing.** Identifying one vertex of two planar embedded graphs keeps planarity:
-splice the rotation of `v₂` into that of `v₁` at an outer corner; the face count drops by one
-and so does the number of components. Admitted. -/
+`IsPlanarEmbedding.oneSum` (`Proofs/PlanarOneSum.lean`) splices the two rotations when both
+vertices have edges; otherwise the identification is a relabelling (`Planar.map`). -/
 theorem oneSum_planar (n₁ n₂ : Nat) (es₁ es₂ : List (Nat × Nat)) (rs₁ rs₂ : RotationSystem)
     (h₁ : IsPlanarEmbedding es₁ n₁ rs₁) (h₂ : IsPlanarEmbedding es₂ n₂ rs₂) (v₁ v₂ : Nat)
     (hv₁ : v₁ < n₁) (hv₂ : v₂ < n₂) :
     Planar (oneSumEdges n₁ es₁ es₂ v₁ v₂) (n₁ + n₂ - 1) := by
-  sorry
+  rw [oneSumEdges_eq n₁ es₁ es₂ v₁ v₂ hv₁ h₁.verts]
+  set w := n₁ + v₂ with hwdef
+  set es := es₁ ++ shiftEdges n₁ es₂ with hes
+  have hU := union_verts h₁.verts h₂.verts
+  have hw : v₁ ≠ w := by omega
+  have hcol : ∀ x y, x ≠ w → y ≠ w → collapse w x = collapse w y → x = y := by
+    intro x y hx hy h
+    unfold collapse at h
+    split_ifs at h <;> omega
+  have hcol_lt : ∀ x, x ≠ w → x < n₁ + n₂ → collapse w x < n₁ + n₂ - 1 := by
+    intro x hx hlt
+    unfold collapse
+    split_ifs <;> omega
+  by_cases hboth : HasEdge es₁ v₁ ∧ HasEdge es₂ v₂
+  · have hP := h₁.oneSum h₂ hboth.1 hboth.2
+    have hmap : mapEdges (collapse w ∘ ident v₁ w) es =
+        mapEdges (collapse w) (identEdges v₁ w es) := by
+      simp [mapEdges, identEdges, List.map_map, Function.comp_def]
+    rw [hmap]
+    have hev : ∀ p ∈ identEdges v₁ w es, p.1 < n₁ + n₂ ∧ p.2 < n₁ + n₂ := by
+      intro p hp
+      obtain ⟨q, hq, rfl⟩ := mem_identEdges.1 hp
+      have := hU q hq
+      simp only [ident]
+      split_ifs <;> omega
+    refine Planar.map hev ?_ ?_ hP
+    · intro p hp
+      obtain ⟨q, hq, rfl⟩ := mem_identEdges.1 hp
+      have := hU q hq
+      exact ⟨hcol_lt _ (ident_ne_b hw _) (hev _ hp).1, hcol_lt _ (ident_ne_b hw _) (hev _ hp).2⟩
+    · intro u v hu hv h
+      exact hcol u v (fun h => not_hasEdge_ident_b hw (h ▸ hu))
+        (fun h => not_hasEdge_ident_b hw (h ▸ hv)) h
+  · refine Planar.map hU ?_ ?_ ⟨_, h₁.union h₂⟩
+    · intro p hp
+      have := hU p hp
+      exact ⟨hcol_lt _ (ident_ne_b hw _) (by simp only [ident]; split_ifs <;> omega),
+        hcol_lt _ (ident_ne_b hw _) (by simp only [ident]; split_ifs <;> omega)⟩
+    · intro u v hu hv h
+      have h' := hcol _ _ (ident_ne_b hw u) (ident_ne_b hw v) h
+      rcases (ident_eq_iff hw).1 h' with h' | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact h'
+      · exfalso
+        apply hboth
+        refine ⟨?_, ?_⟩
+        · rcases hasEdge_union_iff.1 hu with h | ⟨v', hv', -⟩
+          · exact h
+          · omega
+        · rcases hasEdge_union_iff.1 hv with h | ⟨v', hv', h⟩
+          · have := h.lt_of h₁.verts; omega
+          · have : v' = v₂ := by omega
+            exact this ▸ h
+      · exfalso
+        apply hboth
+        refine ⟨?_, ?_⟩
+        · rcases hasEdge_union_iff.1 hv with h | ⟨v', hv', -⟩
+          · exact h
+          · omega
+        · rcases hasEdge_union_iff.1 hu with h | ⟨v', hv', h⟩
+          · have := h.lt_of h₁.verts; omega
+          · have : v' = v₂ := by omega
+            exact this ▸ h
 
 theorem disjointUnionEdges_eq (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) :
     disjointUnionEdges n₁ es₁ es₂ = es₁ ++ shiftEdges n₁ es₂ := by
