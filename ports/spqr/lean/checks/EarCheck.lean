@@ -1,0 +1,306 @@
+import Spqr.Ear
+import Spqr.ItemSpec
+import Spqr.EarInv
+/-!
+# Empirical check of `WalkState.EarFinish` (`Spqr/EarInv.lean`)
+
+Run with `lake env lean checks/EarCheck.lean` from `ports/spqr/lean` (not part of the library).
+
+`iTree`/`iOuts`/`iOut` re-implement `walkTree`/`walkOuts`/`walkOut` around the library's
+`finishEdge` (as in `checks/InvCheck.lean`) and, right before every `finishEdge curV d o
+origTstack hasVert`, evaluate each field of `EarFinish curV d o hasVert sub base` with
+`sub = tstack.take (len - origTstack)`, `base = tstack.drop (len - origTstack)` (the only split
+`EarAt` allows), plus the ear-bottom anchor (`eb_*`: `EarFinish.bottom`) and the shape after loops 1–2 (`t_*`/`t1_*`/`t2_*`:
+`EarFinish.loops`), recorded per chain bottom in `EB`.
+-/
+open Spqr WalkM
+instance : Inhabited Spqr.DfsTree := ⟨.node 0 []⟩
+instance : Inhabited Spqr.DfsOut := ⟨.back 0 0 .selfLoop⟩
+
+partial def edgesBelow (s : WalkState) (i : ItemId) : List Nat :=
+  (if 1 + s.g.nv ≤ i ∧ i < 1 + s.g.nv + s.g.ne then [i - 1 - s.g.nv] else []) ++
+    (s.items[i]!.ch).flatMap (edgesBelow s)
+def entryEdges (s : WalkState) (t : TEntry) : List Nat := (t.spans.1 ++ t.spans.2).flatMap (edgesBelow s)
+def inc (s : WalkState) (e v : Nat) : Bool := s.g.edges[e]!.1 == v || s.g.edges[e]!.2 == v
+def touches (s : WalkState) (E : List Nat) (v : Nat) : Bool := E.any (inc s · v)
+def isParent (s : WalkState) (p c : ItemId) : Bool := (s.items[p]!.ch).contains c
+def hasParent (s : WalkState) (c : ItemId) : Bool :=
+  (List.range s.items.size).any fun p => isParent s p c
+def subEdgesL (o : DfsOut) : List Nat :=
+  match o with
+  | .tree e _ child => e :: child.edges
+  | .back e _ _ => [e]
+def spanItems (t : TEntry) : List ItemId := t.spans.1 ++ t.spans.2
+def onSide (t : TEntry) (dir : Bool) : Bool := getSide t.spans (!dir) == []
+def showT (t : TEntry) : String := s!"({t.vStart},{t.topDepth},{t.firstIdx},{t.spans})"
+def sameT (a b : TEntry) : Bool := showT a == showT b
+
+structure V where
+  seed : Nat
+  curV : Nat
+  d : Nat
+  o : String
+  hasVert : Bool
+  kind : String
+  info : String
+deriving Repr
+
+def traceOn : Bool := false
+def earCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) : List V := Id.run do
+  let n := s.tstack.length
+  let sub := s.tstack.take (n - orig)
+  let base := s.tstack.drop (n - orig)
+  let dir := s.stackDir[d]!
+  let lowval := o.cls.lowval d
+  let oStr := s!"{if o.cls.isTree then "tree" else "back"} e={o.e} dest={o.dest} lv={lowval} t1={o.cls.isType1}"
+  let mut out : List V := []
+  if traceOn then out := [⟨seed, curV, d, oStr, hv, "TRACE", s!"orig={orig} dir={s.stackDir.toList.take (d+2)} sv={s.stackVerts.toList.take (d+2)} stack={s.tstack.map showT}"⟩]
+  let bad (k : String) (info : String) : V :=
+    ⟨seed, curV, d, oStr, hv, k, s!"{info} | orig={orig} dir={s.stackDir.toList.take (d+2)} sv={s.stackVerts.toList.take (d+2)} nv={s.g.nv} stack={s.tstack.map showT}"⟩
+  let E := fun t => entryEdges s t
+  let SE := subEdgesL o
+  if !o.cls.isTree && sub ≠ [] then out := bad "back_nil" (toString (sub.map showT)) :: out
+  for t in base do
+    if o.cls.isTree && t.vStart == o.dest then out := bad "base_bot" (showT t) :: out
+    if (E t).any (SE.contains ·) then out := bad "base_disj" (showT t) :: out
+  for t in sub do
+    if (E t).any (fun e => !SE.contains e) then out := bad "sub_edges" (showT t) :: out
+    if t.vStart == curV then out := bad "sub_bot" (showT t) :: out
+  for e in SE do
+    if e ≠ o.e && !sub.any (fun t => (E t).contains e) then out := bad "sub_cover" s!"e={e}" :: out
+  for k in List.range (d+1) do
+    for k' in List.range (d+1) do
+      if k < k' && s.stackVerts[k]! == s.stackVerts[k']! then out := bad "path" s!"{k} {k'}" :: out
+  let rec pw : List TEntry → Bool
+    | [] => true
+    | t :: rest => rest.all (fun t' => !(E t).any ((E t').contains ·)) && pw rest
+  if !pw s.tstack then out := bad "disj" "" :: out
+  let rec pws : List TEntry → Bool
+    | [] => true
+    | t :: rest => rest.all (fun t' => !(spanItems t).any ((spanItems t').contains ·)) && pws rest
+  if !pws s.tstack then out := bad "span_disj" "" :: out
+  let hi := sub.takeWhile fun t => d ≤ t.topDepth
+  let ret := lowval < d
+  if ret then
+    for t in hi do
+      if !onSide t dir then out := bad "loop1_side" (showT t) :: out
+      if (E t) ≠ [] && t.topDepth ≤ d + 1 && !touches s (E t) s.stackVerts[t.topDepth]! then
+        out := bad "loop1_touch" (showT t) :: out
+  for t in s.tstack do
+    if (E t) ≠ [] && !touches s (E t) t.vStart then out := bad "touch_bot" (showT t) :: out
+    if (spanItems t).contains (vertItem curV) then
+      if !hv then out := bad "vert_free.hv" (showT t) :: out
+      if !base.any (sameT t) then out := bad "vert_free.base" (showT t) :: out
+    if (spanItems t).contains (edgeItem s.g o.e) then out := bad "q_free" (showT t) :: out
+  if hv && !base.any (fun t => t.topDepth ≤ d && (spanItems t).contains (vertItem curV)) then
+    out := bad "vert" "" :: out
+  if hasParent s (edgeItem s.g o.e) then out := bad "q_root" "" :: out
+  if hasParent s (vertItem curV) then out := bad "v_root" "" :: out
+  if ret && o.cls.isType1 then
+    for t in base do
+      if t.vStart == curV && t.topDepth == lowval then
+        if !onSide t s.stackDir[lowval]! then out := bad "p_entry.side" (showT t) :: out
+        match spanItems t with
+        | [i] => if hasParent s i then out := bad "p_entry.root" (showT t) :: out
+        | _ => out := bad "p_entry.single" (showT t) :: out
+        for v in List.range s.g.nv do
+          if touches s (E t) v && v ≠ curV && v ≠ s.stackVerts[lowval]! &&
+              (List.range s.g.ne).any (fun e => inc s e v && !(E t).contains e) then
+            out := bad "p_entry.att" s!"{showT t} v={v}" :: out
+  if d ≤ lowval then
+    for t in sub do
+      for u in base do
+        for v in List.range s.g.nv do
+          if touches s (E t) v && touches s (E u) v && v ≠ curV then
+            out := bad "boundary" s!"{showT t} {showT u} v={v}" :: out
+  return out
+
+/-- Ear bottoms: `(y, (y,l) piece, V y)` recorded when the walk of `y` ends, if `y`'s own entries
+begin (bottom-up) with its vertex entry. -/
+abbrev EB := List (Nat × TEntry × TEntry)
+
+/-- Checks of the ear-bottom claim at a `finishEdge`: for a returning tree edge the child's entries
+end with `[(y, lowval) piece, V y]` as recorded for `y`; every recorded pair still on the stack is
+untouched (and adjacent). -/
+def ebCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (eb : EB) (s : WalkState) : List V := Id.run do
+  let n := s.tstack.length
+  let sub := s.tstack.take (n - orig)
+  let lowval := o.cls.lowval d
+  let oStr := s!"{if o.cls.isTree then "tree" else "back"} e={o.e} dest={o.dest} lv={lowval} t1={o.cls.isType1}"
+  let bad (k : String) (info : String) : V :=
+    ⟨seed, curV, d, oStr, hv, k, s!"{info} | orig={orig} sv={s.stackVerts.toList.take (d+2)} nv={s.g.nv} stack={s.tstack.map showT}"⟩
+  let mut out : List V := []
+  if o.cls.isTree && lowval < d then
+    match sub.reverse with
+    | vy :: py :: _ =>
+      match eb.find? (·.1 == vy.vStart) with
+      | some (_, p, v) =>
+        if !(sameT vy v && sameT py p) then out := bad "eb_sub_bottom" s!"rec=({showT p},{showT v})" :: out
+        if py.topDepth ≠ lowval then out := bad "eb_lowval" (showT py) :: out
+        if !onSide py s.stackDir[lowval]! then out := bad "eb_py_side" (showT py) :: out
+        if (spanItems py).any (hasParent s) then out := bad "eb_p_root" (showT py) :: out
+        if d ≥ vy.topDepth then out := bad "eb_vy_top" (showT vy) :: out
+        if !touches s (entryEdges s py) vy.vStart || !touches s (entryEdges s py) s.stackVerts[lowval]! then out := bad "eb_py_touch" (showT py) :: out
+        if py.vStart ≠ vy.vStart then out := bad "eb_vstart" (showT py) :: out
+        if spanItems vy ≠ [vertItem vy.vStart] then out := bad "eb_vspans" (showT vy) :: out
+        match spanItems py with
+        | [_] => pure ()
+        | _ => out := bad "eb_psingle" (showT py) :: out
+      | none => out := bad "eb_unrecorded" (showT vy ++ showT py) :: out
+    | _ => out := bad "eb_short" (toString (sub.map showT)) :: out
+  -- type-1 three-entry shape after loop 1 / loop 2 (`feS₂`), and the type-2 shape
+  if o.cls.isTree && lowval < d then
+    let s₂ := WalkState.feS₂ d o s
+    let n₂ := s₂.tstack.length
+    let sub₂ := s₂.tstack.take (n₂ - orig)
+    let E₂ := fun t => entryEdges s₂ t
+    match sub₂.reverse, sub.reverse with
+    | vy₂ :: py₂ :: _, vy :: py :: _ =>
+      if !(sameT vy₂ vy && sameT py₂ py) then out := bad "t_bottom_same" s!"{showT py₂} {showT vy₂}" :: out
+    | _, _ => pure ()
+    if o.cls.isType1 then
+      match sub₂ with
+      | [c, py, vy] =>
+        if py.topDepth ≠ lowval || py.vStart ≠ vy.vStart then out := bad "t1_py" (showT py) :: out
+        if spanItems vy ≠ [vertItem vy.vStart] then out := bad "t1_vy" (showT vy) :: out
+        match spanItems py with
+        | [_] => pure ()
+        | _ => out := bad "t1_py_single" (showT py) :: out
+        for v in List.range s₂.g.nv do
+          if touches s₂ (E₂ vy) v && v ≠ vy.vStart && !((List.range s₂.g.ne).all fun e => !inc s₂ e v || (E₂ vy).contains e) then
+            out := bad "t1_vy_bd" s!"v={v} {showT vy}" :: out
+        if c.topDepth < lowval || d < c.topDepth then out := bad "t1_cur_range" (showT c) :: out
+        -- cur ∪ py ∪ vy = subEdges
+        for e in subEdgesL o do
+          if !((E₂ c).contains e || (E₂ py).contains e || (E₂ vy).contains e) then out := bad "t1_cover" s!"e={e}" :: out
+        -- py's edges all end at stackVerts[lowval] or are interior; cur touches curV and o.dest
+        if !touches s₂ (E₂ c) curV then out := bad "t1_cur_touch_cur" (showT c) :: out
+        if !touches s₂ (E₂ c) o.dest then out := bad "t1_cur_touch_dest" (showT c) :: out
+        if !touches s₂ (E₂ py) s₂.stackVerts[lowval]! then out := bad "t1_py_touch_top" (showT py) :: out
+        if !touches s₂ (E₂ py) py.vStart then out := bad "t1_py_touch_bot" (showT py) :: out
+        if !onSide py s.stackDir[lowval]! then out := bad "t1_py_side" (showT py) :: out
+      | _ => out := bad "t1_shape" s!"hv={hv} {sub₂.map showT}" :: out
+    else
+      match sub₂.reverse with
+      | vy :: py :: _ =>
+        if py.topDepth ≠ lowval || py.vStart ≠ vy.vStart then out := bad "t2_py" (showT py) :: out
+        if spanItems vy ≠ [vertItem vy.vStart] then out := bad "t2_vy" (showT vy) :: out
+        match sub₂ with
+        | c :: _ => if c.topDepth < lowval || d < c.topDepth then out := bad "t2_cur_range" (showT c) :: out
+        | _ => pure ()
+      | _ => out := bad "t2_shape" s!"hv={hv} {sub₂.map showT}" :: out
+  -- untouched: every recorded `V y` still present as its own entry has the recorded piece above it
+  let rec scan : List TEntry → List V
+    | [] => []
+    | [_] => []
+    | a :: b :: rest =>
+      (match eb.find? (fun (y, _, _) => spanItems b == [vertItem y]) with
+       | some (_, p, v) => if sameT b v && sameT a p then [] else [bad "eb_touched" s!"{showT a} {showT b} rec=({showT p},{showT v})"]
+       | none => []) ++ scan (b :: rest)
+  out := scan s.tstack ++ out
+  for (y, _, v) in eb do
+    match s.tstack.getLast? with
+    | some b => if spanItems b == [vertItem y] && !sameT b v then out := bad "eb_touched_last" (showT b) :: out
+    | none => pure ()
+  return out
+
+mutual
+partial def iTree (seed : Nat) (t : DfsTree) (d : Nat) (eb : EB) (s : WalkState) : WalkState × EB × List V :=
+  match t with
+  | .node v outs =>
+    let orig := s.tstack.length
+    let s := { s with stackVerts := s.stackVerts.set! d v }
+    let (hv, s, eb, vs) := iOuts seed v d outs false eb s
+    let s := if hv then s else ((setStackDir d true *> pushVertTstack v d).run s).2
+    let subv := s.tstack.take (s.tstack.length - orig)
+    let eb := match subv.reverse with
+      | vy :: py :: _ => if spanItems vy == [vertItem v] then (v, py, vy) :: eb else eb
+      | _ => eb
+    (s, eb, vs)
+partial def iOuts (seed v d : Nat) (outs : List DfsOut) (hv : Bool) (eb : EB) (s : WalkState) : Bool × WalkState × EB × List V :=
+  match outs with
+  | [] => (hv, s, eb, [])
+  | o :: rest =>
+    let (hv, s, eb, vs) := iOut seed v d o hv eb s
+    let (hv', s', eb, vs') := iOuts seed v d rest hv eb s
+    (hv', s', eb, vs ++ vs')
+partial def iOut (seed v d : Nat) (o : DfsOut) (hv : Bool) (eb : EB) (s : WalkState) : Bool × WalkState × EB × List V :=
+  let lowval := o.cls.lowval d
+  let s := ((do let lowDir ← stackDir lowval; setStackDir d (if lowval ≥ d then false else !lowDir) : WalkM Unit).run s).2
+  let (hv, s) := if !hv && lowval < d && o.cls.isType1 then (true, ((pushVertTstack v d).run s).2) else (hv, s)
+  let orig := s.tstack.length
+  let (s, eb, vs) := match o with
+    | .tree _ _ child => iTree seed child (d+1) eb { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
+    | .back .. => (s, eb, [])
+  let vs := vs ++ earCheck seed v d o orig hv s ++ ebCheck seed v d o orig hv eb s
+  let (hv', s) := (finishEdge v d o orig hv).run s
+  (hv', s, eb, vs)
+end
+
+def iForest (seed : Nat) (forest : List DfsTree) (s : WalkState) : WalkState × List V :=
+  forest.foldl (fun (s, vs) t =>
+    let (s, _, vs') := iTree seed t 0 [] s
+    let s := ((popTstack >>= fun top => modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }).run s).2
+    (s, vs ++ vs')) (s, [])
+
+def lcg (x : Nat) : Nat := (x * 6364136223846793005 + 1442695040888963407) % 2^64
+def randGraph (seed : Nat) : Graph := Id.run do
+  let mut x := lcg (seed + 12345)
+  let nv := 2 + (x >>> 33) % 11
+  x := lcg x
+  let ne := 1 + (x >>> 33) % 24
+  let mut es : Array (Nat × Nat) := #[]
+  for _ in List.range ne do
+    x := lcg x
+    let a := (x >>> 33) % nv
+    x := lcg x
+    let b := (x >>> 33) % nv
+    es := es.push (a, b)
+  return ⟨nv, es⟩
+
+def runSeed (seed : Nat) : Bool × List V :=
+  let g := randGraph seed
+  let f := g.dfsForest [] []
+  let (s, vs) := iForest seed f (WalkState.init g false)
+  let ref := g.walk false f
+  (s.items.toList.map (fun it => (it.vs, it.ch)) == ref.items.toList.map (fun it => (it.vs, it.ch)) && s.tstack.length == ref.tstack.length, vs)
+
+def summarize (lo hi : Nat) : IO Unit := do
+  let mut counts : List (String × Nat) := []
+  let mut okAll := true
+  let mut shown : List (String × String) := []
+  let mut checks := 0
+  for seed in List.range' lo (hi - lo) do
+    let (ok, vs) := runSeed seed
+    if !ok then okAll := false
+    checks := checks + 1
+    for v in vs do
+      counts := match counts.find? (·.1 == v.kind) with
+        | some _ => counts.map fun (k, n) => if k == v.kind then (k, n+1) else (k, n)
+        | none => counts ++ [(v.kind, 1)]
+      if (shown.filter (·.1 == v.kind)).length < 1 then
+        shown := shown ++ [(v.kind, s!"{repr v} g={repr (randGraph seed).edges}")]
+  IO.println s!"instrumentation matches library walk: {okAll}"
+  IO.println s!"violations by kind: {counts}"
+  for (_, l) in shown do IO.println l
+
+
+/-! ### Trace of one seed -/
+mutual
+partial def showTree (t : DfsTree) (ind : String) : String :=
+  match t with
+  | .node v outs => s!"{ind}{v}\n" ++ String.join (outs.map (showOut · ind))
+partial def showOut (o : DfsOut) (ind : String) : String :=
+  match o with
+  | .back e dest cls => s!"{ind}  back e{e}->{dest} {repr cls}\n"
+  | .tree e cls child => s!"{ind}  tree e{e} {repr cls}\n" ++ showTree child (ind ++ "    ")
+end
+def traceSeed (seed : Nat) : IO Unit := do
+  let g := randGraph seed
+  IO.println s!"g = {repr g.edges} nv={g.nv}"
+  for t in g.dfsForest [] [] do IO.println (showTree t "")
+  let (_, vs) := runSeed seed
+  for v in vs do
+    if v.kind == "TRACE" then IO.println s!"finishEdge curV={v.curV} d={v.d} {v.o} hv={v.hasVert} {v.info}"
+#eval summarize 0 3000
+
