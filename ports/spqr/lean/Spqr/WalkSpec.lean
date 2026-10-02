@@ -414,7 +414,7 @@ theorem Tree.modify {g : Graph} (ht : Items.Tree g items) (j : ItemId) (f : Item
     fun e he => by rw [hT]; exact edge e he, fun i hi hs => by rw [hT]; exact node i hi (by simpa using hs),
     by rw [hP]; simpa using ch_lt, by rw [hP]; simpa using uniq, by rw [hP]; exact rnp,
     fun p => by rw [hC]; exact nodup p, fun i hi => by rw [hB]; exact reach i (by simpa using hi),
-    fun v c h => by rw [hT]; exact vch v c (by rwa [hP] at h),
+    fun v c hv h => by rw [hT]; exact vch v c hv (by rwa [hP] at h),
     fun c h => by rw [hT]; exact rch c (by rwa [hP] at h)⟩
 
 theorem node_of_type_P {g : Graph} (ht : Items.Tree g items) {i : ItemId} (hi : i < items.size)
@@ -851,14 +851,6 @@ theorem finishEdge_inv (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert :
 /-- The whole walk preserves the invariant. -/
 theorem walkTree_inv (t : DfsTree) (d : Nat) (s : WalkState) (h : s.Inv) :
     ((walkTree t d).run s).2.Inv := by
-  sorry
-
-/-- Completeness: after the walk, the allocated nodes partition the edges (every edge is below
-exactly one child chain from the root) — the `Items.Tree` content of `Items.WF`. -/
-theorem walk_nodes_partition (g : Graph) (tern : Bool) (forest : List DfsTree) :
-    let s := g.walk tern forest
-    ∀ e, e < g.ne → ∃ p, Items.IsParent s.items p (edgeItem g e) ∧
-      ∀ p', Items.IsParent s.items p' (edgeItem g e) → p' = p := by
   sorry
 
 end Spqr

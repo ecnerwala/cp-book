@@ -1239,9 +1239,9 @@ theorem walk_tree (g : Graph) (ternarize : Bool) (forest : List DfsTree) (hnv : 
     v_children := ht.v_children
     root_children := walk_root_children g ternarize forest hf }
 
-/-- The partition fact `walk_nodes_partition` (WalkSpec.lean) states, under the forest hypotheses
-it needs (it is false for e.g. `forest = []`). -/
-theorem walk_nodes_partition' (g : Graph) (ternarize : Bool) (forest : List DfsTree)
+/-- Completeness: after the walk every edge is below exactly one child chain from the root — the
+`Items.Tree` content of `Items.WF` (false without the forest hypotheses, e.g. for `forest = []`). -/
+theorem walk_nodes_partition (g : Graph) (ternarize : Bool) (forest : List DfsTree)
     (hf : ForestOK g forest)
     (hvcov : ∀ v, v < g.nv → v ∈ forest.flatMap DfsTree.verts)
     (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
