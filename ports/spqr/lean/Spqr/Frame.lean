@@ -160,39 +160,36 @@ theorem finishEdge_eq (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : 
 
 /-! ### Stack shapes -/
 
-/-- The bottom entry (if any) is at or above depth `d`. -/
-def Inv1 (d : Nat) (l : List TEntry) : Prop := ∀ e ∈ l.getLast?, e.topDepth ≤ d
+/-- Above the first entry strictly above depth `d`, the stack consists of units: a single entry at
+depth `d`, or a vertex entry (depth `> d`) sitting on its tree-edge entry (depth `≥ d`). -/
+inductive Units (d : Nat) : List TEntry → Prop
+  | nil : Units d []
+  | single {e : TEntry} {l : List TEntry} : e.topDepth = d → Units d l → Units d (e :: l)
+  | pair {y z : TEntry} {l : List TEntry} : d < y.topDepth → d ≤ z.topDepth → Units d l →
+      Units d (y :: z :: l)
+
+/-- Loop-1 shape: units down to an entry strictly above depth `d`. -/
+def Inv1 (d : Nat) (l : List TEntry) : Prop :=
+  ∃ hi b lo, l = hi ++ b :: lo ∧ b.topDepth < d ∧ Units d hi
 
 /-- The bottom entry (if any) was opened at or before edge index `fo`. -/
 def Inv2 (fo : Nat) (l : List TEntry) : Prop := ∀ e ∈ l.getLast?, e.firstIdx ≤ fo
 
-theorem Inv1.of_le {d : Nat} {x y y' : TEntry} {rest : List TEntry} (h : Inv1 d (x :: y :: rest))
-    (hy : y'.topDepth ≤ y.topDepth) : Inv1 d (y' :: rest) := by
-  intro e he
-  cases rest with
-  | nil => simp at he; subst he; exact Nat.le_trans hy (h y (by simp))
-  | cons z rest => exact h e (by simpa using he)
+theorem Inv1.single_tail {d : Nat} {y : TEntry} {l : List TEntry} (h : Inv1 d (y :: l))
+    (hy : y.topDepth = d) : Inv1 d l := by
+  obtain ⟨hi, b, lo, hl, hb, hu⟩ := h
+  cases hu with
+  | nil => simp at hl; obtain ⟨rfl, rfl⟩ := hl; omega
+  | single he hu => simp at hl; obtain ⟨rfl, rfl⟩ := hl; exact ⟨_, _, _, rfl, hb, hu⟩
+  | pair hy' _ _ => simp at hl; obtain ⟨rfl, -⟩ := hl; omega
 
-theorem Inv1.cons_of_le {d : Nat} {x x' : TEntry} {rest : List TEntry} (h : Inv1 d (x :: rest))
-    (hx : x'.topDepth ≤ x.topDepth) : Inv1 d (x' :: rest) := by
-  intro e he
-  cases rest with
-  | nil => simp at he; subst he; exact Nat.le_trans hx (h x (by simp))
-  | cons z rest => exact h e (by simpa using he)
-
-theorem Inv1.cons_cons_of_le {d : Nat} {x y y' : TEntry} {rest : List TEntry}
-    (h : Inv1 d (x :: y :: rest)) (hy : y'.topDepth ≤ y.topDepth) : Inv1 d (x :: y' :: rest) := by
-  intro e he
-  cases rest with
-  | nil => simp at he; subst he; exact Nat.le_trans hy (h y (by simp))
-  | cons z rest => exact h e (by simpa using he)
-
-theorem Inv1.push {d : Nat} {x : TEntry} {l : List TEntry} (h : Inv1 d l) (hx : x.topDepth ≤ d) :
-    Inv1 d (x :: l) := by
-  intro e he
-  cases l with
-  | nil => simp at he; subst he; exact hx
-  | cons z rest => exact h e (by simpa using he)
+theorem Inv1.pair_tail {d : Nat} {y : TEntry} {l : List TEntry} (h : Inv1 d (y :: l))
+    (hy : d < y.topDepth) : ∃ z l', l = z :: l' ∧ Inv1 d l' := by
+  obtain ⟨hi, b, lo, hl, hb, hu⟩ := h
+  cases hu with
+  | nil => simp at hl; obtain ⟨rfl, rfl⟩ := hl; omega
+  | single he _ => simp at hl; obtain ⟨rfl, -⟩ := hl; omega
+  | pair _ _ hu => simp at hl; obtain ⟨rfl, rfl⟩ := hl; exact ⟨_, _, rfl, _, _, _, rfl, hb, hu⟩
 
 theorem Inv2.of_eq {fo : Nat} {x y y' : TEntry} {rest : List TEntry} (h : Inv2 fo (x :: y :: rest))
     (hy : y'.firstIdx = y.firstIdx) : Inv2 fo (y' :: rest) := by
@@ -289,12 +286,14 @@ theorem Sim.loop1Cond (d : Nat) (hB : ∀ e ∈ bot, e.topDepth < d) :
   | [_], b :: _, hB => simp [List.head!, Nat.not_le.2 (hB b (by simp))]
   | _ :: _ :: _, _, _ => simp [List.head!]
 
-/-- Loop 1 state: at most `n` entries, bottom entry at depth `≤ d`. -/
-def I1 (d n : Nat) (s : WalkState) : Prop := s.tstack.length ≤ n ∧ s.tstack ≠ [] ∧ Inv1 d s.tstack
+/-- Loop 1 state: at most `n` entries, loop-1 shape below the top. -/
+def I1 (d n : Nat) (s : WalkState) : Prop :=
+  s.tstack.length ≤ n ∧ s.tstack ≠ [] ∧ Inv1 d s.tstack.tail
 
 theorem Sim.loop1Type (d : Nat) (edgeDir : Bool) (n : Nat) :
     Sim bot (fun s => I1 d (n + 1) s ∧ 2 ≤ s.tstack.length ∧ d ≤ s.tstack.tail.head!.topDepth)
-      (loop1Type d edgeDir) (loop1Type d edgeDir) fun a a' s => a = a' ∧ 2 ≤ s.tstack.length ∧ I1 d (n + 1) s := by
+      (loop1Type d edgeDir) (loop1Type d edgeDir) fun a a' s =>
+        a = a' ∧ 2 ≤ s.tstack.length ∧ s.tstack.length ≤ n + 1 ∧ Inv1 d s.tstack.tail.tail := by
   unfold Spqr.loop1Type
   refine Sim.bind_eq (Sim.sp (Sim.nxt ?_)) fun t => ?_
   · exact fun s h => h.2.1
@@ -315,10 +314,10 @@ theorem Sim.loop1Type (d : Nat) (edgeDir : Bool) (n : Nat) :
       obtain ⟨hty, rfl⟩ := h0
       obtain ⟨-, rfl⟩ := h1
       have hl' : s.tstack = x :: y :: rest := by rw [h2.2]; exact hl
-      rw [hl']
-      cases rest with
-      | nil => exact absurd (hs.1.2.2 y (by simp [hl])) (Nat.not_le.2 (hty ▸ ht))
-      | cons z rest => simp
+      have hinv := hs.1.2.2
+      rw [hl] at hinv
+      obtain ⟨z, rest', rfl, -⟩ := hinv.pair_tail (hty ▸ ht)
+      rw [hl']; simp
     refine Sim.pure _ _ fun s h => ⟨rfl, ?_⟩
     obtain ⟨s₃, ⟨s₂, ⟨s₁, ⟨s₀, hs, h0⟩, h1⟩, h2⟩, h3⟩ := h
     simp only [run_nxt, run_setStackDir, Prod.mk.injEq] at h0 h1 h2
@@ -331,16 +330,13 @@ theorem Sim.loop1Type (d : Nat) (edgeDir : Bool) (n : Nat) :
     obtain ⟨-, rfl⟩ := h1
     have hl' : s₃.tstack = x :: y :: rest := by rw [h2.2]; exact hl
     have e3 : s = (WalkM.mergeTstackTops.run s₃).2 := congrArg Prod.snd h3
-    cases rest with
-    | nil => exact absurd (hs.1.2.2 y (by simp [hl])) (Nat.not_le.2 (hty ▸ ht))
-    | cons z rest =>
-      obtain ⟨y', hm, -, hy, -⟩ := mergeTstackTops_run s₃ hl'
-      rw [e3, hm]
-      have hlen := hs.1.1; have hinv := hs.1.2.2
-      rw [hl] at hlen hinv
-      refine ⟨by simp, by simp at hlen ⊢; omega, by simp, ?_⟩
-      simp only
-      exact hinv.of_le hy
+    have hinv := hs.1.2.2
+    have hlen := hs.1.1
+    rw [hl] at hinv hlen
+    obtain ⟨z, rest', rfl, hinv'⟩ := hinv.pair_tail (hty ▸ ht)
+    obtain ⟨y', hm, -, -, -⟩ := mergeTstackTops_run s₃ hl'
+    rw [e3, hm]
+    refine ⟨by simp, by simp at hlen ⊢; omega, by simpa using hinv'⟩
   · refine Sim.bind_eq (Sim.sp (Sim.nxt fun s h => ?_)) fun a => ?_
     · obtain ⟨s₀, hs, h0⟩ := h
       simp only [run_nxt, Prod.mk.injEq] at h0
@@ -351,10 +347,19 @@ theorem Sim.loop1Type (d : Nat) (edgeDir : Bool) (n : Nat) :
       rw [h1.2, h0.2]; exact List.ne_nil_of_length_pos (by have := hs.2.1; omega)
     have hQ : ∀ s, (∃ s₁, (∃ s₀, (∃ s', (I1 d (n + 1) s' ∧ 2 ≤ s'.tstack.length ∧
         d ≤ s'.tstack.tail.head!.topDepth) ∧ (t, s₀) = WalkM.nxt.run s') ∧ (a, s₁) = WalkM.nxt.run s₀) ∧
-        (b, s) = WalkM.cur.run s₁) → 2 ≤ s.tstack.length ∧ I1 d (n + 1) s := by
+        (b, s) = WalkM.cur.run s₁) →
+        2 ≤ s.tstack.length ∧ s.tstack.length ≤ n + 1 ∧ Inv1 d s.tstack.tail.tail := by
       rintro s ⟨s₁, ⟨s₀, ⟨s', hs, h0⟩, h1⟩, h2⟩
       simp only [run_nxt, run_cur, Prod.mk.injEq] at h0 h1 h2
-      rw [h2.2, h1.2, h0.2]; exact ⟨hs.2.1, hs.1⟩
+      rw [h2.2, h1.2, h0.2]
+      obtain ⟨x, y, rest, hl⟩ : ∃ x y rest, s'.tstack = x :: y :: rest := by
+        match hl : s'.tstack, hs.2.1 with
+        | x :: y :: l, _ => exact ⟨x, y, l, rfl⟩
+      have hlen := hs.1.1; have hinv := hs.1.2.2; have hd := hs.2.2
+      rw [h0.1, hl] at ht
+      rw [hl] at hlen hinv hd ⊢
+      simp only [List.tail_cons, List.head!] at hinv hd ht ⊢
+      exact ⟨by simp, hlen, hinv.single_tail (by omega)⟩
     exact Sim.ite _ _ (fun _ _ => Iff.rfl) (fun _ _ => Sim.pure _ _ fun s h => ⟨rfl, hQ s h⟩)
       fun _ _ => Sim.pure _ _ fun s h => ⟨rfl, hQ s h⟩
 
@@ -396,15 +401,13 @@ theorem Sim.loop1Body (d : Nat) (edgeDir : Bool) (n : Nat) :
       finishTstackTop_run item s₂ (x := y'') (rest := rest) (by rw [e1, hm])
     have e2 : s = ((WalkM.finishTstackTop item).run s₂).2 := congrArg Prod.snd h2
     rw [e2, hf]
-    have hlen := hs.2.1; have hinv := hs.2.2.2
+    have hlen := hs.2.1; have hinv := hs.2.2
     rw [hl] at hlen hinv
-    refine ⟨by simp at hlen ⊢; omega, by simp, ?_⟩
-    simp only
-    exact (hinv.of_le (y' := y''') (by omega)).cons_of_le (Nat.le_refl _) |>.cons_of_le (Nat.le_refl _)
+    exact ⟨by simp at hlen ⊢; omega, by simp, by simpa using hinv⟩
 
 /-- Loop 1 exit: fewer than two entries, or the entry below the top is above depth `d`. -/
 def Q1 (d : Nat) (s : WalkState) : Prop :=
-  s.tstack ≠ [] ∧ Inv1 d s.tstack ∧ ¬ (2 ≤ s.tstack.length ∧ d ≤ s.tstack.tail.head!.topDepth)
+  s.tstack ≠ [] ∧ Inv1 d s.tstack.tail ∧ ¬ (2 ≤ s.tstack.length ∧ d ≤ s.tstack.tail.head!.topDepth)
 
 theorem Sim.loop1 (d : Nat) (edgeDir : Bool) (hB : ∀ e ∈ bot, e.topDepth < d) (n m : Nat)
     (h : n ≤ m) :
@@ -432,16 +435,16 @@ theorem Sim.closeEars (nxtV d e : Nat) (edgeDir : Bool) (hB : ∀ e ∈ bot, e.t
   rintro s ⟨⟨s₀, hs, h0⟩, rfl⟩
   rw [run_pushEdgeTstack, Prod.mk.injEq] at h0
   obtain ⟨-, rfl⟩ := h0
-  exact ⟨Nat.le_refl _, by simp, hs.push (Nat.le_refl _)⟩
+  exact ⟨Nat.le_refl _, by simp, by simpa using hs⟩
 
 /-! ### Loop 2: merge ears whose first back edge is after `fo` -/
 
-/-- Loop 2 state: at most `n` nonempty entries, bottom entry at depth `≤ d` with `firstIdx ≤ fo`. -/
-def I2 (d fo n : Nat) (s : WalkState) : Prop :=
-  s.tstack.length ≤ n ∧ s.tstack ≠ [] ∧ Inv1 d s.tstack ∧ Inv2 fo s.tstack
+/-- Loop 2 state: at most `n` nonempty entries, bottom entry with `firstIdx ≤ fo`. -/
+def I2 (fo n : Nat) (s : WalkState) : Prop :=
+  s.tstack.length ≤ n ∧ s.tstack ≠ [] ∧ Inv2 fo s.tstack
 
-def Q2 (d fo : Nat) (s : WalkState) : Prop :=
-  s.tstack ≠ [] ∧ Inv1 d s.tstack ∧ Inv2 fo s.tstack ∧ s.tstack.head!.firstIdx ≤ fo
+def Q2 (fo : Nat) (s : WalkState) : Prop :=
+  s.tstack ≠ [] ∧ Inv2 fo s.tstack ∧ s.tstack.head!.firstIdx ≤ fo
 
 theorem run_loop2Cond (fo : Nat) (s : WalkState) :
     (loop2Cond fo).run s = (decide (s.tstack.head!.firstIdx > fo), s) := rfl
@@ -455,9 +458,9 @@ theorem Sim.loop2Cond (fo : Nat) (hP : ∀ s, P s → s.tstack ≠ []) :
   | nil => exact absurd rfl (hP _ hs)
   | cons x l => exact ⟨_, rfl, rfl, by simp, by simp⟩
 
-theorem Sim.loop2Body (d fo n : Nat) :
-    Sim bot (fun s => I2 d fo (n + 1) s ∧ 2 ≤ s.tstack.length) WalkM.mergeTstackTops WalkM.mergeTstackTops
-      fun _ _ s => I2 d fo n s := by
+theorem Sim.loop2Body (fo n : Nat) :
+    Sim bot (fun s => I2 fo (n + 1) s ∧ 2 ≤ s.tstack.length) WalkM.mergeTstackTops WalkM.mergeTstackTops
+      fun _ _ s => I2 fo n s := by
   refine Sim.mono (Sim.sp (Sim.mergeTstackTops ?_)) (fun _ => id) ?_
   · exact fun s h => h.2
   rintro _ _ s ⟨-, s₀, hs, h0⟩
@@ -467,46 +470,46 @@ theorem Sim.loop2Body (d fo n : Nat) :
   obtain ⟨y', hm, -, hy, hf⟩ := mergeTstackTops_run s₀ hl
   have e : s = (WalkM.mergeTstackTops.run s₀).2 := congrArg Prod.snd h0
   rw [e, hm]
-  obtain ⟨⟨hn, -, h1, h2⟩, -⟩ := hs
-  rw [hl] at hn h1 h2
-  exact ⟨by simp at hn ⊢; omega, by simp, h1.of_le hy, h2.of_eq hf⟩
+  obtain ⟨⟨hn, -, h2⟩, -⟩ := hs
+  rw [hl] at hn h2
+  exact ⟨by simp at hn ⊢; omega, by simp, h2.of_eq hf⟩
 
-theorem Sim.loop2 (d fo n m : Nat) (h : n ≤ m) :
-    Sim bot (I2 d fo n) (WalkM.loop m (Spqr.loop2Cond fo) WalkM.mergeTstackTops)
-      (WalkM.loop n (Spqr.loop2Cond fo) WalkM.mergeTstackTops) fun _ _ s => Q2 d fo s :=
-  Sim.loop (I2 d fo) (fun n s => I2 d fo n s ∧ 2 ≤ s.tstack.length) (Q2 d fo) _ _ _ _ (fun _ => rfl)
+theorem Sim.loop2 (fo n m : Nat) (h : n ≤ m) :
+    Sim bot (I2 fo n) (WalkM.loop m (Spqr.loop2Cond fo) WalkM.mergeTstackTops)
+      (WalkM.loop n (Spqr.loop2Cond fo) WalkM.mergeTstackTops) fun _ _ s => Q2 fo s :=
+  Sim.loop (I2 fo) (fun n s => I2 fo n s ∧ 2 ≤ s.tstack.length) (Q2 fo) _ _ _ _ (fun _ => rfl)
     (fun n => Sim.mono (Sim.sp (Sim.loop2Cond fo fun s h => h.2.1)) (fun _ => id)
       fun b b' s ⟨⟨hb, ht, hf⟩, s₀, hs, h0⟩ => by
         simp only [run_loop2Cond, Prod.mk.injEq] at h0
         obtain ⟨rfl, rfl⟩ := h0
-        refine ⟨hb, fun h => ⟨hs, ?_⟩, fun h => ⟨hs.2.1, hs.2.2.1, hs.2.2.2, hf h⟩⟩
+        refine ⟨hb, fun h => ⟨hs, ?_⟩, fun h => ⟨hs.2.1, hs.2.2, hf h⟩⟩
         have := ht h
-        match hl : s.tstack, hs.2.1, hs.2.2.2, this with
+        match hl : s.tstack, hs.2.1, hs.2.2, this with
         | [x], _, h2, h3 => exact absurd (h2 x (by simp)) (by simp [List.head!] at h3; omega)
         | _ :: _ :: _, _, _, _ => simp)
     (fun s ⟨⟨hl, _⟩, h2⟩ => by omega)
-    (fun n => Sim.loop2Body d fo n) n m h
+    (fun n => Sim.loop2Body fo n) n m h
 
 theorem Sim.mergeLate (d : Nat) :
-    Sim bot (fun s => s.tstack ≠ [] ∧ Inv1 d s.tstack ∧ Inv2 s.firstOccurrence[d]! s.tstack)
-      (mergeLate d) (mergeLate d) fun b b' s => b = b' ∧ s.tstack ≠ [] ∧ Inv1 d s.tstack := by
+    Sim bot (fun s => s.tstack ≠ [] ∧ Inv2 s.firstOccurrence[d]! s.tstack)
+      (mergeLate d) (mergeLate d) fun b b' s => b = b' ∧ s.tstack ≠ [] := by
   unfold Spqr.mergeLate
   refine Sim.bind_get fun a => ?_
   simp only [lift_firstOccurrence]
   refine Sim.bind_eq (Sim.sp (Sim.cur fun s h => h.1.1)) fun c => ?_
   refine Sim.ite _ _ (fun _ _ => Iff.rfl) (fun _ _ => ?_) fun _ _ => ?_
   · refine Sim.bind_tstackSize fun n => ?_
-    refine Sim.seq (Sim.mono (Sim.loop2 d _ n (n + bot.length) (by omega)) ?_ fun _ _ _ h => h) ?_
+    refine Sim.seq (Sim.mono (Sim.loop2 _ n (n + bot.length) (by omega)) ?_ fun _ _ _ h => h) ?_
     · rintro s ⟨⟨s₀, ⟨hs, rfl⟩, h0⟩, rfl⟩
       simp only [run_cur, Prod.mk.injEq] at h0
       obtain ⟨-, rfl⟩ := h0
-      exact ⟨Nat.le_refl _, hs.1, hs.2.1, hs.2.2⟩
-    exact Sim.pure _ _ fun s h => ⟨rfl, h.1, h.2.1⟩
+      exact ⟨Nat.le_refl _, hs.1, hs.2⟩
+    exact Sim.pure _ _ fun s h => ⟨rfl, h.1⟩
   · refine Sim.pure _ _ ?_
     rintro s ⟨s₀, ⟨hs, rfl⟩, h0⟩
     simp only [run_cur, Prod.mk.injEq] at h0
     obtain ⟨-, rfl⟩ := h0
-    exact ⟨rfl, hs.1, hs.2.1⟩
+    exact ⟨rfl, hs.1⟩
 
 /-! ### The P-check and the vertex push -/
 
@@ -758,9 +761,9 @@ theorem Sim.finishTree (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert e
     exact ⟨hq, hw⟩
   refine Sim.bind_eq (Q := fun _ s₃ => s₃.tstack ≠ [] ∧ (hasVert = true → 3 ≤ s₃.tstack.length ∧
       (o.cls.isType1 = false → origTstack + 3 ≤ s₃.tstack.length)))
-    (Sim.mono (Sim.sp (Sim.mono (Sim.mergeLate d) (fun s h => ⟨h.1.1, h.1.2.1, h.2.1⟩)
+    (Sim.mono (Sim.sp (Sim.mono (Sim.mergeLate d) (fun s h => ⟨h.1.1, h.2.1⟩)
       fun _ _ _ h => h)) (fun _ => id) ?_) fun isSingle => ?_
-  · rintro b b' s₃ ⟨⟨hb, hne, -⟩, s₂, ⟨-, -, hw⟩, h2⟩
+  · rintro b b' s₃ ⟨⟨hb, hne⟩, s₂, ⟨-, -, hw⟩, h2⟩
     have e : s₃ = ((Spqr.mergeLate d).run s₂).2 := congrArg Prod.snd h2
     subst e
     exact ⟨hb, hne, hw⟩
