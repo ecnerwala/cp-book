@@ -232,6 +232,80 @@ theorem vert_stepC_one {es : List (Nat × Nat)} (ht : rs.Total) (hv : rs.SameVer
 
 end RotationSystem
 
+/-! ### Shifted permutations, parity -/
+
+/-- `f` transported to act on `[n, ∞)`. -/
+def shift (n : Nat) (f : Nat → Nat) (q : Nat) : Nat := if q < n then q else n + f (q - n)
+
+theorem shift_add (n : Nat) (f : Nat → Nat) (a : Nat) : shift n f (n + a) = n + f a := by
+  simp [shift]
+theorem shift_of_lt {n q : Nat} (f : Nat → Nat) (h : q < n) : shift n f q = q := by simp [shift, h]
+
+theorem isPermOn_shift {f : Nat → Nat} {S : Finset Nat} (hf : IsPermOn f S) (n : Nat) :
+    IsPermOn (shift n f) (S.image (n + ·)) where
+  maps q hq := by
+    rw [Finset.mem_image] at hq ⊢
+    obtain ⟨a, ha, rfl⟩ := hq
+    exact ⟨f a, hf.maps a ha, (shift_add n f a).symm⟩
+  inj q hq r hr h := by
+    rw [Finset.mem_image] at hq hr
+    obtain ⟨a, ha, rfl⟩ := hq; obtain ⟨b, hb, rfl⟩ := hr
+    rw [shift_add, shift_add] at h
+    rw [hf.inj a ha b hb (Nat.add_left_cancel h)]
+  fix q hq := by
+    rw [Finset.mem_image] at hq
+    by_cases h : q < n
+    · exact shift_of_lt f h
+    · have : f (q - n) = q - n := hf.fix _ (fun hm => hq ⟨q - n, hm, by omega⟩)
+      unfold shift; rw [if_neg h, this]; omega
+
+theorem orbitCount_shift {f : Nat → Nat} {S : Finset Nat} (hf : IsPermOn f S) (n : Nat) :
+    orbitCount (shift n f) (S.image (n + ·)) = orbitCount f S :=
+  orbitCount_congr hf (isPermOn_shift hf n) (fun _ _ _ _ h => Nat.add_left_cancel h) rfl
+    (fun a _ => shift_add n f a)
+
+theorem sameOrbit_shift_sub {n : Nat} {f : Nat → Nat} {c d : Nat} (h : SameOrbit (shift n f) c d) :
+    SameOrbit f (c - n) (d - n) := by
+  induction h with
+  | rel c d h =>
+    subst h
+    by_cases hc : c < n
+    · rw [shift_of_lt f hc]; exact SameOrbit.refl _ _
+    · unfold shift; rw [if_neg hc, Nat.add_sub_cancel_left]; exact SameOrbit.step _
+  | refl => exact SameOrbit.refl _ _
+  | symm _ _ _ ih => exact ih.symm
+  | trans _ _ _ _ _ ih₁ ih₂ => exact ih₁.trans ih₂
+
+theorem sameOrbit_shift (n : Nat) (f : Nat → Nat) {a b : Nat} :
+    SameOrbit (shift n f) (n + a) (n + b) ↔ SameOrbit f a b := by
+  constructor
+  · intro h
+    have := sameOrbit_shift_sub h
+    simpa using this
+  · intro h
+    induction h with
+    | rel a b h => subst h; exact (shift_add n f a).symm ▸ SameOrbit.step _
+    | refl => exact SameOrbit.refl _ _
+    | symm _ _ _ ih => exact ih.symm
+    | trans _ _ _ _ _ ih₁ ih₂ => exact ih₁.trans ih₂
+
+theorem swapImg_mod2 {f : Nat → Nat} (hf : ∀ a, f a % 2 = a % 2) {x y : Nat} (hxy : x % 2 = y % 2)
+    (a : Nat) : swapImg f x y a % 2 = a % 2 := by
+  unfold swapImg
+  split_ifs with h1 h2
+  · subst h1; rw [hf, hxy]
+  · subst h2; rw [hf, hxy]
+  · exact hf a
+
+theorem xor_xor_one_xor (k c : Nat) : k ^^^ c ^^^ 1 ^^^ c = k ^^^ 1 := by
+  rw [Nat.xor_assoc (k ^^^ c), Nat.xor_comm 1 c, ← Nat.xor_assoc, xor_xor_self]
+
+theorem add_mul4_xor (m a : Nat) {c : Nat} (hc : c < 4) : (4 * m + a) ^^^ c = 4 * m + (a ^^^ c) := by
+  rw [xor_eq4 (4 * m + a) hc, xor_eq4 a hc]
+  have h1 : (4 * m + a) / 4 = m + a / 4 := by omega
+  have h2 : (4 * m + a) % 4 = a % 4 := by omega
+  rw [h1, h2]; omega
+
 namespace TwoSum
 
 variable (T : TwoSum) {rs₁ rs₂ : RotationSystem}
@@ -643,6 +717,383 @@ theorem splice_sameVertex : (T.splice rs₁ rs₂).SameVertex T.edges := fun r h
   exact (T.glue_vert W hr).symm
 
 end WF
+
+/-! ### Orbit counting -/
+
+def S₁ : Finset Nat := Finset.range (4 * T.m₁)
+def S₂ : Finset Nat := (Finset.range (4 * T.m₂)).image (4 * T.m₁ + ·)
+/-- The eight quarter-edges of the two virtual edges (in the disjoint union). -/
+def P₈ : List Nat :=
+  (List.range 4).map (4 * T.e₁ + ·) ++ (List.range 4).map (4 * T.m₁ + 4 * T.e₂ + ·)
+def U : Finset Nat := (T.S₁ ∪ T.S₂) \ T.P₈.toFinset
+/-- Disjoint union of the two steps. -/
+def σ₀ (rs₁ rs₂ : RotationSystem) (c : Nat) : Nat → Nat :=
+  unionStep (rs₁.stepC c) (shift (4 * T.m₁) (rs₂.stepC c)) T.S₁
+/-- … with the virtual edges skipped. -/
+def σ₈ (rs₁ rs₂ : RotationSystem) (c : Nat) : Nat → Nat := skip (T.σ₀ rs₁ rs₂ c) T.P₈
+/-- The point of `G₁` whose `c`-step is the quarter `4·e₁ + k`. -/
+def x (rs₁ : RotationSystem) (c k : Nat) : Nat := T.ρ₁ rs₁ k ^^^ c
+/-- Its partner in `G₂`. -/
+def y (rs₂ : RotationSystem) (c k : Nat) : Nat := 4 * T.m₁ + (T.ρ₂ rs₂ (k ^^^ c ^^^ 1) ^^^ c)
+def τ₁ (rs₁ rs₂ : RotationSystem) (c : Nat) : Nat → Nat :=
+  swapImg (T.σ₈ rs₁ rs₂ c) (T.x rs₁ c 0) (T.y rs₂ c 0)
+def τ₂ (rs₁ rs₂ : RotationSystem) (c : Nat) : Nat → Nat :=
+  swapImg (T.τ₁ rs₁ rs₂ c) (T.x rs₁ c 2) (T.y rs₂ c 2)
+def τ₃ (rs₁ rs₂ : RotationSystem) (c : Nat) : Nat → Nat :=
+  swapImg (T.τ₂ rs₁ rs₂ c) (T.x rs₁ c 1) (T.y rs₂ c 1)
+/-- The spliced step, on the disjoint union minus the virtual edges. -/
+def τ (rs₁ rs₂ : RotationSystem) (c : Nat) : Nat → Nat :=
+  swapImg (T.τ₃ rs₁ rs₂ c) (T.x rs₁ c 3) (T.y rs₂ c 3)
+/-- Relabelling of the disjoint union onto the glued quarter-edges. -/
+def φ (q : Nat) : Nat := if q < 4 * T.m₁ then T.qe₁ q else T.qe₂ (q - 4 * T.m₁)
+
+theorem mem_S₁ {q : Nat} : q ∈ T.S₁ ↔ q < 4 * T.m₁ := Finset.mem_range
+theorem mem_S₂ {q : Nat} : q ∈ T.S₂ ↔ 4 * T.m₁ ≤ q ∧ q < 4 * T.m₁ + 4 * T.m₂ := by
+  simp only [S₂, Finset.mem_image, Finset.mem_range]
+  constructor
+  · rintro ⟨a, ha, rfl⟩; omega
+  · intro h; exact ⟨q - 4 * T.m₁, by omega, by omega⟩
+theorem disjoint_S : Disjoint T.S₁ T.S₂ := Finset.disjoint_left.2 fun q h1 h2 => by
+  rw [mem_S₁] at h1; rw [mem_S₂] at h2; omega
+theorem σ₀_apply₁ (rs₁ rs₂ : RotationSystem) (c : Nat) {q : Nat} (hq : q < 4 * T.m₁) :
+    T.σ₀ rs₁ rs₂ c q = rs₁.stepC c q := by
+  unfold σ₀ unionStep; rw [if_pos (T.mem_S₁.2 hq)]
+theorem σ₀_apply₂ (rs₁ rs₂ : RotationSystem) (c q : Nat) :
+    T.σ₀ rs₁ rs₂ c (4 * T.m₁ + q) = 4 * T.m₁ + rs₂.stepC c q := by
+  have h : 4 * T.m₁ + q ∉ T.S₁ := fun h => by have := T.mem_S₁.1 h; omega
+  unfold σ₀ unionStep; rw [if_neg h, shift_add]
+theorem φ_of_lt {q : Nat} (hq : q < 4 * T.m₁) : T.φ q = T.qe₁ q := by simp [φ, hq]
+theorem φ_add (q : Nat) : T.φ (4 * T.m₁ + q) = T.qe₂ q := by simp [φ]
+
+section Count
+variable (W : T.WF rs₁ rs₂) (c : Nat)
+include W
+
+theorem mem_P₈ {q : Nat} : q ∈ T.P₈ ↔
+    (q < 4 * T.m₁ ∧ q / 4 = T.e₁) ∨ (4 * T.m₁ ≤ q ∧ (q - 4 * T.m₁) / 4 = T.e₂) := by
+  have := T.e₁_lt W
+  simp only [P₈, List.mem_append, List.mem_map, List.mem_range]
+  constructor
+  · rintro (⟨k, hk, rfl⟩ | ⟨k, hk, rfl⟩) <;> omega
+  · rintro (h | h)
+    · exact Or.inl ⟨q - 4 * T.e₁, by omega, by omega⟩
+    · exact Or.inr ⟨q - 4 * T.m₁ - 4 * T.e₂, by omega, by omega⟩
+
+theorem mem_U {q : Nat} : q ∈ T.U ↔
+    (q < 4 * T.m₁ ∧ q / 4 ≠ T.e₁) ∨
+      (4 * T.m₁ ≤ q ∧ q < 4 * T.m₁ + 4 * T.m₂ ∧ (q - 4 * T.m₁) / 4 ≠ T.e₂) := by
+  rw [U, Finset.mem_sdiff, Finset.mem_union, mem_S₁, mem_S₂, List.mem_toFinset, T.mem_P₈ W]
+  omega
+
+theorem nodup_P₈ : T.P₈.Nodup := by
+  have := T.e₁_lt W
+  unfold P₈
+  rw [List.nodup_append]
+  refine ⟨List.Nodup.map (fun a b h => Nat.add_left_cancel h) List.nodup_range,
+    List.Nodup.map (fun a b h => Nat.add_left_cancel h) List.nodup_range, ?_⟩
+  intro a h1 b h2 hab
+  simp only [List.mem_map, List.mem_range] at h1 h2
+  obtain ⟨k, hk, hk1⟩ := h1; obtain ⟨k', hk', hk2⟩ := h2
+  omega
+
+theorem P₈_sub : ∀ p ∈ T.P₈, p ∈ T.S₁ ∪ T.S₂ := by
+  intro p hp
+  rw [T.mem_P₈ W] at hp
+  rw [Finset.mem_union, mem_S₁, mem_S₂]
+  have := T.e₂_lt W
+  omega
+
+variable (hc4 : c < 4)
+include hc4
+
+theorem perm₁ : IsPermOn (rs₁.stepC c) T.S₁ := by
+  have := RotationSystem.isPermOn_stepC W.emb₁.total W.emb₁.involution (T.size₁ W) hc4
+  rwa [T.size₁ W] at this
+theorem perm₂ : IsPermOn (rs₂.stepC c) (Finset.range (4 * T.m₂)) := by
+  have := RotationSystem.isPermOn_stepC W.emb₂.total W.emb₂.involution (T.size₂ W) hc4
+  rwa [T.size₂ W] at this
+theorem perm_σ₀ : IsPermOn (T.σ₀ rs₁ rs₂ c) (T.S₁ ∪ T.S₂) :=
+  isPermOn_unionStep (T.perm₁ W c hc4) (isPermOn_shift (T.perm₂ W c hc4) _) T.disjoint_S
+theorem count_σ₀ : orbitCount (T.σ₀ rs₁ rs₂ c) (T.S₁ ∪ T.S₂) =
+    orbitCount (rs₁.stepC c) T.S₁ + orbitCount (rs₂.stepC c) (Finset.range (4 * T.m₂)) := by
+  have hd := T.disjoint_S
+  unfold σ₀ S₂ at *
+  rw [orbitCount_unionStep (T.perm₁ W c hc4) (isPermOn_shift (T.perm₂ W c hc4) _) hd,
+    orbitCount_shift (T.perm₂ W c hc4)]
+
+theorem σ₀_P₈ : ∀ p ∈ T.P₈, T.σ₀ rs₁ rs₂ c p ∉ T.P₈ := by
+  intro p hp
+  rw [T.mem_P₈ W] at hp
+  rcases hp with ⟨hp, he⟩ | ⟨hp, he⟩
+  · rw [T.σ₀_apply₁ _ _ _ hp,
+      RotationSystem.stepC_eq_rot W.emb₁.total (T.size₁ W) hc4 (T.size₁ W ▸ hp)]
+    have h1 : p ^^^ c = 4 * T.e₁ + (p % 4 ^^^ c) := by rw [xor_eq4 p hc4, he]
+    rw [h1, ← ρ₁_def]
+    have hk := xor_lt4 (Nat.mod_lt p (by omega)) hc4
+    have h2 := T.ρ₁_lt W hk; have h3 := T.ρ₁_div_ne W hk
+    rw [T.mem_P₈ W]; omega
+  · obtain ⟨q, rfl⟩ : ∃ q, p = 4 * T.m₁ + q := ⟨p - 4 * T.m₁, by omega⟩
+    rw [Nat.add_sub_cancel_left] at he
+    rw [T.σ₀_apply₂]
+    have hq : q < 4 * T.m₂ := by have := T.e₂_lt W; omega
+    rw [RotationSystem.stepC_eq_rot W.emb₂.total (T.size₂ W) hc4 (T.size₂ W ▸ hq)]
+    have h1 : q ^^^ c = 4 * T.e₂ + (q % 4 ^^^ c) := by rw [xor_eq4 q hc4, he]
+    rw [h1, ← ρ₂_def]
+    have hk := xor_lt4 (Nat.mod_lt q (by omega)) hc4
+    have h2 := T.ρ₂_lt W hk; have h3 := T.ρ₂_div_ne W hk
+    rw [T.mem_P₈ W]; omega
+
+theorem perm_σ₈ : IsPermOn (T.σ₈ rs₁ rs₂ c) T.U :=
+  (orbitCount_skip (T.perm_σ₀ W c hc4) _ (T.P₈_sub W) (T.σ₀_P₈ W c hc4) (T.nodup_P₈ W)).1
+theorem count_σ₈ : orbitCount (T.σ₈ rs₁ rs₂ c) T.U =
+    orbitCount (rs₁.stepC c) T.S₁ + orbitCount (rs₂.stepC c) (Finset.range (4 * T.m₂)) :=
+  (orbitCount_skip (T.perm_σ₀ W c hc4) _ (T.P₈_sub W) (T.σ₀_P₈ W c hc4) (T.nodup_P₈ W)).2.trans
+    (T.count_σ₀ W c hc4)
+
+omit W hc4 in
+theorem σ₈_apply_of {q : Nat} (hq : q ∉ T.P₈) (hσ : T.σ₀ rs₁ rs₂ c q ∉ T.P₈) :
+    T.σ₈ rs₁ rs₂ c q = T.σ₀ rs₁ rs₂ c q := by
+  unfold σ₈ skip; rw [if_neg hq, if_neg hσ]
+omit W hc4 in
+theorem σ₈_apply_of' {q : Nat} (hq : q ∉ T.P₈) (hσ : T.σ₀ rs₁ rs₂ c q ∈ T.P₈) :
+    T.σ₈ rs₁ rs₂ c q = T.σ₀ rs₁ rs₂ c (T.σ₀ rs₁ rs₂ c q) := by
+  unfold σ₈ skip; rw [if_neg hq, if_pos hσ]
+
+/-! The eight special points. -/
+
+theorem x_lt {k : Nat} (hk : k < 4) : T.x rs₁ c k < 4 * T.m₁ := xor_lt_mul4 (T.ρ₁_lt W hk) hc4
+theorem x_div {k : Nat} (hk : k < 4) : T.x rs₁ c k / 4 ≠ T.e₁ := by
+  unfold x; rw [xor_div4 _ hc4]; exact T.ρ₁_div_ne W hk
+theorem x_not_P₈ {k : Nat} (hk : k < 4) : T.x rs₁ c k ∉ T.P₈ := by
+  have := T.x_lt W c hc4 hk; have := T.x_div W c hc4 hk
+  rw [T.mem_P₈ W]; omega
+theorem x_mem {k : Nat} (hk : k < 4) : T.x rs₁ c k ∈ T.U := by
+  have := T.x_lt W c hc4 hk; have := T.x_div W c hc4 hk
+  rw [T.mem_U W]; omega
+omit W in
+theorem j_lt {k : Nat} (hk : k < 4) : k ^^^ c ^^^ 1 < 4 := xor_lt4 (xor_lt4 hk hc4) (by decide)
+theorem y_sub_lt {k : Nat} (hk : k < 4) : T.ρ₂ rs₂ (k ^^^ c ^^^ 1) ^^^ c < 4 * T.m₂ :=
+  xor_lt_mul4 (T.ρ₂_lt W (j_lt c hc4 hk)) hc4
+theorem y_sub_div {k : Nat} (hk : k < 4) : (T.ρ₂ rs₂ (k ^^^ c ^^^ 1) ^^^ c) / 4 ≠ T.e₂ := by
+  rw [xor_div4 _ hc4]; exact T.ρ₂_div_ne W (j_lt c hc4 hk)
+theorem y_not_P₈ {k : Nat} (hk : k < 4) : T.y rs₂ c k ∉ T.P₈ := by
+  have := T.y_sub_lt W c hc4 hk; have := T.y_sub_div W c hc4 hk
+  rw [T.mem_P₈ W]; unfold y; omega
+theorem y_mem {k : Nat} (hk : k < 4) : T.y rs₂ c k ∈ T.U := by
+  have := T.y_sub_lt W c hc4 hk; have := T.y_sub_div W c hc4 hk
+  rw [T.mem_U W]; unfold y; omega
+theorem x_ne_y {k k' : Nat} (hk : k < 4) : T.x rs₁ c k ≠ T.y rs₂ c k' := by
+  have := T.x_lt W c hc4 hk; unfold y; omega
+omit hc4 in
+theorem x_inj {k k' : Nat} (hk : k < 4) (hk' : k' < 4) (h : T.x rs₁ c k = T.x rs₁ c k') : k = k' :=
+  T.ρ₁_inj W hk hk' (by unfold x at h; rw [← xor_xor_self (T.ρ₁ rs₁ k) c, h, xor_xor_self])
+theorem y_inj {k k' : Nat} (hk : k < 4) (hk' : k' < 4) (h : T.y rs₂ c k = T.y rs₂ c k') : k = k' := by
+  unfold y at h
+  have h' : T.ρ₂ rs₂ (k ^^^ c ^^^ 1) ^^^ c = T.ρ₂ rs₂ (k' ^^^ c ^^^ 1) ^^^ c := by omega
+  have := T.ρ₂_inj W (j_lt c hc4 hk) (j_lt c hc4 hk')
+    (by rw [← xor_xor_self (T.ρ₂ rs₂ (k ^^^ c ^^^ 1)) c, h', xor_xor_self])
+  rw [← xor_xor_self k c, ← xor_xor_self (k ^^^ c) 1, this, xor_xor_self, xor_xor_self]
+omit hc4 in
+theorem x_ne {k k' : Nat} (hk : k < 4) (hk' : k' < 4) (h : k ≠ k') : T.x rs₁ c k ≠ T.x rs₁ c k' :=
+  fun h' => h (T.x_inj W c hk hk' h')
+theorem y_ne {k k' : Nat} (hk : k < 4) (hk' : k' < 4) (h : k ≠ k') : T.y rs₂ c k ≠ T.y rs₂ c k' :=
+  fun h' => h (T.y_inj W c hc4 hk hk' h')
+theorem y_ne_x {k k' : Nat} (hk' : k' < 4) : T.y rs₂ c k ≠ T.x rs₁ c k' :=
+  fun h => T.x_ne_y W c hc4 hk' h.symm
+
+theorem stepC_x {k : Nat} (hk : k < 4) : rs₁.stepC c (T.x rs₁ c k) = 4 * T.e₁ + k := by
+  unfold x
+  rw [RotationSystem.stepC_eq_rot W.emb₁.total (T.size₁ W) hc4
+    (T.size₁ W ▸ xor_lt_mul4 (T.ρ₁_lt W hk) hc4), xor_xor_self]
+  exact T.rot_ρ₁ W hk
+theorem stepC_y {k : Nat} (hk : k < 4) :
+    rs₂.stepC c (T.ρ₂ rs₂ (k ^^^ c ^^^ 1) ^^^ c) = 4 * T.e₂ + (k ^^^ c ^^^ 1) := by
+  rw [RotationSystem.stepC_eq_rot W.emb₂.total (T.size₂ W) hc4
+    (T.size₂ W ▸ T.y_sub_lt W c hc4 hk), xor_xor_self]
+  exact T.rot_ρ₂ W (j_lt c hc4 hk)
+theorem stepC_virt₁ {k : Nat} (hk : k < 4) : rs₁.stepC c (4 * T.e₁ + k) = T.ρ₁ rs₁ (k ^^^ c) := by
+  rw [RotationSystem.stepC_eq_rot W.emb₁.total (T.size₁ W) hc4 (T.virt₁_lt W hk),
+    mul4_add_xor _ _ hk hc4]; rfl
+theorem stepC_virt₂ {k : Nat} (hk : k < 4) : rs₂.stepC c (4 * T.e₂ + k) = T.ρ₂ rs₂ (k ^^^ c) := by
+  rw [RotationSystem.stepC_eq_rot W.emb₂.total (T.size₂ W) hc4 (T.virt₂_lt W hk),
+    mul4_add_xor _ _ hk hc4]; rfl
+
+omit hc4 in
+theorem virt₁_mem_P₈ {k : Nat} (hk : k < 4) : 4 * T.e₁ + k ∈ T.P₈ := by
+  have := T.e₁_lt W; rw [T.mem_P₈ W]; omega
+omit hc4 in
+theorem virt₂_mem_P₈ {k : Nat} (hk : k < 4) : 4 * T.m₁ + (4 * T.e₂ + k) ∈ T.P₈ := by
+  rw [T.mem_P₈ W]; omega
+
+theorem σ₈_x {k : Nat} (hk : k < 4) : T.σ₈ rs₁ rs₂ c (T.x rs₁ c k) = T.ρ₁ rs₁ (k ^^^ c) := by
+  have h1 : T.σ₀ rs₁ rs₂ c (T.x rs₁ c k) = 4 * T.e₁ + k := by
+    rw [T.σ₀_apply₁ _ _ _ (T.x_lt W c hc4 hk), T.stepC_x W c hc4 hk]
+  rw [T.σ₈_apply_of' c (T.x_not_P₈ W c hc4 hk) (h1 ▸ T.virt₁_mem_P₈ W hk), h1,
+    T.σ₀_apply₁ _ _ _ (T.virt₁_lt W hk |>.trans_eq (T.size₁ W)), T.stepC_virt₁ W c hc4 hk]
+theorem σ₈_y {k : Nat} (hk : k < 4) :
+    T.σ₈ rs₁ rs₂ c (T.y rs₂ c k) = 4 * T.m₁ + T.ρ₂ rs₂ (k ^^^ 1) := by
+  have h1 : T.σ₀ rs₁ rs₂ c (T.y rs₂ c k) = 4 * T.m₁ + (4 * T.e₂ + (k ^^^ c ^^^ 1)) := by
+    rw [y, T.σ₀_apply₂, T.stepC_y W c hc4 hk]
+  rw [T.σ₈_apply_of' c (T.y_not_P₈ W c hc4 hk) (h1 ▸ T.virt₂_mem_P₈ W (j_lt c hc4 hk)),
+    h1, T.σ₀_apply₂, T.stepC_virt₂ W c hc4 (j_lt c hc4 hk), xor_xor_one_xor]
+
+/-! Orbits of `σ₈` in terms of the summands. -/
+
+theorem sameOrbit_σ₈_iff {a b : Nat} (ha : a ∈ T.U) :
+    SameOrbit (T.σ₈ rs₁ rs₂ c) a b ↔ SameOrbit (T.σ₀ rs₁ rs₂ c) a b ∧ b ∉ T.P₈ :=
+  sameOrbit_skip _ (T.σ₀_P₈ W c hc4) (T.nodup_P₈ W)
+    (by rw [U, Finset.mem_sdiff, List.mem_toFinset] at ha; exact ha.2)
+theorem sameOrbit_σ₀_left {a b : Nat} (ha : a < 4 * T.m₁) :
+    SameOrbit (T.σ₀ rs₁ rs₂ c) a b ↔ SameOrbit (rs₁.stepC c) a b :=
+  sameOrbit_unionStep_left (T.perm₁ W c hc4) (isPermOn_shift (T.perm₂ W c hc4) _) T.disjoint_S
+    (T.mem_S₁.2 ha)
+theorem sameOrbit_σ₀_right {a b : Nat} (ha : a < 4 * T.m₂) :
+    SameOrbit (T.σ₀ rs₁ rs₂ c) (4 * T.m₁ + a) (4 * T.m₁ + b) ↔ SameOrbit (rs₂.stepC c) a b := by
+  rw [σ₀, sameOrbit_unionStep_right (T.perm₁ W c hc4) (isPermOn_shift (T.perm₂ W c hc4) _)
+    T.disjoint_S (T.mem_S₂.2 ⟨by omega, by omega⟩), sameOrbit_shift]
+
+theorem sameOrbit_x {k k' : Nat} (hk : k < 4) (hk' : k' < 4) :
+    SameOrbit (T.σ₈ rs₁ rs₂ c) (T.x rs₁ c k) (T.x rs₁ c k') ↔
+      SameOrbit (rs₁.stepC c) (4 * T.e₁ + k) (4 * T.e₁ + k') := by
+  rw [T.sameOrbit_σ₈_iff W c hc4 (T.x_mem W c hc4 hk), T.sameOrbit_σ₀_left W c hc4 (T.x_lt W c hc4 hk),
+    and_iff_left (T.x_not_P₈ W c hc4 hk')]
+  have h1 : SameOrbit (rs₁.stepC c) (T.x rs₁ c k) (4 * T.e₁ + k) :=
+    T.stepC_x W c hc4 hk ▸ SameOrbit.step _
+  have h2 : SameOrbit (rs₁.stepC c) (T.x rs₁ c k') (4 * T.e₁ + k') :=
+    T.stepC_x W c hc4 hk' ▸ SameOrbit.step _
+  exact ⟨fun h => h1.symm.trans (h.trans h2), fun h => h1.trans (h.trans h2.symm)⟩
+theorem sameOrbit_y {k k' : Nat} (hk : k < 4) (hk' : k' < 4) :
+    SameOrbit (T.σ₈ rs₁ rs₂ c) (T.y rs₂ c k) (T.y rs₂ c k') ↔
+      SameOrbit (rs₂.stepC c) (4 * T.e₂ + (k ^^^ c ^^^ 1)) (4 * T.e₂ + (k' ^^^ c ^^^ 1)) := by
+  rw [T.sameOrbit_σ₈_iff W c hc4 (T.y_mem W c hc4 hk), and_iff_left (T.y_not_P₈ W c hc4 hk'), y, y,
+    T.sameOrbit_σ₀_right W c hc4 (T.y_sub_lt W c hc4 hk)]
+  have h1 : SameOrbit (rs₂.stepC c) (T.ρ₂ rs₂ (k ^^^ c ^^^ 1) ^^^ c) (4 * T.e₂ + (k ^^^ c ^^^ 1)) :=
+    T.stepC_y W c hc4 hk ▸ SameOrbit.step _
+  have h2 : SameOrbit (rs₂.stepC c) (T.ρ₂ rs₂ (k' ^^^ c ^^^ 1) ^^^ c) (4 * T.e₂ + (k' ^^^ c ^^^ 1)) :=
+    T.stepC_y W c hc4 hk' ▸ SameOrbit.step _
+  exact ⟨fun h => h1.symm.trans (h.trans h2), fun h => h1.trans (h.trans h2.symm)⟩
+theorem not_sameOrbit_xy {k k' : Nat} (hk : k < 4) :
+    ¬SameOrbit (T.σ₈ rs₁ rs₂ c) (T.x rs₁ c k) (T.y rs₂ c k') := by
+  rw [T.sameOrbit_σ₈_iff W c hc4 (T.x_mem W c hc4 hk), T.sameOrbit_σ₀_left W c hc4 (T.x_lt W c hc4 hk)]
+  rintro ⟨h, -⟩
+  have hiff := (T.perm₁ W c hc4).mem_iff_of_sameOrbit h
+  rw [mem_S₁, mem_S₁] at hiff
+  have := T.x_lt W c hc4 hk
+  unfold y at hiff; omega
+theorem not_sameOrbit_yx {k k' : Nat} (hk' : k' < 4) :
+    ¬SameOrbit (T.σ₈ rs₁ rs₂ c) (T.y rs₂ c k) (T.x rs₁ c k') :=
+  fun h => T.not_sameOrbit_xy W c hc4 hk' h.symm
+
+/-! Parity. -/
+
+variable (hc2 : c % 2 = 1)
+include hc2
+
+omit hc4 in
+theorem x_mod2 {k : Nat} (hk : k < 4) : T.x rs₁ c k % 2 = k % 2 := by
+  have := T.ρ₁_mod2 W hk; have := xor_mod2 (T.ρ₁ rs₁ k) hc2; unfold x; omega
+theorem y_mod2 {k : Nat} (hk : k < 4) : T.y rs₂ c k % 2 = k % 2 := by
+  have h1 := T.ρ₂_mod2 W (j_lt c hc4 hk); have h2 := xor_mod2 (T.ρ₂ rs₂ (k ^^^ c ^^^ 1)) hc2
+  have h3 := xor_mod2 (k ^^^ c) (c := 1) rfl; have h4 := xor_mod2 k hc2
+  unfold y; omega
+theorem σ₀_mod2 (q : Nat) : T.σ₀ rs₁ rs₂ c q % 2 = q % 2 := by
+  unfold σ₀ unionStep
+  split
+  · exact RotationSystem.stepC_mod2 W.emb₁.total W.emb₁.opposite_dir (T.size₁ W) hc4 hc2 q
+  · unfold shift
+    split
+    · rfl
+    · have := RotationSystem.stepC_mod2 W.emb₂.total W.emb₂.opposite_dir (T.size₂ W) hc4 hc2
+        (q - 4 * T.m₁)
+      omega
+theorem σ₈_mod2 (q : Nat) : T.σ₈ rs₁ rs₂ c q % 2 = q % 2 := by
+  have := T.σ₀_mod2 W c hc4 hc2
+  unfold σ₈ skip
+  split_ifs
+  · rfl
+  · rw [this, this]
+  · exact this q
+theorem τ₁_mod2 (q : Nat) : T.τ₁ rs₁ rs₂ c q % 2 = q % 2 :=
+  swapImg_mod2 (T.σ₈_mod2 W c hc4 hc2)
+    ((T.x_mod2 W c hc2 (by decide)).trans (T.y_mod2 W c hc4 hc2 (by decide)).symm) q
+theorem τ₂_mod2 (q : Nat) : T.τ₂ rs₁ rs₂ c q % 2 = q % 2 :=
+  swapImg_mod2 (T.τ₁_mod2 W c hc4 hc2)
+    ((T.x_mod2 W c hc2 (by decide)).trans (T.y_mod2 W c hc4 hc2 (by decide)).symm) q
+theorem τ₃_mod2 (q : Nat) : T.τ₃ rs₁ rs₂ c q % 2 = q % 2 :=
+  swapImg_mod2 (T.τ₂_mod2 W c hc4 hc2)
+    ((T.x_mod2 W c hc2 (by decide)).trans (T.y_mod2 W c hc4 hc2 (by decide)).symm) q
+
+theorem τ₂_odd {a : Nat} (ha : a % 2 = 1) : T.τ₂ rs₁ rs₂ c a = T.σ₈ rs₁ rs₂ c a := by
+  have h0 := T.x_mod2 W c hc2 (k := 0) (by decide)
+  have h0' := T.y_mod2 W c hc4 hc2 (k := 0) (by decide)
+  have h2 := T.x_mod2 W c hc2 (k := 2) (by decide)
+  have h2' := T.y_mod2 W c hc4 hc2 (k := 2) (by decide)
+  unfold τ₂ τ₁
+  rw [swapImg_of_ne _ (by omega) (by omega), swapImg_of_ne _ (by omega) (by omega)]
+theorem τ₃_odd {a : Nat} (ha : a % 2 = 1) :
+    T.τ₃ rs₁ rs₂ c a = swapImg (T.σ₈ rs₁ rs₂ c) (T.x rs₁ c 1) (T.y rs₂ c 1) a := by
+  have h1 := T.x_mod2 W c hc2 (k := 1) (by decide)
+  have h1' := T.y_mod2 W c hc4 hc2 (k := 1) (by decide)
+  unfold τ₃ swapImg
+  split_ifs <;> first | rfl | exact T.τ₂_odd W c hc4 hc2 (by omega)
+
+omit hc2 in
+theorem perm_τ : IsPermOn (T.τ rs₁ rs₂ c) T.U :=
+  isPermOn_swapImg (isPermOn_swapImg (isPermOn_swapImg (isPermOn_swapImg (T.perm_σ₈ W c hc4)
+    (T.x_mem W c hc4 (by decide)) (T.y_mem W c hc4 (by decide)))
+    (T.x_mem W c hc4 (by decide)) (T.y_mem W c hc4 (by decide)))
+    (T.x_mem W c hc4 (by decide)) (T.y_mem W c hc4 (by decide)))
+    (T.x_mem W c hc4 (by decide)) (T.y_mem W c hc4 (by decide))
+
+/-- The four swaps each merge two distinct orbits. -/
+theorem count_τ
+    (h02 : ¬(SameOrbit (T.σ₈ rs₁ rs₂ c) (T.x rs₁ c 0) (T.x rs₁ c 2) ∧
+      SameOrbit (T.σ₈ rs₁ rs₂ c) (T.y rs₂ c 0) (T.y rs₂ c 2)))
+    (h13 : ¬(SameOrbit (T.σ₈ rs₁ rs₂ c) (T.x rs₁ c 1) (T.x rs₁ c 3) ∧
+      SameOrbit (T.σ₈ rs₁ rs₂ c) (T.y rs₂ c 1) (T.y rs₂ c 3))) :
+    orbitCount (T.τ rs₁ rs₂ c) T.U + 4 =
+      orbitCount (rs₁.stepC c) T.S₁ + orbitCount (rs₂.stepC c) (Finset.range (4 * T.m₂)) := by
+  have hp := T.perm_σ₈ W c hc4
+  have hxm : ∀ k, k < 4 → T.x rs₁ c k ∈ T.U := fun k hk => T.x_mem W c hc4 hk
+  have hym : ∀ k, k < 4 → T.y rs₂ c k ∈ T.U := fun k hk => T.y_mem W c hc4 hk
+  have hxy : ∀ k k', k < 4 → ¬SameOrbit (T.σ₈ rs₁ rs₂ c) (T.x rs₁ c k) (T.y rs₂ c k') :=
+    fun k k' hk => T.not_sameOrbit_xy W c hc4 hk
+  have hyx : ∀ k k', k' < 4 → ¬SameOrbit (T.σ₈ rs₁ rs₂ c) (T.y rs₂ c k) (T.x rs₁ c k') :=
+    fun k k' hk' => T.not_sameOrbit_yx W c hc4 hk'
+  have p1 : IsPermOn (T.τ₁ rs₁ rs₂ c) T.U :=
+    isPermOn_swapImg hp (hxm 0 (by decide)) (hym 0 (by decide))
+  have c1 : orbitCount (T.τ₁ rs₁ rs₂ c) T.U + 1 = orbitCount (T.σ₈ rs₁ rs₂ c) T.U :=
+    orbitCount_swapImg hp (hxm 0 (by decide)) (hym 0 (by decide)) (hxy 0 0 (by decide))
+  have n2 : ¬SameOrbit (T.τ₁ rs₁ rs₂ c) (T.x rs₁ c 2) (T.y rs₂ c 2) :=
+    not_sameOrbit_swapImg_of hp (hxm 0 (by decide)) (hym 0 (by decide)) (hxy 0 0 (by decide))
+      (hxy 2 2 (by decide)) (hxy 0 2 (by decide)) (hyx 0 2 (by decide)) h02
+  have p2 : IsPermOn (T.τ₂ rs₁ rs₂ c) T.U :=
+    isPermOn_swapImg p1 (hxm 2 (by decide)) (hym 2 (by decide))
+  have c2 : orbitCount (T.τ₂ rs₁ rs₂ c) T.U + 1 = orbitCount (T.τ₁ rs₁ rs₂ c) T.U :=
+    orbitCount_swapImg p1 (hxm 2 (by decide)) (hym 2 (by decide)) n2
+  have n3 : ¬SameOrbit (T.τ₂ rs₁ rs₂ c) (T.x rs₁ c 1) (T.y rs₂ c 1) := by
+    rw [sameOrbit_congr (fun a => a % 2 = 1) (fun a => by rw [T.τ₂_mod2 W c hc4 hc2])
+      (fun a => by rw [T.σ₈_mod2 W c hc4 hc2]) (fun a ha => T.τ₂_odd W c hc4 hc2 ha)
+      (T.x_mod2 W c hc2 (by decide))]
+    exact hxy 1 1 (by decide)
+  have p3 : IsPermOn (T.τ₃ rs₁ rs₂ c) T.U :=
+    isPermOn_swapImg p2 (hxm 1 (by decide)) (hym 1 (by decide))
+  have c3 : orbitCount (T.τ₃ rs₁ rs₂ c) T.U + 1 = orbitCount (T.τ₂ rs₁ rs₂ c) T.U :=
+    orbitCount_swapImg p2 (hxm 1 (by decide)) (hym 1 (by decide)) n3
+  have n4 : ¬SameOrbit (T.τ₃ rs₁ rs₂ c) (T.x rs₁ c 3) (T.y rs₂ c 3) := by
+    rw [sameOrbit_congr (fun a => a % 2 = 1) (fun a => by rw [T.τ₃_mod2 W c hc4 hc2])
+      (fun a => by
+        rw [swapImg_mod2 (T.σ₈_mod2 W c hc4 hc2) ((T.x_mod2 W c hc2 (by decide)).trans
+          (T.y_mod2 W c hc4 hc2 (by decide)).symm)])
+      (fun a ha => T.τ₃_odd W c hc4 hc2 ha) (T.x_mod2 W c hc2 (by decide))]
+    exact not_sameOrbit_swapImg_of hp (hxm 1 (by decide)) (hym 1 (by decide)) (hxy 1 1 (by decide))
+      (hxy 3 3 (by decide)) (hxy 1 3 (by decide)) (hyx 1 3 (by decide)) h13
+  have c4 : orbitCount (T.τ rs₁ rs₂ c) T.U + 1 = orbitCount (T.τ₃ rs₁ rs₂ c) T.U :=
+    orbitCount_swapImg p3 (hxm 3 (by decide)) (hym 3 (by decide)) n4
+  rw [T.count_σ₈ W c hc4] at c1
+  omega
+
+end Count
 
 /-- WIP (PROOF.md §8.5): the splice of two planar embeddings along the virtual edge is a planar
 embedding of the 2-sum. Admitted; the embedding fields and the orbit counts are in progress. -/
