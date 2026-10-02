@@ -681,6 +681,28 @@ classes through `{2,3}`, through `{4,5}`, and the singleton shared edge.
 This is a counterexample to that abstract sufficiency claim, not a reachable walk state.
 No new ear-content assumption is used to fill the gap; the interface restatement remains open.
 
+Run saturation is now stated in `Proofs/RunSaturation.lean` as
+`WalkState.Saturated dfs origTstack s`: no 2-attached run with at least two edge-bearing entries
+below the schedule frontier; no proper 2-attached run of at least two non-V children of a
+closed R item; and no proper 2-attached union of an R child with additional back edges at a
+vertex. It is a hypothesis, not yet an invariant theorem. Empty entries do not count toward
+the stack-run length. The closed-item clause excludes the whole child list, which is
+2-attached at the cap even for K4. `checks/RunSaturationCheck.lean` exhibits the actual K4
+output: the R item's five non-V children own `[2,4,5,1,3]` and attach at `{0,1}`. The DFS
+postorder is `[1,2,4,5,3,0]`, so child order is not itself the postorder.
+
+Proved, with standard axioms only: `Pieces.WF.sepClass_of_mem` and `.sepClass_constant`
+(a skeleton pair other than a piece's terminal pair cannot split that piece),
+`runEdges_of_interval` (selecting one marker per piece transports an aligned edge interval
+to a run of pieces), `Graph.RunSaturated.short_or_eq` and `.laminar`,
+`Pieces.WF.class_laminar_of_interval`, `Saturated.closed_laminar`, and
+`entryLaminar_of_runSaturated`. These are conditional derivations, not proofs that the
+walk maintains saturation. The class lemma requires the class to be covered by the listed
+pieces and their marker order to be the corresponding postorder subsequence; neither that
+alignment nor the crossing-class cases follows from the current range interface.
+`EntryR.maximal`, `.bond`, and `.single` still need derivations, as does saturation inside
+open entries (the stack-run and closed-R clauses alone do not state it).
+
 The schedule-specific input is `WalkState.Frontier (o := o) d origTstack s`
 (`Proofs/RInvFrame.lean`), separate from interval ownership and saturation. Since the stack is
 top-first and `origTstack` counts the preserved bottom entries, the split is at
@@ -1037,6 +1059,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 Item/contract edge correspondence: `Pieces.ofItems_addParent_edges`, `Items.rSkeleton_perm_contract` | `Proofs/RItems.lean` | proved (standard axioms), under non-V-child edge coverage; deriving coverage for completed R items remains open |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
 | 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge`/`walkTree` induction and `walk_ranges` admitted; saturation not a field (attachment-count forms false, §4.6) |
+| 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
