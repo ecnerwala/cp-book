@@ -44,3 +44,4 @@ import Spqr.Proofs.SepClasses
 import Spqr.RMax
 import Spqr.Proofs.RMax
 import Spqr.RClose
+import Spqr.Proofs.RClose
