@@ -534,8 +534,14 @@ The split is `walk_st : Items.StNumbered (walk …).items` (§7.4) and
   The cap is written last, at node-edge position `neSt` (position 0, `capNe`), with incidences at
   the first slot of row `2 s + 1` and the last slot of row `2 (e-1)`; it is the only edge outside
   the dominance order.
-  The remaining work is mechanical: the layout is a loop over `Layout` with `inc`/`setNe`, and the
-  statement has to be read through `adjBounds`/`adjDat` offsets.
+* What blocks `relabel_st` **[sorry]** itself is not a layout fact but the glue: a per-node
+  characterization of the recursive `relabel` fold — for every node `i` of `relabelTree g items`,
+  `nvRange i`, `neRange i`, `nodeEdgesOf i` and the rows `adjRow (2 nv)`, `adjRow (2 nv + 1)` are
+  those of `layoutNode it.type … edgeChildren` for the item `it` numbered `i`, with `edgeChildren`
+  the `vertPos` images of the non-V children of `orderedChildren it nvSt`.
+  No such lemma exists yet (`relabelTree_wf` is admitted for the same reason), so it is the exact
+  statement to add, as `relabel_node_layout`; with it `relabel_st` is `layoutNode_r_bracket` plus
+  the S/P row shapes read off `layoutNode` and `Items.StNumbered` transported along `vertPos`.
 
 ### 7.4 Walk: the hole invariant (`StWalk.lean`)
 
@@ -658,7 +664,7 @@ left to the preservation proof.
 | `pairwise_dominance_of_sorted_sum`, `edgeChildren_dominance` | `StSpec.lean` | proved |
 | `LayoutR.run`, `layoutNode_R_eq`, `run_spec`, `layoutNode_R_bracket` | `StLayout.lean` | proved |
 | `layoutNode_r_bracket` | `StSpec.lean` | proved |
-| `relabel_st` | `StSpec.lean` | sorry (7.3) |
+| `relabel_st` | `StSpec.lean` | sorry (7.3: needs the relabel-fold glue `relabel_node_layout`) |
 | `TEntry.wrap`, `OneSided`, `OnSide`, `nest` | `StWalk.lean` | def |
 | `pushTstack_onSide`, `merge_onSide`, `fold_onSide`, `getSide_setSides` | `StWalk.lean` | proved |
 | `WalkState.StSides`, `StEntry`, `StInv`, `TopClosable`, `entryVertList`, `entryEdges` | `StWalk.lean` | def |
