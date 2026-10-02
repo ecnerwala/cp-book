@@ -70,6 +70,10 @@ structure Endpoints : Prop where
   child_vs_in_parent : ∀ p c, items.IsParent p c → items.type p ∉ [NodeType.F, .V] → items.type c ≠ .V →
     ∀ u, (items.vs c).1 = some u ∨ (items.vs c).2 = some u →
       (items.vs p).1 = some u ∨ (items.vs p).2 = some u ∨ items.IsParent p (vertItem u)
+  /-- A node's vertices (first endpoint, V children in `ch` order, second endpoint) are distinct. -/
+  nv_nodup : ∀ i, i < items.size →
+    ((items.vs i).1.toList ++ ((items.ch i).filter fun c => items.type c = NodeType.V).map (· - 1) ++
+      (items.vs i).2.toList).Nodup
   /-- Separation: the subtree of a node touches the rest of the graph only at its endpoints. -/
   separation : ∀ i, i < items.size → items.type i ∉ [NodeType.F, .V] →
     ∀ v e e', v < g.nv → e < g.ne → e' < g.ne →
@@ -94,7 +98,10 @@ structure Shapes : Prop where
   /-- `Q`: either a leaf (cap to parent), or a block root with children `[node]` or `[node, v]`. -/
   q_children : ∀ e, e < g.ne → items.ch (edgeItem g e) = [] ∨
     ∃ c, items.type c ∉ [NodeType.F, .V, .Q] ∧
-      (items.ch (edgeItem g e) = [c] ∨ ∃ v, items.ch (edgeItem g e) = [c, vertItem v])
+      (items.ch (edgeItem g e) = [c] ∨ ∃ v, v < g.nv ∧ items.ch (edgeItem g e) = [c, vertItem v])
+  /-- Block-root Qs hang under `F`/`V` items; a Q child of a node is a leaf (its cap). -/
+  q_leaf_of_node : ∀ p c, items.IsParent p c → items.type p ∉ [NodeType.F, .V] →
+    items.type c = .Q → items.ch c = []
   /-- `P`: 2 endpoints, ≥ 2 non-V children all on the same endpoints, no V children. -/
   p_shape : ∀ i, i < items.size → items.type i = .P →
     2 ≤ (items.virtualEdges i).length ∧ (∀ c, items.IsParent i c → items.type c ≠ .V) ∧
@@ -106,12 +113,13 @@ structure Shapes : Prop where
     2 ≤ xs.length ∧
     (items.virtualEdges i).Perm (List.zip (u :: xs) (xs ++ [v]))
   /-- `R`: ≥ 2 V children, simple skeleton with ≥ 6 edges (no child virtual edge parallel to the
-  node's own `vs`), 3-connected (checked on the output). -/
+  node's own `vs`; non-V children all have two endpoints), 3-connected (checked on the output). -/
   r_shape : ∀ i, i < items.size → items.type i = .R →
     2 ≤ ((items.ch i).filter fun c => items.type c = .V).length ∧ 6 ≤ (items.virtualEdges i).length ∧
     ((items.virtualEdges i).map fun q => min q.1 q.2 + g.nv * max q.1 q.2).Nodup ∧
     (∀ q ∈ items.virtualEdges i, q.1 ≠ q.2) ∧
-    ∀ u v, items.vs i = (some u, some v) → ∀ q ∈ items.virtualEdges i, ¬ PairEq q (u, v)
+    (∀ u v, items.vs i = (some u, some v) → ∀ q ∈ items.virtualEdges i, ¬ PairEq q (u, v)) ∧
+    ∀ c, items.IsParent i c → items.type c ≠ .V → ∃ u v, items.vs c = (some u, some v)
   canonical : ∀ p c, items.IsParent p c → (items.type c = .S → items.type p ≠ .S) ∧ (items.type c = .P → items.type p ≠ .P)
 
 structure WF : Prop where

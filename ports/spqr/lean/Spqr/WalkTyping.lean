@@ -997,7 +997,7 @@ theorem walk_q_children (g : Graph) (ternarize : Bool) (forest : List DfsTree) (
     ∀ e, e < g.ne → Items.ch (g.walk ternarize forest).items (edgeItem g e) = [] ∨
       ∃ c, Items.type (g.walk ternarize forest).items c ∉ [NodeType.F, .V, .Q] ∧
         (Items.ch (g.walk ternarize forest).items (edgeItem g e) = [c] ∨
-          ∃ v, Items.ch (g.walk ternarize forest).items (edgeItem g e) = [c, vertItem v]) := by
+          ∃ v, v < g.nv ∧ Items.ch (g.walk ternarize forest).items (edgeItem g e) = [c, vertItem v]) := by
   sorry
 
 end Spqr

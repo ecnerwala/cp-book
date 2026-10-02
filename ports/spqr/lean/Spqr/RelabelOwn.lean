@@ -8,8 +8,8 @@ import Spqr.LayoutShape
 # Phase 3b: `Bijections`, `Ownership`, `Twins` of `relabelTree` from the per-node interface
 
 Everything here is derived from `relabel_node_spec` (taken as a hypothesis through its `∃ idx`)
-and `Items.WF`, plus the extra item-level hypotheses collected in `Items.OwnExtra` that
-`Items.WF` does not promise (see its docstring). The one `Layout`-local fact needed, the edge
+and `Items.WF` (plus `Items.ROriented` for the R-node clause of `Ownership.ne_nvs`). The one
+`Layout`-local fact needed, the edge
 records of `layoutNode` (`layoutNode_edges`), is read off the per-type forms of `LayoutShape.lean`;
 only the R edges are re-derived here without the endpoint hypothesis of `LayoutShape.run_edges`,
 so that `Twins` does not depend on `ROriented`.
@@ -170,25 +170,6 @@ theorem nvList_mem_lt (ht : items.Tree g) (he : items.Endpoints g) {i : ItemId} 
   · exact he.vs_lt i v (Or.inr (by cases h : (items.vs i).2 <;> simp [h] at hv ⊢; exact hv.symm))
 
 
-/-! ### Extra item-level hypotheses -/
-
-/-- What `Ownership`/`Twins` need beyond `Items.WF` (all true of the walk's output; none is
-promised by `Items.WF`):
-* `nv_nodup`: a node's node-vert list has no repeats (`WF` allows `I`/`P` nodes with `u = v`);
-* `q_leaf_of_node`: a Q child of a node is a leaf (block-root Qs hang under V items);
-* `r_edges_in_nv`: both endpoints of an R node's virtual edges are node-verts (`WF` only
-  constrains `some` endpoints, so a loop-Q/O child would contribute `getD 0`);
-* `q_vert_child`: the `vertItem v` child of a block-root Q is a real V item (`Shapes.q_children`
-  does not bound `v`). -/
-structure OwnExtra (g : Graph) (items : Items) : Prop where
-  nv_nodup : ∀ i, i < items.size → (items.nvList g i).Nodup
-  q_leaf_of_node : ∀ p c, items.IsParent p c → (items.type p).isNode = true →
-    items.type c = .Q → items.ch c = []
-  r_edges_in_nv : ∀ i, i < items.size → items.type i = .R →
-    ∀ p ∈ items.virtualEdges i, p.1 ∈ items.nvList g i ∧ p.2 ∈ items.nvList g i
-  q_vert_child : ∀ i, i < items.size → items.type i = .Q →
-    ∀ v, vertItem v ∈ items.ch i → v < g.nv
-
 /-! ### Children filters -/
 
 theorem Tree.filter_V_eq (ht : items.Tree g) (i : ItemId) :
@@ -296,11 +277,48 @@ theorem WF.vs_two (hw : items.WF g) {i : ItemId} (hi : i < items.size)
 
 theorem WF.q_cases (hw : items.WF g) {i : ItemId} (hi : i < items.size) (hQ : items.type i = .Q) :
     items.ch i = [] ∨ ∃ c, items.type c ∉ [NodeType.F, .V, .Q] ∧
-      (items.ch i = [c] ∨ ∃ v, items.ch i = [c, vertItem v]) := by
+      (items.ch i = [c] ∨ ∃ v, v < g.nv ∧ items.ch i = [c, vertItem v]) := by
   have hr := (hw.tree.type_Q_iff hi).1 hQ
   have he : edgeItem g (i - 1 - g.nv) = i := by simp only [edgeItem]; iomega
   have := hw.shapes.q_children (i - 1 - g.nv) (by iomega)
   rwa [he] at this
+
+theorem WF.nv_nodup (hw : items.WF g) {i : ItemId} (hi : i < items.size) :
+    (items.nvList g i).Nodup := by
+  have h := hw.endpoints.nv_nodup i hi
+  rw [hw.tree.filter_V_eq] at h
+  exact h
+
+theorem WF.q_leaf_of_node (hw : items.WF g) {p c : ItemId} (hc : items.IsParent p c)
+    (hp : (items.type p).isNode = true) (hQ : items.type c = .Q) : items.ch c = [] := by
+  refine hw.shapes.q_leaf_of_node p c hc ?_ hQ
+  intro hm
+  simp only [List.mem_cons, List.mem_singleton, List.not_mem_nil, or_false] at hm
+  rcases hm with hm | hm <;> simp [hm, NodeType.isNode] at hp
+
+theorem WF.r_edges_in_nv (hw : items.WF g) {i : ItemId} (hi : i < items.size)
+    (hR : items.type i = .R) :
+    ∀ p ∈ items.virtualEdges i, p.1 ∈ items.nvList g i ∧ p.2 ∈ items.nvList g i := by
+  intro p hp
+  obtain ⟨c, hc, rfl⟩ := List.mem_map.1 hp
+  have hc' := List.mem_filter.1 hc
+  have hV : items.type c ≠ .V := by simpa using hc'.2
+  obtain ⟨_, _, _, _, _, hvs⟩ := hw.shapes.r_shape i hi hR
+  obtain ⟨u, v, huv⟩ := hvs c hc'.1 hV
+  have hnF : items.type i ∉ [NodeType.F, .V] := by simp [hR]
+  have key : ∀ w, (items.vs c).1 = some w ∨ (items.vs c).2 = some w → w ∈ items.nvList g i := by
+    intro w hw'
+    have hlt := hw.endpoints.vs_lt c w hw'
+    unfold Items.nvList
+    simp only [List.mem_append, List.mem_map, List.mem_filter, Option.mem_toList, Option.mem_def,
+      decide_eq_true_eq]
+    rcases hw.endpoints.child_vs_in_parent i c hc'.1 hnF hV w hw' with h | h | h
+    · exact Or.inl (Or.inl h)
+    · exact Or.inr h
+    · exact Or.inl (Or.inr ⟨vertItem w, ⟨h, by simp only [vertItem]; omega⟩,
+        by simp only [vertItem]; omega⟩)
+  simp only [huv, Option.getD_some]
+  exact ⟨key u (Or.inl (by rw [huv])), key v (Or.inr (by rw [huv]))⟩
 
 theorem WF.one_le_nvList (hw : items.WF g) {i : ItemId} (hi : i < items.size)
     (hn : (items.type i).isNode = true) : 1 ≤ (items.nvList g i).length := by
@@ -308,7 +326,7 @@ theorem WF.one_le_nvList (hw : items.WF g) {i : ItemId} (hi : i < items.size)
   rw [nvList_length, hu]; simp only [Option.toList_some, List.length_singleton]; omega
 
 /-- The hypotheses of `layoutNode_edges` and the two-vertex facts, per node type. -/
-theorem WF.layout_hyps (hw : items.WF g) (hx : items.OwnExtra g) {i : ItemId} (hi : i < items.size)
+theorem WF.layout_hyps (hw : items.WF g) {i : ItemId} (hi : i < items.size)
     (hn : (items.type i).isNode = true) :
     ((items.nvList g i).length = 1 → items.nEdges g i ≤ 1) ∧
     (items.type i = .Q ∨ items.type i = .I → items.nEdges g i ≤ 1) ∧
@@ -325,7 +343,7 @@ theorem WF.layout_hyps (hw : items.WF g) (hx : items.OwnExtra g) {i : ItemId} (h
   all_goals simp only [hty] at hn hne ⊢
   all_goals simp [NodeType.isNode] at hn
   · -- Q
-    rcases hw.q_cases hi hty with h0 | ⟨c, hc, h1 | ⟨v, h1⟩⟩
+    rcases hw.q_cases hi hty with h0 | ⟨c, hc, h1 | ⟨v, hv, h1⟩⟩
     · simp only [h0, List.countP_nil, List.filter_nil, List.length_nil] at hne hlen
       simp only [Items.hasCap, hty] at hcap ⊢
       refine ⟨fun _ => by omega, fun _ => by omega, by simp, by simp, fun _ _ => ?_, by simp⟩
@@ -342,7 +360,6 @@ theorem WF.layout_hyps (hw : items.WF g) (hx : items.OwnExtra g) {i : ItemId} (h
     · have hcge : 1 + g.nv ≤ c := ht.child_ge_of_ne_V (by rw [h1]; simp) (by simp at hc; tauto)
       have hcapv : items.capCount i = 0 := by
         simp [Items.capCount, Items.hasCap, hty, h1]
-      have hv : v < g.nv := hx.q_vert_child i hi hty v (by rw [h1]; simp)
       have hv' : ¬ g.nv ≤ v := by omega
       simp only [h1, List.countP_cons, List.countP_nil] at hne
       simp [hcge, hcapv, vertItem, hv'] at hne
@@ -786,8 +803,8 @@ theorem hasCap_eq {i : ItemId} (hi : i < items.size) : t.hasCap (idx i) = items.
       · have h2 : t.children (idx i) = [] := by
           have := H.children_perm hi; rw [h0] at this; exact this.eq_nil
         simp [h2, h0]
-      · have hcm : c ∈ items.ch i := by rcases h1 with h1 | ⟨v, h1⟩ <;> simp [h1]
-        have hne : (items.ch i).isEmpty = false := by rcases h1 with h1 | ⟨v, h1⟩ <;> simp [h1]
+      · have hcm : c ∈ items.ch i := by rcases h1 with h1 | ⟨v, -, h1⟩ <;> simp [h1]
+        have hne : (items.ch i).isEmpty = false := by rcases h1 with h1 | ⟨v, -, h1⟩ <;> simp [h1]
         rw [hne, Bool.not_false, List.any_eq_true]
         refine ⟨idx c, (H.children_perm hi).mem_iff.2 (List.mem_map_of_mem hcm), ?_⟩
         rw [H.type_child hcm, bne_iff_ne]
@@ -817,7 +834,7 @@ theorem vertItem_lt {v : Nat} (hv : v < g.nv) : vertItem v < items.size := by
 
 /-! #### Ownership: node-edges -/
 
-theorem nodeEdge_at (hx : items.OwnExtra g) {i : ItemId} (hi : i < items.size) {k : Nat}
+theorem nodeEdge_at {i : ItemId} (hi : i < items.size) {k : Nat}
     (hk : k < items.nEdges g i) :
     ∃ pos, RelabelLayout g items t idx i pos ∧
       (t.nodeEdges[(t.neRange (idx i)).1 + k]!).node = idx i ∧
@@ -828,7 +845,7 @@ theorem nodeEdge_at (hx : items.OwnExtra g) {i : ItemId} (hi : i < items.size) {
   have hn : (items.type i).isNode = true := by
     by_contra h
     rw [Items.nEdges_eq_zero (Bool.eq_false_iff.2 h)] at hk; omega
-  have hy := H.wf.layout_hyps hx hi hn
+  have hy := H.wf.layout_hyps hi hn
   have hnv := (H.node i hi).nv_range
   have hne := (H.node i hi).ne_range
   have hec := Items.edgeChildren_length (g := g) (items := items) i (t.nvRange (idx i)).1 pos
@@ -856,7 +873,7 @@ theorem isNode_of_nEdges_pos {i : ItemId} (h : 0 < items.nEdges g i) :
 
 /-- The `k`-th non-V child of `i` in output order has both endpoints among `i`'s node-verts
 (R nodes), and they are the pair `edgeChildren` lists at `k`. -/
-theorem edgeChild_at (hx : items.OwnExtra g) {i : ItemId} (hi : i < items.size)
+theorem edgeChild_at {i : ItemId} (hi : i < items.size)
     (hR : items.type i = .R) {pos : Nat → Nat} {nvSt : Nat} {k : Nat}
     (hk : k < (items.edgeChildren g pos (items.ordered g i nvSt pos)).length) :
     ∃ u v, u ∈ items.nvList g i ∧ v ∈ items.nvList g i ∧ (u, v) ∈ items.virtualEdges i ∧
@@ -874,10 +891,10 @@ theorem edgeChild_at (hx : items.OwnExtra g) {i : ItemId} (hi : i < items.size)
     intro h; have := ((H.tree.type_V_iff (H.tree.child_lt hc)).1 h).2; iomega
   have hve : ((items.vs _).1.getD 0, (items.vs _).2.getD 0) ∈ items.virtualEdges i :=
     List.mem_map_of_mem (List.mem_filter.2 ⟨hc, by simpa using hV⟩)
-  obtain ⟨h1, h2⟩ := hx.r_edges_in_nv i hi hR _ hve
+  obtain ⟨h1, h2⟩ := H.wf.r_edges_in_nv hi hR _ hve
   exact ⟨_, _, h1, h2, hve, rfl⟩
 
-theorem layoutNvs_bounds (hx : items.OwnExtra g) (hor : items.ROriented g) {i : ItemId}
+theorem layoutNvs_bounds (hor : items.ROriented g) {i : ItemId}
     (hi : i < items.size) {pos : Nat → Nat} (hl : RelabelLayout g items t idx i pos) {k : Nat}
     (hk : k < items.nEdges g i) :
     (t.nvRange (idx i)).1 ≤ (layoutNvs (items.type i) (t.nvRange (idx i)).1 (t.nvRange (idx i)).2
@@ -890,7 +907,7 @@ theorem layoutNvs_bounds (hx : items.OwnExtra g) (hor : items.ROriented g) {i : 
         (items.edgeChildren g pos (items.ordered g i (t.nvRange (idx i)).1 pos)) k).2 <
       (t.nvRange (idx i)).2 := by
   have hn := isNode_of_nEdges_pos (g := g) (items := items) (i := i) (by omega)
-  have hy := H.wf.layout_hyps hx hi hn
+  have hy := H.wf.layout_hyps hi hn
   have hnv := (H.node i hi).nv_range
   have h1 := H.wf.one_le_nvList hi hn
   have hec := Items.edgeChildren_length (g := g) (items := items) i (t.nvRange (idx i)).1 pos
@@ -908,7 +925,7 @@ theorem layoutNvs_bounds (hx : items.OwnExtra g) (hor : items.ROriented g) {i : 
     have hlen : k - 1 < (items.edgeChildren g pos (items.ordered g i (t.nvRange (idx i)).1 pos)).length := by
       rw [hec]; have := Items.nEdges_eq (g := g) hn
       simp only [Items.capCount, hcap, ↓reduceIte] at this; omega
-    obtain ⟨u, v, hu, hv, huv, heq⟩ := H.edgeChild_at hx hi hR hlen
+    obtain ⟨u, v, hu, hv, huv, heq⟩ := H.edgeChild_at hi hR hlen
     rw [heq, Option.getD_some]
     have hpos := hl.pos_ok hR
     have hu1 := (hpos u hu).1
@@ -920,13 +937,13 @@ theorem layoutNvs_bounds (hx : items.OwnExtra g) (hor : items.ROriented g) {i : 
     rw [← Items.PosOK.pos_sub hnd hpos hu, ← Items.PosOK.pos_sub hnd hpos hv] at h3
     exact ⟨by omega, by omega, by omega⟩
 
-theorem layoutNvs_cap (hx : items.OwnExtra g) {i : ItemId} (hi : i < items.size)
+theorem layoutNvs_cap {i : ItemId} (hi : i < items.size)
     (hcap : items.hasCap i = true) (ec : List (Nat × Nat)) :
     layoutNvs (items.type i) (t.nvRange (idx i)).1 (t.nvRange (idx i)).2 ec 0 =
       ((t.nvRange (idx i)).1, (t.nvRange (idx i)).2 - 1) := by
   have hn : (items.type i).isNode = true := by
     unfold Items.hasCap at hcap; exact (Bool.and_eq_true_iff.1 hcap).1
-  have hy := H.wf.layout_hyps hx hi hn
+  have hy := H.wf.layout_hyps hi hn
   have hnv := (H.node i hi).nv_range
   have h1 := H.wf.one_le_nvList hi hn
   unfold layoutNvs
@@ -939,7 +956,7 @@ theorem layoutNvs_cap (hx : items.OwnExtra g) {i : ItemId} (hi : i < items.size)
 
 /-! #### Ownership -/
 
-theorem ownership (hx : items.OwnExtra g) (hor : items.ROriented g) : t.Ownership := by
+theorem ownership (hor : items.ROriented g) : t.Ownership := by
   have ht := H.tree
   refine ⟨H.nv_mono, H.ne_mono, H.gl.nv_last, H.gl.ne_last, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · -- nv_node
@@ -972,7 +989,7 @@ theorem ownership (hx : items.OwnExtra g) (hor : items.ROriented g) : t.Ownershi
     have hf : ((fun x : NodeVert => x.vert) ∘ fun v => (⟨idx i, idx (vertItem v)⟩ : NodeVert)) =
         fun v => idx (vertItem v) := rfl
     rw [hf]
-    refine (hx.nv_nodup i hi).map_on ?_
+    refine (H.wf.nv_nodup hi).map_on ?_
     intro x hx' y hy hxy
     have hx1 := Items.nvList_mem_lt ht H.wf.endpoints hx'
     have hy1 := Items.nvList_mem_lt ht H.wf.endpoints hy
@@ -984,7 +1001,7 @@ theorem ownership (hx : items.OwnExtra g) (hor : items.ROriented g) : t.Ownershi
     have hk : ne - (t.neRange (idx i)).1 < items.nEdges g i := by
       have := (H.node i hi).ne_range; omega
     have hsz : ne < t.nodeEdges.size := lt_of_lt_of_le h2 (H.neEn_le_size hn)
-    obtain ⟨pos, hl, hnode, -⟩ := H.nodeEdge_at hx hi hk
+    obtain ⟨pos, hl, hnode, -⟩ := H.nodeEdge_at hi hk
     rw [Nat.add_sub_cancel' h1] at hnode
     unfold SpqrTree.nodeOfNe
     rw [Array.getElem!_of_lt _ _ hsz, Option.map_some, hnode]
@@ -993,7 +1010,7 @@ theorem ownership (hx : items.OwnExtra g) (hor : items.ROriented g) : t.Ownershi
     obtain ⟨i, hi, h1, h2⟩ := H.ne_locate hne
     have hk : ne - (t.neRange (idx i)).1 < items.nEdges g i := by
       have := (H.node i hi).ne_range; omega
-    obtain ⟨pos, hl, hnode, hnvs⟩ := H.nodeEdge_at hx hi hk
+    obtain ⟨pos, hl, hnode, hnvs⟩ := H.nodeEdge_at hi hk
     rw [Nat.add_sub_cancel' h1] at hnode hnvs
     have hn' : n = idx i := by
       unfold SpqrTree.nodeOfNe at hn
@@ -1001,7 +1018,7 @@ theorem ownership (hx : items.OwnExtra g) (hor : items.ROriented g) : t.Ownershi
       exact (Option.some.inj hn).symm
     subst hn'
     rw [hnvs]
-    exact H.layoutNvs_bounds hx hor hi hl hk
+    exact H.layoutNvs_bounds hor hi hl hk
   · -- vert_par_nv
     intro n p hn hV hp
     obtain ⟨j, hj, rfl⟩ := H.idx_surj hn
@@ -1014,7 +1031,7 @@ theorem ownership (hx : items.OwnExtra g) (hor : items.ROriented g) : t.Ownershi
     obtain rfl := Option.some.inj hpar
     obtain ⟨pos, hl⟩ := (H.node q hqs).layout
     have hjV : j < 1 + g.nv := ht.child_lt_of_V hq hV
-    have hfil := Items.ordered_filter_V ht (hx.nv_nodup q hqs) hl.pos_ok
+    have hfil := Items.ordered_filter_V ht (H.wf.nv_nodup hqs) hl.pos_ok
     have hmem : j ∈ (items.ordered g q (t.nvRange (idx q)).1 pos).filter (· < 1 + g.nv) := by
       rw [hfil]; exact List.mem_filter.2 ⟨hq, by simpa using hjV⟩
     obtain ⟨k, hk, hjk⟩ := List.mem_iff_getElem.1 hmem
@@ -1067,7 +1084,7 @@ theorem ownership (hx : items.OwnExtra g) (hor : items.ROriented g) : t.Ownershi
         constructor
         · exact fun h => h.2
         · intro h; exact ⟨by iomega, h⟩
-      rw [hfil, Items.ordered_filter_V ht (hx.nv_nodup i hi) hl.pos_ok]
+      rw [hfil, Items.ordered_filter_V ht (H.wf.nv_nodup hi) hl.pos_ok]
       apply List.map_congr_left
       intro c hc
       have := ht.child_pos (List.mem_filter.1 hc).1
@@ -1079,13 +1096,13 @@ theorem ownership (hx : items.OwnExtra g) (hor : items.ROriented g) : t.Ownershi
       have hn1 : 0 < items.nEdges g i := by
         have hn := (Bool.and_eq_true_iff.1 (by unfold Items.hasCap at hcap; exact hcap)).1
         rw [Items.nEdges_eq hn]; simp [Items.capCount, hcap]
-      obtain ⟨pos', hl', -, hnvs'⟩ := H.nodeEdge_at hx hi hn1
+      obtain ⟨pos', hl', -, hnvs'⟩ := H.nodeEdge_at hi hn1
       rw [Nat.add_zero] at hnvs'
       have hsz : (t.neRange (idx i)).1 < t.nodeEdges.size := by
         have := (H.node i hi).ne_range; have := H.neEn_le_size (H.idx_lt hi); omega
       unfold SpqrTree.nvsOf at hnvs
       rw [Array.getElem!_of_lt _ _ hsz, Option.map_some, Option.some.injEq] at hnvs
-      rw [← hnvs, hnvs', H.layoutNvs_cap hx hi hcap]
+      rw [← hnvs, hnvs', H.layoutNvs_cap hi hcap]
       exact ⟨rfl, rfl⟩
 
 /-! #### Twins -/
@@ -1098,17 +1115,17 @@ theorem filter_nonV_length {i : ItemId} (hn : (items.type i).isNode = true) (nvS
   rw [← List.countP_eq_length_filter, (Items.ordered_perm i nvSt pos).countP_eq,
     Items.nEdges_eq hn, Nat.add_sub_cancel]
 
-/-- A non-V child of a node has a cap (a Q child of a node is a leaf, by `OwnExtra`). -/
-theorem child_hasCap (hx : items.OwnExtra g) {p c : ItemId} (hp : (items.type p).isNode = true)
+/-- A non-V child of a node has a cap (a Q child of a node is a leaf, `Shapes.q_leaf_of_node`). -/
+theorem child_hasCap {p c : ItemId} (hp : (items.type p).isNode = true)
     (hc : c ∈ items.ch p) (hge : 1 + g.nv ≤ c) : items.hasCap c = true := by
   have hn := H.tree.isNode_of_ge (H.tree.child_lt hc) hge
   by_cases hQ : items.type c = .Q
-  · rw [Items.hasCap_Q hQ, hx.q_leaf_of_node p c hc hp hQ]; rfl
+  · rw [Items.hasCap_Q hQ, H.wf.q_leaf_of_node hc hp hQ]; rfl
   · exact Items.hasCap_of_ne_Q hn hQ
 
-theorem child_nEdges_pos (hx : items.OwnExtra g) {p c : ItemId} (hp : (items.type p).isNode = true)
+theorem child_nEdges_pos {p c : ItemId} (hp : (items.type p).isNode = true)
     (hc : c ∈ items.ch p) (hge : 1 + g.nv ≤ c) : 0 < items.nEdges g c := by
-  have hcap := H.child_hasCap hx hp hc hge
+  have hcap := H.child_hasCap hp hc hge
   rw [Items.nEdges_eq (H.tree.isNode_of_ge (H.tree.child_lt hc) hge)]
   simp [Items.capCount, hcap]
 
@@ -1131,9 +1148,9 @@ theorem ne_lt_size {j : ItemId} (hj : j < items.size) {k : Nat} (hk : k < items.
     (t.neRange (idx j)).1 + k < t.nodeEdges.size := by
   have := (H.node j hj).ne_range; have := H.neEn_le_size (H.idx_lt hj); omega
 
-theorem nodeOfNe_at (hx : items.OwnExtra g) {j : ItemId} (hj : j < items.size) {k : Nat}
+theorem nodeOfNe_at {j : ItemId} (hj : j < items.size) {k : Nat}
     (hk : k < items.nEdges g j) : t.nodeOfNe ((t.neRange (idx j)).1 + k) = some (idx j) := by
-  obtain ⟨pos, hl, hnode, -⟩ := H.nodeEdge_at hx hj hk
+  obtain ⟨pos, hl, hnode, -⟩ := H.nodeEdge_at hj hk
   unfold SpqrTree.nodeOfNe
   rw [Array.getElem!_of_lt _ _ (H.ne_lt_size hj hk), Option.map_some, hnode]
 
@@ -1193,14 +1210,14 @@ theorem twin_invol : ∀ ne ne', t.twin ne = some ne' → t.twin ne' = some ne :
     · rw [h1] at h; obtain rfl := Option.some.inj h; exact h2
     · rw [h1] at h; cases h
 
-theorem twin_ne (hx : items.OwnExtra g) : ∀ ne ne', t.twin ne = some ne' → ne ≠ ne' := by
+theorem twin_ne : ∀ ne ne', t.twin ne = some ne' → ne ≠ ne' := by
   intro ne ne' h
   by_cases hne : ne < t.nodeEdges.size
   swap
   · rw [twin_none_of_ge (Nat.le_of_not_lt hne)] at h; cases h
   obtain ⟨j, k, hj, hk, rfl⟩ := H.ne_decomp hne
   have hn := isNode_of_nEdges_pos (g := g) (items := items) (i := j) (by omega)
-  have hnode := H.nodeOfNe_at hx hj hk
+  have hnode := H.nodeOfNe_at hj hk
   by_cases hc : items.capCount j ≤ k
   · obtain ⟨pos, hl⟩ := (H.node j hj).layout
     have hk' : k - items.capCount j <
@@ -1214,8 +1231,8 @@ theorem twin_ne (hx : items.OwnExtra g) : ∀ ne ne', t.twin ne = some ne' → n
     have hcm := Items.mem_ordered.1 hmem.1
     have hge : 1 + g.nv ≤ ((items.ordered g j (t.nvRange (idx j)).1 pos).filter (· ≥ 1 + g.nv))[k - items.capCount j] := by
       simpa using hmem.2
-    have hpos := H.child_nEdges_pos hx hn hcm hge
-    have hnode' := H.nodeOfNe_at hx (H.tree.child_lt hcm) hpos
+    have hpos := H.child_nEdges_pos hn hcm hge
+    have hnode' := H.nodeOfNe_at (H.tree.child_lt hcm) hpos
     rw [Nat.add_zero] at hnode'
     intro heq
     rw [heq, hnode'] at hnode
@@ -1230,16 +1247,16 @@ theorem twin_ne (hx : items.OwnExtra g) : ∀ ne ne', t.twin ne = some ne' → n
       have hps := H.tree.parent_lt hp
       have hkp : items.capCount p + k' < items.nEdges g p := by
         rw [filter_nonV_length hpn] at hk'; omega
-      have hnode' := H.nodeOfNe_at hx hps hkp
+      have hnode' := H.nodeOfNe_at hps hkp
       rw [← Nat.add_assoc] at hnode'
       intro heq
       rw [heq, hnode'] at hnode
       exact H.tree.child_ne hp (H.idx_inj hj hps (Option.some.inj hnode).symm)
     · rw [h1] at h; cases h
 
-theorem twins (hx : items.OwnExtra g) : t.Twins := by
+theorem twins : t.Twins := by
   have ht := H.tree
-  refine ⟨H.twin_invol, H.twin_ne hx, ?_, ?_, ?_⟩
+  refine ⟨H.twin_invol, H.twin_ne, ?_, ?_, ?_⟩
   · -- twin_parent
     intro n ne hn hcap
     obtain ⟨j, hj, rfl⟩ := H.idx_surj hn
@@ -1253,7 +1270,7 @@ theorem twins (hx : items.OwnExtra g) : t.Twins := by
       refine ⟨idx p, (H.node p hps).child_par j hp, by rw [H.type hps]; exact hpn, _, h1, ?_⟩
       have hkp : items.capCount p + k' < items.nEdges g p := by
         rw [filter_nonV_length hpn] at hk'; omega
-      have := H.nodeOfNe_at hx hps hkp
+      have := H.nodeOfNe_at hps hkp
       rwa [← Nat.add_assoc] at this
     · right
       have hps := ht.parent_lt hp
@@ -1294,7 +1311,7 @@ theorem twins (hx : items.OwnExtra g) : t.Twins := by
     have hge : 1 + g.nv ≤ ((items.ordered g j (t.nvRange (idx j)).1 pos).filter (· ≥ 1 + g.nv))[k'] := by
       simpa using hmem.2
     unfold SpqrTree.capNe
-    rw [H.hasCap_eq (ht.child_lt hcm), H.child_hasCap hx hnode hcm hge]
+    rw [H.hasCap_eq (ht.child_lt hcm), H.child_hasCap hnode hcm hge]
     rfl
   · -- cap_none
     intro n hn hnode
@@ -1309,24 +1326,23 @@ end RelabelAll
 /-! ### Assembly -/
 
 /-- Phase 3b: the output tree's bijections, ownership, and twin pairing, from `relabel_node_spec`.
-`Bijections` needs only `Items.WF`; `Ownership` and `Twins` need `Items.OwnExtra` (and
-`Ownership.ne_nvs` for R nodes needs `Items.ROriented`). -/
-theorem relabelTree_own (g : Graph) (items : Items) (h : items.WF g) (hx : items.OwnExtra g)
+Only `Ownership.ne_nvs` for R nodes needs `Items.ROriented` beyond `Items.WF`. -/
+theorem relabelTree_own (g : Graph) (items : Items) (h : items.WF g)
     (hor : items.ROriented g) :
     (relabelTree g items).Bijections ∧ (relabelTree g items).Ownership ∧
       (relabelTree g items).Twins := by
   obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
   have H : RelabelAll g items (relabelTree g items) idx := ⟨h, hidx, hnode⟩
-  exact ⟨H.bijections, H.ownership hx hor, H.twins hx⟩
+  exact ⟨H.bijections, H.ownership hor, H.twins⟩
 
 theorem relabelTree_bijections (g : Graph) (items : Items) (h : items.WF g) :
     (relabelTree g items).Bijections := by
   obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
   exact (RelabelAll.mk h hidx hnode).bijections
 
-theorem relabelTree_twins (g : Graph) (items : Items) (h : items.WF g) (hx : items.OwnExtra g) :
+theorem relabelTree_twins (g : Graph) (items : Items) (h : items.WF g) :
     (relabelTree g items).Twins := by
   obtain ⟨idx, -, hidx, hnode⟩ := relabel_node_spec g items h
-  exact (RelabelAll.mk h hidx hnode).twins hx
+  exact (RelabelAll.mk h hidx hnode).twins
 
 end Spqr
