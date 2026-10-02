@@ -249,6 +249,7 @@ def closeCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : Wa
       let mid := midr.reverse
       if c.topDepth < lowval || d < c.topDepth then out := bad₂ "close_c_top" (showT c) :: out
       if vy.topDepth ≤ d then out := bad₂ "close_vy_top" (showT vy) :: out
+      if !(E₂ c).contains o.e then out := bad₂ "close_c_edge" (showT c) :: out
       if (List.range s.g.ne).any (fun e => inc s e vy.vStart && !subE.contains e) then out := bad₂ "close_y_edges" (showT vy) :: out
       match spanItems py with
       | [i] => if hasParent s₂ i then out := bad₂ "close_py_root" (showT py) :: out
