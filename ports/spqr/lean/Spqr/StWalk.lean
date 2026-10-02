@@ -126,18 +126,32 @@ structure WalkState.StInv (s : WalkState) (d : Nat) (ord : Nat → Nat) : Prop w
   items : ∀ i, i < s.items.size →
     Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R →
     Items.StItem s.items i
+  /-- Every entry finished by an open-path vertex strictly below its upper terminal (`vStart`
+  is `stackVerts[j]` for some `topDepth < j ≤ d`: back edges, type-1/type-2 folds and P
+  pieces of the vertices on the path) lies on the side `stackDir[topDepth]`. Entries whose
+  `vStart` has been popped (the eager vertex merge after a type-2 first edge) and entries at
+  `topDepth = d` from earlier out-edges of the current vertex (`stackDir[d]` has been reset
+  since) can be two-sided, see `PROOF.md` §7.4. -/
+  onSide : ∀ t ∈ s.tstack, t.topDepth < d →
+    (∃ j, t.topDepth < j ∧ j ≤ d ∧ s.stackVerts[j]! = t.vStart) →
+    t.OnSide s.stackDir[t.topDepth]!
 
-/-- Admitted: along the first-child chain of an ear every vertex has the ear's lowval, so
-`stackDir` is constant along it (`hchain`, from `first_ret_lowval`, `chain_stackDir_step` and
-`walkTree_stackDir_below` in `Spqr.StFrame`) and every piece attached along the ear lands on the
-same side. The conclusion is a history fact about how the entries were built (`pushTstack`,
-`merge_onSide`, `fold_onSide`), not derivable from the state alone. -/
-theorem chain_stackDir_const (s : WalkState) (l d : Nat) (hl : l < d)
+/-- Along the first-child chain of an ear every vertex has the ear's lowval, so `stackDir` is
+constant along it (`hchain`, from `first_ret_lowval`, `chain_stackDir_step` and
+`walkTree_stackDir_below` in `Spqr.StFrame`), and an entry finished on the chain
+(`StInv.onSide`) is on the side `stackDir[l + 1]` of the whole chain.
+The earlier statement with the hypothesis `∀ d' ∈ (l, d], stackVerts[d'] ≠ t.vStart` and
+`t.topDepth ≤ d` is false: `gen.py` seed 6, depth `d = 14`, `l = 13`, has the entry
+`vStart = 10, topDepth = 14` (back edge `10 → 2` pushed while `stackDir[14] = 1`, with
+`stackDir[14] = 0` after the next out-edge of `2`) on `spans.2`, see `PROOF.md` §7.4. -/
+theorem chain_stackDir_const (s : WalkState) (l d : Nat) (ord : Nat → Nat) (hinv : s.StInv d ord)
     (hchain : ∀ d', l < d' → d' ≤ d → s.stackDir[d']! = s.stackDir[l + 1]!) :
-    ∀ t ∈ s.tstack, l < t.topDepth → t.topDepth ≤ d →
-      (∀ d', l < d' → d' ≤ d → s.stackVerts[d']! ≠ t.vStart) →
+    ∀ t ∈ s.tstack, l < t.topDepth → t.topDepth < d →
+      (∃ j, t.topDepth < j ∧ j ≤ d ∧ s.stackVerts[j]! = t.vStart) →
       t.OnSide s.stackDir[l + 1]! := by
-  sorry
+  intro t ht hl hd hj
+  have h := hinv.onSide t ht hd hj
+  rwa [hchain t.topDepth hl (Nat.le_of_lt hd)] at h
 
 /-- Admitted: the top entry is closable whenever `finishEdge` closes it
 (the `finishTstackTop` calls in the type-1, type-2 and block-boundary branches). -/
