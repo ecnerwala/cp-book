@@ -971,6 +971,208 @@ theorem shape_QI (type : NodeType) (node nvSt nvEn neSt neEn : Nat) (E : List (N
   · exact Or.inr ⟨hv, hsk⟩
   · exact ⟨hv, hsk⟩
 
+/-! #### P -/
+
+theorem local_P (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvEn - nvSt = 2)
+    (he : neSt ≤ neEn) :
+    (layoutNode .P node nvSt nvEn neSt neEn E).Local node nvSt nvEn neSt neEn := by
+  rw [layoutNode_P_eq _ _ _ _ _ _ (by omega)]
+  obtain ⟨hb, hsz, hdsz, ge, -⟩ := runP_spec node nvSt nvEn neSt neEn he
+  have hrow := runP_row node nvSt nvEn neSt neEn hv he
+  have hB := runP_rowBound node nvSt nvEn neSt neEn hv he
+  have hf2 : ∀ (nv x : Nat),
+      x ∈ ((List.range (runP node nvSt nvEn neSt neEn).edges.size).filter fun k =>
+          (runP node nvSt nvEn neSt neEn).edges[k]!.nvs.2 = nv).map (· + neSt) ↔
+        neSt ≤ x ∧ x < neEn ∧ nvSt + 1 = nv := by
+    intro nv x
+    rw [mem_filter_range, hsz]
+    constructor
+    · rintro ⟨h1, h2, h3⟩; rw [ge _ h2] at h3; simp at h3; exact ⟨h1, by omega, h3⟩
+    · rintro ⟨h1, h2, h3⟩; refine ⟨h1, by omega, ?_⟩; rw [ge _ (by omega)]; simpa using h3
+  have hf1 : ∀ (nv x : Nat),
+      x ∈ ((List.range (runP node nvSt nvEn neSt neEn).edges.size).filter fun k =>
+          (runP node nvSt nvEn neSt neEn).edges[k]!.nvs.1 = nv).map (· + neSt) ↔
+        neSt ≤ x ∧ x < neEn ∧ nvSt = nv := by
+    intro nv x
+    rw [mem_filter_range, hsz]
+    constructor
+    · rintro ⟨h1, h2, h3⟩; rw [ge _ h2] at h3; simp at h3; exact ⟨h1, by omega, h3⟩
+    · rintro ⟨h1, h2, h3⟩; refine ⟨h1, by omega, ?_⟩; rw [ge _ (by omega)]; simpa using h3
+  refine ⟨hsz, by rw [hb, initP_adjBounds_size], hdsz, fun k hk => ?_, fun k hk => ?_,
+    ?_, fun r h1 h2 => ?_, fun r h1 h2 a ha => ?_, fun nv h1 h2 => ?_, fun nv h1 h2 => ?_⟩
+  · rw [hsz] at hk; rw [ge _ hk]; exact ⟨rfl, rfl⟩
+  · rw [hsz] at hk; rw [ge _ hk]; simp; omega
+  · rw [hB _ (by omega) (Nat.le_refl _), ite_of_neg (by omega), ite_of_neg (by omega)]; omega
+  · rw [hB _ h1 (by omega), hB _ (by omega) (by omega)]; split_ifs <;> omega
+  · rw [hrow _ h1 h2] at ha
+    split_ifs at ha <;> simp only [List.mem_map, List.mem_range, List.not_mem_nil] at ha
+    · obtain ⟨k, hk, rfl⟩ := ha
+      simp only [Nat.add_sub_cancel_left]
+      rw [ge _ hk]; simp <;> omega
+    · obtain ⟨k, hk, rfl⟩ := ha
+      simp only
+      rw [ge _ (by omega)]; simp <;> omega
+  · rw [hrow _ (by omega) (by omega)]
+    rcases (show nv = nvSt ∨ nv = nvSt + 1 by omega) with rfl | rfl
+    · rw [ite_of_neg (by omega), ite_of_neg (by omega)]
+      apply perm_of_mem_iff List.nodup_nil (filter_range_nodup ..)
+      intro x; rw [hf2]; simp
+    · rw [ite_of_neg (by omega), ite_of_pos (by omega), List.map_map]
+      apply perm_of_mem_iff _ (filter_range_nodup ..)
+      · intro x; rw [hf2]
+        simp only [List.mem_map, List.mem_range, Function.comp]
+        constructor
+        · rintro ⟨k, hk, rfl⟩; exact ⟨by omega, by omega, trivial⟩
+        · rintro ⟨h1, h2, -⟩; exact ⟨neEn - 1 - x, by omega, by omega⟩
+      · exact List.nodup_range.map_on fun a ha b hb h => by
+          simp only [List.mem_range] at ha hb; simp only [Function.comp] at h; omega
+  · rw [hrow _ (by omega) (by omega)]
+    rcases (show nv = nvSt ∨ nv = nvSt + 1 by omega) with rfl | rfl
+    · rw [ite_of_pos rfl, List.map_map]
+      apply perm_of_mem_iff _ (filter_range_nodup ..)
+      · intro x; rw [hf1]
+        simp only [List.mem_map, List.mem_range, Function.comp]
+        constructor
+        · rintro ⟨k, hk, rfl⟩; exact ⟨by omega, by omega, trivial⟩
+        · rintro ⟨h1, h2, -⟩; exact ⟨x - neSt, by omega, by omega⟩
+      · exact List.nodup_range.map_on fun a ha b hb h => by
+          simp only [Function.comp] at h; omega
+    · rw [ite_of_neg (by omega), ite_of_neg (by omega)]
+      apply perm_of_mem_iff List.nodup_nil (filter_range_nodup ..)
+      intro x; rw [hf1]; simp
+
+theorem shape_P (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvEn - nvSt = 2)
+    (he : 3 ≤ neEn - neSt) :
+    (layoutNode .P node nvSt nvEn neSt neEn E).Shape .P nvSt nvEn := by
+  rw [layoutNode_P_eq _ _ _ _ _ _ (by omega)]
+  obtain ⟨-, hsz, -, ge, -⟩ := runP_spec node nvSt nvEn neSt neEn (by omega)
+  refine ⟨hv, by rw [hsz]; exact he, fun p hp => ?_⟩
+  simp only [Layout.skeleton, List.mem_map, Array.mem_toList_iff, Array.mem_iff_getElem] at hp
+  obtain ⟨a, ⟨k, hk, rfl⟩, rfl⟩ := hp
+  rw [← getElem!_pos (runP node nvSt nvEn neSt neEn).edges k hk, ge _ (by rw [hsz] at hk; exact hk)]
+
+/-! #### S -/
+
+theorem local_S (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : 3 ≤ nvEn - nvSt)
+    (he : neEn - neSt = nvEn - nvSt) :
+    (layoutNode .S node nvSt nvEn neSt neEn E).Local node nvSt nvEn neSt neEn := by
+  rw [layoutNode_S_eq _ _ _ _ _ _ (by omega)]
+  obtain ⟨hb, hsz, hdsz, ge, -⟩ := runS_spec node nvSt nvEn neSt neEn (by omega)
+  have hrow := runS_row node nvSt nvEn neSt neEn hv he
+  have hB := runS_rowBound node nvSt nvEn neSt neEn (by omega) (by omega)
+  have hf2 : ∀ (nv x : Nat),
+      x ∈ ((List.range (runS node nvSt nvEn neSt neEn).edges.size).filter fun k =>
+          (runS node nvSt nvEn neSt neEn).edges[k]!.nvs.2 = nv).map (· + neSt) ↔
+        neSt ≤ x ∧ x < neEn ∧ (if x - neSt = 0 then nvEn - 1 else nvSt + (x - neSt)) = nv := by
+    intro nv x
+    rw [mem_filter_range, hsz]
+    constructor
+    · rintro ⟨h1, h2, h3⟩; rw [ge _ h2] at h3; refine ⟨h1, by omega, ?_⟩
+      split_ifs at h3 ⊢ <;> simp at h3 <;> omega
+    · rintro ⟨h1, h2, h3⟩; refine ⟨h1, by omega, ?_⟩; rw [ge _ (by omega)]
+      split_ifs at h3 ⊢ <;> simp <;> omega
+  have hf1 : ∀ (nv x : Nat),
+      x ∈ ((List.range (runS node nvSt nvEn neSt neEn).edges.size).filter fun k =>
+          (runS node nvSt nvEn neSt neEn).edges[k]!.nvs.1 = nv).map (· + neSt) ↔
+        neSt ≤ x ∧ x < neEn ∧ (if x - neSt = 0 then nvSt else nvSt + (x - neSt) - 1) = nv := by
+    intro nv x
+    rw [mem_filter_range, hsz]
+    constructor
+    · rintro ⟨h1, h2, h3⟩; rw [ge _ h2] at h3; refine ⟨h1, by omega, ?_⟩
+      split_ifs at h3 ⊢ <;> simp at h3 <;> omega
+    · rintro ⟨h1, h2, h3⟩; refine ⟨h1, by omega, ?_⟩; rw [ge _ (by omega)]
+      split_ifs at h3 ⊢ <;> simp <;> omega
+  have hdest : ∀ a : NodeAdj, neSt ≤ a.ne → a.ne < neEn →
+      (a.destNv = (if a.ne - neSt = 0 then nvSt else nvSt + (a.ne - neSt) - 1) ∨
+       a.destNv = (if a.ne - neSt = 0 then nvEn - 1 else nvSt + (a.ne - neSt))) →
+      neSt ≤ a.ne ∧ a.ne < neEn ∧
+      (a.destNv = (runS node nvSt nvEn neSt neEn).edges[a.ne - neSt]!.nvs.1 ∨
+       a.destNv = (runS node nvSt nvEn neSt neEn).edges[a.ne - neSt]!.nvs.2) := by
+    intro a h1 h2 h3
+    refine ⟨h1, h2, ?_⟩
+    rw [ge _ (by omega)]
+    split_ifs at h3 ⊢ <;> simpa using h3
+  refine ⟨hsz, by rw [hb, boundsS_size], hdsz, fun k hk => ?_, fun k hk => ?_,
+    ?_, fun r h1 h2 => ?_, fun r h1 h2 a ha => ?_, fun nv h1 h2 => ?_, fun nv h1 h2 => ?_⟩
+  · rw [hsz] at hk; rw [ge _ hk]; split_ifs <;> exact ⟨rfl, rfl⟩
+  · rw [hsz] at hk; rw [ge _ hk]; split_ifs <;> simp <;> omega
+  · rw [hB _ (by omega) (Nat.le_refl _), ite_of_neg (by omega), ite_of_pos (by omega)]; omega
+  · rw [hB _ h1 (by omega), hB _ (by omega) (by omega)]; split_ifs <;> omega
+  · rw [hrow _ h1 h2] at ha
+    split_ifs at ha with c0 c1 c2 c3 c4 <;>
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
+    · rcases ha with rfl | rfl <;> apply hdest <;> simp only <;> (try split_ifs) <;> omega
+    · rcases ha with rfl | rfl <;> apply hdest <;> simp only <;> (try split_ifs) <;> omega
+    · subst ha; apply hdest <;> simp only <;> (try split_ifs) <;> omega
+    · subst ha; apply hdest <;> simp only <;> (try split_ifs) <;> omega
+  · rw [hrow _ (by omega) (by omega)]
+    by_cases c0 : nv = nvSt
+    · rw [ite_of_pos (by omega)]
+      apply perm_of_mem_iff List.nodup_nil (filter_range_nodup ..)
+      intro x; rw [hf2]; simp only [List.not_mem_nil, false_iff, not_and]
+      intro h1 h2; split_ifs <;> omega
+    by_cases c1 : nv = nvEn - 1
+    · rw [ite_of_neg (by omega), ite_of_neg (by omega), ite_of_pos (by omega)]
+      apply perm_of_mem_iff (by simp; omega) (filter_range_nodup ..)
+      intro x; rw [hf2]
+      simp only [List.map_cons, List.map_nil, List.mem_cons, List.not_mem_nil, or_false]
+      constructor
+      · rintro (rfl | rfl)
+        · refine ⟨by omega, by omega, ?_⟩; rw [ite_of_neg (by omega)]; omega
+        · refine ⟨Nat.le_refl _, by omega, ?_⟩; rw [ite_of_pos (by omega)]; omega
+      · rintro ⟨h1, h2, h3⟩; split_ifs at h3 <;> omega
+    · rw [ite_of_neg (by omega), ite_of_neg (by omega), ite_of_neg (by omega), ite_of_neg (by omega),
+        ite_of_pos (by omega)]
+      apply perm_of_mem_iff (by simp) (filter_range_nodup ..)
+      intro x; rw [hf2]
+      simp only [List.map_cons, List.map_nil, List.mem_cons, List.not_mem_nil, or_false]
+      constructor
+      · rintro rfl; refine ⟨by omega, by omega, ?_⟩; rw [ite_of_neg (by omega)]; omega
+      · rintro ⟨h1, h2, h3⟩; split_ifs at h3 <;> omega
+  · rw [hrow _ (by omega) (by omega)]
+    by_cases c0 : nv = nvSt
+    · rw [ite_of_neg (by omega), ite_of_pos (by omega)]
+      apply perm_of_mem_iff (by simp) (filter_range_nodup ..)
+      intro x; rw [hf1]
+      simp only [List.map_cons, List.map_nil, List.mem_cons, List.not_mem_nil, or_false]
+      constructor
+      · rintro (rfl | rfl)
+        · refine ⟨Nat.le_refl _, by omega, ?_⟩; rw [ite_of_pos (by omega)]; omega
+        · refine ⟨by omega, by omega, ?_⟩; rw [ite_of_neg (by omega)]; omega
+      · rintro ⟨h1, h2, h3⟩; split_ifs at h3 <;> omega
+    by_cases c1 : nv = nvEn - 1
+    · rw [ite_of_neg (by omega), ite_of_neg (by omega), ite_of_neg (by omega), ite_of_pos (by omega)]
+      apply perm_of_mem_iff List.nodup_nil (filter_range_nodup ..)
+      intro x; rw [hf1]; simp only [List.not_mem_nil, false_iff, not_and]
+      intro h1 h2; split_ifs <;> omega
+    · rw [ite_of_neg (by omega), ite_of_neg (by omega), ite_of_neg (by omega), ite_of_neg (by omega),
+        ite_of_neg (by omega)]
+      apply perm_of_mem_iff (by simp) (filter_range_nodup ..)
+      intro x; rw [hf1]
+      simp only [List.map_cons, List.map_nil, List.mem_cons, List.not_mem_nil, or_false]
+      constructor
+      · rintro rfl; refine ⟨by omega, by omega, ?_⟩; rw [ite_of_neg (by omega)]; omega
+      · rintro ⟨h1, h2, h3⟩; split_ifs at h3 <;> omega
+
+theorem shape_S (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : 3 ≤ nvEn - nvSt)
+    (he : neEn - neSt = nvEn - nvSt) :
+    (layoutNode .S node nvSt nvEn neSt neEn E).Shape .S nvSt nvEn := by
+  rw [layoutNode_S_eq _ _ _ _ _ _ (by omega)]
+  obtain ⟨-, hsz, -, ge, -⟩ := runS_spec node nvSt nvEn neSt neEn (by omega)
+  refine ⟨hv, ?_⟩
+  rw [Layout.skeleton]
+  apply toList_map_eq _ _ _ (by simp [hsz]; omega)
+  intro k hk
+  rw [hsz] at hk
+  rw [ge _ hk]
+  cases k with
+  | zero => rfl
+  | succ k =>
+    rw [getElem!_pos _ _ (by simp; omega)]
+    simp only [Nat.succ_ne_zero, ↓reduceIte, List.getElem_cons_succ, List.getElem_map,
+      List.getElem_range, Nat.add_sub_cancel, Prod.mk.injEq]
+    omega
+
 end LayoutShape
 
 end Spqr
