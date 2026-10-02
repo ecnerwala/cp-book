@@ -287,6 +287,19 @@ sides; and type-2 separation pairs always lie along a single ear (Fact C), so th
 split cuts off is uniformly on one side and its entry has the empty-side shape. Only type-1
 closes / ear boundaries produce genuinely two-sided entries.
 
+### 4.4b Planar variant: what a tstack entry stores
+
+In the planar variant a tstack entry represents its piece as an interior spine along the ear
+plus the two outer-face boundary walks along the outside of the piece; only the exposed ends of
+those two walks (quarter-edges) are stored, together with, on each side, a linked list of the far
+ends of the back edges leaving the piece on that side. Conceptually the whole upper DFS stack
+(the back-edge targets, i.e. the ancestors above the piece) is contracted into a single vertex at
+which the exposed ends also live. Embedding a new piece or back edge is choosing which boundary
+walk it goes on (consistent with its st side); the piece is non-planar when both sides are
+already blocked. The invariant to prove is therefore: the piece has a planar embedding with both
+terminals on the outer face, and the exposed ends + side lists describe exactly its outer-face
+boundary split at the terminals; merges glue embeddings along the shared terminal.
+
 ### 4.5 Maximality and R skeletons [hard]
 
 Soundness (each item is a separation class, Fact B direction "⇐") comes from statement 3 of
