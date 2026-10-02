@@ -60,10 +60,12 @@ structure Endpoints : Prop where
     | .Q => (∃ v, items.vs i = (some v, none)) ∨ (∃ u v, items.vs i = (some u, some v))
     | _ => ∃ u v, items.vs i = (some u, some v)
   vs_lt : ∀ i u, (items.vs i).1 = some u ∨ (items.vs i).2 = some u → u < g.nv
-  /-- A Q item's endpoints are its edge's endpoints. -/
+  /-- A Q item's endpoints are its edge's endpoints; a block root (a Q with children, including
+  every self-loop) records only its upper endpoint. -/
   q_vs : ∀ e, e < g.ne → ∀ u, (items.vs (edgeItem g e)).1 = some u →
     (u = (g.edges[e]!).1 ∨ u = (g.edges[e]!).2) ∧
-    ((items.vs (edgeItem g e)).2 = none ↔ (g.edges[e]!).1 = (g.edges[e]!).2) ∧
+    ((items.vs (edgeItem g e)).2 = none ↔ items.ch (edgeItem g e) ≠ []) ∧
+    ((g.edges[e]!).1 = (g.edges[e]!).2 → items.ch (edgeItem g e) ≠ []) ∧
     ∀ v, (items.vs (edgeItem g e)).2 = some v → PairEq (u, v) g.edges[e]!
   /-- Each child node's endpoints are vertices of the parent node: the parent's own endpoints or
   its V children. -/
