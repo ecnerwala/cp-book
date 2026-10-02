@@ -42,6 +42,7 @@ import Spqr.StSpec
 import Spqr.LayoutShape
 import Spqr.RelabelAdj
 import Spqr.RelabelWF
+import Spqr.StOriented
 import Spqr.StRef
 import Spqr.StWalk
 import Spqr.StEar
