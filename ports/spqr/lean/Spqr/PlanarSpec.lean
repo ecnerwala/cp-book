@@ -1,6 +1,8 @@
 import Spqr.PlanarEmbed
 import Spqr.PlanarRelabelProj
 import Spqr.Build
+import Spqr.Correctness
+import Spqr.PlanarInv
 import Spqr.Spec
 
 /-!
@@ -44,11 +46,133 @@ end PlanarSpqrTree
 abbrev Graph.planarTree (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) : PlanarSpqrTree :=
   g.planarSpqrTree ternarize vertOrder edgeOrder
 
+/-- Relabel bookkeeping (admitted): the segment of `neRotAdj` belonging to node `i` is the
+`layoutRot` of its type, computed by `planarRelabel` when the node was laid out. -/
+theorem neRotAdj_segment (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (i : Nat)
+    (hi : i < (g.planarTree ternarize vertOrder edgeOrder).size) :
+    ∃ (edgeVes : List Nat) (mapRot : Nat → Array (Option Nat)) (capVe : Nat),
+      (g.planarTree ternarize vertOrder edgeOrder).neRotAdj.extract
+          (4 * ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.neRange i).1)
+          (4 * ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.neRange i).2) =
+        layoutRot ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.type i)
+          ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i)
+          ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.neRange i).1
+          ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.neRange i).2 edgeVes mapRot capVe := by
+  sorry
+
+theorem planarTree_shape (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (i : Nat)
+    (hi : i < (g.planarTree ternarize vertOrder edgeOrder).size) :
+    (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.Shape i := by
+  have hwf := spqrTree_wf g ternarize vertOrder edgeOrder
+  rw [← planarRelabel_proj] at hwf
+  exact hwf.shape i hi
+
+theorem skeleton_length (t : SpqrTree) (i : Nat) : (t.skeleton i).length = t.nEdges i := by
+  simp [SpqrTree.skeleton, SpqrTree.nodeEdgesOf, SpqrTree.nEdges]
+
+/-- The S case of `nodePlanar_sound`: the skeleton is the cycle (`Shape`), the local rotation is
+the cycle layout (`neRotAdj_segment`, `layoutRot_S_shift`), and the cycle layout is a planar
+embedding (`cycleRot_isPlanarEmbedding`). -/
+theorem nodePlanar_sound_S (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (i : Nat)
+    (hi : i < (g.planarTree ternarize vertOrder edgeOrder).size)
+    (hS : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.type i = .S) :
+    IsPlanarEmbedding ((g.planarTree ternarize vertOrder edgeOrder).localSkeleton i)
+      ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i)
+      ((g.planarTree ternarize vertOrder edgeOrder).nodeRot i) := by
+  have hsh := planarTree_shape g ternarize vertOrder edgeOrder i hi
+  simp only [SpqrTree.Shape, hS] at hsh
+  obtain ⟨⟨s, e⟩, hnv⟩ : ∃ p, (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nvRange i = p := ⟨_, rfl⟩
+  rw [hnv] at hsh
+  simp only at hsh
+  obtain ⟨hn3, hsk⟩ := hsh
+  have hnv' : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i = e - s := by unfold SpqrTree.nVerts; rw [hnv]
+  have hsk' : (g.planarTree ternarize vertOrder edgeOrder).localSkeleton i = cycleEdges (e - s) := by
+    unfold PlanarSpqrTree.localSkeleton
+    rw [hsk, hnv]
+    simp only [cycleEdges, List.map_cons, List.map_map]
+    refine List.cons_eq_cons.mpr ⟨?_, ?_⟩
+    · simp only [Prod.mk.injEq]; omega
+    · apply List.map_congr_left
+      intro k hk
+      simp only [Function.comp, Prod.mk.injEq]
+      omega
+  have hrot : (g.planarTree ternarize vertOrder edgeOrder).nodeRot i = cycleRot (e - s) := by
+    obtain ⟨ev, mr, cv, hseg⟩ := neRotAdj_segment g ternarize vertOrder edgeOrder i hi
+    have hlen := skeleton_length (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree i
+    rw [hsk] at hlen
+    simp only [List.length_cons, List.length_map, List.length_range] at hlen
+    unfold PlanarSpqrTree.nodeRot
+    obtain ⟨⟨neSt, neEn⟩, hne⟩ : ∃ p, (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.neRange i = p := ⟨_, rfl⟩
+    rw [hne] at hseg ⊢
+    unfold SpqrTree.nEdges at hlen
+    rw [hne] at hlen
+    simp only at hlen
+    obtain ⟨k, rfl⟩ : ∃ k, neEn = neSt + k := ⟨neEn - neSt, by omega⟩
+    have hk : k = e - s := by omega
+    subst hk
+    rw [hS, hnv'] at hseg
+    simp only [hseg]
+    exact layoutRot_S_shift (e - s) neSt (by omega) ev mr cv
+  rw [hsk', hrot, hnv']
+  exact cycleRot_isPlanarEmbedding _ (by omega)
+
+/-- The P case of `nodePlanar_sound`: the skeleton is a bond (`Shape`), the local rotation is
+the bond layout (`neRotAdj_segment`, `layoutRot_P_shift`), and the bond layout is a planar
+embedding (`bondRot_isPlanarEmbedding`). -/
+theorem nodePlanar_sound_P (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (i : Nat)
+    (hi : i < (g.planarTree ternarize vertOrder edgeOrder).size)
+    (hP : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.type i = .P) :
+    IsPlanarEmbedding ((g.planarTree ternarize vertOrder edgeOrder).localSkeleton i)
+      ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i)
+      ((g.planarTree ternarize vertOrder edgeOrder).nodeRot i) := by
+  have hsh := planarTree_shape g ternarize vertOrder edgeOrder i hi
+  simp only [SpqrTree.Shape, hP] at hsh
+  obtain ⟨⟨s, e⟩, hnv⟩ : ∃ p, (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nvRange i = p := ⟨_, rfl⟩
+  rw [hnv] at hsh
+  simp only at hsh
+  obtain ⟨hn2, hk3, hall⟩ := hsh
+  have hnv' : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i = 2 := by unfold SpqrTree.nVerts; rw [hnv]; exact hn2
+  have hlen := skeleton_length (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree i
+  have hsk' : (g.planarTree ternarize vertOrder edgeOrder).localSkeleton i = bondEdges ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nEdges i) := by
+    unfold PlanarSpqrTree.localSkeleton bondEdges
+    rw [List.eq_replicate_iff]
+    refine ⟨by rw [List.length_map, hlen], fun b hb => ?_⟩
+    rw [List.mem_map] at hb
+    obtain ⟨p, hp, rfl⟩ := hb
+    rw [hall p hp, hnv]
+    simp
+  have hrot : (g.planarTree ternarize vertOrder edgeOrder).nodeRot i = bondRot ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nEdges i) := by
+    obtain ⟨ev, mr, cv, hseg⟩ := neRotAdj_segment g ternarize vertOrder edgeOrder i hi
+    unfold PlanarSpqrTree.nodeRot
+    obtain ⟨⟨neSt, neEn⟩, hne⟩ : ∃ p, (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.neRange i = p := ⟨_, rfl⟩
+    rw [hne] at hseg ⊢
+    have hk : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nEdges i = neEn - neSt := by unfold SpqrTree.nEdges; rw [hne]
+    rw [hk] at hk3 ⊢
+    obtain ⟨k, rfl⟩ : ∃ k, neEn = neSt + k := ⟨neEn - neSt, by omega⟩
+    rw [Nat.add_sub_cancel_left]
+    rw [hP, hnv'] at hseg
+    simp only [hseg]
+    exact layoutRot_P_shift k neSt ev mr cv
+  rw [hsk', hrot, hnv']
+  exact bondRot_isPlanarEmbedding _ (by omega)
+
+/-- The R case of `nodePlanar_sound`. Admitted; plan: when the R item is finished, Invariant P
+(`InvariantP`, maintained by `planarWalkOut_stackInv`) gives a planar embedding of its piece whose
+exposed ends are the four recorded cap matches (`finishMatches`); `planarRelabel` maps it through
+`mapRot` into the node's `neRotAdj` segment (`neRotAdj_segment`), and the piece with its cap is
+the node's skeleton. -/
+theorem nodePlanar_sound_R (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (i : Nat)
+    (hi : i < (g.planarTree ternarize vertOrder edgeOrder).size)
+    (hR : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.type i = .R)
+    (h : (g.planarTree ternarize vertOrder edgeOrder).isPlanar i = true) :
+    IsPlanarEmbedding ((g.planarTree ternarize vertOrder edgeOrder).localSkeleton i)
+      ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i)
+      ((g.planarTree ternarize vertOrder edgeOrder).nodeRot i) := by
+  sorry
+
 /-- Soundness of the per-node flag: a planar S/P/R node's local rotation system is a planar
-embedding of its skeleton. Admitted; plan in PROOF.md §8.4 (S: the cycle layout `layoutRot .S` is
-the two-face embedding; P: the bond layout is the `k`-face embedding of `k` parallel edges;
-R: the walk's `node_planarity` matches, i.e. the t-stack invariant of §8.2 at the moment the R item
-is finished, mapped through `mapRot`). -/
+embedding of its skeleton. S and P are `nodePlanar_sound_S` / `nodePlanar_sound_P` (proved modulo
+`neRotAdj_segment`); R is `nodePlanar_sound_R` (admitted). -/
 theorem nodePlanar_sound (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (i : Nat)
     (hty : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.type i = .S ∨
       (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.type i = .P ∨
@@ -57,7 +181,17 @@ theorem nodePlanar_sound (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : L
     IsPlanarEmbedding ((g.planarTree ternarize vertOrder edgeOrder).localSkeleton i)
       ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i)
       ((g.planarTree ternarize vertOrder edgeOrder).nodeRot i) := by
-  sorry
+  have hi : i < (g.planarTree ternarize vertOrder edgeOrder).size := by
+    by_contra hge
+    have hF : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.type i = .F := by
+      unfold SpqrTree.type
+      rw [Array.getElem?_eq_none (by unfold PlanarSpqrTree.size at hge; omega)]
+      rfl
+    rcases hty with h' | h' | h' <;> rw [hF] at h' <;> cases h'
+  rcases hty with hS | hP | hR
+  · exact nodePlanar_sound_S g ternarize vertOrder edgeOrder i hi hS
+  · exact nodePlanar_sound_P g ternarize vertOrder edgeOrder i hi hP
+  · exact nodePlanar_sound_R g ternarize vertOrder edgeOrder i hi hR h
 
 /-- Completeness of the per-node flag: a node flagged nonplanar has a nonplanar skeleton.
 Admitted (Kuratowski-style; plan in PROOF.md §8.3: the `mergePlanarity` nesting obstruction
@@ -70,7 +204,11 @@ theorem nodePlanar_complete (g : Graph) (ternarize : Bool) (vertOrder edgeOrder 
   sorry
 
 /-- Soundness of the glued embedding: it is a planar embedding of `g` (Euler's formula per
-component). Admitted; plan in PROOF.md §8.5 (2-sum of planar embeddings along twin edges). -/
+component). Admitted; plan in PROOF.md §8.5: bottom-up over the reverse preorder, the partial
+rotation restricted to the edges below an item is a planar embedding of them — S/P/R nodes glue
+their children's embeddings through the twins (`twoSum_planar` with `nodePlanar_sound`), V items
+glue the blocks hanging off a vertex (`oneSum_planar`), Q items add their real edge, F items
+collect components (`disjointUnion_planar`). -/
 theorem planarEmbed_sound (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
     (rs : RotationSystem) (h : (g.planarTree ternarize vertOrder edgeOrder).planarEmbed = some rs) :
     IsPlanarEmbedding g.edges.toList g.nv rs := by
