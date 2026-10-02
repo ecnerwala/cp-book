@@ -31,6 +31,11 @@ theorem getElem!_modify_eq {α : Type} [Inhabited α] (xs : Array α) (i j : Nat
   · subst ‹j = i›; exact LayoutR.getElem!_modify_self' _ _ _ hj
   · exact LayoutR.getElem!_modify_ne' _ _ _ _ (Ne.symm ‹_›)
 
+theorem ite_of_pos {α : Type} {c : Prop} [Decidable c] (h : c) (a b : α) :
+    (if c then a else b) = a := by simp [h]
+theorem ite_of_neg {α : Type} {c : Prop} [Decidable c] (h : ¬ c) (a b : α) :
+    (if c then a else b) = b := by simp [h]
+
 theorem empty_edges_size (n m : Nat) : (Layout.empty n m).edges.size = m := by simp [Layout.empty]
 theorem empty_adjBounds_size (n m : Nat) : (Layout.empty n m).adjBounds.size = 2 * n + 1 := by
   simp [Layout.empty]
@@ -289,6 +294,155 @@ theorem runQI_row (node nvSt nvEn neSt neEn : Nat) (hv : nvEn - nvSt = 2) (he : 
     rw [runQI_adjDat_get _ _ _ _ _ he _ (by omega)]; simp
   · simp only [h1, h2, ↓reduceIte]
     split_ifs <;> simp <;> omega
+
+/-! ### P -/
+
+/-- Initial P layout: bounds `[_, 2 neSt, 2 neSt + nEdges, 2 neSt + 2 nEdges, 2 neSt + 2 nEdges]`. -/
+def initP (nvSt nvEn neSt neEn : Nat) : Layout :=
+  { Layout.empty (nvEn - nvSt) (neEn - neSt) with
+    adjBounds := (((((Layout.empty (nvEn - nvSt) (neEn - neSt)).adjBounds.set! 1 (2 * neSt)).set! 2
+      (2 * neSt + (neEn - neSt))).set! 3 (2 * neSt + 2 * (neEn - neSt))).set! 4
+      (2 * neSt + 2 * (neEn - neSt))) }
+
+/-- Step `k` of the P fill: edge `neSt + k` at slots `k` (row `2 nvSt + 1`) and `2 nEdges - 1 - k`
+(row `2 nvSt + 2`, reversed). -/
+def stepP (node nvSt neSt neEn : Nat) (l : Layout) (k : Nat) : Layout :=
+  l.setNe neSt node (neSt + k) (nvSt, nvSt + 1) (2 * neSt + k, 2 * neEn - 1 - k)
+
+def runP (node nvSt nvEn neSt neEn : Nat) : Layout :=
+  (List.range' 0 (neEn - neSt)).foldl (stepP node nvSt neSt neEn) (initP nvSt nvEn neSt neEn)
+
+theorem layoutNode_P_eq (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat))
+    (hv : nvEn - nvSt ≠ 1) :
+    layoutNode .P node nvSt nvEn neSt neEn E = runP node nvSt nvEn neSt neEn := by
+  have hv' : (nvEn - nvSt == 1) = false := by simpa using hv
+  simp only [layoutNode, Id.run, pure, hv', Bool.false_eq_true, ↓reduceIte, beq_self_eq_true,
+    Std.Legacy.Range.forIn_eq_forIn_range', Std.Legacy.Range.size, forIn_id_yield,
+    Nat.add_sub_cancel, Nat.div_one, Nat.sub_zero]
+  rfl
+
+theorem initP_adjBounds_size (nvSt nvEn neSt neEn : Nat) :
+    (initP nvSt nvEn neSt neEn).adjBounds.size = 2 * (nvEn - nvSt) + 1 := by
+  simp [initP, Layout.empty]
+
+theorem initP_adjBounds_get (nvSt nvEn neSt neEn : Nat) (hv : nvEn - nvSt = 2) (j : Nat) (hj : j ≤ 4) :
+    (initP nvSt nvEn neSt neEn).adjBounds[j]! =
+      if j = 0 then 0 else if j = 1 then 2 * neSt else if j = 2 then 2 * neSt + (neEn - neSt)
+      else 2 * neSt + 2 * (neEn - neSt) := by
+  simp only [initP]
+  rw [getElem!_set!_eq _ _ _ _ (by simp [Layout.empty]; omega),
+    getElem!_set!_eq _ _ _ _ (by simp [Layout.empty]; omega),
+    getElem!_set!_eq _ _ _ _ (by simp [Layout.empty]; omega),
+    getElem!_set!_eq _ _ _ _ (by simp [Layout.empty]; omega), empty_adjBounds_get]
+  split_ifs <;> omega
+
+/-- The P fill after `m` steps: edges `0 … m - 1` written, slots `k < m` hold `⟨neSt + k, nvSt + 1⟩`,
+slots `2 nE - 1 - k` hold `⟨neSt + k, nvSt⟩`, everything else untouched. -/
+theorem foldl_stepP (node nvSt neSt neEn : Nat) (l : Layout) (nE : Nat) (hnE : neEn = neSt + nE)
+    (hs : l.edges.size = nE) (hd : l.adjDat.size = 2 * nE) (m : Nat) (hm : m ≤ nE) :
+    let l' := (List.range' 0 m).foldl (stepP node nvSt neSt neEn) l
+    l'.adjBounds = l.adjBounds ∧ l'.edges.size = nE ∧ l'.adjDat.size = 2 * nE ∧
+    (∀ j, j < nE → l'.edges[j]! = if j < m then ⟨node, none, (nvSt, nvSt + 1)⟩ else l.edges[j]!) ∧
+    (∀ j, j < 2 * nE → l'.adjDat[j]! =
+      if j < m then ⟨neSt + j, nvSt + 1⟩
+      else if 2 * nE - m ≤ j then ⟨neSt + (2 * nE - 1 - j), nvSt⟩ else l.adjDat[j]!) := by
+  intro l'
+  induction m with
+  | zero =>
+    simp only [l', List.range'_zero, List.foldl_nil]
+    refine ⟨trivial, hs, hd, ?_, ?_⟩
+    · intro j _; simp
+    · intro j hj
+      rw [ite_of_neg (by omega), ite_of_neg (by omega)]
+  | succ m ih =>
+    obtain ⟨b, se, sd, ge, gd⟩ := ih (by omega)
+    simp only [l', List.range'_1_concat, List.foldl_append, List.foldl_cons, List.foldl_nil, Nat.zero_add]
+    refine ⟨b, ?_, ?_, ?_, ?_⟩
+    · rw [stepP, setNe_edges_size, se]
+    · rw [stepP, setNe_adjDat_size, sd]
+    · intro j hj
+      rw [stepP, setNe_edges_get _ _ _ _ _ _ _ (by omega), ge j hj, Nat.add_sub_cancel_left]
+      split_ifs <;> first | rfl | omega
+    · intro j hj
+      rw [stepP, setNe_adjDat_get _ _ _ _ _ _ _ (by omega), gd j hj]
+      simp only [Nat.add_sub_cancel_left, hnE]
+      split_ifs <;> first | rfl | omega | (congr 1; omega)
+
+theorem runP_spec (node nvSt nvEn neSt neEn : Nat) (he : neSt ≤ neEn) :
+    let l' := runP node nvSt nvEn neSt neEn
+    l'.adjBounds = (initP nvSt nvEn neSt neEn).adjBounds ∧ l'.edges.size = neEn - neSt ∧
+    l'.adjDat.size = 2 * (neEn - neSt) ∧
+    (∀ j, j < neEn - neSt → l'.edges[j]! = ⟨node, none, (nvSt, nvSt + 1)⟩) ∧
+    (∀ j, j < 2 * (neEn - neSt) → l'.adjDat[j]! =
+      if j < neEn - neSt then ⟨neSt + j, nvSt + 1⟩ else ⟨neEn - 1 - (j - (neEn - neSt)), nvSt⟩) := by
+  intro l'
+  obtain ⟨b, se, sd, ge, gd⟩ := foldl_stepP node nvSt neSt neEn (initP nvSt nvEn neSt neEn)
+    (neEn - neSt) (by omega) (by simp [initP, Layout.empty]) (by simp [initP, Layout.empty]) _
+    (Nat.le_refl _)
+  simp only [l', runP]
+  refine ⟨b, se, sd, ?_, ?_⟩
+  · intro j hj; rw [ge j hj, ite_of_pos hj]
+  · intro j hj
+    rw [gd j hj]
+    split_ifs <;> first | rfl | omega | (congr 1; omega)
+
+theorem runP_rowBound (node nvSt nvEn neSt neEn : Nat) (hv : nvEn - nvSt = 2) (he : neSt ≤ neEn)
+    (r : Nat) (hr1 : 2 * nvSt ≤ r) (hr2 : r ≤ 2 * nvEn) :
+    rowBound nvSt neSt (runP node nvSt nvEn neSt neEn) r =
+      if r ≤ 2 * nvSt + 1 then 2 * neSt else if r = 2 * nvSt + 2 then 2 * neSt + (neEn - neSt)
+      else 2 * neSt + 2 * (neEn - neSt) := by
+  unfold rowBound
+  split
+  · split_ifs <;> omega
+  · rw [(runP_spec node nvSt nvEn neSt neEn he).1, initP_adjBounds_get _ _ _ _ hv _ (by omega)]
+    split_ifs <;> omega
+
+/-- Rows of a P node: `2 nvSt + 1` lists the parallel edges in increasing order (towards
+`nvSt + 1`), `2 nvSt + 2` lists them in decreasing order (towards `nvSt`); the other two are
+empty. -/
+theorem runP_row (node nvSt nvEn neSt neEn : Nat) (hv : nvEn - nvSt = 2) (he : neSt ≤ neEn) (r : Nat)
+    (hr1 : 2 * nvSt ≤ r) (hr2 : r < 2 * nvEn) :
+    row nvSt neSt (runP node nvSt nvEn neSt neEn) r =
+      if r = 2 * nvSt + 1 then (List.range (neEn - neSt)).map fun k => ⟨neSt + k, nvSt + 1⟩
+      else if r = 2 * nvSt + 2 then (List.range (neEn - neSt)).map fun k => ⟨neEn - 1 - k, nvSt⟩
+      else [] := by
+  obtain ⟨-, -, -, -, gd⟩ := runP_spec node nvSt nvEn neSt neEn he
+  have hB := runP_rowBound node nvSt nvEn neSt neEn hv he
+  by_cases h1 : r = 2 * nvSt + 1
+  · subst h1
+    have b0 := hB (2 * nvSt + 1) (by omega) (by omega)
+    rw [ite_of_pos (by omega)] at b0
+    have b1 := hB (2 * nvSt + 1 + 1) (by omega) (by omega)
+    rw [ite_of_neg (by omega), ite_of_pos (by omega)] at b1
+    unfold row
+    rw [b0, b1, ite_of_pos rfl, Nat.add_sub_cancel_left]
+    apply List.map_congr_left
+    intro k hk
+    rw [List.mem_range] at hk
+    rw [show 2 * neSt + k - 2 * neSt = k by omega, gd _ (by omega), ite_of_pos hk]
+  by_cases h2 : r = 2 * nvSt + 2
+  · subst h2
+    have b0 := hB (2 * nvSt + 2) (by omega) (by omega)
+    rw [ite_of_neg (by omega), ite_of_pos rfl] at b0
+    have b1 := hB (2 * nvSt + 2 + 1) (by omega) (by omega)
+    rw [ite_of_neg (by omega), ite_of_neg (by omega)] at b1
+    unfold row
+    rw [b0, b1, ite_of_neg h1, ite_of_pos rfl,
+      show 2 * neSt + 2 * (neEn - neSt) - (2 * neSt + (neEn - neSt)) = neEn - neSt by omega]
+    apply List.map_congr_left
+    intro k hk
+    rw [List.mem_range] at hk
+    rw [show 2 * neSt + (neEn - neSt) + k - 2 * neSt = neEn - neSt + k by omega,
+      gd _ (by omega), ite_of_neg (by omega), Nat.add_sub_cancel_left]
+  · rw [ite_of_neg h1, ite_of_neg h2]
+    have b0 := hB r hr1 (by omega)
+    have b1 := hB (r + 1) (by omega) (by omega)
+    rcases (show r = 2 * nvSt ∨ r = 2 * nvSt + 3 by omega) with rfl | rfl
+    · rw [ite_of_pos (by omega)] at b0; rw [ite_of_pos (by omega)] at b1
+      unfold row; rw [b0, b1]; simp
+    · rw [ite_of_neg (by omega), ite_of_neg (by omega)] at b0
+      rw [ite_of_neg (by omega), ite_of_neg (by omega)] at b1
+      unfold row; rw [b0, b1]; simp
 
 end LayoutShape
 
