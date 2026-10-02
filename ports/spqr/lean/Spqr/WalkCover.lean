@@ -1,6 +1,7 @@
 import Spqr.Frame
 import Spqr.WalkPlace
 import Spqr.StWalk
+import Spqr.Proofs.Dfs
 
 /-!
 # Nothing is dropped
@@ -42,8 +43,7 @@ def BoundaryOK (d : Nat) (o : DfsOut) (s : WalkState) : Prop :=
 
 /-- `walkForest`, after `walkTree t 0`: one entry is left, with everything on its second side. -/
 def RootOK (s : WalkState) : Prop :=
-  s.tstack.tail = [] ∧
-  ∀ t ∈ s.tstack.head?, t.spans.1 = [] ∧ ∀ c ∈ t.spans.2, ∃ v, v < s.g.nv ∧ c = vertItem v
+  ∃ t, s.tstack = [t] ∧ t.spans.1 = [] ∧ ∀ c ∈ t.spans.2, ∃ v, v < s.g.nv ∧ c = vertItem v
 
 /-! ### The sites, following the blocks of `finishEdge'` -/
 
@@ -937,5 +937,400 @@ theorem finishEdge_full (h : s.Full g P X) {curV d : Nat} {o : DfsOut} {origTsta
     · next htree => exact finishTree_full h₁.place.g_eq h₁ hv he hPe hPv hPv' (hs.1 htree)
     · next htree =>
       exact finishBack_full h₁.place.g_eq h₁ hv he hPe hPv hPv' (hs.2 (Bool.not_eq_true _ |>.mp htree))
+
+/-! ### The walk -/
+
+/-- Unfolds `Pushed` and closes the propositional reshuffling. -/
+macro "pushed_iff" : tactic => `(tactic|
+  (simp only [Pushed, List.mem_cons, List.mem_append, List.mem_singleton, List.not_mem_nil, false_and,
+    exists_false, or_false, false_or, exists_eq_or_imp, exists_eq_left, or_and_right, exists_or,
+    Bool.false_eq_true, true_and, DfsOut.vertsList, DfsOut.edgesList, List.flatMap_nil, List.append_nil]
+   try simp only [or_assoc, or_comm, or_left_comm]
+   try aesop))
+
+theorem pushed_append_iff {P : ItemId → Prop} {A B : Prop} (hAB : A → B) {vs₁ es₁ vs₂ es₂ : List Nat}
+    {x i : ItemId} :
+    Pushed g (fun i => Pushed g (fun i => P i ∨ (A ∧ i = x)) vs₁ es₁ i ∨ (B ∧ i = x)) vs₂ es₂ i ↔
+      Pushed g (fun i => P i ∨ (B ∧ i = x)) (vs₁ ++ vs₂) (es₁ ++ es₂) i := by
+  simp only [Pushed, List.mem_append, or_and_right, exists_or]
+  generalize (∃ v ∈ vs₁, i = vertItem v) = E₁
+  generalize (∃ v ∈ vs₂, i = vertItem v) = E₂
+  generalize (∃ e ∈ es₁, i = edgeItem g e) = F₁
+  generalize (∃ e ∈ es₂, i = edgeItem g e) = F₂
+  tauto
+
+theorem pushed_append_iff' {P : ItemId → Prop} {vs₁ es₁ vs₂ es₂ : List Nat} {i : ItemId} :
+    Pushed g (Pushed g P vs₁ es₁) vs₂ es₂ i ↔ Pushed g P (vs₁ ++ vs₂) (es₁ ++ es₂) i := by
+  simp only [Pushed, List.mem_append, or_and_right, exists_or]
+  generalize (∃ v ∈ vs₁, i = vertItem v) = E₁
+  generalize (∃ v ∈ vs₂, i = vertItem v) = E₂
+  generalize (∃ e ∈ es₁, i = edgeItem g e) = F₁
+  generalize (∃ e ∈ es₂, i = edgeItem g e) = F₂
+  tauto
+
+theorem walkOutPre_full (h : s.Full g P X) {v d : Nat} {o : DfsOut} {hasVert : Bool} (hv : v < g.nv)
+    (hPv : hasVert = false → ¬ P (vertItem v)) (hPv' : hasVert = true → P (vertItem v)) :
+    wp (walkOutPre v d o hasVert) (fun hv' s₁ =>
+      s₁.Full g (fun i => P i ∨ (hv' = true ∧ i = vertItem v)) X ∧ (hasVert = true → hv' = true)) s := by
+  unfold walkOutPre
+  dsimp only
+  rw [bind_stackDir]
+  refine bind_spec (setStackDir_spec _ _) ?_
+  rintro _ _ rfl
+  split
+  · next hc =>
+    have hhv : hasVert = false := by revert hc; cases hasVert <;> simp
+    subst hhv
+    refine bind_spec (pushVertTstack_spec v d) ?_
+    rintro _ _ rfl
+    rw [wp_pure]
+    exact ⟨((h.set_stackDir _).cons (by show 0 < 1 + v; omega) (by show 1 + v < _; omega) (hPv rfl)
+      v d _ _).monoP fun i => by simp, fun hh => nomatch hh⟩
+  · rw [wp_pure]
+    exact ⟨(h.set_stackDir _).monoP fun i =>
+      ⟨Or.inl, fun hh => hh.elim id fun ⟨hb, he⟩ => he ▸ hPv' hb⟩, fun hh => hh⟩
+
+theorem modify_full {f : WalkState → WalkState} {P' X' : ItemId → Prop} (hf : (f s).Full g P' X') :
+    wp (modify f) (fun _ s' => s'.Full g P' X') s := hf
+
+theorem walk_full_aux (g : Graph) :
+    (∀ (t : DfsTree) (d : Nat) (P X : ItemId → Prop) (s : WalkState), s.Full g P X →
+      (∀ v ∈ t.verts, v < g.nv) → (∀ e ∈ t.edges, e < g.ne) → t.verts.Nodup → t.edges.Nodup →
+      (∀ v ∈ t.verts, ¬ P (vertItem v)) → (∀ e ∈ t.edges, ¬ P (edgeItem g e)) → SidesTree t d s →
+      wp (walkTree t d) (fun _ s' => s'.Full g (Pushed g P t.verts t.edges) X) s) ∧
+    (∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (P X : ItemId → Prop) (s : WalkState),
+      s.Full g P X → v < g.nv →
+      (∀ w ∈ DfsOut.vertsList outs, w < g.nv) → (∀ e ∈ DfsOut.edgesList outs, e < g.ne) →
+      (DfsOut.vertsList outs).Nodup → (DfsOut.edgesList outs).Nodup → v ∉ DfsOut.vertsList outs →
+      (∀ w ∈ DfsOut.vertsList outs, ¬ P (vertItem w)) → (∀ e ∈ DfsOut.edgesList outs, ¬ P (edgeItem g e)) →
+      (hasVert = false → ¬ P (vertItem v)) → (hasVert = true → P (vertItem v)) →
+      SidesOuts v d outs hasVert s →
+      wp (walkOuts v d outs hasVert) (fun hv' s' =>
+        s'.Full g (Pushed g (fun i => P i ∨ (hv' = true ∧ i = vertItem v))
+          (DfsOut.vertsList outs) (DfsOut.edgesList outs)) X ∧ (hasVert = true → hv' = true)) s) ∧
+    (∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (P X : ItemId → Prop) (s : WalkState),
+      s.Full g P X → v < g.nv →
+      (∀ w ∈ DfsOut.vertsList [o], w < g.nv) → (∀ e ∈ DfsOut.edgesList [o], e < g.ne) →
+      (DfsOut.vertsList [o]).Nodup → (DfsOut.edgesList [o]).Nodup → v ∉ DfsOut.vertsList [o] →
+      (∀ w ∈ DfsOut.vertsList [o], ¬ P (vertItem w)) → (∀ e ∈ DfsOut.edgesList [o], ¬ P (edgeItem g e)) →
+      (hasVert = false → ¬ P (vertItem v)) → (hasVert = true → P (vertItem v)) →
+      SidesOut v d o hasVert s →
+      wp (walkOut v d o hasVert) (fun hv' s' =>
+        s'.Full g (Pushed g (fun i => P i ∨ (hv' = true ∧ i = vertItem v))
+          (DfsOut.vertsList [o]) (DfsOut.edgesList [o])) X ∧ (hasVert = true → hv' = true)) s) := by
+  refine walkTree.mutual_induct _ _ _ ?_ ?_ ?_ ?_
+  · intro d v outs ih P X s h hvlt helt hvn hen hPv hPe hs
+    simp only [DfsTree.verts, DfsTree.edges] at *
+    have hv : v < g.nv := hvlt v List.mem_cons_self
+    obtain ⟨hvo, hvn⟩ := List.nodup_cons.1 hvn
+    unfold SidesTree at hs
+    simp only [walkTree, wp_bind, wp_modify]
+    refine wp_mono _ (ih P X _ (h.set_stackVerts _) hv (fun w hw => hvlt w (List.mem_cons_of_mem _ hw))
+      helt hvn hen hvo (fun w hw => hPv w (List.mem_cons_of_mem _ hw)) hPe
+      (fun _ => hPv v List.mem_cons_self) (fun hh => nomatch hh) hs) fun hasVert s₁ ⟨h₁, _⟩ => ?_
+    split
+    · next hhv => subst hhv; exact h₁.monoP fun i => by pushed_iff
+    · next hhv =>
+      have hhv : hasVert = false := by simpa using hhv
+      subst hhv
+      refine bind_spec (setStackDir_spec _ _) ?_
+      rintro _ _ rfl
+      refine wp_mono _ (pushVertTstack_spec v d) ?_
+      rintro _ _ rfl
+      have hP' : ¬ Pushed g (fun i => P i ∨ (false = true ∧ i = vertItem v))
+          (DfsOut.vertsList outs) (DfsOut.edgesList outs) (vertItem v) := by
+        rintro ((hi | ⟨hb, _⟩) | ⟨w, hw, hwe⟩ | ⟨e, _, hev⟩)
+        · exact hPv v List.mem_cons_self hi
+        · exact Bool.false_ne_true hb
+        · exact hvo (vertItem_inj hwe ▸ hw)
+        · exact vertItem_ne_edgeItem hv e hev
+      exact ((h₁.set_stackDir _).cons (by show 0 < 1 + v; omega) (by show 1 + v < _; omega) hP'
+        v d _ _).monoP fun i => by pushed_iff
+  · intro o v d hasVert ih P X s h hv hvlt helt hvn hen hvo hPv hPe hPcur hPcur' hs
+    rw [walkOut_eq]
+    unfold SidesOut at hs
+    refine bind_spec (wp_and (walkOutPre_full h hv hPcur hPcur') hs) ?_
+    rintro hv₁ s₁ ⟨⟨h₁, hhv₁⟩, hs₁⟩
+    have hPv₁ : hv₁ = false → ¬ (P (vertItem v) ∨ (hv₁ = true ∧ vertItem v = vertItem v)) := by
+      rintro hh (hh' | ⟨hb, _⟩)
+      · exact hPcur (by cases hasVert with
+          | false => rfl
+          | true => exact absurd (hhv₁ rfl) (hh ▸ Bool.false_ne_true)) hh'
+      · exact Bool.false_ne_true (hh ▸ hb)
+    have hPv₁' : hv₁ = true → P (vertItem v) ∨ (hv₁ = true ∧ vertItem v = vertItem v) :=
+      fun hh => Or.inr ⟨hh, rfl⟩
+    unfold walkOutRest
+    rw [bind_tstackSize]
+    cases o with
+    | back e dest cls =>
+      simp only [DfsOut.vertsList, DfsOut.edgesList, List.mem_singleton, List.not_mem_nil,
+        forall_eq, false_implies, implies_true] at hvlt helt hvn hen hvo hPv hPe ⊢
+      dsimp only at hs₁ ⊢
+      refine wp_mono _ (finishEdge_full h₁ hv helt
+        (fun hh => hh.elim hPe fun hh => edgeItem_ne_vertItem hv e hh.2) hPv₁ hPv₁' hs₁)
+        fun hv₂ s₂ ⟨h₂, hhv₂⟩ => ⟨h₂.monoP fun i => by pushed_iff, fun hh => hhv₂ (hhv₁ hh)⟩
+    | tree e cls child =>
+      obtain ⟨cv, couts⟩ := child
+      simp only [DfsOut.vertsList, DfsOut.edgesList, List.append_nil, DfsTree.verts, DfsTree.edges]
+        at hvlt helt hvn hen hvo hPv hPe ih ⊢
+      obtain ⟨he, helt⟩ := List.forall_mem_cons.1 helt
+      obtain ⟨heo, hen⟩ := List.nodup_cons.1 hen
+      obtain ⟨hPe, hPe'⟩ := List.forall_mem_cons.1 hPe
+      dsimp only at hs₁ ⊢
+      refine bind_spec (wp_and (modify_full (h₁.of_eq rfl rfl rfl)) hs₁) fun _ s₂ ⟨h₂, hst, hwt⟩ => ?_
+      have hPv₂ : ∀ w ∈ cv :: DfsOut.vertsList couts,
+          ¬ (P (vertItem w) ∨ (hv₁ = true ∧ vertItem w = vertItem v)) :=
+        fun w hw hh => hh.elim (hPv w hw) fun hh => hvo (vertItem_inj hh.2 ▸ hw)
+      have hPe₂ : ∀ e' ∈ DfsOut.edgesList couts,
+          ¬ (P (edgeItem g e') ∨ (hv₁ = true ∧ edgeItem g e' = vertItem v)) :=
+        fun e' he' hh => hh.elim (hPe' e' he') fun hh => edgeItem_ne_vertItem hv e' hh.2
+      refine bind_spec (wp_and (ih _ X s₂ h₂ hvlt helt hvn hen hPv₂ hPe₂ hst) hwt) fun _ s₃ ⟨h₃, hfs⟩ => ?_
+      have hPe₃ : ¬ Pushed g (fun i => P i ∨ (hv₁ = true ∧ i = vertItem v))
+          (cv :: DfsOut.vertsList couts) (DfsOut.edgesList couts) (edgeItem g e) := by
+        rintro ((hh | ⟨_, hh⟩) | ⟨w, hw, hwe⟩ | ⟨e', he', hee⟩)
+        · exact hPe hh
+        · exact edgeItem_ne_vertItem hv e hh
+        · exact edgeItem_ne_vertItem (hvlt w hw) e hwe
+        · exact heo (edgeItem_inj hee ▸ he')
+      have hPv₃ : hv₁ = false → ¬ Pushed g (fun i => P i ∨ (hv₁ = true ∧ i = vertItem v))
+          (cv :: DfsOut.vertsList couts) (DfsOut.edgesList couts) (vertItem v) := by
+        rintro hh (hh' | ⟨w, hw, hwe⟩ | ⟨e', _, hee⟩)
+        · exact hPv₁ hh hh'
+        · exact hvo (vertItem_inj hwe ▸ hw)
+        · exact vertItem_ne_edgeItem hv e' hee
+      refine wp_mono _ (finishEdge_full h₃ hv he hPe₃ hPv₃ (fun hh => Or.inl (Or.inr ⟨hh, rfl⟩)) hfs)
+        fun hv₂ s₄ ⟨h₄, hhv₄⟩ => ⟨h₄.monoP fun i => by pushed_iff, fun hh => hhv₄ (hhv₁ hh)⟩
+  · intro v d hasVert P X s h hv _ _ _ _ _ _ _ hPcur hPcur' _
+    simp only [walkOuts, wp_pure]
+    refine ⟨h.monoP fun i => ⟨fun hi => Or.inl (Or.inl hi), fun hi => ?_⟩, fun hh => hh⟩
+    rcases hi with ((hi | ⟨hb, rfl⟩) | ⟨_, hw, _⟩ | ⟨_, he, _⟩)
+    · exact hi
+    · exact hPcur' hb
+    · exact (List.not_mem_nil hw).elim
+    · exact (List.not_mem_nil he).elim
+  · intro v d hasVert o rest ih₁ ih₂ P X s h hv hvlt helt hvn hen hvo hPv hPe hPcur hPcur' hs
+    rw [DfsOut.vertsList_cons] at hvlt hvn hvo hPv ⊢
+    rw [DfsOut.edgesList_cons] at helt hen hPe ⊢
+    obtain ⟨hvlt₁, hvlt₂⟩ := List.forall_mem_append.1 hvlt
+    obtain ⟨helt₁, helt₂⟩ := List.forall_mem_append.1 helt
+    obtain ⟨hPv₁, hPv₂⟩ := List.forall_mem_append.1 hPv
+    obtain ⟨hPe₁, hPe₂⟩ := List.forall_mem_append.1 hPe
+    rw [List.mem_append, not_or] at hvo
+    obtain ⟨hvn₁, hvn₂, hvd⟩ := List.nodup_append.1 hvn
+    obtain ⟨hen₁, hen₂, hed⟩ := List.nodup_append.1 hen
+    unfold SidesOuts at hs
+    simp only [walkOuts]
+    refine bind_spec (wp_and (ih₁ P X s h hv hvlt₁ helt₁ hvn₁ hen₁ hvo.1 hPv₁ hPe₁ hPcur hPcur' hs.1) hs.2) ?_
+    rintro hv₁ s₁ ⟨⟨h₁, hhv₁⟩, hs₁⟩
+    refine wp_mono _ (ih₂ hv₁ _ X s₁ h₁ hv hvlt₂ helt₂ hvn₂ hen₂ hvo.2 ?_ ?_ ?_
+      (fun hh => Or.inl (Or.inr ⟨hh, rfl⟩)) hs₁) ?_
+    · rintro w hw ((hh | ⟨_, hwv⟩) | ⟨w', hw', hww⟩ | ⟨e', _, hwe⟩)
+      · exact hPv₂ w hw hh
+      · exact hvo.2 (vertItem_inj hwv ▸ hw)
+      · exact hvd w' hw' w hw (vertItem_inj hww).symm
+      · exact vertItem_ne_edgeItem (hvlt₂ w hw) e' hwe
+    · rintro e' he' ((hh | ⟨_, hev⟩) | ⟨w', hw', hew⟩ | ⟨e'', he'', hee⟩)
+      · exact hPe₂ e' he' hh
+      · exact edgeItem_ne_vertItem hv e' hev
+      · exact edgeItem_ne_vertItem (hvlt₁ w' hw') e' hew
+      · exact hed e'' he'' e' he' (edgeItem_inj hee).symm
+    · rintro hh ((hh' | ⟨hb, _⟩) | ⟨w', hw', hvw⟩ | ⟨e', _, hve⟩)
+      · exact hPcur (by cases hasVert <;> simp_all) hh'
+      · exact Bool.false_ne_true (hh ▸ hb)
+      · exact hvo.1 (vertItem_inj hvw ▸ hw')
+      · exact vertItem_ne_edgeItem hv e' hve
+    · rintro hv₂ s₂ ⟨h₂, hhv₂⟩
+      exact ⟨h₂.monoP fun i => pushed_append_iff hhv₂, fun hh => hhv₂ (hhv₁ hh)⟩
+
+theorem walkForest_full (forest : List DfsTree) (h : s.Full g P X) (ht : s.tstack = [])
+    (hvlt : ∀ v ∈ forest.flatMap DfsTree.verts, v < g.nv)
+    (helt : ∀ e ∈ forest.flatMap DfsTree.edges, e < g.ne)
+    (hvn : (forest.flatMap DfsTree.verts).Nodup) (hen : (forest.flatMap DfsTree.edges).Nodup)
+    (hPv : ∀ v ∈ forest.flatMap DfsTree.verts, ¬ P (vertItem v))
+    (hPe : ∀ e ∈ forest.flatMap DfsTree.edges, ¬ P (edgeItem g e)) (hs : SidesForest forest s) :
+    wp (walkForest forest) (fun _ s' =>
+      s'.Full g (Pushed g P (forest.flatMap DfsTree.verts) (forest.flatMap DfsTree.edges)) X ∧
+        s'.tstack = []) s := by
+  induction forest generalizing P s with
+  | nil => exact ⟨h.monoP fun i => by pushed_iff, ht⟩
+  | cons t rest ih =>
+    rw [List.flatMap_cons] at hvlt helt hvn hen hPv hPe ⊢
+    obtain ⟨hvlt₁, hvlt₂⟩ := List.forall_mem_append.1 hvlt
+    obtain ⟨helt₁, helt₂⟩ := List.forall_mem_append.1 helt
+    obtain ⟨hPv₁, hPv₂⟩ := List.forall_mem_append.1 hPv
+    obtain ⟨hPe₁, hPe₂⟩ := List.forall_mem_append.1 hPe
+    obtain ⟨hvn₁, hvn₂, hvd⟩ := List.nodup_append.1 hvn
+    obtain ⟨hen₁, hen₂, hed⟩ := List.nodup_append.1 hen
+    unfold SidesForest at hs
+    obtain ⟨hst, hs⟩ := hs
+    show wp ((walkTree t 0 >>= fun _ => popTstack >>= fun top =>
+      modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }) >>= fun _ => walkForest rest) _ s
+    refine bind_spec (P := fun _ s' => s'.Full g (Pushed g P t.verts t.edges) X ∧ s'.tstack = [] ∧
+      SidesForest rest s') ?_ fun _ s₁ ⟨h₁, ht₁, hs₁⟩ => ?_
+    · refine bind_spec (wp_and ((walk_full_aux g).1 t 0 P X s h hvlt₁ helt₁ hvn₁ hen₁ hPv₁ hPe₁ hst) hs)
+        fun _ s₁ ⟨h₁, ⟨t', hts, hside, hroot⟩, hs₁⟩ => ?_
+      rw [wp_bind] at hs₁
+      refine bind_spec (wp_and popTstack_spec' hs₁) ?_
+      rintro _ _ ⟨⟨rfl, rfl⟩, hs₂⟩
+      rw [wp_modifyItem] at hs₂ ⊢
+      refine ⟨h₁.root_append ?_ ?_, by simp [hts], hs₂⟩
+      · simp only [hts, List.head?_cons, Option.mem_def, Option.some.injEq]
+        rintro x rfl; exact hside
+      · simp only [hts, List.head!_cons]
+        intro c hc
+        obtain ⟨v, hv, rfl⟩ := hroot c hc
+        exact ⟨v, by rwa [h₁.place.g_eq] at hv, rfl⟩
+    · refine wp_mono _ (ih h₁ ht₁ hvlt₂ helt₂ hvn₂ hen₂ ?_ ?_ hs₁) fun _ s₂ ⟨h₂, ht₂⟩ =>
+        ⟨h₂.monoP fun i => pushed_append_iff', ht₂⟩
+      · rintro v hv (hh | ⟨w, hw, hvw⟩ | ⟨e, _, hve⟩)
+        · exact hPv₂ v hv hh
+        · exact hvd w hw v hv (vertItem_inj hvw).symm
+        · exact vertItem_ne_edgeItem (hvlt₂ v hv) e hve
+      · rintro e he (hh | ⟨w, hw, hew⟩ | ⟨e', he', hee⟩)
+        · exact hPe₂ e he hh
+        · exact edgeItem_ne_vertItem (hvlt₁ w hw) e hew
+        · exact hed e' he' e he (edgeItem_inj hee).symm
+
+theorem WalkState.init_full (g : Graph) (ternarize : Bool) :
+    (WalkState.init g ternarize).Full g (fun _ => False) (fun _ => False) where
+  place := WalkState.init_place g ternarize
+  fixedP _ h := h.elim
+  pushed _ h := h.elim
+  placed i hn hi _ := by
+    have := Items.initialItems_size g
+    simp only [WalkState.init] at hi; omega
+  qch e _ _ := Items.initialItems_ch g _
+  rootch c hc := by
+    rw [show (WalkState.init g ternarize).items = initialItems g from rfl, Items.initialItems_ch] at hc
+    exact (List.not_mem_nil hc).elim
+
+/-! ### Admitted: the side discipline of the walk
+
+The one orientation fact this file needs: at every discard site of the walk the discarded side is
+empty (and the entries the sites pop exist). PROOF.md §4.4 says which ear facts discharge it:
+`EarSpec.walkTree_guards` (the entries exist, so `MergeOK`/`BoundaryOK`/`RootOK`'s shape) and
+`chain_stackDir_const` + `TEntry.OnSide` (every ear hangs on the side `stackDir[topDepth]`, so the
+side `finishTstackTop`/`maybeUnwrapNxt`/the block branch/`walkForest` discard is `[]`). -/
+theorem walk_sides (g : Graph) (ternarize : Bool) (forest : List DfsTree) (hf : ForestOK g forest)
+    (hwf : ∀ t ∈ forest, t.WF []) : SidesForest forest (WalkState.init g ternarize) := by
+  sorry
+
+/-- Exact placement at the end of the walk, and the `tstack` is empty. -/
+theorem walk_full (g : Graph) (ternarize : Bool) (forest : List DfsTree) (hf : ForestOK g forest)
+    (hwf : ∀ t ∈ forest, t.WF []) :
+    (g.walk ternarize forest).Full g
+      (WalkM.Pushed g (fun _ => False) (forest.flatMap DfsTree.verts) (forest.flatMap DfsTree.edges))
+      (fun _ => False) ∧ (g.walk ternarize forest).tstack = [] :=
+  walkForest_full forest (WalkState.init_full g ternarize) rfl hf.verts_lt hf.edges_lt
+    hf.verts_nodup hf.edges_nodup (fun _ _ h => h) (fun _ _ h => h) (walk_sides g ternarize forest hf hwf)
+
+theorem WalkState.exists_parent_of_cnt {s : WalkState} (ht : s.tstack = []) {i : ItemId}
+    (hc : 0 < s.cnt i) : ∃ p, Items.IsParent s.items p i := by
+  simp only [WalkState.cnt, ht, spansCount_nil, Nat.zero_add, chCount] at hc
+  obtain ⟨j, _, hj⟩ := Finset.exists_ne_zero_of_sum_ne_zero (Nat.pos_iff_ne_zero.1 hc)
+  exact ⟨j, List.count_pos_iff.1 (Nat.pos_of_ne_zero hj)⟩
+
+section Consequences
+
+variable (g : Graph) (ternarize : Bool) (forest : List DfsTree) (hf : ForestOK g forest)
+  (hwf : ∀ t ∈ forest, t.WF [])
+include hf hwf
+
+/-- The walk ends with an empty `tstack`. -/
+theorem walk_tstack_nil : (g.walk ternarize forest).tstack = [] := (walk_full g ternarize forest hf hwf).2
+
+/-- Every allocated non-root item ends up in some `ch` list. -/
+theorem walk_covered
+    (hvcov : ∀ v, v < g.nv → v ∈ forest.flatMap DfsTree.verts)
+    (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
+    ∀ i, 0 < i → i < (g.walk ternarize forest).items.size →
+      ∃ p, Items.IsParent (g.walk ternarize forest).items p i := fun i hi hlt => by
+  obtain ⟨h, ht⟩ := walk_full g ternarize forest hf hwf
+  refine WalkState.exists_parent_of_cnt ht ?_
+  by_cases hn : 1 + g.nv + g.ne ≤ i
+  · exact h.placed i hn hlt id
+  · refine h.pushed i ?_
+    by_cases hv : i < 1 + g.nv
+    · exact Or.inr (Or.inl ⟨i - 1, hvcov _ (by omega), by show i = 1 + (i - 1); omega⟩)
+    · exact Or.inr (Or.inr ⟨i - (1 + g.nv), hecov _ (by omega),
+        by show i = 1 + g.nv + (i - (1 + g.nv)); omega⟩)
+
+/-- The root's children are `vertItem`s of real vertices. -/
+theorem walk_root_children :
+    ∀ c, Items.IsParent (g.walk ternarize forest).items rootItem c →
+      Items.type (g.walk ternarize forest).items c = .V := fun c hc => by
+  obtain ⟨v, hv, rfl⟩ := (walk_full g ternarize forest hf hwf).1.rootch c hc
+  exact (walk_full g ternarize forest hf hwf).1.place.vert v hv
+
+/-- Every item is below the root. Admitted: on top of `walk_covered` and `walk_parent_unique` this
+needs acyclicity of `IsParent`, i.e. that every `ch` write of the walk targets an item without a
+parent and adds only items without a parent (`maybeUnwrapNxt`, the one write that removes
+children, moves them to a span). -/
+theorem walk_reach
+    (hvcov : ∀ v, v < g.nv → v ∈ forest.flatMap DfsTree.verts)
+    (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
+    ∀ i, i < (g.walk ternarize forest).items.size →
+      Items.Below (g.walk ternarize forest).items rootItem i := by
+  sorry
+
+theorem walk_unique_parent
+    (hvcov : ∀ v, v < g.nv → v ∈ forest.flatMap DfsTree.verts)
+    (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
+    ∀ c, 0 < c → c < (g.walk ternarize forest).items.size →
+      ∃ p, Items.IsParent (g.walk ternarize forest).items p c ∧
+        ∀ p', Items.IsParent (g.walk ternarize forest).items p' c → p' = p := fun c hc hlt =>
+  let ⟨p, hp⟩ := walk_covered g ternarize forest hf hwf hvcov hecov c hc hlt
+  ⟨p, hp, fun p' hp' => walk_parent_unique g ternarize forest hf c p p' hp hp'⟩
+
+/-- Completeness: after the walk every edge is below exactly one child chain from the root — the
+`Items.Tree` content of `Items.WF` (false without the forest hypotheses, e.g. for `forest = []`). -/
+theorem walk_nodes_partition
+    (hvcov : ∀ v, v < g.nv → v ∈ forest.flatMap DfsTree.verts)
+    (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
+    ∀ e, e < g.ne →
+      ∃ p, Items.IsParent (g.walk ternarize forest).items p (edgeItem g e) ∧
+        ∀ p', Items.IsParent (g.walk ternarize forest).items p' (edgeItem g e) → p' = p := fun e he =>
+  walk_unique_parent g ternarize forest hf hwf hvcov hecov (edgeItem g e) (by show 0 < 1 + g.nv + e; omega)
+    (Nat.lt_of_lt_of_le (by show 1 + g.nv + e < _; omega) (walk_place g ternarize forest hf).size)
+
+end Consequences
+
+/-- The fields of `Items.Tree`, with `v_children` restricted to real vertices. -/
+structure WalkTree (g : Graph) (items : Items) : Prop where
+  size : 1 + g.nv + g.ne ≤ items.size
+  root : items.type rootItem = .F
+  vert : ∀ v, v < g.nv → items.type (vertItem v) = .V
+  edge : ∀ e, e < g.ne → items.type (edgeItem g e) = .Q
+  node : ∀ i, 1 + g.nv + g.ne ≤ i → i < items.size → items.type i ∉ [NodeType.F, .V, .Q]
+  ch_lt : ∀ p c, items.IsParent p c → c < items.size
+  unique_parent : ∀ c, 0 < c → c < items.size →
+    ∃ p, items.IsParent p c ∧ ∀ p', items.IsParent p' c → p' = p
+  root_no_parent : ∀ p, ¬ items.IsParent p rootItem
+  ch_nodup : ∀ p, (items.ch p).Nodup
+  reach : ∀ i, i < items.size → items.Below rootItem i
+  v_children : ∀ v c, v < g.nv → items.IsParent (vertItem v) c → items.type c = .Q
+  root_children : ∀ c, items.IsParent rootItem c → items.type c = .V ∨ items.type c = .Q
+
+/-- `Items.Tree` for the walk (modulo the admitted `walk_sides` and `walk_reach`). -/
+theorem walk_tree (g : Graph) (ternarize : Bool) (forest : List DfsTree) (hnv : 0 < g.nv)
+    (hb : ∀ t ∈ forest, t.Bounded g.nv g.ne) (hf : ForestOK g forest) (hwf : ∀ t ∈ forest, t.WF [])
+    (hvcov : ∀ v, v < g.nv → v ∈ forest.flatMap DfsTree.verts)
+    (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
+    WalkTree g (g.walk ternarize forest).items :=
+  have hcov : ∀ e, e < g.ne → ∃ t ∈ forest, e ∈ t.edges := fun e he =>
+    List.mem_flatMap.1 (hecov e he)
+  let ht := walk_typing g ternarize forest hnv hb hcov
+  { size := ht.size
+    root := ht.root
+    vert := ht.vert
+    edge := ht.edge
+    node := ht.node
+    ch_lt := walk_ch_lt g ternarize forest hf
+    unique_parent := walk_unique_parent g ternarize forest hf hwf hvcov hecov
+    root_no_parent := walk_root_no_parent g ternarize forest hf
+    ch_nodup := walk_ch_nodup g ternarize forest hf
+    reach := walk_reach g ternarize forest hf hwf hvcov hecov
+    v_children := ht.v_children
+    root_children := fun c hc => Or.inl (walk_root_children g ternarize forest hf hwf c hc) }
 
 end Spqr
