@@ -15,7 +15,7 @@ def incident (g : Graph) (v e : Nat) : Bool :=
 def touches (t : SpqrTree) (g : Graph) (i v : Nat) : Bool :=
   (List.range g.ne).any fun e => edgeIn t i e && incident g v e
 
-def checkOuter (t : PlanarSpqrTree) (s : PlanarSpqrTree.EmbedState) : IO Nat := do
+def checkOuter (g : Graph) (t : PlanarSpqrTree) (s : PlanarSpqrTree.EmbedState) : IO Nat := do
   let mut bad := 0
   for j in [0:t.size] do
     if s.outerE[j]!.size != 4 then
@@ -28,6 +28,12 @@ def checkOuter (t : PlanarSpqrTree) (s : PlanarSpqrTree.EmbedState) : IO Nat := 
             ((parentType == some NodeType.F || parentType == some NodeType.V) && k >= 2) then
           bad := bad + 1
           IO.println s!"outer_slots: j={j} k={k}"
+        if let some p := t.toSpqrTree.parent j then
+          if t.toSpqrTree.type p == .V then
+            if let some v := t.origId[p]! then
+              if (s.outerE[j]![k]!).bind (QE.vert g.edges.toList) != some v then
+                bad := bad + 1
+                IO.println s!"outer_at_vertex: j={j} k={k} parent={p} vertex={v}"
   return bad
 
 def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
@@ -59,11 +65,11 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
       | _, _ => pure ()
   let pt := g.planarSpqrTree tern vo eo
   let mut s := pt.initState
-  bad := bad + (← checkOuter pt s)
+  bad := bad + (← checkOuter g pt s)
   if pt.nodePlanar.all id then
     for i in (List.range pt.size).reverse do
       s := ((pt.embedItem i).run s).2
-      bad := bad + (← checkOuter pt s)
+      bad := bad + (← checkOuter g pt s)
   return bad
 
 def main : IO UInt32 := do
