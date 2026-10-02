@@ -1,5 +1,6 @@
 import Spqr.PlanarLayout
 import Spqr.PlanarWalk
+import Spqr.Proofs.PlanarUnion
 
 /-!
 # Invariant P and the gluing lemmas
@@ -166,12 +167,17 @@ theorem oneSum_planar (n₁ n₂ : Nat) (es₁ es₂ : List (Nat × Nat)) (rs₁
     Planar (oneSumEdges n₁ es₁ es₂ v₁ v₂) (n₁ + n₂ - 1) := by
   sorry
 
+theorem disjointUnionEdges_eq (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) :
+    disjointUnionEdges n₁ es₁ es₂ = es₁ ++ shiftEdges n₁ es₂ := by
+  simp [disjointUnionEdges, glueEdges, glueVert, shiftEdges]
+
 /-- The disjoint union of two planar embedded graphs is planar (components are embedded
-separately in `EulerFormula`). Admitted. -/
+separately in `EulerFormula`): `IsPlanarEmbedding.union` (`Proofs/PlanarUnion.lean`). -/
 theorem disjointUnion_planar (n₁ n₂ : Nat) (es₁ es₂ : List (Nat × Nat)) (rs₁ rs₂ : RotationSystem)
     (h₁ : IsPlanarEmbedding es₁ n₁ rs₁) (h₂ : IsPlanarEmbedding es₂ n₂ rs₂) :
     Planar (disjointUnionEdges n₁ es₁ es₂) (n₁ + n₂) := by
-  sorry
+  rw [disjointUnionEdges_eq]
+  exact ⟨_, h₁.union h₂⟩
 
 /-! ### Renumbering a laid-out node's edges from `0` -/
 
