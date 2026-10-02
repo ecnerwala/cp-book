@@ -367,8 +367,11 @@ walk in the style of `GuardsTree` and assert, at each discard site, one of:
   `t.OnSide s.stackDir[t.topDepth]!`, i.e. the side `getSide t.spans (!topDir)` it discards is `[]`;
 - `UnwrapOK s ty` before `maybeUnwrapNxt ty` (when it may reuse): if the kept side of the entry
   below the top starts with an item of type `ty`, that entry is `[x]` on its own side;
-- `BoundaryOK d o s` in the block branch: `spans.1 = []` of the top (type-2 close, lowval `= d+1`)
-  resp. `spans.2 = []` of the back-edge entry and `spans.1 = []` of the vertex entry below it;
+- `BoundaryOK curV d o s` in the block branch: `spans.1 = []` of the top (type-2 close, lowval
+  `= d+1`) resp. `spans.2 = []` of the back-edge entry and `spans.1 = []` of the vertex entry below
+  it; and on each kept side no item `c` has `Items.Below s.items c (vertItem curV)` (the Q item
+  takes the kept sides as its children and is then put under `vertItem curV`; this clause is what
+  keeps `ch` acyclic, see below);
 - `RootOK s` after `walkTree t 0`: one entry is left, `spans.1 = []`, and `spans.2` consists of
   `vertItem`s of real vertices (it is `[vertItem t.v]`).
 
@@ -383,7 +386,30 @@ should carry `OnSide (stackDir[topDepth])` for every entry above the ear's bound
 there (`setStackDir d false` for a tree child with lowval `≥ d`, so the vertex ear's entry has
 `spans.1 = []`); `UnwrapOK` is the sub-ear case of `CloseOK` (a finished sub-ear sits alone in
 its entry, on the side it was finished on); `RootOK` is `BoundaryOK` at depth 0 after the root's
-`pushVertTstack` with `stackDir[0] = false`.
+`pushVertTstack` with `stackDir[0] = false`. The extra `¬ Below c (vertItem curV)` clause of
+`BoundaryOK` is the ear fact that the popped spans, and everything already hanging below them,
+were built while walking the subtree under `o`, which never places `vertItem curV`.
+
+**Acyclicity (`ItemAcyc.lean`, `WalkState.Full.acyc`).** Exact placement plus coverage say every
+non-root item has exactly one parent but not that `Items.IsParent` is well-founded, so `Full`
+also carries
+
+```
+Items.NoParent items r := ∀ p, ¬ items.IsParent p r
+Items.Acyc items      := ∀ i < items.size, ∃ r, items.NoParent r ∧ items.Below r i
+```
+
+(a forest: every item sits below a parentless one). The tempting "parent id > child id" is false
+for the walk: in the block branch the Q item `edgeItem o.e` (allocated at the start, so older than
+every node item) receives the popped spans as children and then goes under `vertItem curV`.
+`Acyc` is preserved by `Acyc.push` (a fresh childless item), `Acyc.append` (append `L` to `ch a`
+when no `c ∈ L` is above `a` — `pushEdgeTstack`'s self-loop O item, `root_append`, and the Q
+re-wiring `acyc_q_write`, which is where `BoundaryOK`'s new clause is used), `Acyc.dropCh`
+(clearing a `ch` list whose members have no other parent, by `Place.le` — the `maybeUnwrapNxt`
+reuse), and `Acyc.of_ch_eq` (everything that leaves `ch` alone: `finishTstackTop` only moves items
+from spans to a fresh node, `mergeTstackTops` only moves between spans). `Acyc.reach` then gives
+`walk_reach`: by `walk_covered` every item `0 < i < size` has a parent, so the parentless root
+that `Acyc` provides is `rootItem`.
 
 ### 4.4b Planar variant: what a tstack entry stores
 
@@ -504,7 +530,10 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | walk pieces ↔ separation classes: a nonempty proper `TwoAttached` set of a block is a union of `{u,v}`-classes with `{u,v}` a separation pair, or it / its complement is a single `u–v` edge (`twoAttached_union_classes`, `twoAttached_type1_or_type2`) | `Proofs/SepClasses.lean` | proved |
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
 | `walkEarTree = walkTree` (`walkEarTree_eq_walkTree`, `walkEar_eq_walk`) | `EarSpec.lean` | proved |
-| span discipline / placement (`Place`: each item id placed ≤ 1 time over spans + ch lists; `walk_place`, `walk_ch_nodup`, `walk_parent_unique`, `root_no_parent`) | `WalkPlace.lean` | proved; `walk_tstack_nil`, `walk_covered`, `walk_root_children`, `walk_reach` admitted pending the ear-orientation fact (discarded span side is empty) |
+| span discipline / placement (`Place`: each item id placed ≤ 1 time over spans + ch lists; `walk_place`, `walk_ch_nodup`, `walk_parent_unique`, `root_no_parent`) | `WalkPlace.lean` | proved; `walk_tstack_nil`, `walk_covered`, `walk_root_children`, `walk_reach` moved to `WalkCover.lean` |
+| coverage + reachability half of `Items.Tree` (`WalkState.Full` = exact placement + `Acyc`; `walk_tstack_nil`, `walk_covered`, `walk_root_children`, `walk_reach`, `walk_tree`) | `WalkCover.lean`, `ItemAcyc.lean` | proved from `walk_sides : SidesForest forest (WalkState.init g tern)` (§4.4; the only `sorry` in the file, now including the `¬ Below c (vertItem curV)` clause of `BoundaryOK`) |
+| linear phase 2/3 refinements `walkFast` / `relabelTreeFast` (`CatList` spans, `Array` tstack, ticks): `walkFast_items`, `relabelTreeFast_eq`; `spqrTree_eq` routed through them | `CatList.lean`, `Refine.lean`, `WalkFast.lean`, `RelabelFast.lean`, `Correctness.lean` | proved |
+| step bounds: `walk_ticks_le : (g.walkFast tern (g.dfsForest vo eo)).ticks ≤ 47·(nv+ne)` (via `walk_ticks_le_forest`, `dfsForest_size_le` from `dfsForest_spanning'`); `relabelRun_sizes_le` (`Items.desc` cardinalities), `relabel_ticks_le : ticks ≤ 288·(nv+ne) + 6` | `WalkCost.lean`, `ItemTree.lean`, `RelabelCost.lean` | proved; the relabel bounds take `Items.Tree` as hypothesis (`relabel_ticks_le'` discharges it with the admitted `walk_items_wf`) |
 | frame rule `walkTree_local` via `Lifts`/`Sim` simulation (`Sim.closeEars`, `Sim.mergeLate`, `Sim.finishRest`, `Sim.finishBoundary` proved) | `Sim.lean`, `Frame.lean`, `EarSpec.lean` | `Sim.closeVert`, `Sim.finishEdge`, `Sim.walkTree` proved; `walkTree_local` reduces to the stack-shape invariant `walkTree_guards` (admitted, with `earOut_one_entry` / `ascend_frame_one_entry`) |
 | typing/allocation part of `Items.WF` (`Items.Tree` sizes/types, I/O leaves, `vs_shape`, `vs_lt`): `walk_typing` | `WalkTyping.lean` | proved (`walk_q_children` sorry: needs span shape) |
 | §4.2b walk invariant `Inv D` (`EntryInv D`: connected + attached at `vStart`/`stackVerts[topDepth..D]`; closed items 2-attached): closure lemmas (`GraphLemmas.lean`: `AttachedIn`, `twoAttached_iff`), `mergeTstackTops_sound`, `finishTstackTop_complete`, `Shape`/`Step` infrastructure, per-block lemmas `Step.closeEars`/`mergeLate`/`closeVert'`/`finishRest` under `CloseEarsOk`/`MergeLateOk`/`CloseVertOk`/`FinishRestOk` | `GraphLemmas.lean`, `WalkSpec.lean` | proved |
