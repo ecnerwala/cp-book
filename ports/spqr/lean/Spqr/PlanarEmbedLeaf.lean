@@ -54,8 +54,8 @@ theorem embedItem_step_leaf_of (g : Graph) (i : Nat) (hi : i < t.size)
   have houter : ∀ q, ¬ s.exposedAt i q := h.outer_unprocessed i (Nat.lt_succ_self i)
   have hq : t.types[i]! ≠ .Q := by rcases hty with hty | hty <;> rw [hty] <;> decide
   have hbelow : t.edgesBelow i = [] := t.edgesBelow_leaf i hsub hq
-  refine ⟨⟨h.rot_size, h.outer_size, fun j hj => h.outer_unprocessed j (by omega), ?_, ?_⟩,
-    h.outer_row_size, h.outer_slots⟩
+  refine ⟨⟨⟨h.rot_size, h.outer_size, fun j hj => h.outer_unprocessed j (by omega), ?_, ?_⟩,
+    h.outer_row_size, h.outer_slots⟩, h.outer_at_vertex⟩
   · intro q hq'
     exact h.unset q fun j hj hjs => hq' j (by omega) hjs
   · intro j hj

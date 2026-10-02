@@ -1440,21 +1440,37 @@ On the actual single-edge tree for `nv=2`, `edges=[(0,1)]`, the items are
 The old invariant holds at index 1, witnessed by `[1,0,3,2]`, but F only closes slots 0/1;
 the state is unchanged and the root cannot account for its unmatched quarter-edges 2/3.
 `Proofs/PlanarEmbedCounterexample.lean` proves both facts without `sorryAx`.
-The old invariant is retained as `GluedPieces`; `GluedUpTo` extends it with
+The old invariant is retained as `GluedPieces`; `GluedSlots` extends it with
 four-slot row sizes and exposed-slot support: slots are below 4, F exposes nothing,
 and an item whose parent is F or V exposes only slots 0/1.
 The initialization and leaf proofs preserve these fields; `badState_excluded` proves
 the counterexample is excluded. `CheckPieceSep` checks these fields after every item
 of every successful planar fold. Seeds 0..300 and the four tiny cases again give zero violations.
-The V/Q/node steps will additionally need attachment-vertex / cofacial information;
-the slot correction alone is not a claim that their current statements are sufficient.
+`GluedUpTo` extends `GluedSlots` with `outer_at_vertex`: exposed ends of a child
+of a V item for original vertex `v` must be at `v` in `g.edges`.
+The V/Q/node steps still need further boundary-existence / endpoint / cofacial audits;
+these corrections are not a claim that their current statements are sufficient.
 
-`embedItem_step_F` is proved in `PlanarEmbedF.lean` under its unchanged strengthened
-signature. `only_root_F` reduces the item to index 0; `closeList_get` identifies each
+The attachment condition is necessary already on the two-edge star
+`nv=3, edges=[(0,1),(0,2)]`. Its items are `F,V(0),Q(0),I,V(1),Q(1),I,V(2)`.
+Set `rotAdj=[1,0,-,-,5,4,-,-]`, expose `[2,3,-,-]` at item 2 and `[6,7,-,-]`
+at item 5, and leave all other outer rows empty. `GluedSlots 2` holds, but processing
+V item 1 links quarter-edges 3 and 6, at original vertices 1 and 2 respectively.
+No `SameVertex` rotation can agree with that link, so `GluedSlots 1` fails.
+`Proofs/PlanarEmbedVCounterexample.lean` proves `badVState_before`, `badVState_after`,
+and `badVState_excluded` with only standard axioms. Its literal base tree was also
+compared by execution with `starGraph.planarSpqrTree false [0,1,2] [0,1]` and matched;
+this comparison is empirical, not a kernel proof of tree well-formedness.
+`outer_at_vertex` excludes that state and is preserved by the initialization, leaf,
+and F proofs. The checker validates it after every item as well: seeds 0..300 and
+the four tiny graphs all give zero violations.
+
+`embedItem_step_F` is proved in `PlanarEmbedF.lean` with the strengthened invariant.
+`only_root_F` reduces the item to index 0; `closeList_get` identifies each
 child's final rotation entries with its single-pair closure, with all other children
 framed out by `root_disjoint`. `Piece.union_embeddings` iterates the same-numbering
 append theorem; `edgesBelow_eq` identifies its concatenation with the root piece.
-The root outer row stays unset, and the row-size / slot-support fields are preserved.
+The root outer row stays unset, and the row-size / slot-support / attachment fields are preserved.
 `PlanarEmbedFold.lean` imports this proof instead of the former F admission.
 The F theorem and every helper in this group were audited with `#print axioms`:
 only `propext`, `Classical.choice`, and `Quot.sound` occur, never `sorryAx`.
@@ -1471,6 +1487,7 @@ only `propext`, `Classical.choice`, and `Quot.sound` occur, never `sorryAx`.
 | `closeList_nil/cons`, `closeList_outerE`, `closeList_rotAdj_size`, `closeOuter_get_congr`, `closeList_frame/get`, `forM_closeOuter_run`, `embedItem_F` | `PlanarEmbedCloseList.lean` | **proved** (`propext`, `Quot.sound`) |
 | `Piece.union_embeddings` | `Proofs/PieceUnion.lean` | **proved** (standard axioms) |
 | `root_child_exposed_mem`, `embedItem_step_F` | `PlanarEmbedF.lean` | **proved** (standard axioms); F admission removed |
+| `starEdgeRot_planar`, `badVState_before`, `badVState_after`, `badVState_excluded` | `Proofs/PlanarEmbedVCounterexample.lean` | **proved** (standard axioms); attachment-vertex counterexample and exclusion |
 | planar walk (`planarWalk`), relabel (`planarSpqrTree`), gluing (`planarEmbed`) | `PlanarWalk.lean`, `PlanarRelabel.lean`, `PlanarEmbed.lean` | def |
 | `planarWalk_base`, `planarWalk_proj` (planar walk = ordinary walk + aux) | `PlanarWalkProj.lean` | **proved** (`propext`, `Quot.sound`) |
 | `planarRelabelTree_base`, `planarRelabel_proj` | `PlanarRelabelProj.lean` | **proved** (`propext`, `Quot.sound`) |
