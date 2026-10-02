@@ -45,6 +45,48 @@ theorem cls_eq_of_edgesConn {es : List (Nat × Nat)} {n a b : Nat} (h : EdgesCon
     ⟨fun h' => Relation.ReflTransGen.trans (edgesConn_symm h) h',
      fun h' => Relation.ReflTransGen.trans h h'⟩
 
+/-- `v` is the least vertex of its component. -/
+def IsMin (es : List (Nat × Nat)) (n v : Nat) : Prop := ∀ w, w < n → EdgesConn es v w → v ≤ w
+
+/-- Components with an edge are counted by their least vertices. -/
+theorem ccCount_eq_card_min (es : List (Nat × Nat)) (n : Nat) :
+    ccCount es n = ((Finset.range n).filter (fun v => HasEdge es v ∧ IsMin es n v)).card := by
+  symm
+  rw [Finset.filter_congr (s := Finset.range n) (p := fun v => HasEdge es v ∧ IsMin es n v)
+    (q := fun v => HasEdge es v ∧ ∀ w, w < n → EdgesConn es v w → v ≤ w) (fun _ _ => Iff.rfl)]
+  unfold ccCount
+  have himg : ((Finset.range n).filter (HasEdge es)).image
+        (fun v => (Finset.range n).filter (EdgesConn es v)) =
+      ((Finset.range n).filter
+        (fun v => HasEdge es v ∧ ∀ w, w < n → EdgesConn es v w → v ≤ w)).image
+        (fun v => (Finset.range n).filter (EdgesConn es v)) := by
+    ext C
+    simp only [Finset.mem_image, Finset.mem_filter, Finset.mem_range]
+    constructor
+    · rintro ⟨v, ⟨hv, he⟩, rfl⟩
+      have hne : ((Finset.range n).filter (EdgesConn es v)).Nonempty :=
+        ⟨v, Finset.mem_filter.2 ⟨Finset.mem_range.2 hv, Relation.ReflTransGen.refl⟩⟩
+      obtain ⟨hmn, hvm⟩ := Finset.mem_filter.1 (Finset.min'_mem _ hne)
+      rw [Finset.mem_range] at hmn
+      refine ⟨_, ⟨hmn, hasEdge_of_edgesConn hvm he, fun w hw hmw => ?_⟩,
+        (cls_eq_of_edgesConn hvm).symm⟩
+      exact Finset.min'_le _ w
+        (Finset.mem_filter.2 ⟨Finset.mem_range.2 hw, Relation.ReflTransGen.trans hvm hmw⟩)
+    · rintro ⟨v, ⟨hv, he, -⟩, rfl⟩
+      exact ⟨v, ⟨hv, he⟩, rfl⟩
+  rw [himg]
+  symm
+  apply Finset.card_image_of_injOn
+  intro a ha b hb hab
+  have hab : (Finset.range n).filter (EdgesConn es a) =
+      (Finset.range n).filter (EdgesConn es b) := hab
+  rw [Finset.mem_coe, Finset.mem_filter, Finset.mem_range] at ha hb
+  have hab' : EdgesConn es a b := by
+    have : b ∈ (Finset.range n).filter (EdgesConn es a) := by
+      rw [hab]; exact Finset.mem_filter.2 ⟨Finset.mem_range.2 hb.1, Relation.ReflTransGen.refl⟩
+    exact (Finset.mem_filter.1 this).2
+  exact le_antisymm (ha.2.2 b hb.1 hab') (hb.2.2 a ha.1 (edgesConn_symm hab'))
+
 /-! ### Label lists -/
 
 /-- Label of `v` in a label list (`v` itself when out of range). -/
@@ -296,43 +338,9 @@ theorem numComponents_eq_ccCount : numComponents es n = ccCount es n := by
     intro v hv
     rw [Bool.and_eq_true, beq_iff_eq, nonIsolated_iff]
     exact and_congr_right fun _ => lab_compLabels_eq_iff hes v hv
-  have key : ((Finset.range n).filter
-      (fun v => HasEdge es v ∧ ∀ w, w < n → EdgesConn es v w → v ≤ w)).card = ccCount es n := by
-    unfold ccCount
-    have himg : ((Finset.range n).filter (HasEdge es)).image
-          (fun v => (Finset.range n).filter (EdgesConn es v)) =
-        ((Finset.range n).filter
-          (fun v => HasEdge es v ∧ ∀ w, w < n → EdgesConn es v w → v ≤ w)).image
-          (fun v => (Finset.range n).filter (EdgesConn es v)) := by
-      ext C
-      simp only [Finset.mem_image, Finset.mem_filter, Finset.mem_range]
-      constructor
-      · rintro ⟨v, ⟨hv, he⟩, rfl⟩
-        have hne : ((Finset.range n).filter (EdgesConn es v)).Nonempty :=
-          ⟨v, Finset.mem_filter.2 ⟨Finset.mem_range.2 hv, Relation.ReflTransGen.refl⟩⟩
-        obtain ⟨hmn, hvm⟩ := Finset.mem_filter.1 (Finset.min'_mem _ hne)
-        rw [Finset.mem_range] at hmn
-        refine ⟨_, ⟨hmn, hasEdge_of_edgesConn hvm he, fun w hw hmw => ?_⟩,
-          (cls_eq_of_edgesConn hvm).symm⟩
-        exact Finset.min'_le _ w
-          (Finset.mem_filter.2 ⟨Finset.mem_range.2 hw, Relation.ReflTransGen.trans hvm hmw⟩)
-      · rintro ⟨v, ⟨hv, he, -⟩, rfl⟩
-        exact ⟨v, ⟨hv, he⟩, rfl⟩
-    rw [himg]
-    symm
-    apply Finset.card_image_of_injOn
-    intro a ha b hb hab
-    have hab : (Finset.range n).filter (EdgesConn es a) =
-        (Finset.range n).filter (EdgesConn es b) := hab
-    rw [Finset.mem_coe, Finset.mem_filter, Finset.mem_range] at ha hb
-    have hab' : EdgesConn es a b := by
-      have : b ∈ (Finset.range n).filter (EdgesConn es a) := by
-        rw [hab]; exact Finset.mem_filter.2 ⟨Finset.mem_range.2 hb.1, Relation.ReflTransGen.refl⟩
-      exact (Finset.mem_filter.1 this).2
-    exact le_antisymm (ha.2.2 b hb.1 hab') (hb.2.2 a ha.1 (edgesConn_symm hab'))
   show ((List.range n).filter
     fun v => nonIsolated es v && (compLabels es n)[v]?.getD v == v).length = _
-  rw [length_filter_range_eq_card, ← key]
+  rw [length_filter_range_eq_card, ccCount_eq_card_min]
   congr 1
   exact Finset.filter_congr fun v hv => hfilt v (Finset.mem_range.1 hv)
 
