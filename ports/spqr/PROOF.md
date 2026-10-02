@@ -659,27 +659,33 @@ was false for a bridge block (`[I, vertItem v]` under a Q with `vs = (some u, no
 * `nv`/`ne` (`RelabelIdx.Sizes`), `interior`, `canonical` (`Items.Endpoints.interior`,
   `Items.Shapes.canonical` along `idx`/`vertIndex`), `nv_orig_inj` (`Endpoints.nv_nodup` through
   `node_verts`, `nvList` injective on original ids) — from `Items.WF` alone;
-* `q_endpoints`, `separation`, `twin_glue`, and the output-level `r_three_connected` from
-  `Items.WF` plus `Items.RepOK`, three item facts the walk guarantees that `Items.WF` does not
-  state: `q_root` (a block-root Q with children `[c]` is a self-loop and with `[c, vertItem w]`
-  has edge `{u, w}` — needed to read the Q's node-verts as its edge), `o_parent` (an `O` item hangs
-  alone under a self-loop Q — its cap is a loop `(x, x)`, used by `twin_glue`/`separation` and the
-  R virtual-edge endpoints), and `s_order` (the positional form of `s_shape`: the S children in
-  `ch` order are the path `u → xs → v`, so that `skeleton` of an S node is a path and its virtual
-  edges are the consecutive pairs; `s_shape` only gives a permutation). `twin_glue` is
+* `q_endpoints`, `separation`, `twin_glue`, and the output-level `r_three_connected` additionally
+  use three `Items.WF` clauses added for this transport (formerly a separate `Items.RepOK`):
+  `Endpoints.q_root` (a block-root Q with children `[c]` is a self-loop and with `[c, vertItem w]`
+  has edge `{u, w}` — needed to read the Q's node-verts as its edge; in the walk, `[c]` is written
+  only by the self-loop branch of `finishEdge` and `[c, vertItem w]` by the bridge/block branches
+  with `w` the tree child, so this is the same tstack-span fact as `walk_q_children`),
+  `Shapes.o_parent` (an `O` item is allocated only in the self-loop branch, as the sole child of
+  its Q — its cap is a loop `(x, x)`, used by `twin_glue`/`separation` and the R virtual-edge
+  endpoints), and `Shapes.s_order` (the positional form of `s_shape`: the S children in `ch`
+  order are the path `u → xs → v`, so that `skeleton` of an S node is a path and its virtual
+  edges are the consecutive pairs; `s_shape` only gives a permutation; `finishTstackTop` writes
+  `ch` as the ear's span in walk direction, and `walk_st'`'s reference order fixes it). The three
+  clauses are checked on the walk's output by `lake build check_repok` over `gen.py` seeds
+  (0..400, 0 violations). `twin_glue` is
   `RelabelLayout.twin` + `edge_nvs` on both sides plus `Endpoints.child_endpoints`
   (`virt_glue`/`cap_orig`); `r_three_connected` is a pure transport
   `Items.RThreeConnected g items → (relabelTree g items).r_three_connected`, where
   `Items.RThreeConnected` (R items' `rSkeleton` — cap plus child virtual edges, read through the
   node-vert positions — is `ThreeConnected`) is the item-level statement of §4.5
   (`items_r_three_connected`, admitted there), not proved here.
-`relabelTree_represents' : Items.WF → Items.RepOK → Items.RThreeConnected → Represents` and
-`relabelTree_represents_of_r` (same with the output-level R clause, i.e. the hypothesis of
-`Correctness.relabelTree_represents`). `Correctness.relabelTree_represents` itself stays admitted:
-its statement has no `Items.RepOK` hypothesis, and `Items.WF` does not imply `RepOK` (a `Q` with
-`vs = (some u, none)`, `ch = [c]` and a non-loop edge satisfies every `Items.WF` clause). Either
-`RepOK` becomes part of `Items.WF` (then the walk must discharge it) or `relabelTree_represents`
-takes it as a hypothesis.
+`relabelTree_represents' : Items.WF → Items.RThreeConnected → Represents` and
+`relabelTree_represents_of_r` (same with the output-level R clause, the hypothesis
+`spqrTree_r_three_connected` provides). `Correctness.relabelTree_represents` now takes
+`Items.RThreeConnected` as its explicit hypothesis and is `relabelTree_represents'`;
+`spqrTree_represents` is `relabelTree_represents_of_r` on `walk_items_wf` and
+`spqrTree_r_three_connected`, so its admissions are `walk_items_wf`, `relabel_node_spec` and
+`spqrTree_r_three_connected`.
 
 `RelabelSt.lean` proves `relabel_st : Items.StNumbered → Items.WF g → (relabelTree g items).StOrder`
 **[proved modulo `relabel_node_spec`]** from the same package, see §7.3.
@@ -715,14 +721,14 @@ takes it as a hypothesis.
 | 4.1–4.3 ear content at a `finishEdge` (`WalkState.EarFinish`/`EarAt`: `sub ++ base` split, pairwise edge-disjointness, span ownership `subEdges` of the child's entries, loop-1 range `topDepth > d ⇒ vStart = child` and `origTstack`-indexed side `stackDir[d]`, terminal touching, V/Q item freshness, block-boundary separation) | `EarInv.lean` | **stated** (consumers mapped field by field in the file header: `MergeTopOk`/`RetargetOk.disj`, `loop1_rBranch`, `ear_lower'`, `walk_sides`' `CloseOK`, `BoundaryOk.gone/gone₂`); not yet carried by the walk (`EarShape.finishEdge`/`walkEarTree_guards` admitted) and the `ear_*` derivations not done; missing: the three-entry shape at a type-1 vertex close (`CloseVertOk.merge₁/merge₂/retarget.old`) and loop 2's `firstIdx` order |
 | 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape'`/`RStep.threeConnected'` (`Proofs/RClose.lean`) give it for Loop 1's R step from `Inv' D` + `stackVerts[d+1..D] = cur.vStart` + `RStep` + `RContent` (`Inv d` is contradictory there) |
 | 4.5 walk side: `EntryR`/`RTop`/`RBranch`/`RInvAt`; `RBranch.rStep`, `RBranch.rContent` (all five content fields), `RBranch.threeConnected` (from `Inv' (d+1)`); `EntryR.congr`/`RInvAt.congr` + bookkeeping frames; `Items.RSkel3`, `RBranch.rSkel3` | `RInv.lean`, `Proofs/RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RItems.lean` | proved; admitted: `finishEdge_rInvAt`, `walkTree_rInvAt`, `loop1_rBranch` (history preservation), `items_r_three_connected` (all R items of the walk on a block); `spqrTree_r_three_connected` (relabel transport): hard |
-| 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` (`Correctness.lean`) | sorry; the `Represents` half is `relabelTree_represents'`/`relabelTree_represents_of_r` below — `Correctness.relabelTree_represents` lacks the `Items.RepOK` hypothesis and is not implied by `Items.WF` (see §5) |
-| 5 relabel, `Represents` transport: `relabelTree_represents' : Items.WF → Items.RepOK → Items.RThreeConnected → Represents`, `relabelTree_represents_of_r` (output-level R clause); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved modulo `relabel_node_spec` (every `RelabelOK.*` field is standard-axioms only); `Items.RepOK` = `q_root`, `o_parent`, `s_order` (item facts beyond `Items.WF`, §5); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
+| 5 relabel: `Items.WF → WF` | `relabelTree_wf` (`Correctness.lean`) | sorry |
+| 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved modulo `relabel_node_spec` (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
 | 5 relabel, structural part: `relabelTree_own : Items.WF → Items.ROriented → Bijections ∧ Ownership ∧ Twins` (also `relabelTree_bijections`, `relabelTree_twins` from `WF` alone); `layoutNode_edges` | `RelabelOwn.lean` | proved modulo `relabel_node_spec` (`RelabelSpec.lean`, sorry); the item-level facts it needs are clauses of `Items.WF` (`nv_nodup`, `q_leaf_of_node`, `q_children`'s `v < nv`, `r_shape`'s child endpoints) |
 | 5 relabel, CSR bounds: `relabelTree_adj : Items.WF → Items.ROriented → (∀ n, adjBounds[2 nvSt n] = 2 neSt n) ∧ adjBounds[2 |nodeVerts|] = |adjDat|` (the statement of `relabel_adj_spec`); `layout_local` (`Layout.Local` for every item's `nodeLayout`) | `RelabelAdj.lean` | proved modulo `relabel_node_spec`; `relabel_adj_spec` itself stays admitted in `RelabelSpec.lean` only because that file cannot import its proof |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
 | 7 relabel-side: `vchildren_nv_increasing`, `orderedChildren_sorted`, `edgeChildren_dominance`, `layoutNode_r_bracket` | `StSpec.lean`, `StLayout.lean` | proved |
-| 7 relabel-side: `relabel_st : Items.StNumbered → Items.WF → StOrder` (`RelabelOK.stOrder`: `st_S/st_P/st_R`, `dom_node`, `adj_node` via `adjRow_eq_layout` + `LayoutShape` rows + `layoutNode_R_bracket`) | `RelabelSt.lean` | proved modulo `relabel_node_spec` (through `relabelOK_of_wf` and `relabelTree_adj`); no `RepOK` needed |
+| 7 relabel-side: `relabel_st : Items.StNumbered → Items.WF → StOrder` (`RelabelOK.stOrder`: `st_S/st_P/st_R`, `dom_node`, `adj_node` via `adjRow_eq_layout` + `LayoutShape` rows + `layoutNode_R_bracket`) | `RelabelSt.lean` | proved modulo `relabel_node_spec` (through `relabelOK_of_wf` and `relabelTree_adj`) |
 | 7 walk-side: `WalkState.StInv`, data lemmas `pushTstack_onSide`, `merge_onSide`, `fold_onSide` | `StWalk.lean` | def / proved |
 | 7 walk-side: `finishTstackTop_stItem`; ear lowvals `first_ret_lowval`, `chain_stackDir_step` | `StWalk.lean`, `StEar.lean` | proved |
 | 7 walk-side: `StInv.onSide` field, `chain_stackDir_const` (corrected statement, see 7.4) | `StWalk.lean` | def / proved |
