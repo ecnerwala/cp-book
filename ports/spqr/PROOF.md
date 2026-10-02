@@ -1638,9 +1638,27 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 
 ### 8.6 Lean plan (planarity)
 
+The second gluing pass adds `SpqrTree.PieceSep` (`PieceSep.lean`): `Touches i v` means an
+original edge below `i` is incident to `v`; distinct root children have disjoint `Touches`,
+distinct children of `V(v)` touch only at `v`, and a block-root `Q(e)` with children `[c,w]`
+(`w` of type V) touches an outside edge only at an endpoint of `e`.
+`spqrTree_pieceSep` (`WalkPieceSep.lean`) is the explicit walk-side admission, under graph
+well-formedness and valid vertex/edge orders, threaded through the gluing steps and fold.
+`lake build check_piece_sep` builds the executable checker. Seeds 0..300 from `gen.py`,
+plus a single edge, a three-leaf star, a self-loop and four isolated vertices, give zero
+violations of all three fields. These checks are empirical evidence, not a proof of the admission.
+
+`IsPlanarEmbedding.append` (`Proofs/PlanarAppend.lean`) proves the same-vertex-numbering
+union needed by F: from embeddings of `es₁` and `es₂` and disjoint incident vertex sets,
+`rs₁.union rs₂` embeds `es₁ ++ es₂`. It transports `IsPlanarEmbedding.union` with
+`f x = if x < n then x else x - n`; the disjointness hypothesis proves injectivity only on
+incident vertices, so isolated vertices need no special case.
+
 | statement | file | status |
 |---|---|---|
 | quarter-edges, `RotationSystem`, `IsEmbedding`, `IsPlanarEmbedding`, `Planar` | `Planar.lean` | def |
+| `SpqrTree.PieceSep`, `spqrTree_pieceSep` | `PieceSep.lean`, `WalkPieceSep.lean` | def / named walk admission; empirical checks above |
+| `IsPlanarEmbedding.append` (vertex-disjoint edge lists in the same vertex numbering) | `Proofs/PlanarAppend.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | planar walk (`planarWalk`), relabel (`planarSpqrTree`), gluing (`planarEmbed`) | `PlanarWalk.lean`, `PlanarRelabel.lean`, `PlanarEmbed.lean` | def |
 | `planarWalk_base`, `planarWalk_proj` (planar walk = ordinary walk + aux) | `PlanarWalkProj.lean` | **proved** (`propext`, `Quot.sound`) |
 | `planarRelabelTree_base`, `planarRelabel_proj` | `PlanarRelabelProj.lean` | **proved** (`propext`, `Quot.sound`) |
