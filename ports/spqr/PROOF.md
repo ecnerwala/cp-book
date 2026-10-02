@@ -28,6 +28,8 @@ of `v` at depth `d`:
 | `ret l backEdge` | back edge to `anc v l`, `l < d` |
 | `ret l type2Child` | tree edge, `lowpt1 c = l < d`, `lowpt2 c < d` — the subtree also attaches strictly between |
 
+*Terminology.* "type-1 child" (subtree hangs off `{v, anc v l}` only) is the Hopcroft–Tarjan type-1 split; "type-2 child" here just means a returning child that is not type-1. "Type-2 *pair*/split" (§3) is the HT separation-pair notion, which is about first-child chains, not about a single child. Only the relative order "type-1 edges to `l` before type-2 children to `l`" matters for correctness; the type-1-child vs back-edge tiebreak only affects output order.
+
 `OutClass.rank` **[def]** orders them `bridge < component < selfLoop <` all `ret`, and the `ret`
 edges by `(l, kind)` with `type1Child < backEdge < type2Child`; `dfsVisit` stably sorts each
 vertex's out-list by rank. We call the `ret` edges the *returning* edges of `v`, and a type-1 child
