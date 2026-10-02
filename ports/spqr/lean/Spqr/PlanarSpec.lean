@@ -5,6 +5,8 @@ import Spqr.Build
 import Spqr.Correctness
 import Spqr.PlanarInv
 import Spqr.PlanarEmbedSteps
+import Spqr.PlanarEmbedFold
+import Spqr.RelabelChildShape
 import Spqr.Spec
 
 /-!
@@ -228,8 +230,12 @@ theorem planarEmbed_sound (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : 
   · rename_i hall
     simp only [Option.some.injEq] at h
     subst h
+    have hwf : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.WF := by
+      rw [planarRelabel_proj]; exact spqrTree_wf g ternarize vertOrder edgeOrder
+    have hsh : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.ChildShape := by
+      rw [planarRelabel_proj]; exact spqrTree_childShape g ternarize vertOrder edgeOrder
     exact glued_root g ternarize vertOrder edgeOrder _
-      ((g.planarTree ternarize vertOrder edgeOrder).gluedUpTo_planarEmbed g hall)
+      ((g.planarTree ternarize vertOrder edgeOrder).gluedUpTo_planarEmbed g hwf hsh hall)
   · cases h
 
 /-- The eventual target: the planar SPQR tree yields an embedding iff `g` is planar. `→` is

@@ -3,11 +3,9 @@ import Spqr.PlanarEmbedSteps
 /-!
 # The leaf step of `planarEmbed`, under the hypotheses it needs
 
-`embedItem_step_leaf` (`PlanarEmbedSteps.lean`) is stated for an arbitrary `PlanarSpqrTree` and
-is not provable as stated: nothing says the leaf has no items below it (`subtreeEnd`) nor that
-`outerE[i]` is still unset when item `i` is processed (`GluedUpTo` has no clause about unprocessed
-items). `embedItem_step_leaf_of` proves it from exactly those two facts; the first is
-`WF.preorder.subtree_eq` for a childless item, the second is the missing `GluedUpTo` clause.
+`embedItem_step_leaf_of` proves the `O`/`I` step from `GluedUpTo (i + 1)` and the fact that the
+leaf has no items below it (`subtreeEnd`); `embedItem_step_leaf` (`PlanarEmbedFold.lean`) derives
+the latter from `WF.preorder.subtree_eq` and `ChildShape.leaf`.
 -/
 
 namespace Spqr
@@ -45,17 +43,18 @@ theorem embedItem_leaf (i : Nat) (hty : t.types[i]! = .O ∨ t.types[i]! = .I) (
     ((t.embedItem i).run s).2 = s := by
   rcases hty with hty | hty <;> (unfold embedItem; rw [hty]; rfl)
 
-/-- The `O`/`I` step of `planarEmbed`, from `GluedUpTo (i + 1)` plus the two facts the admitted
-`embedItem_step_leaf` lacks: the leaf has nothing below it, and its exposed ends are still unset. -/
+/-- The `O`/`I` step of `planarEmbed`, from `GluedUpTo (i + 1)` plus the fact that the leaf has
+nothing below it. -/
 theorem embedItem_step_leaf_of (g : Graph) (i : Nat) (hi : i < t.size)
     (hty : t.types[i]! = .O ∨ t.types[i]! = .I)
     (hsub : t.subtreeEnd[i]! = i + 1)
-    (s : EmbedState) (houter : ∀ q, ¬ s.exposedAt i q) (h : t.GluedUpTo g (i + 1) s) :
+    (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
     t.GluedUpTo g i ((t.embedItem i).run s).2 := by
   rw [t.embedItem_leaf i hty s]
+  have houter : ∀ q, ¬ s.exposedAt i q := h.outer_unprocessed i (Nat.lt_succ_self i)
   have hq : t.types[i]! ≠ .Q := by rcases hty with hty | hty <;> rw [hty] <;> decide
   have hbelow : t.edgesBelow i = [] := t.edgesBelow_leaf i hsub hq
-  refine ⟨h.rot_size, h.outer_size, ?_, ?_⟩
+  refine ⟨h.rot_size, h.outer_size, fun j hj => h.outer_unprocessed j (by omega), ?_, ?_⟩
   · intro q hq'
     exact h.unset q fun j hj hjs => hq' j (by omega) hjs
   · intro j hj
