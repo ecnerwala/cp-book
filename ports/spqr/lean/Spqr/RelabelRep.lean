@@ -25,6 +25,58 @@ theorem Array.getElem!_opt {α : Type} (a : Array (Option α)) (i : Nat) :
     a[i]! = a[i]?.getD none := by
   simp only [getElem!_def]; cases a[i]? <;> rfl
 
+/-- Item-level facts the representation transport needs beyond `Items.WF`. All hold for the
+walk's output (`PROOF.md` §5); `Items.WF` alone does not imply them. -/
+structure Items.RepOK (g : Graph) (items : Items) : Prop where
+  nv_nodup : ∀ i, i < items.size → (items.nvList g i).Nodup
+  /-- A Q has `vs.2 = none` iff it is a block root; `[c]` is a self-loop, `[c, v]` has edge `{u, v}`. -/
+  q_root : ∀ e, e < g.ne →
+    ((items.vs (edgeItem g e)).2 = none ↔ items.ch (edgeItem g e) ≠ []) ∧
+    (∀ c, items.ch (edgeItem g e) = [c] → (g.edges[e]!).1 = (g.edges[e]!).2) ∧
+    (∀ c w u, items.ch (edgeItem g e) = [c, vertItem w] → (items.vs (edgeItem g e)).1 = some u →
+      Items.PairEq (u, w) g.edges[e]!)
+  /-- Block-root Qs hang under V items. -/
+  q_root_parent : ∀ e p, e < g.ne → items.ch (edgeItem g e) ≠ [] → items.IsParent p (edgeItem g e) →
+    items.type p = .V
+  /-- O items hang alone under a (self-loop) Q. -/
+  o_parent : ∀ p c, items.IsParent p c → items.type c = .O → items.type p = .Q ∧ items.ch p = [c]
+  /-- S children are in path order (positional `s_shape`). -/
+  s_order : ∀ i, i < items.size → items.type i = .S → ∃ u v xs,
+    items.vs i = (some u, some v) ∧ ((items.ch i).filter fun c => items.type c = .V) = xs.map vertItem ∧
+    items.virtualEdges i = List.zip (u :: xs) (xs ++ [v])
+
+/-! ### `layoutNode` facts, in `Layout`-local form (proved by the `LayoutShape` session) -/
+
+namespace LayoutFacts
+
+theorem one_vert (ty : NodeType) (ht : ty.isNode = true) (node nvSt neSt neEn : Nat)
+    (ec : List (Nat × Nat)) (hne : neSt < neEn) :
+    ((layoutNode ty node nvSt (nvSt + 1) neSt neEn ec).edges[0]!).nvs = (nvSt, nvSt) := by
+  sorry
+
+theorem qi_edge (ty : NodeType) (ht : ty = .Q ∨ ty = .I) (node nvSt neSt neEn : Nat)
+    (ec : List (Nat × Nat)) (hne : neSt < neEn) :
+    ((layoutNode ty node nvSt (nvSt + 2) neSt neEn ec).edges[0]!).nvs = (nvSt, nvSt + 1) := by
+  sorry
+
+theorem p_edge (node nvSt neSt neEn : Nat) (ec : List (Nat × Nat)) (k : Nat) (hk : k < neEn - neSt) :
+    ((layoutNode .P node nvSt (nvSt + 2) neSt neEn ec).edges[k]!).nvs = (nvSt, nvSt + 1) := by
+  sorry
+
+theorem s_edge (node nvSt nvEn neSt neEn : Nat) (ec : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hne : neEn - neSt = nvEn - nvSt) (k : Nat) (hk : k < neEn - neSt) :
+    ((layoutNode .S node nvSt nvEn neSt neEn ec).edges[k]!).nvs =
+      if k = 0 then (nvSt, nvEn - 1) else (nvSt + k - 1, nvSt + k) := by
+  sorry
+
+theorem r_edge (node nvSt nvEn neSt neEn : Nat) (E : List (Nat × Nat)) (hv : nvSt + 2 ≤ nvEn)
+    (hne : neEn = neSt + E.length + 1) (k : Nat) (hk : k < E.length + 1) :
+    ((layoutNode .R node nvSt nvEn neSt neEn E).edges[k]!).nvs =
+      if k = 0 then (nvSt, nvEn - 1) else E[k - 1]! := by
+  sorry
+
+end LayoutFacts
+
 /-- The phase-3 interface as a hypothesis on an abstract output `t`. -/
 structure RelabelOK (g : Graph) (items : Items) (t : SpqrTree) (idx : ItemId → Nat) : Prop where
   wf : items.WF g
@@ -430,6 +482,154 @@ theorem nv_orig_inj (hnd : ∀ i, i < items.size → (items.nvList g i).Nodup) :
   obtain ⟨a, ha, rfl⟩ := h.idx_surj hn
   rw [h.nv_orig_map ha]
   exact (hnd a ha).map (Option.some_injective _)
+
+/-! ### Node-edge transport -/
+
+omit h in
+theorem isNode_iff (ty : NodeType) : ty.isNode = true ↔ ty ∉ [NodeType.F, .V] := by
+  cases ty <;> simp [NodeType.isNode]
+
+theorem filter_lt_eq {i : ItemId} (hi : i < items.size) :
+    (items.ch i).filter (· < 1 + g.nv) = (items.ch i).filter fun c => items.type c = .V := by
+  apply List.filter_congr
+  intro c hc
+  exact decide_eq_decide.2 (h.type_V_iff hi hc).symm
+
+theorem filter_ge_eq {i : ItemId} (hi : i < items.size) :
+    (items.ch i).filter (· ≥ 1 + g.nv) = (items.ch i).filter fun c => items.type c ≠ .V := by
+  apply List.filter_congr
+  intro c hc
+  exact decide_eq_decide.2 (by rw [ne_eq, h.type_V_iff hi hc]; constructor <;> intro <;> iomega)
+
+theorem virt_length {i : ItemId} (hi : i < items.size) :
+    (items.virtualEdges i).length = (items.ch i).countP (· ≥ 1 + g.nv) := by
+  rw [Items.virtualEdges, List.length_map, ← h.filter_ge_eq hi, List.countP_eq_length_filter]
+
+theorem nEdges_node {i : ItemId} (hi : i < items.size) (hn : (items.type i).isNode = true) :
+    items.nEdges g i = (items.virtualEdges i).length + items.capCount i := by
+  rw [Items.nEdges, ite_eq_left hn, h.virt_length hi]
+
+omit h in
+theorem nEdges_not_node {i : ItemId} (hn : (items.type i).isNode = false) : items.nEdges g i = 0 := by
+  simp [Items.nEdges, Items.capCount, Items.hasCap, hn]
+
+omit h in
+theorem ordered_filter_perm (i : ItemId) (nvSt : Nat) (pos : Nat → Nat) (p : ItemId → Bool) :
+    ((items.ordered g i nvSt pos).filter p).Perm ((items.ch i).filter p) :=
+  (ordered_perm i nvSt pos).filter p
+
+theorem type_Q_eq {i : ItemId} (hi : i < items.size) (hQ : items.type i = .Q) :
+    ∃ e, e < g.ne ∧ i = edgeItem g e := by
+  by_cases h1 : i < 1 + g.nv
+  · exfalso
+    rcases Nat.eq_zero_or_pos i with h0 | h0
+    · subst h0; have := h.tree.root; rw [show (0 : ItemId) = rootItem from rfl, this] at hQ; cases hQ
+    · have : i = vertItem (i - 1) := by iomega
+      rw [this, h.type_vertItem (by iomega)] at hQ; cases hQ
+  · by_cases h2 : i < 1 + g.nv + g.ne
+    · exact ⟨i - (1 + g.nv), by iomega, by iomega⟩
+    · exfalso
+      have := h.tree.node i (by iomega) hi
+      simp [hQ] at this
+
+theorem hasCap_eq {i : ItemId} (hi : i < items.size) : t.hasCap (idx i) = items.hasCap i := by
+  obtain ⟨pos, hl⟩ := (h.node i hi).layout
+  have hperm := ordered_perm (items := items) (g := g) i (t.nvRange (idx i)).1 pos
+  by_cases hQ : items.type i = .Q
+  · obtain ⟨e, he, rfl⟩ := h.type_Q_eq hi hQ
+    have key : (((items.ordered g (edgeItem g e) (t.nvRange (idx (edgeItem g e))).1 pos).map idx).any
+        fun c => t.type c != .V) = !(items.ch (edgeItem g e)).isEmpty := by
+      rcases h.shapes.q_children e he with h0 | ⟨c, hc, hch⟩
+      · rw [h0] at hperm ⊢
+        rw [List.perm_nil.1 hperm]; rfl
+      · have hne : items.ch (edgeItem g e) ≠ [] := by
+          rcases hch with h1 | ⟨v, h1⟩ <;> simp [h1]
+        have hcm : c ∈ items.ch (edgeItem g e) := by
+          rcases hch with h1 | ⟨v, h1⟩ <;> simp [h1]
+        rw [Bool.eq_iff_iff, List.any_eq_true]
+        constructor
+        · intro _; simpa using hne
+        · intro _
+          refine ⟨idx c, List.mem_map_of_mem (hperm.mem_iff.2 hcm), ?_⟩
+          rw [h.type_eq (h.ch_lt hi hcm)]
+          simpa using fun hV => hc (by simp [hV])
+    rw [SpqrTree.hasCap, Items.hasCap, h.type_eq hi, hl.children, key]
+  · have : (items.type (i) == .Q) = false := by simpa using hQ
+    rw [SpqrTree.hasCap, Items.hasCap, h.type_eq hi, this]
+    simp
+
+theorem neBounds_cover : ∀ n, n ≤ t.size → ∀ ne, ne < t.neBounds[n]! →
+    ∃ m, m < n ∧ t.neBounds[m]! ≤ ne ∧ ne < t.neBounds[m + 1]! := by
+  intro n
+  induction n with
+  | zero => intro _ ne hne; rw [h.ridx.ne_zero] at hne; omega
+  | succ n ih =>
+    intro hn ne hne
+    by_cases hlt : ne < t.neBounds[n]!
+    · obtain ⟨m, hm, h1, h2⟩ := ih (by omega) ne hlt
+      exact ⟨m, by omega, h1, h2⟩
+    · exact ⟨n, by omega, by omega, hne⟩
+
+theorem ne_mem_range {ne : Nat} (hne : ne < t.nodeEdges.size) :
+    ∃ a, a < items.size ∧ (t.neRange (idx a)).1 ≤ ne ∧ ne < (t.neRange (idx a)).2 := by
+  obtain ⟨m, hm, h1, h2⟩ := h.neBounds_cover t.size le_rfl ne (by rw [h.ridx.ne_last]; exact hne)
+  obtain ⟨a, ha, rfl⟩ := h.idx_surj hm
+  exact ⟨a, ha, by rw [neRange_fst]; exact h1, by rw [neRange_snd]; exact h2⟩
+
+omit h in
+theorem twin_some_lt {ne ne' : Nat} (ht : t.twin ne = some ne') : ne < t.nodeEdges.size := by
+  by_contra hge
+  simp [SpqrTree.twin, Array.getElem?_eq_none_iff.2 (by omega : t.nodeEdges.size ≤ ne)] at ht
+
+theorem nodeEdges_get {i : ItemId} (hi : i < items.size) {k : Nat} (hk : k < items.nEdges g i) :
+    (t.neRange (idx i)).1 + k < t.nodeEdges.size ∧
+    t.nodeEdges[(t.neRange (idx i)).1 + k]? = some (t.nodeEdges[(t.neRange (idx i)).1 + k]!) := by
+  have hlt : (t.neRange (idx i)).1 + k < t.nodeEdges.size := by
+    have := (h.node i hi).ne_range; have := h.neEn_le hi; omega
+  exact ⟨hlt, by rw [Array.getElem?_eq_getElem hlt, ← getElem!_pos]⟩
+
+theorem neOrig_eq {i : ItemId} (hi : i < items.size) {k a b : Nat} (hk : k < items.nEdges g i)
+    (ha : a < (items.nvList g i).length) (hb : b < (items.nvList g i).length)
+    (hnvs : (t.nodeEdges[(t.neRange (idx i)).1 + k]!).nvs =
+      ((t.nvRange (idx i)).1 + a, (t.nvRange (idx i)).1 + b)) :
+    t.neOrig ((t.neRange (idx i)).1 + k) = some ((items.nvList g i)[a], (items.nvList g i)[b]) := by
+  obtain ⟨-, hget⟩ := h.nodeEdges_get hi hk
+  have h1 := h.nvOrig_get hi ha
+  have h2 := h.nvOrig_get hi hb
+  simp [SpqrTree.neOrig, SpqrTree.nvsOf, hget, hnvs, h1, h2]
+
+/-! ### Endpoints and node-vert lists per type -/
+
+theorem vs_fst {i : ItemId} (hi : i < items.size) (hn : (items.type i).isNode = true) :
+    ∃ u, (items.vs i).1 = some u := by
+  have hs := h.endpoints.vs_shape i hi
+  cases hty : items.type i <;> rw [hty] at hs hn <;> simp [NodeType.isNode] at hn
+  · exact hs.elim (fun h1 => h1.elim fun v hv => ⟨v, by rw [hv]⟩)
+      (fun h2 => h2.elim fun u h2' => h2'.elim fun v hv => ⟨u, by rw [hv]⟩)
+  · obtain ⟨u, v, hv⟩ := hs; exact ⟨u, by rw [hv]⟩
+  · obtain ⟨v, hv⟩ := hs; exact ⟨v, by rw [hv]⟩
+  all_goals obtain ⟨u, v, hv⟩ := hs; exact ⟨u, by rw [hv]⟩
+
+omit h in
+theorem nvList_eq (i : ItemId) : items.nvList g i =
+    (items.vs i).1.toList ++ ((items.ch i).filter (· < 1 + g.nv)).map (· - 1) ++ (items.vs i).2.toList := rfl
+
+omit h in
+theorem vs_head {i : ItemId} {u : Nat} (hu : (items.vs i).1 = some u) :
+    (items.nvList g i)[0]? = some u := by
+  rw [nvList_eq, hu]; rfl
+
+omit h in
+theorem vs_last {i : ItemId} {v : Nat} (hv : (items.vs i).2 = some v) :
+    (items.nvList g i)[(items.nvList g i).length - 1]? = some v := by
+  rw [nvList_eq, hv, Option.toList_some]
+  set A := (items.vs i).1.toList ++ ((items.ch i).filter (· < 1 + g.nv)).map (· - 1)
+  have : (A ++ [v]).length - 1 = A.length := by simp
+  rw [this, List.getElem?_concat_length]
+
+omit h in
+theorem nvList_pos {i : ItemId} {u : Nat} (hu : (items.vs i).1 = some u) : 0 < (items.nvList g i).length := by
+  rw [nvList_eq, hu]; simp
 
 end RelabelOK
 
