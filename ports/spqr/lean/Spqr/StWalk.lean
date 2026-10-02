@@ -428,6 +428,21 @@ theorem finishTstackTop_stItem (s : WalkState) (item : ItemId) (h : s.TopClosabl
     rw [hvert]
     exact hor p (by rw [hent, List.tail_cons]; exact hp)
 
+/-- Close site: under `StInv` the top entry, once one-sided with its hole closed and its terminals
+distinct and not among its vertices, closes into an st-numbered item (`stInv_topClosable` fed to
+`finishTstackTop_stItem`). -/
+theorem stInv_finishTstackTop_stItem (s : WalkState) (d : Nat) (ord : Nat → Nat)
+    (hinv : s.StInv d ord) (item : ItemId) (t : TEntry) (ht : s.tstack.head? = some t)
+    (htd : t.topDepth ≤ d) (hside : t.OnSide s.stackDir[t.topDepth]!) (hclosed : s.HoleClosed d t)
+    (hne : t.vStart ≠ t.top s) (hvv : t.vStart ∉ s.entryVerts t) (htop : t.top s ∉ s.entryVerts t)
+    (hitem : item < s.items.size) (hnot : item ∉ getSide t.spans s.stackDir[t.topDepth]!) :
+    Items.StItem ((WalkM.finishTstackTop item).run s).2.items item :=
+  finishTstackTop_stItem s item
+    (fun t' ht' => by
+      rw [ht] at ht'; cases ht'
+      exact stInv_topClosable s d ord hinv t ht htd hside hclosed hne hvv htop)
+    t ht hitem hnot
+
 /-- Admitted: the walk-level induction in the shape of `WalkInv.walkTree_inv'`: for some
 numbering `ord` of the vertices, the final state satisfies `StInv`. -/
 theorem walk_stInv (g : Graph) (tern : Bool) (vo eo : List Nat) :
