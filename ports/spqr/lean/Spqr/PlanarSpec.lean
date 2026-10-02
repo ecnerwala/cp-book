@@ -212,7 +212,8 @@ theorem nodePlanar_complete (g : Graph) (ternarize : Bool) (vertOrder edgeOrder 
 `outerE[0]` is all unset, so `GluedUpTo 0` says the glued rotation is total and agrees with a
 planar embedding of `g.edges` under the identity renumbering. Admitted (tree facts about the
 root item). -/
-theorem glued_root (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (s : PlanarSpqrTree.EmbedState)
+theorem glued_root (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
+    (hwf : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.WF) (s : PlanarSpqrTree.EmbedState)
     (h : (g.planarTree ternarize vertOrder edgeOrder).GluedUpTo g 0 s) :
     IsPlanarEmbedding g.edges.toList g.nv ⟨s.rotAdj⟩ := by
   sorry
@@ -221,8 +222,10 @@ theorem glued_root (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Na
 component). The reverse-preorder fold is `forM_reverse_range_inv` with the invariant `GluedUpTo`
 (`gluedUpTo_init` proved); the per-item steps `embedItem_step_{F,V,Q,leaf,node}` and the root
 assembly `glued_root` are admitted (plan in PROOF.md §8.5: `twoSum_planar` for S/P/R with
-`nodePlanar_sound`, `oneSum_planar` for V/Q, `disjointUnion_planar` for F). -/
-theorem planarEmbed_sound (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
+`nodePlanar_sound`, `oneSum_planar` for V/Q, `disjointUnion_planar` for F). The tree's `WF` comes
+from `spqrTree_wf'`, hence the `g.WF` / `OrderOK` hypotheses. -/
+theorem planarEmbed_sound (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
+    (hvo : OrderOK g.nv vertOrder) (heo : OrderOK g.ne edgeOrder)
     (rs : RotationSystem) (h : (g.planarTree ternarize vertOrder edgeOrder).planarEmbed = some rs) :
     IsPlanarEmbedding g.edges.toList g.nv rs := by
   unfold PlanarSpqrTree.planarEmbed at h
@@ -231,10 +234,10 @@ theorem planarEmbed_sound (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : 
     simp only [Option.some.injEq] at h
     subst h
     have hwf : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.WF := by
-      rw [planarRelabel_proj]; exact spqrTree_wf g ternarize vertOrder edgeOrder
+      rw [planarRelabel_proj]; exact spqrTree_wf' g hg ternarize vertOrder edgeOrder hvo heo
     have hsh : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.ChildShape := by
       rw [planarRelabel_proj]; exact spqrTree_childShape g ternarize vertOrder edgeOrder
-    exact glued_root g ternarize vertOrder edgeOrder _
+    exact glued_root g ternarize vertOrder edgeOrder hwf _
       ((g.planarTree ternarize vertOrder edgeOrder).gluedUpTo_planarEmbed g hwf hsh hall)
   · cases h
 
