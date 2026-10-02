@@ -866,6 +866,15 @@ and the depth separation of vertex entries, which is the merge test the code app
 the R layer as a hypothesis over `tstack.drop (tstack.length - origTstack)` (`Frontier`,
 `Proofs/RInvFrame.lean`) and is not a field of `RangesInv`.
 
+The item shape counts exclude the parent cap. `Shapes.r_shape` therefore requires five
+non-V children, giving six skeleton edges with the cap. `Shapes.s_shape` requires one
+V child, giving a path of two child edges and a three-edge cycle with the cap.
+`checks/SkeletonShapeCheck.lean` kernel-checks both sharp cases on actual walk outputs:
+K4 has R item 11 with five non-V children and two V children; the triangle has S item 7
+with two non-V children and one V child. The former bounds of six non-V R children and
+two V S children were false. `RelabelOK.nvList_S` and `.nvList_S'` use the corrected S bound;
+the public minimum skeleton sizes remain six edges for R and three vertices/edges for S.
+
 ## 5. Phase 3: relabel
 
 `relabelTree` **[def]** takes the item array and produces `SpqrTree`. It is a plain preorder walk:
@@ -1092,6 +1101,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 Item/contract edge correspondence: `Pieces.ofItems_addParent_edges`, `Items.rSkeleton_perm_contract` | `Proofs/RItems.lean` | proved (standard axioms), under non-V-child edge coverage; deriving coverage for completed R items remains open |
 | 4.5 HT 3-connectivity implies 2-connectivity with ≥ 3 edges: `Graph.ThreeConnected.twoConnected` | `Proofs/ThreeConnected.lean` | proved (standard axioms); no block or simplicity assumption |
 | 4.5 Item HT-to-cut bridge: `Items.RSkel3.rThreeConnected` | `Proofs/RItems.lean`, `Proofs/ThreeConnected.lean` | proved (standard axioms), including active vertices and either cap orientation; takes item WF and non-V-child edge coverage |
+| Item S/R shape minimum counts | `ItemSpec.lean`, `checks/SkeletonShapeCheck.lean` | corrected: ≥ 1 V child for S, ≥ 5 non-V children for R; kernel-checked sharp triangle/K4 outputs (standard axioms) |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
 | 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge`/`walkTree` induction and `walk_ranges` admitted; saturation not a field (attachment-count forms false, §4.6) |
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |
