@@ -228,10 +228,10 @@ flattened state machine:
     Spqr/Proofs/{Postorder,Interval,Type2}.lean  Fact D: edge postorder, classes are laminar intervals (no sorry)
     Spqr/Blocks.lean, Spqr/Proofs/Blocks.lean  blocks ↔ lowval ≥ d (PROOF.md §2, no sorry)
     Spqr/Proofs/Dfs.lean  phase-1 spec: dfsForest_spanning, lowpoint/classify lemmas (no sorry)
-    Spqr/SepPairExhaust.lean  Type1Pair / Type2Pair / ThreeConnected (PROOF.md §4.5)
-    Spqr/Proofs/SepPairExhaust.lean  separation pairs = type-1 ∪ type-2 pairs proved (no sorry): sepPair_iff, three_connected_of_no_split
-    Spqr/Blocks.lean     blocks (SameBlock, block roots / tops, InBlock) relative to the DFS forest (PROOF.md §2)
-    Spqr/Proofs/Blocks.lean  Lemma 2.1 proved (no sorry): sameBlock_iff, blockRoot_cut, ret_child_sameBlock
+    Spqr/StSpec.lean     st-order spec: SpqrTree.StOrder (StNumbered / EdgeDominance / AdjBracket),
+                         Items.StNumbered, spqrTree_st = relabel_st ∘ walk_st, relabel-side lemmas
+    Spqr/StWalk.lean     walk-side st invariant WalkState.StInv (st-ordering with a hole) and the
+                         setSides / merge / fold side lemmas
     DumpLean.lean        dump harness (SPQR_EAR=1 switches to walkEarTree)
 
 Proof status: the specification and theorem statements are complete; the phase theorems
@@ -239,6 +239,13 @@ Proof status: the specification and theorem statements are complete; the phase t
 `spqrTree_r_three_connected`, and everything in `EarSpec.lean`) are currently `sorry` and are being
 proved per work package (see `PROOF.md` §6 for the plan and the natural-language proof they follow).
 Nothing about correctness is claimed until `#print axioms Spqr.spqrTree_represents` shows only the
-standard axioms. Runtime: the proof-carrying implementation uses `List ++` for span merges and
+standard axioms.
+The st-order layer (`PROOF.md` §7) is stated in `StSpec.lean`/`StWalk.lean`: `spqrTree_st` is
+derived from `walk_st` and `relabel_st`, both `sorry`; proved there are `vchildren_nv_increasing`,
+`orderedChildren_sorted`, `orderedChildren_eq_of_ne_R`, `edgeChildren_dominance` and the
+side-bookkeeping lemmas `pushTstack_onSide`, `merge_onSide`, `fold_onSide`; admitted are
+`layoutNode_r_bracket`, `relabel_st`, `chain_stackDir_const`, `finishTstackTop_stItem`,
+`finishEdge_topClosable`, `finishEdge_stInv`, `walk_st` (so `#print axioms Spqr.spqrTree_st`
+reports `sorryAx`). Runtime: the proof-carrying implementation uses `List ++` for span merges and
 `List.mergeSort`, so it is not linear-time; a cost-instrumented linear-time refinement (cat-lists,
 verified bucket sort) with a `fast = slow` theorem is separate, in-progress work.
