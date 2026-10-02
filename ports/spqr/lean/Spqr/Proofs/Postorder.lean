@@ -30,6 +30,39 @@ theorem List.eq_or_disjoint_of_nodup_flatMap {α β : Type} {f : α → List β}
     · exact .inr fun x hx hx' => hdisj _ hx' _ ((List.infix_flatMap_of_mem ha').subset hx) rfl
     · exact ih hnd ha' hb'
 
+theorem List.eq_cons_of_mem_of_not_sublist {α : Type} {l : List α} {x : α} (hx : x ∈ l)
+    (h : ∀ y, [y, x].Sublist l → False) : ∃ rest, l = x :: rest := by
+  cases l with
+  | nil => exact absurd hx (List.not_mem_nil)
+  | cons y rest =>
+    rcases List.mem_cons.mp hx with rfl | hx'
+    · exact ⟨rest, rfl⟩
+    · exact absurd (List.Sublist.cons_cons y (List.singleton_sublist.mpr hx')) (h y)
+
+theorem List.mem_dropWhile_sorted {α : Type} {f : α → Nat} {k : Nat} {l : List α}
+    (hs : l.Pairwise fun x y => f x ≤ f y) {x : α} :
+    x ∈ l.dropWhile (fun y => decide (f y ≤ k)) ↔ x ∈ l ∧ k < f x := by
+  induction l with
+  | nil => simp
+  | cons y rest ih =>
+    rw [List.pairwise_cons] at hs
+    rw [List.dropWhile_cons]
+    by_cases hy : f y ≤ k
+    · rw [ite_eq_left_of_eq_true _ _ (eq_true (decide_eq_true hy)), ih hs.2, List.mem_cons]
+      constructor
+      · rintro ⟨h1, h2⟩; exact ⟨.inr h1, h2⟩
+      · rintro ⟨rfl | h1, h2⟩
+        · omega
+        · exact ⟨h1, h2⟩
+    · rw [ite_eq_right_of_eq_false _ _ (eq_false (by simpa using hy))]
+      constructor
+      · intro h
+        refine ⟨h, ?_⟩
+        rcases List.mem_cons.mp h with rfl | h
+        · omega
+        · have := hs.1 x h; omega
+      · exact fun h => h.1
+
 theorem DfsOut.edgePostorderList_eq_flatMap (outs : List DfsOut) :
     DfsOut.edgePostorderList outs = outs.flatMap DfsOut.block := by
   induction outs with
@@ -312,6 +345,10 @@ theorem DfsData.ofForest_outs {forest : List DfsTree} (hnd : (forest.flatMap Dfs
   show forest.flatMap (·.outsAt s.v) = s.outs
   rw [outsAt_forest_eq hnd ht (hsub.verts_subset s.v_mem_verts)]
   exact hsub.outsAt_eq (hnd.sublist (List.infix_flatMap_of_mem ht).sublist)
+
+theorem DfsTree.edgePostorder_eq (t : DfsTree) :
+    t.edgePostorder = DfsOut.edgePostorderList t.outs := by
+  cases t; rfl
 
 theorem DfsOut.e_mem_block (o : DfsOut) : o.e ∈ o.block := by
   cases o <;> simp [DfsOut.block, DfsOut.e]

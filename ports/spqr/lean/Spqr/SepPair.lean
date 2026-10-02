@@ -215,6 +215,14 @@ inductive DfsTree.Sub : DfsTree → DfsTree → Prop
   | refl (t) : Sub t t
   | step {s v outs e cls child} : Sub s child → DfsOut.tree e cls child ∈ outs → Sub s (.node v outs)
 
+/-- The candidate class of `a → a'` (`e₀`, the tree edge into `c`) for a type-2 pair `{a, b}` with
+`a` at depth `l`: the blocks of the out-edges of `b` (the subtree at `sb`) sorted after
+`ret l backEdge`, the remaining edges of `T_{a'} − T_b`, and `e₀` itself. -/
+def DfsTree.type2Block (l e₀ : Nat) (c sb : DfsTree) : List Nat :=
+  DfsOut.edgePostorderList
+      (sb.outs.dropWhile fun o => decide (o.cls.rank ≤ (OutClass.ret l .backEdge).rank)) ++
+    c.edgePostorder.drop sb.edgePostorder.length ++ [e₀]
+
 /-- Two edge intervals are nested or disjoint. -/
 def Laminar (B₁ B₂ : List Nat) : Prop := B₁ ⊆ B₂ ∨ B₂ ⊆ B₁ ∨ ∀ x, x ∈ B₁ → x ∈ B₂ → False
 
