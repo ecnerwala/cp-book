@@ -12,12 +12,12 @@ namespace Spqr.Ghost
 
 open RelabelM
 
-/-- Discharge one arm of a join point, leaving the relation as a `sorry`. -/
-macro "jp_armR_sorry" : tactic =>
+/-- Discharge one arm of a join point whose relation is a conjunction of field equations. -/
+macro "jp_armR" : tactic =>
   `(tactic| first
-      | exact ⟨_, by sorry, arm_modify _ _ _⟩
-      | exact ⟨_, by sorry, arm_pure _ _⟩
-      | exact ⟨_, by sorry, arm_id _ _⟩)
+      | exact ⟨_, by constructor <;> first | rfl | simp only [*, ↓reduceIte, reduceCtorEq, Items.nvList] | (split_ifs <;> first | rfl | contradiction), arm_modify _ _ _⟩
+      | exact ⟨_, by constructor <;> first | rfl | simp only [*, ↓reduceIte, reduceCtorEq, Items.nvList] | (split_ifs <;> first | rfl | contradiction), arm_pure _ _⟩
+      | exact ⟨_, by constructor <;> first | rfl | simp only [*, ↓reduceIte, reduceCtorEq, Items.nvList] | (split_ifs <;> first | rfl | contradiction), arm_id _ _⟩)
 
 set_option pp.deepTerms false
 set_option pp.deepTerms.threshold 80
@@ -42,7 +42,7 @@ theorem relabel_spec {g : Graph} {items : Items} (hwf : items.WF g) :
     refine wp_abs _ (StepNum cur (items.type cur) p pn s) _
       (by constructor <;> first | rfl | exact hc.g_eq.symm | exact hc.items_eq.symm) fun s1 h1 => ?_
     -- V/Q bookkeeping
-    refine wp_jpR _ _ (StepVQ g items cur s.types.size) _ (by split <;> jp_armR_sorry) fun s2 h2 => ?_
+    refine wp_jpR _ _ (StepVQ g items cur s.types.size) _ (by split <;> jp_armR) fun s2 h2 => ?_
     try simp only [wp_bind, wp_get, wp_modify]
     -- node-verts
     refine wp_abs _ (StepNV ((items.nvList g cur).map (⟨s.types.size, ·⟩)) s2) _ (by constructor <;> rfl)
@@ -50,7 +50,7 @@ theorem relabel_spec {g : Graph} {items : Items} (hwf : items.WF g) :
     try dsimp only
     -- R: vertex positions
     refine wp_jpR _ _ (StepPos (items.type cur) ((items.nvList g cur).map (⟨s.types.size, ·⟩)) s2.nodeVerts.size) _
-      (by split <;> jp_armR_sorry) fun s4 h4 => ?_
+      (by split <;> jp_armR) fun s4 h4 => ?_
     try simp only [wp_bind, wp_get, wp_modify]
     refine wp_orderedChildren' _ _ fun children hchildren => ?_
     try simp only [wp_bind, wp_get, wp_modify]
@@ -61,12 +61,12 @@ theorem relabel_spec {g : Graph} {items : Items} (hwf : items.WF g) :
     split
     · rename_i hcap
       try simp only [wp_bind, wp_modify]
-      refine wp_abs _ (StepCap true s4.nodeEdges.size ct s6) _ (by sorry) fun s7 h7 => ?_
+      refine wp_abs _ (StepCap true s4.nodeEdges.size ct s6) _ (by constructor <;> rfl) fun s7 h7 => ?_
       have he := entry_of_steps hwf hpre ct h1 h2 h3 h4 hchildren h6 h7 ⟨fun _ => hcap, fun _ => rfl⟩
       try simp only [wp_bind]
       refine wp_forIn_inv _ _ _ _
         (fun rest b σ => ∃ done, LoopInv g items cur ct s.types.size s2.chDat.size s2.nodeVerts.size
-          s4.nodeEdges.size s s7 children done rest b σ) s7 ⟨[], loop_init he rfl (by rw [he.hasCap_eq]; split <;> first | rfl | exact absurd hcap ‹_›)⟩ ?_ ?_
+          s4.nodeEdges.size s s7 children done rest b σ) s7 ⟨[], loop_init hpre he rfl (by rw [he.hasCap_eq, if_pos hcap])⟩ ?_ ?_
       · intro c hc rest b σ ⟨done, hi⟩
         have hcc := hi.mem_ch he
         simp only [wp_bind, wp_get, wp_modify, wp_pure, wp_ite]
@@ -90,13 +90,13 @@ theorem relabel_spec {g : Graph} {items : Items} (hwf : items.WF g) :
         try simp only [wp_modify]
         exact hi.fin hwf hpre he (by constructor <;> rfl)
     · rename_i hcap
-      refine wp_abs _ (StepCap false s4.nodeEdges.size ct s6) _ (by sorry) fun s7 h7 => ?_
+      refine wp_abs _ (StepCap false s4.nodeEdges.size ct s6) _ (by constructor <;> rfl) fun s7 h7 => ?_
       have he := entry_of_steps hwf hpre ct h1 h2 h3 h4 hchildren h6 h7
         ⟨fun h => absurd h Bool.false_ne_true, fun h => absurd h hcap⟩
       try simp only [wp_bind]
       refine wp_forIn_inv _ _ _ _
         (fun rest b σ => ∃ done, LoopInv g items cur ct s.types.size s2.chDat.size s2.nodeVerts.size
-          s4.nodeEdges.size s s7 children done rest b σ) s7 ⟨[], loop_init he rfl (by rw [he.hasCap_eq]; split <;> first | rfl | exact absurd ‹_› hcap)⟩ ?_ ?_
+          s4.nodeEdges.size s s7 children done rest b σ) s7 ⟨[], loop_init hpre he rfl (by rw [he.hasCap_eq, if_neg hcap])⟩ ?_ ?_
       · intro c hc rest b σ ⟨done, hi⟩
         have hcc := hi.mem_ch he
         simp only [wp_bind, wp_get, wp_modify, wp_pure, wp_ite]

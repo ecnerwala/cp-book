@@ -65,19 +65,17 @@ structure StepVQ (g : Graph) (items : Items) (cur curIdx : Nat) (s σ : RelabelS
   adjDat : σ.adjDat = s.adjDat
   vertPos : σ.vertPos = s.vertPos
   order : σ.order = s.order
-  origId_size : σ.origId.size = s.origId.size
-  origId_ne : ∀ k, k ≠ curIdx → σ.origId[k]? = s.origId[k]?
-  origId_cur : σ.origId[curIdx]! = items.origOf g cur
-  vertIndex_size : σ.vertIndex.size = s.vertIndex.size
-  vertIndex : ∀ v, σ.vertIndex[v]! =
-    if items.type cur = NodeType.V ∧ v = cur - 1 then some curIdx else s.vertIndex[v]!
-  edgeIndex_size : σ.edgeIndex.size = s.edgeIndex.size
-  edgeIndex : ∀ e, σ.edgeIndex[e]! =
-    if items.type cur = NodeType.Q ∧ e = cur - 1 - g.nv then some curIdx else s.edgeIndex[e]!
-  edgeFlipped_size : σ.edgeFlipped.size = s.edgeFlipped.size
-  edgeFlipped : ∀ e, σ.edgeFlipped[e]! =
-    if items.type cur = NodeType.Q ∧ e = cur - 1 - g.nv then ((items.vs cur).1 != some (g.edges[e]!).1)
-    else s.edgeFlipped[e]!
+  origId : σ.origId =
+    if items.type cur = .V then s.origId.set! curIdx (some (cur - 1))
+    else if items.type cur = .Q then s.origId.set! curIdx (some (cur - 1 - g.nv)) else s.origId
+  vertIndex : σ.vertIndex =
+    if items.type cur = .V then s.vertIndex.set! (cur - 1) (some curIdx) else s.vertIndex
+  edgeIndex : σ.edgeIndex =
+    if items.type cur = .Q then s.edgeIndex.set! (cur - 1 - g.nv) (some curIdx) else s.edgeIndex
+  edgeFlipped : σ.edgeFlipped =
+    if items.type cur = .Q then
+      s.edgeFlipped.set! (cur - 1 - g.nv) ((items.vs cur).1 != some (g.edges[cur - 1 - g.nv]!).1)
+    else s.edgeFlipped
 structure StepNV (nv : List NodeVert) (s σ : RelabelState) : Prop where
   g_eq : σ.g = s.g
   items_eq : σ.items = s.items
@@ -162,11 +160,8 @@ structure StepCap (b : Bool) (neSt : Nat) (ct : Option Nat) (s σ : RelabelState
   adjDat : σ.adjDat = s.adjDat
   vertPos : σ.vertPos = s.vertPos
   order : σ.order = s.order
-  nodeEdges_size : σ.nodeEdges.size = s.nodeEdges.size
-  nodeEdges_ne : ∀ k, k ≠ neSt → σ.nodeEdges[k]? = s.nodeEdges[k]?
-  nodeEdges_node : ∀ k : Nat, NodeEdge.node σ.nodeEdges[k]! = NodeEdge.node s.nodeEdges[k]!
-  nodeEdges_nvs : ∀ k : Nat, NodeEdge.nvs σ.nodeEdges[k]! = NodeEdge.nvs s.nodeEdges[k]!
-  cap : b = true → neSt < s.nodeEdges.size → NodeEdge.twin σ.nodeEdges[neSt]! = ct
+  nodeEdges : σ.nodeEdges =
+    if b = true then s.nodeEdges.modify neSt (fun ne => { ne with twin := ct }) else s.nodeEdges
 structure StepEnd (curIdx n : Nat) (s σ : RelabelState) : Prop where
   g_eq : σ.g = s.g
   items_eq : σ.items = s.items
@@ -375,11 +370,32 @@ theorem entry_of_steps {s1 s2 s3 s4 s6 : RelabelState} {b : Bool} (hwf : items.W
       (fun v => s4.vertPos[v]!) children s s7 := by
   sorry
 
-theorem loop_init (he : Entry g items cur p pn ct curIdx chSt nvSt neSt pos children s s7) {nv0 ne0 : Nat}
+theorem loop_init (hpre : CallPre g items cur s)
+    (he : Entry g items cur p pn ct curIdx chSt nvSt neSt pos children s s7) {nv0 ne0 : Nat}
     (hnv : nv0 = nvSt + if (items.vs cur).1.isSome = true then 1 else 0)
     (hne : ne0 = neSt + if items.hasCap cur then 1 else 0) :
-    LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children [] children (nv0, ne0, 0) s7 := by
-  sorry
+    LoopInv g items cur ct curIdx chSt nvSt neSt s s7 children [] children (nv0, ne0, 0) s7 where
+  split := rfl
+  cons := he.cons
+  agree0 := he.agree
+  agree7 := Agree.refl
+  idx_cur := by
+    rw [RelabelState.idx, he.order, Array.toList_push, List.idxOf_append, if_neg he.cur_not_mem,
+      List.idxOf_cons_self, Array.length_toList, hpre.cons.order_size, he.curIdx_eq, Nat.zero_add]
+  ch_cur := rfl
+  nv_cur := by rw [hnv, List.countP_nil, Nat.add_zero]; cases (items.vs cur).1 <;> rfl
+  ne_cur := by simp only [hne, Items.capCount, List.countP_nil, ite_self, Nat.add_zero]
+  mem := fun j => by simp
+  size := by show s7.types.size = curIdx + 1; rw [he.types, Array.size_push, he.curIdx_eq]
+  slots := fun k hk => absurd hk (Nat.not_lt_zero _)
+  child_idx := fun k hk => absurd hk (Nat.not_lt_zero _)
+  par := fun c hc => nomatch hc
+  par_nv := fun k hk => absurd hk (Nat.not_lt_zero _)
+  par_nv_none := fun c hc => nomatch hc
+  twin := fun _ k hk => absurd hk (Nat.not_lt_zero _)
+  cap_none := fun _ c hc => nomatch hc
+  cap := he.cap
+  nodes := fun c hc => nomatch hc
 
 theorem loop_fuel {fuel : Nat} (ht : items.Tree g) (hcur : cur < items.size) (hc : c ∈ items.ch cur)
     (hf : (items.desc cur).card ≤ fuel + 1) : (items.desc c).card ≤ fuel := by
