@@ -1,5 +1,6 @@
 import Spqr.Proofs.Orbits
 import Spqr.Proofs.OrbitCount
+import Spqr.Proofs.TwoSumCount
 
 /-!
 # 2-sum gluing (PROOF.md §8.5)
@@ -1413,13 +1414,6 @@ theorem splice_numVertexOrbits :
     RotationSystem.numVertexOrbits_eq _ W.emb₁.total W.emb₁.involution (T.size₁ W),
     RotationSystem.numVertexOrbits_eq _ W.emb₂.total W.emb₂.involution (T.size₂ W)]
   exact T.count_splice W 1 (by decide) rfl (T.h02_vert W) (T.h13_vert W)
-
-/-- ADMITTED (graph counting): the non-isolated vertices of the 2-sum are those of `G₁` plus
-those of `G₂` other than its two terminals (which are identified with `u₁, v₁`, non-isolated in
-`G₁` by `deg₁`). -/
-theorem numNonIsolated_edges :
-    numNonIsolated T.edges T.nVerts + 2 = numNonIsolated T.es₁ T.n₁ + numNonIsolated T.es₂ T.n₂ := by
-  sorry
 
 /-- ADMITTED (graph counting): components of the 2-sum, using `conn` (the virtual edge is not a
 bridge on at least one side): `C = C₁ + C₂ − 1`. -/
