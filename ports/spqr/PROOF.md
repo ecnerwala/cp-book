@@ -956,7 +956,9 @@ hole lemmas of §7.4 can be reused.
 | `EarsOnSide` (named ear-shape hypothesis), `finishEdge_stInv` | `StWalk.lean` | def / sorry (hard; push/merge/fold/close blocks via `Step`/`Sim`) |
 | `walk_stInv` | `StWalk.lean` | sorry (the `walkTree_inv'`-shaped induction; needs `StInv (d+1) → StInv d` at returns) |
 | `walk_st`, `spqrTree_st` | `StWalk.lean` | proved (from `walk_stInv`, `relabel_st`, `walk_items_wf`) |
-| `refTree`/`refOrder`, `check_stref` differential test (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..300 (0 mismatches); `walk_st'` (walk order = reference) not started |
+| `refTree`/`refOrder`, `restrictCh`, `check_stref` differential test (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..300 (0 mismatches) |
+| `walk_st'` (`ch i = restrictCh … (refOrder …) i` for S/P/R items) | `StRef.lean` | sorry (the simulation) |
+| reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes) | `StRef.lean` | proved |
 
 ## 8. Planarity
 
