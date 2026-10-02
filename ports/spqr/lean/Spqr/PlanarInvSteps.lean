@@ -80,8 +80,8 @@ theorem popPair {k : TEntry → PlEntry → PlanarWalkM α} (hk : ∀ t tp, Pres
     Preserves WalkInv (PlanarWalkM.liftW WalkM.popTstack >>= fun t => PlanarWalkM.popPl >>= fun tp => k t tp) := by
   intro s ⟨hinv, hlen⟩
   refine hk _ _ _ ⟨?_, ?_⟩
-  · intro x hx p hp
-    exact hinv x (mem_zip_tail hx) p hp
+  · intro x hx p hp hne
+    exact hinv x (mem_zip_tail hx) p hp hne
   · show s.base.tstack.tail.length = s.aux.plStack.tail.length
     simp only [List.length_tail, hlen]
 
@@ -89,9 +89,20 @@ end Preserves
 
 namespace PlanarWalkM
 
-/-- A fresh vertex entry (empty piece, both sides empty) satisfies Invariant P. Admitted. -/
+theorem default_ends : (default : Planarity).ends = [] := rfl
+
+/-- A fresh vertex entry has an empty piece and no exposed ends, so it is exempt from
+Invariant P. -/
 theorem pushVertTstack_inv (v d : Nat) : Preserves WalkInv (pushVertTstack v d) := by
-  sorry
+  intro s ⟨hinv, hlen⟩
+  refine ⟨?_, ?_⟩
+  · intro x hx p hp hne
+    rcases List.mem_cons.1 hx with rfl | hx
+    · cases hp
+      exact absurd default_ends hne
+    · exact hinv x hx p hp hne
+  · show (_ :: s.base.tstack).length = (_ :: s.aux.plStack).length
+    simp only [List.length_cons, hlen]
 
 /-- A fresh single-edge ear (`makeEdgePlanarity`) satisfies Invariant P: the piece is one
 virtual edge, its embedding is `bondRot 1`, and the four quarter-edges are the exposed ends

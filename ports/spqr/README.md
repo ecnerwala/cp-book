@@ -256,7 +256,7 @@ flattened state machine:
                          twoSum_planar / oneSum_planar / disjointUnion_planar, layout renumbering
     Spqr/PlanarInvSteps.lean
                          Invariant P through the planar walk: Preserves/frame/popPair plumbing and the
-                         walk recursion are proved, the ten per-step lemmas *_inv are admitted
+                         walk recursion are proved, nine per-step lemmas *_inv are admitted (pushVertTstack_inv proved)
     Spqr/PlanarEmbedSteps.lean
                          gluing invariant GluedUpTo of planarEmbed; the reverse-preorder fold is proved,
                          the per-item steps embedItem_step_* are admitted
