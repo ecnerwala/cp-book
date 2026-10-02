@@ -637,6 +637,21 @@ Items.WF g items → Items.ROriented g items →
 * `Twins` from `Items.Tree` and `Shapes.q_leaf_of_node` (a capped child has at least one edge),
   via `RelabelLayout.twin` both ways, `child_cap_twin_none`, injectivity of `idx` and disjointness
   of the `neRange`s.
+`RelabelAdj.lean` adds the CSR facts of `relabel_adj_spec` on the same hypothesis:
+`relabelTree_adj : Items.WF g items → Items.ROriented g items →
+(∀ n < size, adjBounds[2 nvSt n] = 2 neSt n) ∧ adjBounds[2 |nodeVerts|] = |adjDat|` **[proved]**.
+Every item's `nodeLayout` satisfies `Layout.Local` (`layout_local`: the `local_*` instances of
+`LayoutShape.lean`, with their hypotheses read off `Items.WF` through `WF.layout_hyps`, `WF.nvList_V`
+— V items have no node-verts — `WF.nvList_Q`, `WF.nEdges_pos`, and for R the orientation
+`edgeChildren_bounds` from `ROriented`), so `RelabelLayout.adj_bounds` at `j = 2 nVerts` plus
+`Local.bound_last` give `adjBounds[2 nvEn] = 2 neEn` whenever `adjBounds[2 nvSt] = 2 neSt`
+(`adj_bound_step`; a node without node-verts has no node-edges). Since `nvSt (n+1) = nvEn n`,
+induction over the node index gives `adjBounds[2 nvBounds[n]] = 2 neBounds[n]` for all `n ≤ size`
+(`adj_bounds_start`), which is the first clause for `n < size` and the second at `n = size`
+(`RelabelIdx.nv_last`/`ne_last`/`adj_dat_size`). The Q case needs `Endpoints.q_vs`'s corrected
+clause: a block-root Q (a Q with children) records only its upper endpoint, `vs.2 = none` — the
+walk sets this for every block boundary, not only self-loops, and the statement `vs.2 = none ↔ loop`
+was false for a bridge block (`[I, vertItem v]` under a Q with `vs = (some u, none)`).
 
 ## 6. Lean plan (what is proved where)
 
@@ -671,6 +686,7 @@ Items.WF g items → Items.ROriented g items →
 | 5 relabel: `Items.WF → WF ∧ Represents` | `relabelTree_wf`, `relabelTree_represents` | sorry |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
 | 5 relabel, structural part: `relabelTree_own : Items.WF → Items.ROriented → Bijections ∧ Ownership ∧ Twins` (also `relabelTree_bijections`, `relabelTree_twins` from `WF` alone); `layoutNode_edges` | `RelabelOwn.lean` | proved modulo `relabel_node_spec` (`RelabelSpec.lean`, sorry); the item-level facts it needs are clauses of `Items.WF` (`nv_nodup`, `q_leaf_of_node`, `q_children`'s `v < nv`, `r_shape`'s child endpoints) |
+| 5 relabel, CSR bounds: `relabelTree_adj : Items.WF → Items.ROriented → (∀ n, adjBounds[2 nvSt n] = 2 neSt n) ∧ adjBounds[2 |nodeVerts|] = |adjDat|` (the statement of `relabel_adj_spec`); `layout_local` (`Layout.Local` for every item's `nodeLayout`) | `RelabelAdj.lean` | proved modulo `relabel_node_spec`; `relabel_adj_spec` itself stays admitted in `RelabelSpec.lean` only because that file cannot import its proof |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
 | 7 relabel-side: `vchildren_nv_increasing`, `orderedChildren_sorted`, `edgeChildren_dominance`, `layoutNode_r_bracket` | `StSpec.lean`, `StLayout.lean` | proved |
 | 7 relabel-side: `relabel_st` | `StSpec.lean` | sorry |
