@@ -308,7 +308,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | graph / DFS / items / walk / relabel definitions | `Graph.lean … Build.lean` | def |
 | output spec `SpqrTree.WF`, `Represents` | `Spec.lean` | def |
 | phase-2 contract `Items.WF` | `ItemSpec.lean` | def |
-| 1.1, 1.2 DFS spanning + lowpoints | `Correctness.lean` (`dfsForest_spanning`) | sorry |
+| 1.1, 1.2 DFS spanning + lowpoints | `Proofs/Dfs.lean` (`dfsForest_spanning`, `dfsForest_wf`, `classify_child_*`) | proved |
 | 2.1 blocks ↔ `lowval ≥ d` branches | — | to state |
 | Facts A–C (`sepPair_comparable`, type-1 class / above-between / sorted prefix-suffix, `type2_first_out`) | `SepPair.lean`, `Proofs/SepPair.lean` | proved |
 | Fact D (laminar intervals) | — | to state |
