@@ -379,7 +379,7 @@ relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical
 | Fact D (laminar intervals): `edgePostorder`, type-1 classes are intervals + laminar, `type2_class_interval`, `type2Block_laminar_block` | `Proofs/{Postorder,Interval,Type2}.lean` | proved (type-2 vs type-2 nesting open, see §3) |
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
 | `walkEarTree = walkTree` (`walkEarTree_eq_walkTree`, `walkEar_eq_walk`) | `EarSpec.lean` | proved |
-| frame rule `walkTree_local` | `EarSpec.lean` | sorry |
+| frame rule `walkTree_local` via `Lifts`/`Sim` simulation (`Sim.closeEars`, `Sim.mergeLate`, `Sim.finishRest`, `Sim.finishBoundary` proved) | `Sim.lean`, `Frame.lean`, `EarSpec.lean` | `Sim.closeVert` (loop 3 mechanics) and `Sim.walkTree` (invariant threading) admitted; rest proved |
 | typing/allocation part of `Items.WF` (`Items.Tree` sizes/types, I/O leaves, `vs_shape`, `vs_lt`): `walk_typing` | `WalkTyping.lean` | proved (`walk_q_children` sorry: needs span shape) |
 | §4.2b walk invariant (`EntryInv`, `Inv`), `mergeTstackTops_sound`, `finishEdge_inv`, `walkTree_inv` | `WalkSpec.lean` | sorry |
 | Invariant W, Lemmas 4.3/4.4 (`earOut_one_entry`, `ascend_frame_one_entry`) | `EarSpec.lean` | sorry / hard |
