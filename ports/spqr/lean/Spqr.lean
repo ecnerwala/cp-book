@@ -3,9 +3,16 @@ import Spqr.Dfs
 import Spqr.BucketSort
 import Spqr.DfsFast
 import Spqr.Items
+import Spqr.CatList
+import Spqr.StateRun
+import Spqr.Refine
 import Spqr.Walk
+import Spqr.WalkFast
+import Spqr.WalkCost
 import Spqr.Ear
 import Spqr.Relabel
+import Spqr.RelabelFast
+import Spqr.RelabelCost
 import Spqr.Build
 import Spqr.Spec
 import Spqr.ItemSpec

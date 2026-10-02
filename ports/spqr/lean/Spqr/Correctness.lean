@@ -53,7 +53,7 @@ theorem spqrTree_r_three_connected (g : Graph) (tern : Bool) (vo eo : List Nat) 
 
 theorem spqrTree_eq (g : Graph) (tern : Bool) (vo eo : List Nat) :
     g.spqrTree tern vo eo = relabelTree g (g.walk tern (g.dfsForest vo eo)).items := by
-  simp [Graph.spqrTree, Graph.dfsForestFast_eq]
+  simp [Graph.spqrTree, Graph.dfsForestFast_eq, Graph.walkFast_items, Fast.relabelTreeFast_eq]
 
 theorem spqrTree_wf (g : Graph) (tern : Bool) (vo eo : List Nat) : (g.spqrTree tern vo eo).WF := by
   rw [spqrTree_eq]; exact relabelTree_wf g _ (walk_items_wf g tern vo eo)
