@@ -219,7 +219,7 @@ flattened state machine:
     Spqr/Correctness.lean  top-level theorems spqrTree_wf / spqrTree_represents, assembled from
                          one theorem per phase
     Spqr/EarSpec.lean    walkEarTree = walkTree, tstack frame rule, per-ear lemmas
-    Spqr/Sim.lean, Spqr/Frame.lean  Lifts/Sim relation: walk on tstack `top ++ bot` simulates walk on `top`; finishEdge block lemmas (only Sim.closeVert, Sim.walkTree admitted)
+    Spqr/Sim.lean, Spqr/Frame.lean  Lifts/Sim relation: walk on tstack `top ++ bot` simulates walk on `top`; finishEdge block lemmas (Sim.closeVert, Sim.finishEdge, Sim.walkTree proved; only the stack-shape fact `walkTree_guards` admitted)
     Spqr/SepPair.lean    separation pairs / classes / DFS ancestry definitions (PROOF.md §3)
     Spqr/WalkTyping.lean typing/allocation invariant of the walk (`walk_typing`; only `walk_q_children` admitted)
     Spqr/Proofs/SepPair.lean  Facts A–C proved (no sorry)
