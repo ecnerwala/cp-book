@@ -926,6 +926,8 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 | `nodePlanar_sound` = S ∨ P ∨ R cases | `PlanarSpec.lean` | proved from the three |
 | `nodePlanar_complete` (Kuratowski-style certificate from the §8.3 crossing) | `PlanarSpec.lean` | sorry, hard |
 | `twoSum_planar`, `oneSum_planar`, `disjointUnion_planar` (gluing on `Planar`) | `PlanarInv.lean` | sorry (explicit splice with `f₁ + f₂ − 2` faces: `PlanarGlue`) |
+| `WalkInv` / `Preserves` (Hoare triple on `PlanarWalkM`), `Preserves.frame`, `Preserves.popPair`, `planarFinishEdge_inv`, `planarWalkOut_inv` (+ `Tree`/`Outs`), `planarWalkOut_stackInv` | `PlanarInvSteps.lean` | def / **proved** modulo the per-step lemmas |
+| per-step lemmas `pushVertTstack_inv`, `pushEdgeTstack_inv`, `mergeTstackTops_inv`, `maybeUnwrapNxt_inv`, `finishTstackTop_inv`, `closeBackedges_inv`, `flipBeforeMerge_inv`, `pruneBackedges_inv`, `flipForLowval_inv`, `modifyCur_foldSides_inv` (one `planarFinishEdge` step each preserves Invariant P) | `PlanarInvSteps.lean` | sorry |
 | gluing invariant `GluedUpTo` (per maximal processed item: restricted rotation agrees with a planar embedding of the piece below it, exposed ends = unset ends, on one face), `gluedUpTo_init`, fold `forM_reverse_range_inv`, `gluedUpTo_planarEmbed` | `PlanarEmbedSteps.lean` | def / **proved** modulo the steps |
 | `embedItem_step_F` / `_V` / `_Q` / `_leaf` / `_node` (one `embedItem` preserves `GluedUpTo`) | `PlanarEmbedSteps.lean` | sorry (F: `disjointUnion_planar`; V, Q: `oneSum_planar`; node: `twoSum_planar` + `nodePlanar_sound`) |
 | `glued_root` (`GluedUpTo 0` at the root `F` item is `IsPlanarEmbedding` of `g`) | `PlanarSpec.lean` | sorry |
@@ -933,7 +935,8 @@ formula in `IsPlanarEmbedding`). If some node is nonplanar the result is `none`
 | `spqrTree_planar` (`→` from `planarEmbed_sound`; `←` needs completeness + skeletons are minors of `g`) | `PlanarSpec.lean` | sorry |
 
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): `neRotAdj_segment`;
-`nodePlanar_sound_R`; `planarWalkOut_stackInv`; `nodePlanar_complete`; `twoSum_planar`,
+`nodePlanar_sound_R`; the ten per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
+`planarWalkOut_stackInv`); `nodePlanar_complete`; `twoSum_planar`,
 `oneSum_planar`, `disjointUnion_planar`; `embedItem_step_F`, `embedItem_step_V`,
 `embedItem_step_Q`, `embedItem_step_leaf`, `embedItem_step_node`, `glued_root` (hence
 `planarEmbed_sound`); `spqrTree_planar`. The S and P
