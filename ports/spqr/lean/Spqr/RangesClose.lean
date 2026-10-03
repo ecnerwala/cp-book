@@ -516,6 +516,58 @@ theorem CloseInv.root_append {s : WalkState} {P X : ItemId → Prop} (h : s.Clos
       · have := hp.size; dsimp [vertItem]; omega
       · exact Or.inl (by dsimp [vertItem]; omega)
 
+theorem CloseInv.vertex_append {s : WalkState} {P X : ItemId → Prop} (h : s.CloseInv)
+    (hp : s.Place s.g P X) (v e : Nat) (hv : v < s.g.nv) (he : e < s.g.ne)
+    (hz : s.cnt (vertItem v) = 0)
+    (hvc : ∀ c, Items.IsParent s.items (vertItem v) c → Items.type s.items c = .Q)
+    (hq : Items.CloseAt s.g s.items (edgeItem s.g e))
+    (hqne : Items.ch s.items (edgeItem s.g e) ≠ []) :
+    ({ s with items := s.items.modify (vertItem v) fun it => { it with ch := it.ch ++ [edgeItem s.g e] } } : WalkState).CloseInv := by
+  have hvlt : vertItem v < s.items.size := by have := hp.size; show 1 + v < _; omega
+  have hn : Items.NoParent s.items (vertItem v) := by
+    intro p hc
+    have := List.count_pos_iff.mpr hc
+    have := Items.count_le_chCount s.items (Items.parent_lt hc) (vertItem v)
+    dsimp [cnt] at hz; omega
+  have hvert := h.closed (vertItem v) hvlt (Or.inl (by show 1 + v ≤ s.g.nv; omega))
+  have heq : (s.items.modify (vertItem v) fun it => { it with ch := it.ch ++ [edgeItem s.g e] }) =
+      (s.items.modify (vertItem v) fun it => { it with ch := Items.ch s.items (vertItem v) ++ [edgeItem s.g e] }) := by
+    apply Array.ext
+    · simp
+    · intro i hi₁ hi₂
+      simp only [Array.getElem_modify]
+      split
+      · next hEq => subst i; simp [Items.ch, Array.getElem?_eq_getElem hvlt]
+      · rfl
+  rw [heq]
+  apply h.writeChildren hvlt hn
+  · apply Items.CloseAt.vertex hv
+    · rw [Items.type_modify s.items (vertItem v) _ (fun it => { it with ch := Items.ch s.items (vertItem v) ++ [edgeItem s.g e] }) (fun _ => rfl)]
+      exact hp.vert v hv
+    · intro c hc
+      have hc' : c ∈ Items.ch s.items (vertItem v) ++ [edgeItem s.g e] := by
+        simpa only [Items.IsParent, Items.ch_modify_self _ _ _ hvlt] using hc
+      have hct : Items.type s.items c = .Q := by
+        rcases List.mem_append.mp hc' with hc' | hc'
+        · exact hvc c hc'
+        · obtain rfl := List.mem_singleton.mp hc'; exact hp.edge e he
+      have hcv : vertItem v ≠ c := by
+        intro heq; rw [← heq, hp.vert v hv] at hct; cases hct
+      rw [Items.type_modify s.items (vertItem v) _ (fun it => { it with ch := Items.ch s.items (vertItem v) ++ [edgeItem s.g e] }) (fun _ => rfl),
+        Items.ch_modify_ne _ _ _ _ hcv]
+      refine ⟨hct, ?_⟩
+      rcases List.mem_append.mp hc' with hc' | hc'
+      · exact hvert.q_under_v v rfl hv c hc'
+      · obtain rfl := List.mem_singleton.mp hc'; exact hqne
+  · intro c hc
+    rcases List.mem_append.mp hc with hc | hc
+    · have hpos : 0 < s.cnt c := by
+        have := Items.count_le_chCount s.items hvlt c
+        have := List.count_pos_iff.mpr hc
+        dsimp [cnt]; omega
+      exact h.closed c (hp.alloc c hpos) (Or.inr hpos)
+    · obtain rfl := List.mem_singleton.mp hc; exact hq
+
 theorem CloseInv.of_tree {s : WalkState} (h : s.CloseInv) (ht : Items.Tree s.g s.items)
     (hty : WalkTyping s.g s.items) : Items.CloseFacts s.g s.items := by
   have hall : ∀ i, i < s.items.size → Items.CloseAt s.g s.items i := by
