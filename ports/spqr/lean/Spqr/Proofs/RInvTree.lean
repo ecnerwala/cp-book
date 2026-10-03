@@ -747,15 +747,136 @@ structure FinishRShape (dfs : DfsData) (curV d : Nat) (o : DfsOut) (origTstack :
     t.edges (feP curV d o s).g (feP curV d o s).items e →
     ¬ Items.EdgeBelow (feP curV d o s).g (feP curV d o s).items (vertItem curV) e
 
-/-- Admitted: (Lemma 4.3, R-maximality content proper) the entry the tree-edge branch builds on
+/-- The top entry (if any) starts at `v`. -/
+def TopStart (v : Nat) (s : WalkState) : Prop := ∀ t rest, s.tstack = t :: rest → t.vStart = v
+
+theorem TopStart.settledTop {v d : Nat} (h : TopStart v s) : s.SettledTop dfs v d := by
+  intro hne _ hv
+  match hts : s.tstack with
+  | [] => exact absurd hts hne
+  | t :: rest => exact absurd (by rw [curE, hts]; exact h t rest hts) hv
+
+theorem topStart_modifyCur {v : Nat} (f : TEntry → TEntry) (hf : ∀ t, (f t).vStart = t.vStart)
+    (h : TopStart v s) : TopStart v (after (modifyCur f) s) := by
+  intro t rest hts
+  change (match s.tstack with | a :: rest => f a :: rest | [] => []) = t :: rest at hts
+  match hs : s.tstack with
+  | [] => rw [hs] at hts; cases hts
+  | a :: r => rw [hs] at hts; cases hts; rw [hf]; exact h _ _ hs
+
+theorem topStart_cvS₅ {v : Nat} (edgeDir isType1 : Bool) (origTstack : Nat) (isSingle : Bool) :
+    TopStart v (cvS₅ v edgeDir isType1 origTstack isSingle s) := by
+  intro t rest hts
+  change (match (cvS₄ isType1 origTstack isSingle s).tstack with
+    | a :: rest => { a with vStart := v, spans := setSides (!edgeDir) (a.spans.1 ++ a.spans.2) [] } :: rest
+    | [] => []) = t :: rest at hts
+  match hs : (cvS₄ isType1 origTstack isSingle s).tstack with
+  | [] => rw [hs] at hts; cases hts
+  | a :: r => rw [hs] at hts; cases hts; rfl
+
+theorem topStart_finishTstackTop {v : Nat} (i : ItemId) (h : TopStart v s) :
+    TopStart v (after (finishTstackTop i) s) := by
+  intro t rest hts
+  match hs : s.tstack with
+  | [] =>
+    change (match s.tstack with | a :: rest => _ :: rest | [] => []) = t :: rest at hts
+    rw [hs] at hts; cases hts
+  | a :: r =>
+    obtain ⟨a', it, he, hv, -, -⟩ := finishTstackTop_run i s hs
+    change (((finishTstackTop i).run s).2).tstack = _ at hts
+    rw [he] at hts; cases hts; rw [hv]; exact h _ _ hs
+
+theorem topStart_vertFinish {v : Nat} (item : Option ItemId) (b : Bool) (h : TopStart v s) :
+    TopStart v (after (vertFinish item b) s) := by
+  cases item with
+  | none => exact h
+  | some i => exact topStart_finishTstackTop i h
+
+theorem topStart_closeVert' {v : Nat} (edgeDir isType1 : Bool) (origTstack : Nat) (isSingle : Bool) :
+    TopStart v (after (closeVert' v edgeDir isType1 origTstack isSingle) s) :=
+  topStart_vertFinish _ _ (topStart_cvS₅ edgeDir isType1 origTstack isSingle)
+
+theorem topStart_finishP {v lowval : Nat} (isType1 : Bool) (h : TopStart v s) :
+    TopStart v (after (Spqr.finishP v lowval isType1) s) := by
+  show TopStart v ((Spqr.finishP v lowval isType1).run s).2
+  simp only [Spqr.finishP, WalkM.run_bind, run_condP]
+  by_cases hc : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == v) &&
+      (s.tstack.tail.head!.topDepth == lowval)) = true
+  · simp only [hc, ↓reduceIte, WalkM.run_bind]
+    simp only [Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hc
+    match hts : s.tstack with
+    | [] | [_] => rw [hts] at hc; simp at hc
+    | a :: b :: rest =>
+      have hbv : b.vStart = v := by rw [hts] at hc; exact hc.1.2
+      obtain ⟨b', hts₁, hb'v, -⟩ := maybeUnwrapNxt_tstack .P a b rest hts
+      have hts₁' : ((maybeUnwrapNxt .P).run s).2.tstack = a :: b' :: rest := hts₁
+      have hts₂ : (mergeTstackTops.run ((maybeUnwrapNxt .P).run s).2).2.tstack =
+          TEntry.mergeInto a b' :: rest := by
+        rw [mergeTstackTops_run_eq _ a b' rest hts₁']
+      refine topStart_finishTstackTop _ ?_
+      intro t r ht
+      rw [hts₂] at ht; cases ht
+      show b'.vStart = v
+      rw [hb'v, hbv]
+  · have h' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == v) &&
+        (s.tstack.tail.head!.topDepth == lowval)) = false := Bool.eq_false_iff.2 hc
+    simp only [h', Bool.false_eq_true, ↓reduceIte]
+    exact h
+
+theorem topStart_finishRest_vert {v k lowval : Nat} (isType1 isSingle : Bool) (h : TopStart v s) :
+    TopStart v (after (Spqr.finishRest v k lowval isType1 true isSingle) s) := by
+  show TopStart v ((Spqr.finishRest v k lowval isType1 true isSingle).run s).2
+  simp only [Spqr.finishRest, Spqr.finishTail, Bool.not_true, Bool.false_eq_true, ↓reduceIte,
+    WalkM.run_bind, WalkM.pure_run]
+  exact topStart_finishP isType1 h
+
+theorem finishEdge_tree_vert_topStart (curV d lv : Nat) (kind : RetKind) (o : DfsOut)
+    (origTstack : Nat) (ho : o.cls = .ret lv kind) (hk : kind ≠ .backEdge) (hlow : lv < d) :
+    TopStart curV (after (finishEdge curV d o origTstack true) s) := by
+  have ht : o.cls.isTree = true := by
+    rw [ho]; cases kind with
+    | backEdge => exact absurd rfl hk
+    | type1Child => rfl
+    | type2Child => rfl
+  have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
+  have hge : ¬ (lv ≥ d) := by omega
+  rw [finishEdge_eq]
+  simp only [finishEdge', finishTree, hlv, hge, ↓reduceIte, ht, closeVert_eq]
+  show TopStart curV (after (Spqr.finishRest curV d lv o.cls.isType1 true (feB₃ curV d o origTstack s))
+    (feS₃ curV d o origTstack s))
+  exact topStart_finishRest_vert (k := d) o.cls.isType1 (feB₃ curV d o origTstack s)
+    (topStart_closeVert' _ _ _ _)
+
+/-- Admitted: (Lemma 4.3, R-maximality content proper, first-edge case) the entry the tree-edge branch builds on
 top of the stack is `EntryR` whenever it tops out at depth `≥ d` and does not start at `curV`:
-after the P-check (`feP`; needed when the first-edge vertex entry is pushed on top of it) and in
-the output. Its pieces are the S/P/R items closed by loop 1 (the complement of a closed
+after the P-check (`feP`; the first-edge vertex entry is pushed on top of it) and in the output
+(the vertex entry, or the old top with the vertex entry merged in). With `hasVert = true` the top
+starts at `curV` after `closeVert` and is exempt (`finishEdge_tree_vert_topStart`), so only the
+first-edge case is content. Its pieces are the S/P/R items closed by loop 1 (the complement of a closed
 `(nxt.vStart, d)` set is one class because all `(nxt.vStart, d)` classes were P-merged when
 `nxt.vStart` was finished and the path class is merged here), merged by loop 2 and `closeVert`;
 the R close is `loop1_rBranch`. Everything else the branch does keeps the entries below the top
 settled (`finishEdge_tree_rInvTop_of_top`). Checked on seeds 0..300 and 6000 extra multigraphs,
-both ternarize modes (`checks/RFinishEdgeCheck.lean`, contract B, 6414 sites). -/
+both ternarize modes (`checks/RFinishEdgeCheck.lean`, contract B, 6414 sites; `ptop` lines, 278
+non-exempt first-edge tops). -/
+theorem finishEdge_tree_top_settled_first {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsOut)
+    (origTstack : Nat) (ho : o.cls = .ret lv kind) (hk : kind ≠ .backEdge)
+    (hlow : lv < d) (hv : curV < s.g.nv)
+    (hi : s.Inv' D) (hs : Shape s) (hok : FinishOk D curV d lv o origTstack false s)
+    (hg : FinishGuards d o origTstack false s)
+    (hfront : Frontier (o := o) d origTstack s)
+    (hshape : FinishRShape dfs curV d o origTstack false s)
+    (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
+    (hd : dfs.depth curV = d) (hcur : s.stackVerts[d]! = curV)
+    (hanc : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! curV ∧ dfs.depth s.stackVerts[k]! = k)
+    (hR : s.RInvFront dfs curV d origTstack) :
+    (feP curV d o s).SettledTop dfs curV d ∧
+      (after (finishEdge curV d o origTstack false) s).SettledTop dfs curV d := by
+  sorry
+
+/-- The top of the tree-edge branch's output is settled: for `hasVert = true` the vertex close
+re-targets it to `curV` (`finishEdge_tree_vert_topStart`, exempt); the first-edge case is the
+admitted `finishEdge_tree_top_settled_first`. -/
 theorem finishEdge_tree_top_settled {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsOut)
     (origTstack : Nat) (hasVert : Bool) (ho : o.cls = .ret lv kind) (hk : kind ≠ .backEdge)
     (hlow : lv < d) (hv : curV < s.g.nv)
@@ -769,7 +890,12 @@ theorem finishEdge_tree_top_settled {D : Nat} (curV d lv : Nat) (kind : RetKind)
     (hR : s.RInvFront dfs curV d origTstack) :
     (hasVert = false → (feP curV d o s).SettledTop dfs curV d) ∧
       (after (finishEdge curV d o origTstack hasVert) s).SettledTop dfs curV d := by
-  sorry
+  cases hasVert
+  · have h := finishEdge_tree_top_settled_first curV d lv kind o origTstack ho hk hlow hv hi hs hok
+      hg hfront hshape h2 hsp hrt hd hcur hanc hR
+    exact ⟨fun _ => h.1, h.2⟩
+  · exact ⟨(fun h => nomatch h),
+      (finishEdge_tree_vert_topStart curV d lv kind o origTstack ho hk hlow).settledTop⟩
 
 /-- The tree-edge branch modulo `finishEdge_tree_top_settled`: loop 1 touches only the frontier
 (`Frontier.loop1`), so the settled base survives positionally (`RInvG`); after it the frontier

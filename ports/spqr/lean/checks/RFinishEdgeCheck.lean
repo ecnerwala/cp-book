@@ -21,7 +21,7 @@ are provisional until the walk returns to their top (`checks/RFinishEdgeCounter.
 (`Proofs/RInvTree.lean`, the call-site hypotheses of the tree-edge branch: the pending tree edge
 is unowned, after loop 1 every frontier entry below the top is settled, the type-1 `closeVert`
 unwraps an exempt entry, the first-edge vertex entry takes unowned edges; plus the admitted
-`finishEdge_tree_top_settled` (a): the top after the P-check is settled; `shape` lines) count.
+`finishEdge_tree_top_settled_first`: the top after the P-check is settled; `shape` lines) count.
 * `base` lines (`finishEdge_rInvG_base`, `Proofs/RInvBase.lean`): for every ancestor frame
   `(p, dp, n₀)` of the site (`p = stackVerts[dp]`, `n₀` the stack size when `p`'s child subtree
   was entered), the bottom `n₀` entries are unchanged by `finishEdge`, their non-exempt entries
@@ -260,7 +260,7 @@ def settledEntry (D : Dfs) (v d : Nat) (s : WalkState) (t : TEntry) (tag : Strin
   if exempt v d t then [] else (entryR D s t).map fun b => s!"{tag} {showT t}: {b}"
 
 /-- `FinishRShape dfs v d o orig hv s` (`Proofs/RInvTree.lean`) plus the admitted
-`finishEdge_tree_top_settled` (a) (the top after the P-check, first-edge case), computed on the
+`finishEdge_tree_top_settled_first` (the top after the P-check, first-edge case), computed on the
 library's `feS₁`, `feS₂`, `feP`. -/
 def shapeCheck (D : Dfs) (v d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
     List String := Id.run do
@@ -283,7 +283,9 @@ def shapeCheck (D : Dfs) (v d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : 
       if (t.spans.1 ++ t.spans.2).any fun i => (belowList sP i).any vE.contains then
         bad := s!"vert_own {showT t}" :: bad
     match sP.tstack with
-    | t :: _ => bad := settledEntry D v d sP t "ptop" ++ bad
+    | t :: _ =>
+      bad := settledEntry D v d sP t "ptop" ++ bad
+      if !exempt v d t then bad := "stat:ptop-nonexempt" :: bad
     | [] => pure ()
   return bad.reverse
 
@@ -375,10 +377,13 @@ partial def outs (D : Dfs) (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkS
       (if bot'.map showT != bot.map showT then [s!"{tagB}bottom {n0} changed: {bot.map showT} -> {bot'.map showT}"] else []) ++
       bot'.flatMap (fun t => settledEntry D p dp s t s!"{tagB}post") else []
     let nB := (s.tstack.filter fun t => t.vStart != v && t.topDepth ≥ d).length
+    let topNE := if site && o.isTree then match s.tstack with
+      | t :: _ => if !exempt v d t then ["stat:post-top-nonexempt"] else []
+      | [] => [] else []
     let post := if site then
       tagged s!"postA {tag}" (checkEntries D d s.tstack s (fun t => t.vStart != v)) ++
       tagged s!"postB {tag}" ((List.replicate nB "stat:postB-entry") ++ checkEntries D d s.tstack s (fun t => t.vStart != v && t.topDepth ≥ d)) ++
-      tagged s!"postD {tag}" (disjoint s) else []
+      tagged s!"postD {tag}" (disjoint s) ++ topNE else []
     let (hv, s, bad', n') := outs D v d rest hv s fr
     (hv, s, bad ++ preOwn ++ pre ++ rcl ++ shp ++ basePre ++ post ++ basePost ++ bad', n + n' + (if site then 1 else 0))
 end
