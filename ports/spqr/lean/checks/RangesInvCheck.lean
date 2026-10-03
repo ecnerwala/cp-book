@@ -73,23 +73,23 @@ def check (seed : Nat) (σ : List Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) 
       for b in List.range' lo (hi + 1 - lo) do
         let e := σ[b]!
         if !(E t).contains e && stk.any (fun t' => (P t').contains e) then
-          out := bad "convex_open" s!"{showT t} hole e={e}" :: out
-        if !(E t).contains e then out := bad "cand_convex_open_below" s!"{showT t} hole e={e}" :: out
+          out := bad "cand_piece_consecutive" s!"{showT t} hole e={e}" :: out
+        if !(E t).contains e then out := bad "convex" s!"{showT t} hole e={e}" :: out
     | _, _ => pure ()
   -- cover: processed edges are in some entry or below the root
   for b in List.range n do
     let e := σ[b]!
     if !stk.any (fun t => (E t).contains e) && !(edgesBelow s rootItem).contains e &&
         !(List.range (d+1)).any (fun k => (edgesBelow s (vertItem s.stackVerts[k]!)).contains e) then
-      out := bad "cover" s!"e={e}" :: out
+      out := bad "cand_cover" s!"e={e}" :: out
   -- terms: ≤ 2 attachments, in Term D (vStart or path[topDepth..D]); candidate variants
   for t in stk do
     let A := atts s (E t)
     let term := fun v => v == t.vStart || (List.range (D+1)).any fun k => t.topDepth ≤ k && v == s.stackVerts[k]!
     let path := fun v => v == t.vStart || (List.range (D+1)).any fun k => v == s.stackVerts[k]!
-    if A.length > 2 then out := bad "terms_two" s!"{showT t} atts={A}" :: out
-    if !A.all term then out := bad "terms_term" s!"{showT t} atts={A}" :: out
-    if !A.all path then out := bad "terms_path" s!"{showT t} atts={A}" :: out
+    if A.length > 2 then out := bad "cand_terms_two" s!"{showT t} atts={A}" :: out
+    if !A.all term then out := bad "cand_terms_term" s!"{showT t} atts={A}" :: out
+    if !A.all path then out := bad "cand_terms_path" s!"{showT t} atts={A}" :: out
   -- closed items
   for i in List.range s.items.size do
     let it := s.items[i]!
@@ -117,8 +117,8 @@ def check (seed : Nat) (σ : List Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) 
     let U := r.flatMap E
     let A := atts s U
     if U ≠ [] && A.length ≤ 2 then
-      if r.length == 2 then out := bad "sat_pair" s!"run={r.map showT} atts={A}" :: out
-      else out := bad "sat_run" s!"run={r.map showT} atts={A}" :: out
+      if r.length == 2 then out := bad "cand_sat_pair" s!"run={r.map showT} atts={A}" :: out
+      else out := bad "cand_sat_run" s!"run={r.map showT} atts={A}" :: out
   return out
 
 mutual
@@ -197,6 +197,8 @@ def summarize (lo hi : Nat) : IO Unit := do
         if (shown.filter (·.1 == v.kind)).length < 2 then
           shown := shown ++ [(v.kind, s!"{repr v} g={repr g.edges}")]
   IO.println s!"instrumentation matches library walk: {okAll}"
-  IO.println s!"violations by kind: {counts}"
+  let req := counts.filter fun (k, _) => !k.startsWith "cand_"
+  IO.println s!"required failures: {req.foldl (fun a (_, n) => a + n) 0} {req}"
+  IO.println s!"candidate observations (not fields of RangesInv, see PROOF.md §4.6): {counts.filter fun (k, _) => k.startsWith "cand_"}"
   for (_, l) in shown do IO.println l
 #eval summarize 0 400

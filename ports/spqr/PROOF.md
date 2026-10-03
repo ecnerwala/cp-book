@@ -777,6 +777,39 @@ invariant (`RangesInv`, step 4) and the R/st layers consume. `WalkWF.walk_items_
 `walk_items_tree`/`walk_typingFacts` are hypothesis-free bridges to `WalkCover.walk_tree` /
 `WalkTyping.walk_typing` (which sit above `WalkWF` in the import order and need `g.WF`/`OrderOK`).
 
+`RangesInv.lean` (step 4, the walk-time invariant behind `walk_ranges`): `WalkState.RangesInv σ n D s`
+after the first `n` edges of `σ` at depth `D`: `inv : Inv' D` (the attachment half, `WalkSpec.lean`;
+there is no "≤ 2 terminals" claim — an open chain is attached at every path vertex between its
+`topDepth` and `D`, and at `vStart`s of entries above it, exactly `Term'`), `processed` (entries own
+processed edges only), `ordered` (top-down, the entries' *piece* edges move strictly backwards in
+`σ`: laminar consecutive intervals; `TEntry.piece` = below a non-V span item without passing a V
+item), `convex` (an entry's piece is an interval of `σ` whose holes are *edges of the entry* — blocks
+hanging at its interior vertices), `closed` (`Ranges.convex` for every allocated node item). It is
+schedule-agnostic (no ear, no merge order). Preservation, all standard axioms:
+`RangesInv.alloc`/`pushVert`/`pushEdge` (the new edge is `σ[n]`, so `n+1`), `mergeTop` (under
+`MergeOk` + edge-disjointness as `Inv'.mergeTop`, plus the *local* range condition `hadj`: the two
+merged entries are adjacent in `σ` — every edge strictly between a piece edge of `nxt` and one of
+`cur` is an edge of one of them), `finishTop` (as `Inv'.finishTop`: the closed item takes over the
+entry's edges and a subset of its pieces, so `closed` for it is the entry's `convex`). The
+`finishEdge`/`walkTree` induction (and `walk_ranges` from the final state) stays admitted.
+Checked at every `finishEdge` by `checks/RangesInvCheck.lean` (`lake env lean`; reimplements
+`walkTree` around `finishEdge`, asserts the instrumented items equal the library walk's; seeds
+0..400 × tern, tiny graphs): `processed`, `ordered`, `convex`, `closed` 0 violations.
+False candidates (recorded): *every processed edge is owned by some entry or the root* — false
+(star: after the bridge `0–1` closes its Q hangs under `vertItem 0`, which is on no entry yet);
+*≤ 2 attachments per entry* — false (K4, entry `vStart 2, topDepth 0` attached at `0, 1, 2`);
+*attachments ⊆ `vStart` ∪ path* — false (seed 1: attached at the `vStart` 4 of the entry above),
+i.e. `Term'` is tight. **Saturation** (R layer): "below the frontier, no two adjacent entries (no run
+of consecutive entries) have attachment union ≤ 2" is false for the attachment-set measure, pairwise
+and run-wise: a vertex entry with no hanging edges has an empty attachment set (triangle + triangle
+at vertex 2, back edge `2→0`: entries `vertItem 2`, `vertItem 1`, union attachments `{2}`), and a
+piece whose `vStart` is a path vertex `w` sits next to the (lazily merged) `vertItem w` entry with
+union attachments = its own two (K4 at `curV 3`: `[(2,0,{e(0,2)}), (2,2,[v2]), (1,1,[v1])]`, union
+`{0, 2}`). Saturation must be stated in terms of the entries' terminals (`vStart`, `stackVerts[topDepth]`)
+and the depth separation of vertex entries, which is the merge test the code applies; it is left to
+the R layer as a hypothesis over `tstack.drop (tstack.length - origTstack)` (`Frontier`,
+`Proofs/RInvFrame.lean`) and is not a field of `RangesInv`.
+
 ## 5. Phase 3: relabel
 
 `relabelTree` **[def]** takes the item array and produces `SpqrTree`. It is a plain preorder walk:
@@ -1002,6 +1035,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 HT-to-cut transport: `Graph.ThreeConnected.relabel` | `Proofs/ThreeConnected.lean` | proved (standard axioms), assuming a block and its active vertex list; item-level hypotheses remain open |
 | 4.5 Item/contract edge correspondence: `Pieces.ofItems_addParent_edges`, `Items.rSkeleton_perm_contract` | `Proofs/RItems.lean` | proved (standard axioms), under non-V-child edge coverage; deriving coverage for completed R items remains open |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
+| 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge`/`walkTree` induction and `walk_ranges` admitted; saturation not a field (attachment-count forms false, §4.6) |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
