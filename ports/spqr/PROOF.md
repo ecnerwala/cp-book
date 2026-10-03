@@ -2559,10 +2559,26 @@ theorem of this group has only `propext`, `Classical.choice`, `Quot.sound`.
 **Fold.** `PlanarEmbedFacesFold.lean` dispatches `embedItem_step_faces` (leaf, F, V, Q
 proved) and folds `gluedFaces_planarEmbed`; `planarEmbed_sound` now uses it (through
 `GluedFaces.toGluedUpTo` into `glued_root`). The one remaining gluing admission is
-`embedItem_step_node_faces` (S/P/R): it needs unfolding lemmas for the executable node
-branch (`neRotAdj` traversal, twin lookup, inner `V` items), `twoSum_planar` per non-cap
-node-edge, cofaciality of the cap's two exposed pairs in the resulting witness (they are the
-two sides of the removed cap edge). The local embedding is the hypothesis `hloc` of the node
+`embedItem_step_node_faces` (S/P/R). Its executable side is done: `PlanarEmbedNodeExec.lean`
+unfolds the node branch exactly (`embedItem_node`: the loop over `[4·neSt : 4·neEn]` is
+`List.foldl (nodeStep i neSt)` over `List.range'`, where `nodeStep` links the exposed slots
+`treeQe` of the children owning the twins of `ta` and its rotation successor `tb > ta`, through
+the vertex item's exposed pair at a `(ta % 4 = 2, tb % 4 = 1)` corner, and exposes the slot
+opposite each cap corner), with frame lemmas `nodeStep_*`/`nodeFold_*` (`outerE` of other items,
+`outerE`/`rotAdj` sizes, `exposedAt` of other items unchanged). What remains is the semantic
+part, in three pieces: (N1) a `TwoSum`-style splice of a planar rotation system *containing* the
+virtual edge `e` (the node's `nodeRot`, hypothesis `hloc`) with a *capped* piece (cap absent, its
+four exposed slots in two facing pairs, slots 0/2 cofacial — `Piece.Capped`), concretely equal to
+the `link`s `nodeStep` performs and planar: this is `TwoSum.splice_isPlanarEmbedding` after
+re-inserting the cap with `IsPlanarEmbedding.insert`, or a direct Euler count as in
+`Proofs/PlanarGlue.lean`; (N2) iterating (N1) over the node's non-cap edges in `nodeRot` order
+with the `Piece.loc` bookkeeping (`ves` of the node = concatenation of the children's `edgesBelow`),
+where the twin ↔ exposed-slot correspondence (`outerE[c][2·side+dir]` is the corner `(side, dir)`
+of the twin of `c`'s cap, oriented as `q_cap_orient` does for `Q`) must first be checked
+empirically in `CheckPieceSep.lean` and added to `PieceSep`; (N3) the inner `V` items at
+corners (1-sum through `OpenEmbedding`, as in `Open2.splice`), then the cap's four neighbours
+become the node's exposed slots and are cofacial because the cap edge's two sides were distinct
+faces of `nodeRot` (2-connected skeleton) — the `CapFace` certificate of the node. The local embedding is the hypothesis `hloc` of the node
 step/dispatcher/fold (`IsPlanarEmbedding (localSkeleton i) (nVerts i) (nodeRot i)`, defs moved
 to `PlanarNodeSpec.lean`); `planarEmbed_sound` discharges it with `nodePlanar_sound` and
 `isPlanar_of_all` from `t.nodePlanar.all id = true`. That needs `i < nodePlanar.size`, i.e.
@@ -2648,6 +2664,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `Piece.Capped`, `Piece.Open2`, `Capped.insert`, `Open2.close`, `Open2.splice`, `single_open2` | `Proofs/PieceInsert.lean` | **proved** (standard axioms) |
 | `embedItem_Q_nil`, `embedItem_Q_O`, `embedItem_Q_cons`, `qUpper`, `qLower`, `setOuter4` | `PlanarEmbedQExec.lean` | **proved** (exact unfolding of the executable `Q` branch) |
 | `q_edge_not_below`, `q_fresh`, `q_lower_boundary`, `q_capped_child`, `q_open_glued`, `q_leaf_glued`, `q_loop_glued`, `q_block_glued`, `embedItem_step_Q_faces` | `PlanarEmbedQ.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
+| `treeQe`, `nodeStep`, `embedItem_node`, `forIn_state_foldl`, `nodeStep_outerE_ne`/`_outerE_size`/`_rotAdj_size`/`_exposedAt_ne`, `nodeFold_*` | `PlanarEmbedNodeExec.lean` | **proved** (exact unfolding of the executable `S`/`P`/`R` branch + frame lemmas) |
 | `embedItem_step_node_faces`, `embedItem_step_faces`, `gluedFaces_planarEmbed` | `PlanarEmbedFacesFold.lean` | sorry (node step) / proved modulo it |
 | `localSkeleton`, `nodeRot`, `isPlanar`, `isPlanar_of_all`; `RotInv.np_size`, `planarTree_nodePlanar_size` | `PlanarNodeSpec.lean`, `PlanarRotInv.lean`, `PlanarSpec.lean` | def / **proved** |
 | `planarEmbed_sound` | `PlanarSpec.lean` | proved from `gluedFaces_planarEmbed` (with `WF`/`ChildShape` of `g.planarTree …` from `spqrTree_wf'`/`spqrTree_childShape` via `planarRelabel_proj`, hence the `g.WF`/`OrderOK` hypotheses) + `glued_root` |
