@@ -1,4 +1,5 @@
 import Spqr.StTree
+import Spqr.StRetFrame
 import Spqr.StVStart
 import Spqr.WalkCover
 import Spqr.WalkInv
@@ -17,15 +18,6 @@ the stack spans (PROOF.md §7.6, step (c)); they are the two admissions of the s
 namespace Spqr
 
 open WalkM WalkState
-
-theorem spansCount_pos_of_mem_readStack : ∀ {ts : List TEntry} {x : ItemId}, x ∈ readStack ts →
-    0 < spansCount ts x
-  | [], _, h => by simp [readStack, readL, readR] at h
-  | t :: ts, x, h => by
-    rw [spansCount_cons]
-    rcases mem_readStack_cons.1 h with h | h
-    · exact Nat.lt_of_lt_of_le (List.count_pos_iff.2 h) (Nat.le_add_right _ _)
-    · exact Nat.lt_of_lt_of_le (spansCount_pos_of_mem_readStack h) (Nat.le_add_left _ _)
 
 /-- A fixed item not yet pushed is a root and is off the stack. -/
 theorem Place.fresh {g : Graph} {P X : ItemId → Prop} {s : WalkState} (h : s.Place g P X) {i : ItemId}
@@ -59,19 +51,17 @@ theorem finishBoundary_st {D curV d : Nat} {o : DfsOut} {hasVert : Bool} {s : Wa
 `finishEdge_st`: for `hasVert = false` the vertex item is still a root off the stack after `finishP`
 (the `hvf` of `finishTree_st`/`finishBack_st`; from `EarFinish.v_root`/`vert_free` by per-primitive
 frames), and the items below the untouched base `B` keep their type and children. -/
-theorem finishRet_frame_st {D d lv : Nat} {kind : RetKind} {o : DfsOut} {s : WalkState} {curV : Nat}
-    {hasVert : Bool} {sub pre B : List TEntry}
-    (hE : s.EarFinish curV d o hasVert sub (pre ++ B)) (hi : s.Inv' D) (hs : Shape s)
-    (hD : D = if o.cls.isTree then d + 1 else d)
-    (hok : FinishOk D curV d lv o (pre ++ B).length hasVert s)
-    (ho : o.cls = .ret lv kind) (hlow : lv < d) :
+theorem finishRet_frame_st {g : Graph} {P X : ItemId → Prop} {blocks : List StBlock} {d lv : Nat}
+    {kind : RetKind} {o : DfsOut} {s : WalkState} {curV : Nat} {hasVert : Bool} {sub pre B : List TEntry}
+    (hE : s.EarFinish curV d o hasVert sub (pre ++ B)) (hfull : s.Full g P X) (hI : StItems g s blocks)
+    (hv : curV < s.g.nv) (ho : o.cls = .ret lv kind) (hlow : lv < d) (hB : ∀ t ∈ B, t.vStart ≠ curV) :
     (hasVert = false →
       (∀ p, ¬ Items.IsParent (fePState curV lv d o s).items p (vertItem curV)) ∧
       vertItem curV ∉ readStack (fePState curV lv d o s).tstack) ∧
     ∀ x ∈ readStack B, ∀ y, Items.Below s.items x y →
       Items.type ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.type s.items y ∧
-      Items.ch ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.ch s.items y := by
-  sorry
+      Items.ch ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.ch s.items y :=
+  finishRet_frame hE hfull hI hv ho hlow hB
 
 /-- Admitted: popping the root entry of a tree of the forest onto `rootItem` closes the root block
 `⟨none, stNest ps⟩` (`ps` the pieces of the whole tree): every S / P / R item of the entry becomes

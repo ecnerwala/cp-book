@@ -232,7 +232,7 @@ theorem refOut_ret_tree' {g : Graph} {v d : Nat} {dirs : List Bool} {e : Nat} {c
 
 /-- The stack above `segsStack segs` reads `finishEdge_st`'s pieces afterwards; the base segments,
 the blocks and the directions `≤ d` are kept. -/
-theorem stRet_finish {g : Graph} {D d : Nat} {o : DfsOut} {s : WalkState} {v : Nat}
+theorem stRet_finish {g : Graph} {P X : ItemId → Prop} {D d : Nat} {o : DfsOut} {s : WalkState} {v : Nat}
     {hv₁ : Bool} {sub new₁ : List TEntry} {segs : List (List TEntry × List StPiece)}
     {ps qs : List StPiece} {blocks : List StBlock}
     (hE : s.EarFinish v d o hv₁ sub (new₁ ++ segsStack segs)) (hi : s.Inv' D) (hs : Shape s)
@@ -243,7 +243,7 @@ theorem stRet_finish {g : Graph} {D d : Nat} {o : DfsOut} {s : WalkState} {v : N
     (hB : ∀ t ∈ segsStack segs, t.vStart ≠ v)
     (hpre : hv₁ = false → new₁ = [] ∧ qs = [])
     (hR : StRead s.items sub ps) (hRq : StRead s.items new₁ qs) (hI : StItems g s blocks)
-    (hseg : SegRead s.items segs) :
+    (hseg : SegRead s.items segs) (hfull : s.Full g P X) :
     let r := (finishEdge v d o (new₁ ++ segsStack segs).length hv₁).run s
     r.1 = true ∧ r.2.g = s.g ∧ DirsOf r.2 d = DirsOf s d ∧
     (∃ new', r.2.tstack = new' ++ segsStack segs ∧
@@ -263,7 +263,7 @@ theorem stRet_finish {g : Graph} {D d : Nat} {o : DfsOut} {s : WalkState} {v : N
   have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
   have hok := finishOk_of_guards ho hlow hg hE rfl hi hs hD hb.v_lt hb.e_lt hb.q
     (hb.ends lv kind ho) hb.vert
-  have hfr := finishRet_frame_st hE hi hs hD hok ho hlow
+  have hfr := finishRet_frame_st hE hfull hI hb.v_lt ho hlow hB
   have hsd : s.stackDir[d]! = !s.stackDir[lv]! := hlv ▸ hE.dir_d hlt
   obtain ⟨h1, h2, h3, new', h4, h5, h6⟩ := finishEdge_st hE hi hs hD hok ho hlow hb.v_lt hb.e_lt hb.q
     (hb.ends lv kind ho) (hs.edge _ hb.e_lt) hsd hB hpre hfr.1 hR hRq hI
@@ -391,7 +391,7 @@ theorem stOut_step (g : Graph) (v d : Nat) (o : DfsOut) (hasVert : Bool)
         refine ⟨hnew₁ hpf h.1, ?_⟩
         rw [hpf, (refOuts_hv_false _ _ (hh.pre.hv.trans h.1)).2]; rfl
       obtain ⟨hr1, hrg, hdr', ⟨new', hrts, hR'⟩, hrI, hseg', hvs'⟩ :=
-        stRet_finish (D := d) hE hi₁ hs₁ hD hg₁ hb₁ hlt hB hpre' StRead.nil hR₁ hI₁ hseg₁
+        stRet_finish (D := d) hE hi₁ hs₁ hD hg₁ hb₁ hlt hB hpre' StRead.nil hR₁ hI₁ hseg₁ hfull₁
       rw [hdirs₁] at hdr'
       rw [hxd, hxv, Bool.not_not, hsgeq, hpr, hnt] at hR'
       simp only [Bool.false_eq_true, ↓reduceIte] at hR'
@@ -454,9 +454,15 @@ theorem stOut_step (g : Graph) (v d : Nat) (o : DfsOut) (hasVert : Bool)
           rw [← h, hvl]
           exact List.mem_cons_of_mem _ (List.mem_append_right _ hmem))
       (by rw [hdirs₂, simBlocks_frame hd]; exact hI₁.congr rfl rfl)
-    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall
-      fun _ s₃ ⟨hg₃, hb₃⟩ ⟨hi₃, hs₃⟩ hkb₃ ⟨hg₃eq, hsz₃, hvs₃, hseg₃, hsim₃⟩ => ?_) (wp_and hg₁.2 hb₁.2))
-      (invTree child (d + 1) _ pre hs₁.frame' hg₁.1 hb₁.1)) hkb) hih
+    have hfullT := (walk_full_aux g).1 child (d + 1) (fun i => P i ∨ (hv₁ = true ∧ i = vertItem v)) X s₂
+      (hfull₁.of_eq rfl rfl rfl) hwl hel.2 hvn'.of_append_right hen.2
+      (fun w hw h => h.elim (hPv w hw) fun h =>
+        hvnot (List.mem_append_right _ (WalkM.vertItem_inj h.2 ▸ hw)))
+      (fun e' he' h => h.elim (hPe.2 e' he') fun h => WalkM.edgeItem_ne_vertItem hh.v_lt e' h.2)
+      (sdTree child (d + 1) s₂ pre hs₁.frame' hg₁.1 hb₁.1)
+    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall
+      fun _ s₃ hfull₃ ⟨hg₃, hb₃⟩ ⟨hi₃, hs₃⟩ hkb₃ ⟨hg₃eq, hsz₃, hvs₃, hseg₃, hsim₃⟩ => ?_) hfullT)
+      (wp_and hg₁.2 hb₁.2)) (invTree child (d + 1) _ pre hs₁.frame' hg₁.1 hb₁.1)) hkb) hih
     have hsgeq₃ : s₃.g = g := hg₃eq.trans hsgeq
     have hgeq₃ : s₃.g = s.g := hg₃eq.trans hgeq₁
     have hsz₃' : s₃.stackDir.size = s.stackDir.size := hsz₃.trans hsize₁
@@ -530,7 +536,7 @@ theorem stOut_step (g : Graph) (v d : Nat) (o : DfsOut) (hasVert : Bool)
         refine ⟨hnew₁ hpf h.1, ?_⟩
         rw [hqs₁, hpf, (refOuts_hv_false _ _ (hh.pre.hv.trans h.1)).2]; rfl
       obtain ⟨hr1, hrg, hdr', ⟨new', hrts, hR'⟩, hrI, hseg', hvs'⟩ :=
-        stRet_finish (D := d + 1) hE hi₃ hs₃ hD hg₃ hb₃ hlt hB hpre' hR₃ hRq₃ hI₃ hseg₃'
+        stRet_finish (D := d + 1) hE hi₃ hs₃ hD hg₃ hb₃ hlt hB hpre' hR₃ hRq₃ hI₃ hseg₃' hfull₃
       rw [hdirs₃'] at hdr'
       rw [hxd₃, hsgeq₃, hit, hqs₁, hpr] at hR'
       simp only [↓reduceIte, Bool.not_not] at hR'
