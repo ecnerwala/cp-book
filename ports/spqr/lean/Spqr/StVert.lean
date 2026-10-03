@@ -451,14 +451,71 @@ theorem closeVert_st {g : Graph} {s st : WalkState} {d lv : Nat} {ps : List StPi
     · show getSide (setSides S₅.stackDir[F.topDepth]! [item] []) _ = []
       rw [hsd₅, hsd₃, hFt]; exact getSide_setSides_other _ _ _
 
+/-! ### Splitting readings -/
+
+theorem ExpandsList.unique {items : Items} {xs L L' : List ItemId} (h : ExpandsList items xs L)
+    (h' : ExpandsList items xs L') : L = L' := by
+  induction h generalizing L' with
+  | nil => cases h'; rfl
+  | leaf hx _ ih =>
+    cases h' with
+    | leaf _ h'' => rw [ih h'']
+    | node hn => exact absurd hx hn
+  | node hx _ ih =>
+    cases h' with
+    | leaf hl => exact absurd hl hx
+    | node _ h'' => exact ih h''
+
+theorem ExpandsList.split {items : Items} {a b L : List ItemId} (h : ExpandsList items (a ++ b) L) :
+    ∃ A B, L = A ++ B ∧ ExpandsList items a A ∧ ExpandsList items b B := by
+  generalize hab : a ++ b = ab at h
+  induction h generalizing a with
+  | nil =>
+    obtain ⟨rfl, rfl⟩ := List.append_eq_nil_iff.1 hab
+    exact ⟨[], [], rfl, .nil, .nil⟩
+  | leaf hx hxs ih =>
+    rename_i x xs L
+    cases a with
+    | nil => simp at hab; subst hab; exact ⟨[], x :: L, rfl, .nil, .leaf hx hxs⟩
+    | cons y a' =>
+      simp at hab; obtain ⟨rfl, hab⟩ := hab
+      obtain ⟨A, B, rfl, hA, hB⟩ := ih hab
+      exact ⟨y :: A, B, rfl, .leaf hx hA, hB⟩
+  | node hx hxs ih =>
+    rename_i x xs L
+    cases a with
+    | nil => simp at hab; subst hab; exact ⟨[], L, rfl, .nil, .node hx hxs⟩
+    | cons y a' =>
+      simp at hab; obtain ⟨rfl, hab⟩ := hab
+      obtain ⟨A, B, rfl, hA, hB⟩ := ih (a := Items.ch items y ++ a') (by rw [List.append_assoc, hab])
+      exact ⟨A, B, rfl, .node hx hA, hB⟩
+
+/-- Concatenating segments: `hi` sits above `lo`, so its pieces come later. -/
+theorem StRead.append {items : Items} {hi lo : List TEntry} {ps qs : List StPiece}
+    (h₁ : StRead items hi qs) (h₂ : StRead items lo ps) : StRead items (hi ++ lo) (ps ++ qs) := by
+  unfold StRead at *
+  rw [readL_append, readR_append, stNestL_append, stNestR_append]
+  exact ⟨h₁.1.append h₂.1, h₂.2.append h₁.2⟩
+
+/-- A reading of `hi ++ lo` whose upper part is known splits (leaf expansions are unique). -/
+theorem StRead.split {items : Items} {hi lo : List TEntry} {ps qs : List StPiece}
+    (h : StRead items (hi ++ lo) (ps ++ qs)) (h₁ : StRead items hi qs) : StRead items lo ps := by
+  unfold StRead at *
+  rw [readL_append, readR_append, stNestL_append, stNestR_append] at h
+  obtain ⟨A, B, hAB, hA, hB⟩ := h.1.split
+  obtain ⟨A', B', hAB', hA', hB'⟩ := h.2.split
+  rw [hA.unique h₁.1] at hAB
+  rw [hB'.unique h₁.2] at hAB'
+  exact ⟨List.append_cancel_left hAB ▸ hB, List.append_cancel_right hAB' ▸ hA'⟩
+
 /-! ### `finishP` and `finishTail` -/
 
 theorem mergeTstackTops_g (s : WalkState) : (mergeTstackTops.run s).2.g = s.g := by
-  first | rfl | (rcases s with ⟨_, _, _, _, _, _, _, _, _, _⟩; rfl)
+  rfl
 
 theorem finishTstackTop_g (item : ItemId) (s : WalkState) :
     ((finishTstackTop item).run s).2.g = s.g := by
-  first | rfl | (rcases s with ⟨_, _, _, _, _, _, _, _, ts, _, _⟩; cases ts <;> rfl)
+  rfl
 
 theorem maybeUnwrapNxt_g (ty : NodeType) (s : WalkState) :
     ((maybeUnwrapNxt ty).run s).2.g = s.g := by
