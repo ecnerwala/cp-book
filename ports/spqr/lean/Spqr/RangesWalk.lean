@@ -370,12 +370,14 @@ def RootsCover (σ : List Nat) (n : Nat) : List DfsTree → WalkState → Prop
 
 theorem forest_ranges_of_cover {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < g.ne) :
     ∀ forest pre n s, RootState g pre s → s.RangesInv σ n 0 → ForestOK g (pre ++ forest) →
-      (∀ t ∈ forest, t.WF []) → (∀ t ∈ forest, t.Ends g) → RootsCover σ n forest s →
+      (∀ t ∈ forest, t.WF []) → (∀ t ∈ forest, t.Ends g) →
+      (∀ t ∈ forest, ∀ e, e < g.ne → ∀ x, g.Inc e x → x ∈ t.verts → e ∈ t.edges) →
+      RootsCover σ n forest s →
       PostAt σ n (edgePostorderForest forest) →
       wp (walkForest forest) (fun _ s' => s'.RangesInv σ (n + (edgePostorderForest forest).length) 0) s
-  | [], _, _, _, _, hr, _, _, _, _, _ => by simpa [walkForest, edgePostorderForest, wp_pure] using hr
-  | t :: rest, pre, n, s, h, hr, hf, hwf, hends, hc, hat => by
-    have hb := h.book hf (hwf t (by simp)) (hends t (by simp))
+  | [], _, _, _, _, hr, _, _, _, _, _, _ => by simpa [walkForest, edgePostorderForest, wp_pure] using hr
+  | t :: rest, pre, n, s, h, hr, hf, hwf, hends, hcomp, hc, hat => by
+    have hb := h.book hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     have hg := gbTree t 0 s hb
     have hi : ∀ v outs, t = .node v outs →
         ({ s with stackVerts := s.stackVerts.set! 0 v } : WalkState).RangesInv σ n 0 :=
@@ -394,7 +396,7 @@ theorem forest_ranges_of_cover {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ
       (by rw [h.sd, ← h.g_eq]; exact hnv)
     have hp := (walk_place_aux g).1 t 0 _ _ s h.place (RootState.hvlt hf) (RootState.helt hf)
       (RootState.hvn hf).1 (RootState.hen hf).1 (RootState.hPv hf) (RootState.hPe hf)
-    have hst := h.step hf (hwf t (by simp)) (hends t (by simp))
+    have hst := h.step hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     show wp ((walkTree t 0 >>= fun _ => popTstack >>= fun top =>
       modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }) >>= fun _ => walkForest rest) _ s
     rw [show edgePostorderForest (t :: rest) = t.edgePostorder ++ edgePostorderForest rest from rfl,
@@ -407,17 +409,19 @@ theorem forest_ranges_of_cover {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ
       (wp_and hrpop (wp_and hst hc)) fun _ s₂ ⟨hr₂, hs₂, hc₂⟩ =>
       forest_ranges_of_cover hnd hσ rest (pre ++ [t]) (n + t.edgePostorder.length) s₂ hs₂ hr₂
         (by simpa using hf) (fun t' ht' => hwf t' (by simp [ht']))
-        (fun t' ht' => hends t' (by simp [ht'])) hc₂ hat'.right
+        (fun t' ht' => hends t' (by simp [ht'])) (fun t' ht' => hcomp t' (by simp [ht'])) hc₂ hat'.right
 
 theorem walk_rangesInv_of_cover (g : Graph) (tern : Bool) (forest : List DfsTree)
     (hf : ForestOK g forest) (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g)
+    (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges)
     (hc : RootsCover (edgePostorderForest forest) 0 forest (WalkState.init g tern)) :
     (g.walk tern forest).RangesInv (edgePostorderForest forest) (edgePostorderForest forest).length 0 := by
   have hnd := DfsData.edgePostorderForest_perm.nodup_iff.2 hf.edges_nodup
   have hσ : ∀ e ∈ edgePostorderForest forest, e < g.ne :=
     fun e he => hf.edges_lt e (DfsData.edgePostorderForest_perm.subset he)
   have h := forest_ranges_of_cover hnd hσ forest [] 0 (WalkState.init g tern)
-    (rootState_init g tern) (init_rangesInv g tern hnd) (by simpa using hf) hwf hends hc
+    (rootState_init g tern) (init_rangesInv g tern hnd) (by simpa using hf) hwf hends
+    (fun t ht => comp_of_forest hf hwf hends hecov ht) hc
     ⟨[], [], rfl, by simp⟩
   simpa only [wp, Graph.walk, Nat.zero_add] using h
 

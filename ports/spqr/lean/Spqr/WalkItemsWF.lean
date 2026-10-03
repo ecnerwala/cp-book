@@ -162,7 +162,8 @@ theorem walk_rangesInv (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
       (edgePostorderForest (g.dfsForest vo eo)).length 0 := by
   obtain ⟨hvp, hep⟩ := dfsForest_spanning' hg hvo heo
   exact WalkState.walk_rangesInv_of_cover g tern _ (ForestOK.of_perm hvp hep)
-    (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo) (walk_rootsCover g tern vo eo hg hvo heo)
+    (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo)
+    (fun e he => hep.symm.subset (List.mem_range.2 he)) (walk_rootsCover g tern vo eo hg hvo heo)
 
 theorem walk_g (g : Graph) (tern : Bool) (forest : List DfsTree) (hnv : 0 < g.nv)
     (hb : ∀ t ∈ forest, t.Bounded g.nv g.ne) : (g.walk tern forest).g = g :=
