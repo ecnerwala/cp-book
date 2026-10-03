@@ -109,6 +109,10 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
             if a != b && touches t g a v && touches t g b v && t.origId[i]! != some v then
               bad := bad + 1
               IO.println s!"v_attach: i={i} a={a} b={b} v={v}"
+    if let some ne := t.capNe i then
+      if (t.neOrig ne).isNone then
+        bad := bad + 1
+        IO.println s!"cap_orig: i={i} ne={ne}"
     if t.hasCap i && t.type i != .I && t.type i != .O && !((List.range g.ne).any fun e => edgeIn t i e) then
       bad := bad + 1
       IO.println s!"cap_nonempty: i={i} type={repr (t.type i)} children={t.children i} parent={t.parent i}"
@@ -134,6 +138,11 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
       if !shapeOk then
         bad := bad + 1
         IO.println s!"q_shape: i={i} children={t.children i}"
+      if t.children i == [] then
+        if let some p := t.parent i then
+          if t.type p == .F || t.type p == .V then
+            bad := bad + 1
+            IO.println s!"q_leaf_parent: i={i} p={p}"
       if let some e := t.origId[i]! then
         let upper := if t.edgeFlipped[e]! then (g.edges[e]!).2 else (g.edges[e]!).1
         let isLoop := (g.edges[e]!).1 == (g.edges[e]!).2
