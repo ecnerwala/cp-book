@@ -513,14 +513,14 @@ def checkClose (seed : Nat) (site : String) (s : WalkState) : List V := Id.run d
           if !ok then out := bad "q_root" :: out
   return out
 
-/-- Ownership invariant `Owned` for `finishP_ownership`, at vertex `v` (depth `d`, subtree start
-`c.n₀`, stack length `c.orig` at its start, root-tree start `c.nR`, path starts `c.sts`, visited
-vertices `c.visited`); `n` is the number of processed edges. -/
+/-- Depth-indexed ownership invariant `OwnedD` (`RangesOwned.lean`) at the path vertex of depth `d`
+(`c.sts[k]`/`c.origs[k]` = schedule start / stack length at the entry of the path vertex of depth
+`k`, `c.visited` = placed vertices); `n` = number of processed edges. Checked at every vertex entry
+(`entry`), `finishEdge` pre-/post-state (`pre`/`post`, the latter with `n + 1`), P site (`P`) and
+vertex end (`end`); `finishEdge_ownedD` is `pre` → `post`. -/
 structure OwnCtx where
-  nR : Nat
-  n₀ : Nat
-  orig : Nat
   sts : List Nat
+  origs : List Nat
   visited : List Nat
 
 def checkOwned (seed : Nat) (σ : List Nat) (c : OwnCtx) (n v d : Nat) (site : String)
@@ -530,9 +530,9 @@ def checkOwned (seed : Nat) (σ : List Nat) (c : OwnCtx) (n v d : Nat) (site : S
   let owned := s.tstack.flatMap (entryEdges s)
   let len := s.tstack.length
   if s.stackVerts[d]! != v then out := fail "own_sv" s!"d={d}" :: out
-  if len < c.orig then out := fail "own_len" s!"len={len} orig={c.orig}" :: out
-  if c.n₀ < c.nR then out := fail "own_nR" s!"nR={c.nR} n₀={c.n₀}" :: out
-  for b in List.range' c.nR (n - c.nR) do
+  for k in List.range (d + 1) do
+    if len < c.origs[k]! then out := fail "own_len" s!"k={k} len={len} orig={c.origs[k]!}" :: out
+  for b in List.range' c.sts[0]! (n - c.sts[0]!) do
     let e := σ[b]!
     if !owned.contains e &&
         !(List.range (d + 1)).any (fun k => (edgesBelow s (vertItem s.stackVerts[k]!)).contains e) then
@@ -541,13 +541,15 @@ def checkOwned (seed : Nat) (σ : List Nat) (c : OwnCtx) (n v d : Nat) (site : S
     for e in edgesBelow s (vertItem s.stackVerts[k]!) do
       if !(σ.idxOf e < c.sts[k + 1]!) then out := fail "own_anc" s!"k={k} e={e}" :: out
   for e in edgesBelow s (vertItem v) do
-    if !(σ.idxOf e < n) then out := fail "own_vertHi" s!"e={e}" :: out
-    if σ.idxOf e < c.n₀ then out := fail "own_vertLo" s!"e={e}" :: out
-  for t in s.tstack.take (len - c.orig) do
-    for e in entryEdges s t do
-      if σ.idxOf e < c.n₀ then out := fail "own_new" s!"e={e} t={showT t}" :: out
-  for t in s.tstack.drop (len - c.orig) do
-    if t.vStart == v then out := fail "own_old" s!"t={showT t}" :: out
+    if !(σ.idxOf e < n) then out := fail "own_hi" s!"e={e}" :: out
+  for k in List.range (d + 1) do
+    for e in edgesBelow s (vertItem s.stackVerts[k]!) do
+      if σ.idxOf e < c.sts[k]! then out := fail "own_lo" s!"k={k} e={e}" :: out
+    for t in s.tstack.take (len - c.origs[k]!) do
+      for e in entryEdges s t do
+        if σ.idxOf e < c.sts[k]! then out := fail "own_new" s!"k={k} e={e} t={showT t}" :: out
+    for t in s.tstack.drop (len - c.origs[k]!) do
+      if t.vStart == s.stackVerts[k]! then out := fail "own_old" s!"k={k} t={showT t}" :: out
   for t in s.tstack do
     if !c.visited.contains t.vStart then out := fail "own_vis" s!"t={showT t}" :: out
   for w in List.range s.g.nv do
@@ -555,13 +557,15 @@ def checkOwned (seed : Nat) (σ : List Nat) (c : OwnCtx) (n v d : Nat) (site : S
   return out
 
 mutual
-partial def iTree (seed : Nat) (σ : List Nat) (nR n : Nat) (sts visited : List Nat) (t : DfsTree) (d : Nat)
+partial def iTree (seed : Nat) (σ : List Nat) (n : Nat) (sts origs visited : List Nat) (t : DfsTree) (d : Nat)
     (s : WalkState) : WalkState × List V × List Nat :=
   match t with
   | .node v outs =>
-    let c : OwnCtx := ⟨if d == 0 then n else nR, n, s.tstack.length, sts ++ [n], visited ++ [v]⟩
+    let c : OwnCtx := ⟨sts ++ [n], origs ++ [s.tstack.length], visited ++ [v]⟩
     let s := { s with stackVerts := s.stackVerts.set! d v }
+    let vs₀ := checkOwned seed σ c n v d "entry" s
     let (hv, s, vs, visited) := iOuts seed σ c v d outs false s
+    let vs := vs₀ ++ vs
     let nEnd := n + t.edgePostorder.length
     let vs := vs ++ checkOwned seed σ { c with visited := visited } nEnd v d "end" s
     let vs := vs ++ if hv then [] else checkVertPast seed σ v nEnd s
@@ -583,7 +587,7 @@ partial def iOut (seed : Nat) (σ : List Nat) (c : OwnCtx) (v d : Nat) (o : DfsO
   let (hv, s) := if !hv && lowval < d && o.cls.isType1 then (true, ((pushVertTstack v d).run s).2) else (hv, s)
   let orig := s.tstack.length
   let (s, vs, visited) := match o with
-    | .tree _ _ child => iTree seed σ c.nR (σ.idxOf o.e - child.edgePostorder.length) c.sts c.visited child (d+1)
+    | .tree _ _ child => iTree seed σ (σ.idxOf o.e - child.edgePostorder.length) c.sts c.origs c.visited child (d+1)
         { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
     | .back .. => (s, [], c.visited)
   let c := { c with visited := visited }
@@ -595,12 +599,13 @@ partial def iOut (seed : Nat) (σ : List Nat) (c : OwnCtx) (v d : Nat) (o : DfsO
   let vs := vs ++ (closeSites v d o orig hv s).flatMap fun (site, st) => checkClose seed site st
   let vs := vs ++ if hv then [] else checkVertPast seed σ v (σ.idxOf o.e) s
   let (hv', s) := (finishEdge v d o orig hv).run s
+  let vs := vs ++ checkOwned seed σ c (σ.idxOf o.e + 1) v d "post" s
   (hv', s, vs, visited)
 end
 
 def iForest (seed : Nat) (σ : List Nat) (forest : List DfsTree) (s : WalkState) : WalkState × List V :=
   let (s, vs, _, _) := forest.foldl (fun (s, vs, visited, n) t =>
-    let (s, vs', visited) := iTree seed σ 0 n [] visited t 0 s
+    let (s, vs', visited) := iTree seed σ n [] [] visited t 0 s
     let s := ((popTstack >>= fun top => modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }).run s).2
     (s, vs ++ vs', visited, n + t.edgePostorder.length)) (s, ([] : List V), ([] : List Nat), 0)
   (s, vs)

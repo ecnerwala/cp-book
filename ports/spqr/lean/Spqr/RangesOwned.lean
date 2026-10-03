@@ -447,5 +447,54 @@ theorem finishP_ownership {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVer
         rw [hgS] at this
         exact this.2 ((TEntry.edges_edgeEntry s.stackDir[lv]! curV lv s.nxtEdgeIdx o.e hq' o.e).2 rfl)
 
+/-! ### Depth-indexed ownership (`walk_rootsCover`'s induction) -/
+
+/-- `Owned` at every path vertex at once: `sts[k]`/`origs[k]` are the schedule position and stack
+length at the entry of the path vertex of depth `k` (`k ≤ d`), `n` the processed prefix.
+`cover` ranges over the root tree (`sts[0]`); the vertex item of the current vertex `stackVerts[d]`
+holds exactly `sts[d]..n`, that of a strict ancestor `k` holds `sts[k]..sts[k+1]`.
+(Checker: `checkOwned`, kinds `own_*`.) -/
+structure OwnedD (σ sts origs : List Nat) (P : ItemId → Prop) (d n : Nat) (s : WalkState) : Prop where
+  len : ∀ k, k ≤ d → origs[k]! ≤ s.tstack.length
+  cover : ∀ b, sts[0]! ≤ b → b < n → (∃ t ∈ s.tstack, t.edges s.g s.items σ[b]!) ∨
+    ∃ k, k ≤ d ∧ Items.EdgeBelow s.g s.items (vertItem s.stackVerts[k]!) σ[b]!
+  anc : ∀ k, k < d → ∀ e, e < s.g.ne → Items.EdgeBelow s.g s.items (vertItem s.stackVerts[k]!) e →
+    σ.idxOf e < sts[k + 1]!
+  hi : ∀ e, e < s.g.ne → Items.EdgeBelow s.g s.items (vertItem s.stackVerts[d]!) e → σ.idxOf e < n
+  lo : ∀ k, k ≤ d → ∀ e, e < s.g.ne → Items.EdgeBelow s.g s.items (vertItem s.stackVerts[k]!) e →
+    sts[k]! ≤ σ.idxOf e
+  new : ∀ k, k ≤ d → ∀ t ∈ s.tstack.take (s.tstack.length - origs[k]!), ∀ e, e < s.g.ne →
+    t.edges s.g s.items e → sts[k]! ≤ σ.idxOf e
+  old : ∀ k, k ≤ d → ∀ t ∈ s.tstack.drop (s.tstack.length - origs[k]!), t.vStart ≠ s.stackVerts[k]!
+  vis : ∀ t ∈ s.tstack, P (vertItem t.vStart) ∨ ∃ k, k ≤ d ∧ t.vStart = s.stackVerts[k]!
+  fresh : ∀ w, w < s.g.nv → ¬ P (vertItem w) → (∀ k, k ≤ d → w ≠ s.stackVerts[k]!) →
+    Items.ch s.items (vertItem w) = []
+
+/-- The exports `finishP_ownership`/`finishEdge_ownedD` consume at a `finishEdge` site. -/
+structure OwnSite (σ : List Nat) (n D curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool)
+    (s : WalkState) : Prop where
+  hD : D = if o.cls.isTree then d + 1 else d
+  nodup : σ.Nodup
+  rgs : RgS σ n D s
+  guards : FinishGuards d o origTstack hasVert s
+  book : FinishBook curV d o origTstack hasVert s
+  pos : σ[n]? = some o.e
+
+theorem CloseBase.toOwnSite {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
+    (h : CloseBase σ n D curV d o origTstack hasVert s) : OwnSite σ n D curV d o origTstack hasVert s :=
+  ⟨h.hD, h.nodup, h.rgs, h.guards, h.book, h.site.pos⟩
+
+/-- `OwnedD` is preserved by `finishEdge` (the processed prefix grows by `o.e`), given monotone
+starts/stack lengths along the path and that the path below `d` avoids `curV`.
+(Checker: `own_*` at `post`.) -/
+theorem finishEdge_ownedD {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
+    (h : OwnSite σ n D curV d o origTstack hasVert s)
+    {sts origs : List Nat} {P : ItemId → Prop} (ho : OwnedD σ sts origs P d n s)
+    (hsts : ∀ k, k ≤ d → sts[k]! ≤ sts[d]!) (hn : sts[d]! ≤ n)
+    (horigs : ∀ k, k ≤ d → origs[k]! ≤ origs[d]!) (horig : origs[d]! ≤ origTstack)
+    (hpath : ∀ k, k < d → s.stackVerts[k]! ≠ curV) :
+    OwnedD σ sts origs P d (n + 1) (after (finishEdge curV d o origTstack hasVert) s) := by
+  sorry
+
 end WalkState
 end Spqr
