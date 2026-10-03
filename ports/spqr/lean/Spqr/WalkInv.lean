@@ -608,17 +608,6 @@ theorem walkTree_book (t : DfsTree) (s : WalkState) (hwf : t.WF []) (hends : t.E
     BookTree t 0 s := by
   sorry
 
-/-- Admitted: the frame of a subtree walk — `g` and the array sizes are kept, and the `ch` of a
-fixed item that is not a `V`/`Q` item of the subtree (`rootItem`, the items of other roots) is
-untouched: the walk writes `ch` only on allocated items and on `vertItem curV` for `curV` in the
-subtree (`rootItem` only at forest level, `walkForest`). -/
-theorem walkTree_frame (t : DfsTree) (d : Nat) (s : WalkState) :
-    wp (walkTree t d) (fun _ s' => s'.g = s.g ∧ s'.stackVerts.size = s.stackVerts.size ∧
-      s'.stackDir.size = s.stackDir.size ∧ s'.firstOccurrence.size = s.firstOccurrence.size ∧
-      ∀ i, 0 < i → i < 1 + s.g.nv + s.g.ne → (∀ v ∈ t.verts, i ≠ vertItem v) →
-        (∀ e ∈ t.edges, i ≠ edgeItem s.g e) → Items.ch s'.items i = Items.ch s.items i) s := by
-  sorry
-
 /-- Admitted (ear content; PROOF.md §4.2b correction). After `finishEdge` of a tree edge at depth
 `d`, run under `Inv' (d+1)`, the result satisfies `Inv' d`: every entry still attached at the child
 `stackVerts[d+1]` has it as its own terminal or lies below an entry whose `vStart` it is (Loop 1

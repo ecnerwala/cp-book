@@ -1,3 +1,4 @@
+import Spqr.EarFrame
 import Spqr.EarRoot
 import Spqr.EarShape
 
@@ -10,7 +11,7 @@ import Spqr.EarShape
 `walkTree_guards'`, `Inv' 0` at a later root follows from `Inv' 0` after the previous root walk
 (`invTree`) through the root pop/append (`rootItem` is parentless by `Place.root`, the popped stack is
 empty by `RootOK`), and the freshness of a later root's `V`/`Q` items from `Place` (parentless) and the
-admitted frame `walkTree_frame` (childless).
+frame `walkTree_frame` (`EarFrame.lean`, childless; its typing hypothesis is `Place.types`).
 -/
 
 namespace Spqr
@@ -116,7 +117,7 @@ theorem step (h : RootState g pre s) (hf : ForestOK g (pre ++ t :: rest)) (hwf :
     exact Nat.lt_of_le_of_lt (Nat.zero_le _) (hvlt hf v (by simp [DfsTree.verts]))
   have hplace := (walk_place_aux g).1 t 0 _ _ s h.place (hvlt hf) (helt hf) (hvn hf).1 (hen hf).1
     (hPv hf) (hPe hf)
-  have hframe := walkTree_frame t 0 s
+  have hframe := walkTree_frame t 0 s h.place.types
   have hinv := invTree t 0 s hi' h.shape hg hb
   have hrk : wp (walkTree t 0) (fun _ s' => RootOK s') s :=
     walkTree_rootOK t s hi' h.shape hg hb h.tstack (by rw [h.sd]; exact hnv)
@@ -275,7 +276,7 @@ structure WalkTree (g : Graph) (items : Items) : Prop where
   v_children : ∀ v c, v < g.nv → items.IsParent (vertItem v) c → items.type c = .Q
   root_children : ∀ c, items.IsParent rootItem c → items.type c = .V ∨ items.type c = .Q
 
-/-- `Items.Tree` for the walk (modulo the admitted `walkTree_book`/`walkTree_frame`). -/
+/-- `Items.Tree` for the walk (modulo the admitted `walkTree_book`). -/
 theorem walk_tree (g : Graph) (ternarize : Bool) (forest : List DfsTree) (hnv : 0 < g.nv)
     (hb : ∀ t ∈ forest, t.Bounded g.nv g.ne) (hf : ForestOK g forest) (hwf : ∀ t ∈ forest, t.WF [])
     (hends : ∀ t ∈ forest, t.Ends g)
