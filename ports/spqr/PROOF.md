@@ -2487,7 +2487,12 @@ node-vertex exactly one with `ta < tb`); `planarTree_nodeCorners` is a named adm
 reached by `planarEmbed_sound` yet; it will be a hypothesis of `nodeFold_capped` once used).
 `Proofs/PlanarDegree.lean` (`lbl_stepC`, `sameOrbit_of_lbl`, `rot_div_ne`) and
 `OrbitSplit.conj_not_sameOrbit_split`/`insert_not_sameFaceOrbit` are proved building blocks for
-(N1)/(N3).
+(N1)/(N3). `Proofs/PieceJoin.lean` has the S-node building block `Capped.join` (standard axioms):
+two `Capped` pieces meeting exactly in the vertex `v` (caps `u v` and `v w`), glued by the node
+step's two links `c2 ↔ d1`, `d0 ↔ c3`, form a `Capped` piece with ends `c0 c1` at `u`, `d2 d3` at
+`w`; the witness is `(ρ.union σ).conj l2 (ρ.size + m0)` (as in `IsPlanarEmbedding.splice`), and
+`c0`, `d2` stay cofacial because both image swaps of `conj_stepC` merge orbits of the two
+components (the outer faces of the two pieces become one face).
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through `walk_items_wf`,
 `spqrTree_r_three_connected`, `spqrTree_pieceSep`, `nodePlanar_sound_R` and
 `nodeFold_capped`.
@@ -2565,6 +2570,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `orbitCount_swapImg_same`, `RotationSystem.conj_numFaceOrbits_split` | `Proofs/OrbitSplit.lean` | **proved** (standard axioms) |
 | `RotationSystem.single`, `RotationSystem.loop`, `RotationSystem.insert`, `IsPlanarEmbedding.insert` | `Proofs/PlanarInsert.lean` | **proved** (standard axioms) |
 | `Piece.Capped`, `Piece.Open2`, `Capped.insert`, `Open2.close`, `Open2.splice`, `single_open2` | `Proofs/PieceInsert.lean` | **proved** (standard axioms) |
+| `Capped.join` (1-sum of two capped pieces at a shared cap endpoint, node-step link order) | `Proofs/PieceJoin.lean` | **proved** (standard axioms) |
 | `embedItem_Q_nil`, `embedItem_Q_O`, `embedItem_Q_cons`, `qUpper`, `qLower`, `setOuter4` | `PlanarEmbedQExec.lean` | **proved** (exact unfolding of the executable `Q` branch) |
 | `q_edge_not_below`, `q_fresh`, `q_lower_boundary`, `q_capped_child`, `q_open_glued`, `q_leaf_glued`, `q_loop_glued`, `q_block_glued`, `embedItem_step_Q_faces` | `PlanarEmbedQ.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `treeQe`, `nodeStep`, `embedItem_node`, `forIn_state_foldl`, `nodeStep_outerE_ne`/`_outerE_size`/`_rotAdj_size`/`_exposedAt_ne`, `nodeFold_*` | `PlanarEmbedNodeExec.lean` | **proved** (exact unfolding of the executable `S`/`P`/`R` branch + frame lemmas) |
