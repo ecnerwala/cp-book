@@ -43,7 +43,7 @@ def entryPieceItems (s : WalkState) (t : TEntry) : List ItemId :=
 `t` (`Pieces.LaminarWith` at item level). -/
 def EntryLaminar (s : WalkState) (t : TEntry) (K : Nat → Prop) : Prop :=
   (∃ i ∈ s.entryPieceItems t, ∀ e, K e → Items.EdgeBelow s.g s.items i e) ∨
-    (∀ e, K e → ¬t.edges s.g s.items e) ∨ ∀ e, t.edges s.g s.items e → K e
+    (∀ e, K e → ¬t.edges s.g s.items e) ∨ ∀ e, e < s.g.ne → t.edges s.g s.items e → K e
 
 /-- A skeleton pair relative to the entry `t`: `b` is interior to no piece of `t`, and `{a, b}` is
 neither a piece's terminal pair nor `t`'s own terminals (`Pieces.SkelPair` at item level). Neither

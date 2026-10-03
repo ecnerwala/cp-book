@@ -71,10 +71,11 @@ structure RCloseShape (g : Graph) (d : DfsData) (P : Pieces) (U : Nat → Prop) 
   maximal : ∀ i, i < P.k → ∀ e e', e < g.ne → e' < g.ne → ¬P.Mem i e → ¬P.Mem i e' →
     g.SepClass (P.x i) (P.y i) e e'
   type1 : ∀ a b, P.SkelPair g U s t a b → d.Anc a b → ∀ o ∈ d.outs b,
-    o.cls = .ret (d.depth a) .type1Child → P.LaminarWith U (d.EndIn o.dest · g)
+    o.cls = .ret (d.depth a) .type1Child →
+      P.LaminarWith (fun e => e < g.ne ∧ U e) (d.EndIn o.dest · g)
   bond : ∀ a b e₁ e₂, e₁ ≠ e₂ → g.Joins e₁ a b → g.Joins e₂ a b → U e₁ → U e₂ →
     ∃ i, P.Mem i e₁ ∧ P.Mem i e₂
   type2 : ∀ a b, P.SkelPair g U s t a b → d.Type2Pair a b → ∀ o ∈ d.outs a, o.isTree = true →
-    d.Anc o.dest b → P.LaminarWith U (g.SepClass a b o.e)
+    d.Anc o.dest b → P.LaminarWith (fun e => e < g.ne ∧ U e) (g.SepClass a b o.e)
 
 end Spqr

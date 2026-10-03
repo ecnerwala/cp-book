@@ -84,7 +84,8 @@ structure RContent (s : WalkState) (dfs : DfsData) (d : Nat) (cur nxt : TEntry) 
   type1 : ∀ a b, (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).SkelPair s.g (s.rU cur nxt)
       nxt.vStart s.stackVerts[d]! a b →
     dfs.Anc a b → ∀ o ∈ dfs.outs b, o.cls = .ret (dfs.depth a) .type1Child →
-      (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).LaminarWith (s.rU cur nxt)
+      (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).LaminarWith
+        (fun e => e < s.g.ne ∧ s.rU cur nxt e)
         (dfs.EndIn o.dest · s.g)
   bond : ∀ a b e₁ e₂, e₁ ≠ e₂ → s.g.Joins e₁ a b → s.g.Joins e₂ a b →
     s.rU cur nxt e₁ → s.rU cur nxt e₂ →
@@ -93,7 +94,8 @@ structure RContent (s : WalkState) (dfs : DfsData) (d : Nat) (cur nxt : TEntry) 
   type2 : ∀ a b, (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).SkelPair s.g (s.rU cur nxt)
       nxt.vStart s.stackVerts[d]! a b →
     dfs.Type2Pair a b → ∀ o ∈ dfs.outs a, o.isTree = true → dfs.Anc o.dest b →
-      (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).LaminarWith (s.rU cur nxt)
+      (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).LaminarWith
+        (fun e => e < s.g.ne ∧ s.rU cur nxt e)
         (s.g.SepClass a b o.e)
 
 end WalkState

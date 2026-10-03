@@ -703,6 +703,18 @@ alignment nor the crossing-class cases follows from the current range interface.
 `EntryR.maximal`, `.bond`, and `.single` still need derivations, as does saturation inside
 open entries (the stack-run and closed-R clauses alone do not state it).
 
+Coverage and laminar containment range over valid graph edges. `Items.EdgeBelow` itself is
+an ancestry predicate and does not enforce `e < g.ne`: an allocated item `i` contains the
+out-of-range index `i - 1 - g.nv` naming itself. On valid K4, R item 11 contains index 6,
+whereas none of its non-V children contains that index. `checks/REdgeDomainCheck.lean`
+proves this failure of unrestricted child coverage, and proves coverage for all valid edges,
+using only standard axioms. The run-to-item bridges now take bounded coverage and identify
+classes with the valid-edge restriction of each run. `EntryLaminar` restricts its containment
+clause; `RContent` and `RCloseShape` use `Pieces.LaminarWith` on `e < g.ne ∧ U e`.
+The type-1 saturation clause's properness witness must also be a valid edge.
+`runEdges_restrict` and `Graph.RunSaturated.restrict` justify the restriction. The affected
+R-maximality, R-branch, persistence, and HT-to-cut transports remain standard-axiom proofs.
+
 The child-return settling claim also fails on a reachable state.
 `checks/RInvReturnCheck.lean` proves `dfsForest_eq` and `returned_not_rInvAt` with only
 `propext`, `Classical.choice`, and `Quot.sound`. For the graph
@@ -1115,6 +1127,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 Item HT-to-cut bridge: `Items.RSkel3.rThreeConnected` | `Proofs/RItems.lean`, `Proofs/ThreeConnected.lean` | proved (standard axioms), including active vertices and either cap orientation; takes item WF and non-V-child edge coverage |
 | Item S/R shape minimum counts | `ItemSpec.lean`, `checks/SkeletonShapeCheck.lean` | corrected: ≥ 1 V child for S, ≥ 5 non-V children for R; kernel-checked sharp triangle/K4 outputs (standard axioms) |
 | R correctness input domain | `Correctness.lean`, `Proofs/RItems.lean`, `checks/RInvalidOrderCheck.lean` | corrected to `g.WF` + `OrderOK` for both orders; K4 with invalid edge order `[6]` kernel-checks failure of the former public target (standard axioms) |
+| R coverage and laminarity edge domain | `RInv.lean`, `RClose.lean`, `RMax.lean`, `Proofs/RunSaturation.lean`, `checks/REdgeDomainCheck.lean` | restricted containment and coverage to `e < g.ne`; kernel-checked K4 failure of unrestricted coverage and success of bounded coverage; affected transport proofs audited (standard axioms) |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
 | 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge`/`walkTree` induction and `walk_ranges` admitted; saturation not a field (attachment-count forms false, §4.6) |
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |

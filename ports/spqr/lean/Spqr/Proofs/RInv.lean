@@ -167,7 +167,7 @@ theorem RBranch.laminar_union {K : Nat → Prop} {a b : Nat} (hKlt : ∀ e, K e 
     (hv : ∃ v, v ≠ a ∧ v ≠ b ∧ s.g.Touches (cur.edges s.g s.items) v ∧
       s.g.Touches (nxt.edges s.g s.items) v)
     (hc : s.EntryLaminar cur K) (hn : s.EntryLaminar nxt K) :
-    (P).LaminarWith (s.rU cur nxt) K := by
+    (P).LaminarWith (fun e => e < s.g.ne ∧ s.rU cur nxt e) K := by
   obtain ⟨v, hva, hvb, ⟨e₁, he₁, hE₁, hv₁⟩, ⟨e₂, he₂, hE₂, hv₂⟩⟩ := hv
   have h12 : s.g.SepClass a b e₁ e₂ :=
     sepClass_of_common hva hvb (Graph.isEnd_iff.2 ⟨he₁, hv₁⟩) (Graph.isEnd_iff.2 ⟨he₂, hv₂⟩)
@@ -175,12 +175,12 @@ theorem RBranch.laminar_union {K : Nat → Prop} {a b : Nat} (hKlt : ∀ e, K e 
   · exact .inl (hb.piece_of_entry hR (mem_rPieceItems_iff.2 (.inl hi)) hKlt hK)
   · rcases hn with ⟨i, hi, hK⟩ | hn | hn
     · exact .inl (hb.piece_of_entry hR (mem_rPieceItems_iff.2 (.inr hi)) hKlt hK)
-    · exact .inr (.inl fun e he => fun | .inl h => hc e he h | .inr h => hn e he h)
-    · exact absurd hE₁ (hc e₁ (hcl _ _ (hn e₂ hE₂) h12.symm))
+    · exact .inr (.inl fun e he => fun | ⟨_, .inl h⟩ => hc e he h | ⟨_, .inr h⟩ => hn e he h)
+    · exact absurd hE₁ (hc e₁ (hcl _ _ (hn e₂ he₂ hE₂) h12.symm))
   · rcases hn with ⟨i, hi, hK⟩ | hn | hn
     · exact .inl (hb.piece_of_entry hR (mem_rPieceItems_iff.2 (.inr hi)) hKlt hK)
-    · exact absurd hE₂ (hn e₂ (hcl _ _ (hc e₁ hE₁) h12))
-    · exact .inr (.inr fun e => fun | .inl h => hc e h | .inr h => hn e h)
+    · exact absurd hE₂ (hn e₂ (hcl _ _ (hc e₁ he₁ hE₁) h12))
+    · exact .inr (.inr fun e => fun | ⟨he, .inl h⟩ => hc e he h | ⟨he, .inr h⟩ => hn e he h)
 
 end Content
 

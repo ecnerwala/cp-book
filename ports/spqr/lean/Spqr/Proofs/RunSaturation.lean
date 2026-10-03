@@ -34,6 +34,12 @@ end Pieces
 def runEdges {α : Type*} (edges : α → Nat → Prop) (L : List α) (e : Nat) : Prop :=
   ∃ i ∈ L, edges i e
 
+theorem runEdges_restrict {α : Type*} (g : Graph) (edges : α → Nat → Prop) (L : List α) (e : Nat) :
+    runEdges (fun i e => e < g.ne ∧ edges i e) L e ↔ e < g.ne ∧ runEdges edges L e := by
+  constructor
+  · rintro ⟨i, hi, he, hE⟩; exact ⟨he, i, hi, hE⟩
+  · rintro ⟨he, i, hi, hE⟩; exact ⟨i, hi, he, hE⟩
+
 /-- Selecting one edge per piece transports an aligned edge interval to a run of pieces. -/
 theorem runEdges_of_interval {α : Type*} {edges : α → Nat → Prop} {K : Nat → Prop}
     {order interval : List Nat} {select : Nat → Option α} {L : List α}
@@ -56,6 +62,15 @@ def Graph.RunSaturated {α : Type*} (g : Graph) (edges : α → Nat → Prop) (L
     ∀ a b, ¬g.TwoAttached (runEdges edges R) a b
 
 namespace Graph
+
+theorem RunSaturated.restrict {α : Type*} {g : Graph} {edges : α → Nat → Prop}
+    {L : List α} (h : g.RunSaturated edges L) :
+    g.RunSaturated (fun i e => e < g.ne ∧ edges i e) L := by
+  intro R hin hlen hproper a b ha
+  apply h R hin hlen hproper a b
+  apply (TwoAttached.congr fun e he => ?_).1 ha
+  rw [runEdges_restrict]
+  exact and_iff_right he
 
 theorem RunSaturated.short_or_eq {α : Type*} {g : Graph} {edges : α → Nat → Prop}
     {L R : List α} (h : g.RunSaturated edges L) (hin : R <:+: L) {a b : Nat}
@@ -98,8 +113,9 @@ theorem WF.class_laminar_of_interval {g : Graph} {P : Pieces} (hP : P.WF g)
     (hK : ∀ e, g.SepClass a b e₀ e ↔ e ∈ interval)
     (hselect : ∀ m ∈ order, ∀ i, select m = some i → P.Mem i m)
     (hown : ∀ e, g.SepClass a b e₀ e → ∃ i ∈ L, P.Mem i e)
-    (hcover : ∀ e, U e ↔ runEdges P.Mem L e)
-    (hsat : g.RunSaturated P.Mem L) : P.LaminarWith U (g.SepClass a b e₀) := by
+    (hcover : ∀ e, e < g.ne → (U e ↔ runEdges P.Mem L e))
+    (hsat : g.RunSaturated P.Mem L) :
+    P.LaminarWith (fun e => e < g.ne ∧ U e) (g.SepClass a b e₀) := by
   have marked : ∀ i ∈ L, ∃ m ∈ order, select m = some i := by
     intro i hi
     rw [← hL] at hi
@@ -113,8 +129,8 @@ theorem WF.class_laminar_of_interval {g : Graph} {P : Pieces} (hP : P.WF g)
   · obtain ⟨i, hi, hsub⟩ := h
     obtain ⟨m, hm, hmi⟩ := marked i hi
     exact .inl ⟨i, hP.mem_k (hselect m hm i hmi), hsub⟩
-  · exact .inr (.inl fun e he hu => h e he ((hcover e).1 hu))
-  · exact .inr (.inr fun e he => h e ((hcover e).1 he))
+  · exact .inr (.inl fun e he hu => h e he ((hcover e hu.1).1 hu.2))
+  · exact .inr (.inr fun e he => h e ((hcover e he.1).1 he.2))
 
 end Pieces
 
@@ -141,35 +157,44 @@ structure Saturated (dfs : DfsData) (origTstack : Nat) (s : WalkState) : Prop wh
   type1 : ∀ i, i < s.items.size → Items.type s.items i = .R → ∀ c ∈ s.rChildren i, ∀ a b,
     (∀ e, backEdges dfs a b e → Items.EdgeBelow s.g s.items i e) →
     (∃ e, backEdges dfs a b e ∧ ¬Items.EdgeBelow s.g s.items c e) →
-    (∃ e, Items.EdgeBelow s.g s.items i e ∧
+    (∃ e, e < s.g.ne ∧ Items.EdgeBelow s.g s.items i e ∧
       ¬Items.EdgeBelow s.g s.items c e ∧ ¬backEdges dfs a b e) →
     ¬s.g.TwoAttached (fun e => Items.EdgeBelow s.g s.items c e ∨ backEdges dfs a b e) a b
 
 theorem Saturated.closed_laminar {dfs : DfsData} {origTstack : Nat} {s : WalkState}
     (h : Saturated dfs origTstack s) {i : ItemId} (hi : i < s.items.size) (ht : Items.type s.items i = .R)
     {R : List ItemId} {K : Nat → Prop} (hin : R <:+: s.rChildren i)
-    (hK : ∀ e, K e ↔ runEdges (Items.EdgeBelow s.g s.items) R e)
-    (hcover : ∀ e, Items.EdgeBelow s.g s.items i e ↔
-      runEdges (Items.EdgeBelow s.g s.items) (s.rChildren i) e)
+    (hK : ∀ e, K e ↔ e < s.g.ne ∧ runEdges (Items.EdgeBelow s.g s.items) R e)
+    (hcover : ∀ e, e < s.g.ne → (Items.EdgeBelow s.g s.items i e ↔
+      runEdges (Items.EdgeBelow s.g s.items) (s.rChildren i) e))
     {a b : Nat} (ha : s.g.TwoAttached K a b) :
     (∃ c ∈ s.rChildren i, ∀ e, K e → Items.EdgeBelow s.g s.items c e) ∨
       (∀ e, K e → ¬Items.EdgeBelow s.g s.items i e) ∨
-      (∀ e, Items.EdgeBelow s.g s.items i e → K e) := by
-  rcases (h.closed i hi ht).laminar hin hK ha with h | h | h
-  · exact .inl h
-  · exact .inr (.inl fun e he ht => h e he ((hcover e).1 ht))
-  · exact .inr (.inr fun e he => h e ((hcover e).1 he))
+      (∀ e, e < s.g.ne → Items.EdgeBelow s.g s.items i e → K e) := by
+  have hK' := fun e => (hK e).trans (runEdges_restrict s.g _ R e).symm
+  rcases (h.closed i hi ht).restrict.laminar hin hK' ha with h | h | h
+  · obtain ⟨c, hc, hsub⟩ := h
+    exact .inl ⟨c, hc, fun e he => (hsub e he).2⟩
+  · refine .inr (.inl fun e he ht => h e he ?_)
+    have hlt := ((hK e).1 he).1
+    exact (runEdges_restrict s.g _ _ e).2 ⟨hlt, (hcover e hlt).1 ht⟩
+  · exact .inr (.inr fun e he hE => h e ((runEdges_restrict s.g _ _ e).2 ⟨he, (hcover e he).1 hE⟩))
 
 theorem entryLaminar_of_runSaturated {s : WalkState} {t : TEntry} {R : List ItemId}
     {K : Nat → Prop} (h : s.g.RunSaturated (Items.EdgeBelow s.g s.items) (s.entryPieceItems t))
-    (hin : R <:+: s.entryPieceItems t) (hK : ∀ e, K e ↔ runEdges (Items.EdgeBelow s.g s.items) R e)
-    (hcover : ∀ e, t.edges s.g s.items e ↔
-      runEdges (Items.EdgeBelow s.g s.items) (s.entryPieceItems t) e)
+    (hin : R <:+: s.entryPieceItems t)
+    (hK : ∀ e, K e ↔ e < s.g.ne ∧ runEdges (Items.EdgeBelow s.g s.items) R e)
+    (hcover : ∀ e, e < s.g.ne → (t.edges s.g s.items e ↔
+      runEdges (Items.EdgeBelow s.g s.items) (s.entryPieceItems t) e))
     {a b : Nat} (ha : s.g.TwoAttached K a b) : s.EntryLaminar t K := by
-  rcases h.laminar hin hK ha with h | h | h
-  · exact .inl h
-  · exact .inr (.inl fun e he ht => h e he ((hcover e).1 ht))
-  · exact .inr (.inr fun e he => h e ((hcover e).1 he))
+  have hK' := fun e => (hK e).trans (runEdges_restrict s.g _ R e).symm
+  rcases h.restrict.laminar hin hK' ha with h | h | h
+  · obtain ⟨i, hi, hsub⟩ := h
+    exact .inl ⟨i, hi, fun e he => (hsub e he).2⟩
+  · refine .inr (.inl fun e he ht => h e he ?_)
+    have hlt := ((hK e).1 he).1
+    exact (runEdges_restrict s.g _ _ e).2 ⟨hlt, (hcover e hlt).1 ht⟩
+  · exact .inr (.inr fun e he hE => h e ((runEdges_restrict s.g _ _ e).2 ⟨he, (hcover e he).1 hE⟩))
 
 end WalkState
 

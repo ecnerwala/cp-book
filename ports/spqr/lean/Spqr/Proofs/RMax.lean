@@ -137,7 +137,7 @@ laminar with `U`. -/
 theorem not_laminarWith (h2 : g.TwoConnected) (hU : g.TwoAttached U s t)
     {a b : Nat} (hab : P.SkelPair g U s t a b) (hne : a ≠ b) (hK : g.TwoAttached K a b)
     (hKa : g.Touches K a) (hKb : g.Touches K b) (hprop : ∃ e, e < g.ne ∧ ¬K e)
-    (hl : P.LaminarWith U K) : False := by
+    (hl : P.LaminarWith (fun e => e < g.ne ∧ U e) K) : False := by
   obtain ⟨hUa, hUb, hsa, hsb, hnt, hst⟩ := hab
   obtain ⟨eK, heK, hKe, hvK⟩ := hKa
   rcases hl with ⟨i, hi, hsub⟩ | hdisj | hsup
@@ -150,9 +150,9 @@ theorem not_laminarWith (h2 : g.TwoConnected) (hU : g.TwoAttached U s t)
     · exact .inl ⟨ha, hb⟩
     · exact .inr ⟨ha, hb⟩
     · exact absurd (ha.trans hb.symm) hne
-  · have ha := hU.boundary hUa (Graph.isEnd_iff.2 ⟨heK, hvK⟩) (hdisj _ hKe)
+  · have ha := hU.boundary hUa (Graph.isEnd_iff.2 ⟨heK, hvK⟩) (fun h => hdisj _ hKe ⟨heK, h⟩)
     obtain ⟨eb, heb, hKb', hvb⟩ := hKb
-    have hb := hU.boundary hUb (Graph.isEnd_iff.2 ⟨heb, hvb⟩) (hdisj _ hKb')
+    have hb := hU.boundary hUb (Graph.isEnd_iff.2 ⟨heb, hvb⟩) (fun h => hdisj _ hKb' ⟨heb, h⟩)
     apply hst
     rcases ha with ha | ha <;> rcases hb with hb | hb
     · exact absurd (ha.trans hb.symm) hne
@@ -161,7 +161,7 @@ theorem not_laminarWith (h2 : g.TwoConnected) (hU : g.TwoAttached U s t)
     · exact absurd (ha.trans hb.symm) hne
   · have hKne : ∃ e, e < g.ne ∧ K e := ⟨eK, heK, hKe⟩
     have int : ∀ w, g.Touches U w → w ≠ s → w ≠ t → g.Interior K w := fun w hw hs ht e he hv =>
-      hsup e (hU.interior hw hs ht e he hv)
+      hsup e ⟨he, hU.interior hw hs ht e he hv⟩
     by_cases has : a = s
     · have hbt : b ≠ t := fun hbt => hst (.inl ⟨has, hbt⟩)
       have hbs : b ≠ s := fun hbs => hne (has.trans hbs.symm)
