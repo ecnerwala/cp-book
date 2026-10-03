@@ -83,7 +83,7 @@ theorem StItems.modify_root {g : Graph} {s : WalkState} {blocks : List StBlock} 
 
 theorem StItems.pushEntry {g : Graph} {s : WalkState} {blocks : List StBlock} (v d idx : Nat)
     (dir : Bool) (q : ItemId) (hq : q < s.items.size) (hr : ∀ p, ¬ Items.IsParent s.items p q)
-    (hch : Items.ch s.items q = []) (hfree : q ∉ readStack s.tstack) (h : StItems g s blocks) :
+    (hfree : q ∉ readStack s.tstack) (h : StItems g s blocks) :
     StItems g { s with tstack := ⟨v, d, idx, setSides dir [q] []⟩ :: s.tstack } blocks := by
   obtain ⟨roots, nodup, bounded, chLt, chNodup, closed⟩ := h
   have hmem := mem_readStack_push v d idx dir q s.tstack
@@ -93,9 +93,9 @@ theorem StItems.pushEntry {g : Graph} {s : WalkState} {blocks : List StBlock} (v
     · exact hr
     · exact roots x hx
   · rcases (hmem x).1 hx with rfl | hx
-    · rcases hy.head_cases with rfl | ⟨c, hc, -⟩
+    · rcases hy.cases_tail with rfl | ⟨c, -, hc⟩
       · exact hq
-      · exact absurd hc (by simp [Items.IsParent, hch])
+      · exact chLt c y hc
     · exact bounded x hx y hy
   · rcases closed i hi hty with ⟨x, hx, hb⟩ | hB
     · exact Or.inl ⟨x, (hmem x).2 (Or.inr hx), hb⟩
@@ -131,8 +131,6 @@ theorem closeEars_st {D d : Nat} {o : DfsOut} {s : WalkState} {curV v₀ : Nat} 
     StItems.modify_root _ f (fun _ => rfl) (fun _ => rfl) hE.q_root hqS hI
   have hty₀ : Items.type (s.items.modify (edgeItem s.g o.e) f) (edgeItem s.g o.e) = .Q := by
     rw [Items.type_modify s.items _ _ f (fun _ => rfl)]; exact hqty
-  have hch₀ : Items.ch (s.items.modify (edgeItem s.g o.e) f) (edgeItem s.g o.e) = [] := by
-    rw [Items.ch_modify_ch_eq _ f (fun _ => rfl)]; exact hq
   have hroot₀ : ∀ p, ¬ Items.IsParent (s.items.modify (edgeItem s.g o.e) f) p (edgeItem s.g o.e) := by
     intro p hp
     unfold Items.IsParent at hp
@@ -150,6 +148,6 @@ theorem closeEars_st {D d : Nat} {o : DfsOut} {s : WalkState} {curV v₀ : Nat} 
     StRead.pushEntry _ _ _ _ _ (Or.inr hty₀) hR₀⟩, ?_, fun k _ => rfl⟩
   · dsimp only; simp only [hE.tstack, hB, List.cons_append, List.append_assoc]
   · exact StItems.pushEntry (s := { s with items := s.items.modify (edgeItem s.g o.e) f }) o.dest d
-      s.nxtEdgeIdx s.stackDir[d]! (edgeItem s.g o.e) hqlt hroot₀ hch₀ hfree hI₀
+      s.nxtEdgeIdx s.stackDir[d]! (edgeItem s.g o.e) hqlt hroot₀ hfree hI₀
 
 end Spqr
