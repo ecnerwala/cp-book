@@ -765,6 +765,20 @@ def checkCanon (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool)
       out := checkFinishCanon (fun k => bad r x ("l1" ++ k)) x r ++ out
   return out
 
+/-- `CanonInv s` (`RangesCanon.lean`): for `ternarize = false`, no S under S and no P under P
+(`Items.Canonical`), evaluated at the walkOut entry site (`canon_inv`). -/
+def checkCanonInv (seed : Nat) (curV d : Nat) (s : WalkState) : List V := Id.run do
+  if s.ternarize then return []
+  let mut out := []
+  for p in List.range s.items.size do
+    let it := s.items[p]!
+    for c in it.ch do
+      let tc := s.items[c]!.type
+      if (tc == .S && it.type == .S) || (tc == .P && it.type == .P) then
+        out := (⟨seed, s.ternarize, curV, d, "CanonInv", "canon_inv",
+          s!"p={p} c={c} type={repr it.type}"⟩ : V) :: out
+  return out
+
 /-- Final-items facts behind `spqrTree_pieceSep` (`walk_q_upper`/`walk_root_sep`, `WalkPieceSep.lean`):
 every child of a V item records that vertex as its first endpoint; distinct root children share no
 vertex. -/

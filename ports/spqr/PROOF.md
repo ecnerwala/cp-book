@@ -2314,6 +2314,25 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `rSide_{entry,finish_content,vertFree}_site`, `loop1_rBranch_{fields,mid}_ctx`, `loop1_rTop_ctx`,
   `feS₂_top_entryR`; ST `walkOut_stLive`.
 
+* **Stage 2h — `CanonInv` and the `ternarize` frame as backbone fields
+  (`Spqr/WalkTernFrame.lean`).** `TreeGhost.tern : Bool`; `WalkInv`/`WalkInvOut`/`PreOut`/`WalkInvEnd`
+  carry `canon : CanonInv` and `tern : s.ternarize = G.tern`. Between-site steps are frames
+  (`CanonInv.frame`: the `walkOutPre` state, the `firstOccurrence` write at the child entry,
+  `toOut`'s `stackVerts.set!`, `exit_false`'s vertex push); at the `finishEdge` site `finish_core`
+  takes `CanonInv s₃` and returns `CanonInv s' ∧ s'.ternarize = s₃.ternarize`, from
+  `finishEdge_canon hcb (closeBase_canon hcb) hc` (`RangesCanon.lean`) and `tern_finishEdge`.
+  `WalkTernFrame.lean`: `tern_finishEdge`/`tern_walkOutPre` (the flag is never written; same
+  traversal as `EarFrame.lean`'s `keep_*`, no hypotheses; `[propext, Quot.sound]`). New named
+  admission `closeBase_canon : CloseBase σ n D curV d o origTstack hasVert s → CloseCanon curV d o
+  origTstack hasVert s` (`WalkBackboneStep.lean`): the `FinishCanon` facts (`p_site`/`v_site`/
+  `l1_site`) at the three `finishTstackTop` sites of one `finishEdge` from `CloseBase` there;
+  checker fields Ranges-3's `canon_*` plus the new per-site `canon_inv` (`CanonInv` at every
+  `walkOut` entry, `checks/WalkInvCheck/Ranges.lean`), 0 violations on 0..3000 both modes. The
+  out-level composition `walkOut_inv` is deleted (nothing used it and it had no source for the new
+  fields; `walkOut_inv_r` stays). `walk_canonInv`/`walk_ternarize` (`WalkItemsWF.lean`) remain
+  admitted until stage 3 derives them from `walkTree_inv` at the root. Reachable from `backbone`:
+  the 25 admissions of stage 2g plus `closeBase_canon` (26).
+
 ## 5. Phase 3: relabel
 
 `relabelTree` **[def]** takes the item array and produces `SpqrTree`. It is a plain preorder walk:

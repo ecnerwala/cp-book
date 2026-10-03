@@ -12,6 +12,8 @@ import Spqr.Proofs.RSkelRoot
 import Spqr.StInduct
 import Spqr.StOpenBlock
 import Spqr.StBdPop
+import Spqr.WalkTernFrame
+import Spqr.RangesCanon
 
 /-! # The backbone invariant (PROOF.md §4.7)
 
@@ -97,6 +99,7 @@ structure TreeGhost where
   prev : List DfsTree
   fs : List PathFrame
   segs : List (List TEntry × List StPiece)
+  tern : Bool
 
 /-- The parent-side R facts at a non-root entry `(t, dp + 1)`. -/
 structure RPar (dfs : DfsData) (t : DfsTree) (dp : Nat) (s : WalkState) : Prop where
@@ -145,6 +148,8 @@ structure WalkInv (G : TreeGhost) (t : DfsTree) (d : Nat) (s : WalkState) : Prop
   post : PostAt G.σ G.n t.edgePostorder
   path : AncPath G.g G.σ (G.n + t.edgePostorder.length) (G.anc ++ [t.v])
   close : s.CloseInv
+  canon : s.CanonInv
+  tern : s.ternarize = G.tern
   -- root coverage
   P_past : ∀ e, e < G.g.ne → G.P (edgeItem G.g e) → G.σ.idxOf e < G.n
   owned : OwnedD G.σ (G.sts ++ [G.n]) (G.origs ++ [s.tstack.length]) G.P d G.n
@@ -177,6 +182,8 @@ structure WalkInvEnd (G : TreeGhost) (t : DfsTree) (d : Nat) (s s' : WalkState) 
   shape : Shape s'
   ranges : RgS G.σ (G.n + t.edgePostorder.length) d s'
   close : s'.CloseInv
+  canon : s'.CanonInv
+  tern : s'.ternarize = G.tern
   full : s'.Full G.g (WalkM.Pushed G.g G.P t.verts t.edges) G.X
   owned : OwnedD G.σ (G.sts ++ [G.n]) (G.origs ++ [s.tstack.length]) (WalkM.Pushed G.g G.P t.verts t.edges) d
     (G.n + t.edgePostorder.length) s'
@@ -326,6 +333,8 @@ structure WalkInvOut (G : TreeGhost) (B v d : Nat) (outs₀ : List DfsOut) (done
   post : PostAt G.σ n (DfsOut.edgePostorderList rest)
   path : AncPath G.g G.σ (n + (DfsOut.edgePostorderList rest).length) (G.anc ++ [v])
   close : s.CloseInv
+  canon : s.CanonInv
+  tern : s.ternarize = G.tern
   -- coverage
   P_past : ∀ e, e < G.g.ne → P (edgeItem G.g e) → G.σ.idxOf e < n
   owned : OwnedD G.σ G.sts G.origs P d n s
@@ -553,6 +562,8 @@ structure PreOut (G : TreeGhost) (B v d : Nat) (outs₀ : List DfsOut) (done : L
   shape : Shape s₁
   ranges : s₁.RangesInv G.σ n d
   close : s₁.CloseInv
+  canon : s₁.CanonInv
+  tern : s₁.ternarize = G.tern
   full : s₁.Full G.g (fun i => P i ∨ (hv₁ = true ∧ i = vertItem v)) G.X
   owned : OwnedD G.σ G.sts G.origs P d n s₁
   vcover : hv₁ = true → VertCover v s₁
@@ -613,13 +624,15 @@ theorem walkOutPre_out (h : WalkInvOut G B v d outs₀ done (o :: rest) hasVert 
     (wp_and (walkOutPre_ranges h.ranges h.shape h.σ_lt hb
       fun _ => h.full.place.pushVertR h.v_lt h.P_past)
     (wp_and (walkOutPre_closeInv' h.close h.shape d o hb)
+    (wp_and (tern_walkOutPre v d o hasVert h.tern)
     (wp_and (walkOutPre_full h.full h.v_lt h.Pcur h.Pcur')
     (wp_and (walkOutPre_ownedD d o hasVert h.owned h.sv_d h.sts_le h.vcover)
     (wp_and hr
     (wp_and (walkOutPre_pre s v d o hasVert hd₀ hts hR h.stPre.items hvert)
-      (keep_walkOutPre (D := d + 1) (j := 0) v d o hasVert Keep.refl))))))))) ?_
-  rintro hv₁ s₁ ⟨⟨push, hpush, hhv, hst⟩, ⟨hi, hs⟩, ⟨hrg, -, -⟩, hc, ⟨hf, -⟩, ⟨ho, hvc⟩, hr, hp, hK⟩
-  exact ⟨push, ⟨hpush, hhv, hst, hi, hs, hrg, hc, hf, ho, hvc, hr, hp, hK⟩⟩
+      (keep_walkOutPre (D := d + 1) (j := 0) v d o hasVert Keep.refl)))))))))) ?_
+  rintro hv₁ s₁ ⟨⟨push, hpush, hhv, hst⟩, ⟨hi, hs⟩, ⟨hrg, -, -⟩, hc, htn, ⟨hf, -⟩, ⟨ho, hvc⟩, hr, hp, hK⟩
+  exact ⟨push, ⟨hpush, hhv, hst, hi, hs, hrg, hc, h.canon.frame (by subst hst; rfl) (by subst hst; rfl), htn,
+    hf, ho, hvc, hr, hp, hK⟩⟩
 
 end WalkInvOut
 
@@ -640,7 +653,7 @@ theorem PreOut.child {e : Nat} {cls : OutClass} {c : Nat} {couts : List DfsOut} 
           segs := (new₁, (refOuts G.g v d (DirsOf s d) (done.map (·.1)) false).1 ++
             if push = true then [⟨s₁.stackDir[d]!, [vertItem v]⟩] else []) :: G.segs }
         (.node c couts) (d + 1) { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } := by
-  obtain ⟨hpush, hhv, hst, hi₁, hs₁, hrg₁, hc₁, hf₁, ho₁, hvc₁, hr₁, hp₁, hK₁⟩ := hp
+  obtain ⟨hpush, hhv, hst, hi₁, hs₁, hrg₁, hc₁, hcn₁, htn₁, hf₁, ho₁, hvc₁, hr₁, hp₁, hK₁⟩ := hp
   have hg := h.g_eq
   have hmem := h.mem
   have hwf_o := h.wf _ hmem
@@ -778,6 +791,8 @@ theorem PreOut.child {e : Nat} {cls : OutClass} {c : Nat} {couts : List DfsOut} 
             getElem!_concat_length']
           exact PairEq.flip hends_o.1
       close := hc₁.frame rfl rfl fun _ hi => hi
+      canon := hcn₁.frame rfl rfl
+      tern := htn₁
       P_past := fun e' he' hp => hp.elim (h.P_past e' he')
         fun hp => absurd hp.2.symm (vertItem_ne_edgeItem h.v_lt e')
       owned := (ho₁.mono fun _ hi => Or.inl hi).entry h.sts_len h.origs_len (hgE ▸ hc')
@@ -983,112 +998,6 @@ theorem walkOut_inv_r (h : WalkInvOut G B v d outs₀ done (o :: rest) hasVert n
         skel := by rw [hg]; exact hskel }
   · exact wp_of_forall fun _ _ h2' => absurd h2' h2
 
-/-- **One `walkOut` step of the backbone.** -/
-theorem walkOut_inv (h : WalkInvOut G B v d outs₀ done (o :: rest) hasVert n P s) :
-    wp (walkOut v d o hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧ ∃ hvF,
-      WalkInvOut G B v d outs₀ (done ++ [(o, hvF)]) rest hv' (n + o.block.length)
-        (Pushed G.g (fun i => P i ∨ (hv' = true ∧ i = vertItem v)) o.verts o.edges) s') s := by
-  obtain ⟨hndO, hdisjV, hvo, hvr, hendO, hdisjE⟩ := h.split_facts
-  have S := h.sites
-  have hE := h.earOut
-  have hK := kOut v d o hasVert s G.g (d + 1) 0 s h.types (Nat.le_refl _) (by omega) (vertItem_ne_zero v)
-    (fun w _ => vertItem_ne_zero w) (fun e _ => edgeItem_ne_zero G.g e) Keep.refl
-  have hI := invOut v d o hasVert s h.inv h.shape S.guards S.book
-  have hRg := rgOut G.σ n v d o hasVert s h.rgs h.σ_nodup S.guards S.book S.rg
-  have hC := ccOut G.σ n v d o hasVert s h.rgs h.σ_nodup S.guards S.book S.frontiers S.rg S.cs h.close
-  have hV := (h.coverOut S.guards S.book S.frontiers S.cs).2
-  have hF := (walk_full_aux G.g).2.2 v d o hasVert P G.X s h.full h.v_lt
-    (by rw [DfsOut.vertsList_single]; exact h.w_lt_o) (by rw [DfsOut.edgesList_single]; exact h.e_lt_o)
-    (by rw [DfsOut.vertsList_single]; exact (List.nodup_cons.1 hndO.of_append_right).2)
-    (by rw [DfsOut.edgesList_single]; exact hendO) (by rw [DfsOut.vertsList_single]; exact hvo)
-    (by rw [DfsOut.vertsList_single]; exact h.Pv_o) (by rw [DfsOut.edgesList_single]; exact h.Pe_o)
-    h.Pcur h.Pcur' (sdOut v d o hasVert s h.inv h.shape S.guards S.book)
-  have hS := stOut_step G.g v d o hasVert (stOutIh G.g o d) s G.prev G.fs G.segs (done.map (·.1)) P G.X h.d_fs h.inv
-    h.shape S.guards S.book h.stHyps
-  have hRR := walkOut_inv_r h S
-  have hL := walkOut_stLive h
-  refine wp_mono _ (wp_and hE.2 (wp_and hK (wp_and hI (wp_and hRg (wp_and hC (wp_and hV (wp_and hF
-    (wp_and hS (wp_and hRR hL))))))))) fun hv' s' ⟨⟨hvF, hC'⟩, hK', ⟨hi', hs'⟩, ⟨hrg', _, hσ'⟩, hcl',
-      ⟨hpl', how', hsv', hvc', hhv'⟩, ⟨hfull', _⟩, ⟨hg', hsd', hp'⟩, hrr', hlc, hll⟩ => ?_
-  refine ⟨hhv', hvF, ?_⟩
-  have hPiff : ∀ i, Pushed G.g (fun i => P i ∨ (hv' = true ∧ i = vertItem v))
-      (DfsOut.vertsList [o]) (DfsOut.edgesList [o]) i ↔
-      Pushed G.g (fun i => P i ∨ (hv' = true ∧ i = vertItem v)) o.verts o.edges i := by
-    intro i; rw [DfsOut.vertsList_single, DfsOut.edgesList_single]
-  have hhf : hv' = false → hasVert = false := fun h0 => by
-    cases hasVert
-    · rfl
-    · exact absurd (hhv' rfl) (by rw [h0]; decide)
-  exact {
-    full := hfull'.monoP hPiff
-    d_anc := h.d_anc
-    split := by rw [List.map_append, List.append_assoc]; exact h.split
-    sorted := h.sorted
-    wf := h.wf
-    ends := h.ends
-    nodup := h.nodup
-    anc_lt := h.anc_lt
-    v_lt := h.v_lt
-    w_lt := h.w_lt
-    e_lt := h.e_lt
-    enodup := h.enodup
-    comp := h.comp
-    pe_anc := h.pe_anc
-    sv_size := hK'.sv.trans h.sv_size
-    sd_size := hK'.sd.trans h.sd_size
-    anc_sv := fun k hk => by rw [hK'.svlo k (by omega)]; exact h.anc_sv k hk
-    sv_d := hsv'
-    ear := hC'
-    inv := hi'
-    shape := hs'
-    ranges := hrg'
-    σ_nodup := h.σ_nodup
-    σ_lt := hσ'
-    post := by have := h.post; rw [DfsOut.edgePostorderList_cons] at this; exact this.right
-    path := by
-      have := h.path; rw [DfsOut.edgePostorderList_cons, List.length_append, ← Nat.add_assoc] at this
-      exact this
-    close := hcl'
-    P_past := pushed_past (fun e he hp => by
-        rcases hp with hp | ⟨_, hp⟩
-        · exact h.P_past e he hp
-        · exact absurd hp.symm (vertItem_ne_edgeItem h.v_lt e))
-      h.w_lt_o (DfsOut.edges_subset_block o) h.post_o h.σ_nodup
-    owned := how'
-    sts_len := h.sts_len
-    origs_len := h.origs_len
-    sts_le := h.sts_le
-    sts_n := Nat.le_trans h.sts_n (Nat.le_add_right _ _)
-    origs_le := h.origs_le
-    Pv := by
-      rintro w hw ((hp | ⟨_, hp⟩) | ⟨w', hw', hp⟩ | ⟨e, _, hp⟩)
-      · exact h.Pv_rest w hw hp
-      · exact hvr (vertItem_inj hp ▸ hw)
-      · exact hdisjV w' hw' (vertItem_inj hp ▸ hw)
-      · exact vertItem_ne_edgeItem (h.w_lt_rest w hw) e hp
-    Pe := by
-      rintro e he ((hp | ⟨_, hp⟩) | ⟨w', hw', hp⟩ | ⟨e', he', hp⟩)
-      · exact h.Pe_rest e he hp
-      · exact vertItem_ne_edgeItem h.v_lt e hp.symm
-      · exact vertItem_ne_edgeItem (h.w_lt_o w' hw') e hp.symm
-      · exact hdisjE e' he' (edgeItem_inj hp ▸ he)
-    Pcur := by
-      rintro h0 ((hp | ⟨h1, _⟩) | ⟨w', hw', hp⟩ | ⟨e, _, hp⟩)
-      · exact h.Pcur (hhf h0) hp
-      · rw [h0] at h1; cases h1
-      · exact hvo (vertItem_inj hp ▸ hw')
-      · exact vertItem_ne_edgeItem h.v_lt e hp
-    Pcur' := fun h1 => Or.inl (Or.inr ⟨h1, rfl⟩)
-    vcover := hvc'
-    r := fun h2 => hrr' (by rw [hK'.g] at h2; exact h2)
-    d_fs := h.d_fs
-    height := by rw [hsd']; exact h.height
-    base_out := h.base_out
-    stPre := by rw [List.map_append]; exact hp'
-    segs_len := h.segs_len
-    live_cur := by rw [List.map_append]; exact hlc
-    live_lower := hll }
-
 /-! ## Tree-level glue
 
 `WalkInv.toOut` carries the `walkTree` conjunction to the first between-edge site;
@@ -1156,6 +1065,8 @@ theorem toOut {v : Nat} {outs : List DfsOut} (h : WalkInv G (.node v outs) d s) 
     post := hpost
     path := hpath
     close := h.close.frame rfl rfl (fun _ h => h)
+    canon := h.canon.frame rfl rfl
+    tern := h.tern
     P_past := h.P_past
     owned := h.owned
     sts_len := by simp [h.sts_len]
@@ -1265,6 +1176,8 @@ theorem exit_true (hW : WalkInv G (.node v outs) d s)
     shape := h.shape
     ranges := h.rgs
     close := h.close
+    canon := h.canon
+    tern := h.tern
     full := h.full.monoP fun i => ⟨Pushed.vert i, fun hi => by
       rcases hi with hi | ⟨w, hw, rfl⟩ | hi
       · exact Or.inl (Or.inl hi)
@@ -1347,6 +1260,8 @@ theorem exit_false (hW : WalkInv G (.node v outs) d s)
     inv := hSt.inv
     shape := hSt.shape
     ranges := ⟨hRg.ranges, hSt.shape, h.σ_lt⟩
+    canon := h.canon.frame rfl rfl
+    tern := h.tern
     close := (h.close.frame (s' := { s₂ with stackDir := s₂.stackDir.set! d true }) rfl rfl
       (fun _ h => h)).pushVert v d hv (by have := h.shape.size; show s₂.g.nv < s₂.items.size; omega)
     full := ((h.full.set_stackDir (s₂.stackDir.set! d true)).cons hv0 hvlt hnP v d
