@@ -1964,11 +1964,29 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   backbone needs it (checker fields `st.live_cur`/`st.live_lower`, 0 violations on 6002 runs); the
   tree-level `live_end` (what `finishBoundary_stLive` needs at the child's boundary) is the `[]`
   instance of `live_cur` after `walkOuts_inv`, to be plumbed in the next stage.
-* Not yet: `walkTree_inv` is still the tree-level composition (it does not yet go through
-  `walkOuts_inv`; the glue `WalkInv → WalkInvOut … [] t.outs false` at the entry and
-  `WalkInvOut … done' [] hv' → WalkInvEnd` at the exit is the next step, together with the
-  `walkTree.mutual_induct` skeleton).
-* Admissions reachable from `walkTree_inv` (direct `sorry` bodies in its dependency closure, 35):
+* **Stage 2c — the tree-level glue.** `walkTree_inv` now runs through `walkOuts_inv`: its body
+  is `unfold walkTree`, `WalkInv.toOut`, `walkOuts_inv`, then `WalkInvOut.exit_true`/`exit_false`
+  (the tree-level composition `cTree ∧ invTree ∧ … ∧ stWalk` is gone). `WalkInv.toOut :
+  WalkInv G (.node v outs) d s → WalkInvOut {G with sts := sts ++ [n], origs := origs ++
+  [|tstack|]} |tstack| v d outs [] outs false n P {s with stackVerts[d] := v}` is the entry glue
+  (the R part builds `ROutCtx` from `RCtx` via `AncChain`/`EntryR.single` of the frames, taken for
+  now from `WalkInv.sites.rside`, i.e. the `rsTree` composition — to be replaced by direct `RCtx`
+  reasoning when the mutual induction lands); `WalkInvOut.exit_true` (no vertex entry pushed) and
+  `WalkInvOut.exit_false` (`setStackDir d true; pushVertTstack v d`, per primitive: `Step.pushVert`,
+  `RgStep.pushVert`, `CloseInv.pushVert`, `Place.cons_fixed`/`Place.fresh`, `OwnedD.pushVert`,
+  `vertCover_pushVert`, `RWalk.pushVert` under `rSide_vertFree_site`, `botKeep_cons`,
+  `StRead.pushEntry`/`StItems.pushEntry`/`DirsOf_push`, and the new `StLive.cons_vert`: pushing a
+  `V` entry keeps a segment live since everything strictly below a `V` item hangs under it) are the
+  exit glue. To make the glue close, `WalkInv` gained `segs_len` and the lower-segment pairing
+  `live_lower`, and `WalkInvEnd` gained `live` (the current segment is `StLive` in `openBlock g fs
+  (DirsOf s' d) (refTree g t d …).1` — the `live_end` field `finishBoundary_stLive` needs at the
+  child's boundary) and `live_lower`. `#print axioms`: `StLive.cons_vert`, `WalkInv.d_lt`,
+  `WalkInvOut.exit_true` standard; `WalkInv.toOut`, `WalkInvOut.exit_false`, `walkTree_inv` reach
+  `sorryAx` (`exit_false` only through `rSide_vertFree_site`; `toOut` through `sites.rside`).
+* Not yet: `walkOut_inv` is still the out-level composition; the `walkTree.mutual_induct` skeleton
+  with the `finishEdge` primitives at the `walkOut` step is the next stage.
+* Admissions reachable from `walkTree_inv` (direct `sorry` bodies in its dependency closure, 36 =
+  the 35 below + `walkOut_stLive`):
   ear `ctx_step_tree_ret`, `walkTree_below_kept`, `walkTree_items_kept`, `ends_of_wf_boundary`,
   `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,bottom,close,late,late_fo,loop1,loop1_side,
   loop1_touch,loops,lower,of_ctx}`, `tree_comp_shape`; Ranges `closeCtx_{bd_node,bd_vert,l1_site,

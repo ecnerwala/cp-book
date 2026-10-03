@@ -57,6 +57,21 @@ end Spqr
 
 namespace Spqr
 open WalkM
+/-- A `V` entry pushed on a live segment keeps it live: everything strictly below a `V` item hangs
+under it. -/
+theorem StLive.cons_vert {g : Graph} {items : Items} {new : List TEntry} {b : StBlock}
+    (h : StLive g items new b) {v d idx : Nat} {dir : Bool} {q : ItemId}
+    (hq : Items.type items q = .V) :
+    StLive g items (⟨v, d, idx, setSides dir [q] []⟩ :: new) b := by
+  intro x hx i hbi hty hh
+  rcases (mem_readStack_push v d idx dir q new x).1 hx with rfl | hx
+  · exfalso
+    by_cases hiq : i = x
+    · subst hiq
+      rcases hty with h | h | h <;> rw [hq] at h <;> cases h
+    · exact hh ⟨x, Relation.ReflTransGen.refl, Ne.symm hiq, Or.inl hq, hbi⟩
+  · exact h x hx i hbi hty hh
+
 namespace WalkState
 
 /-- Ghost data of the backbone at a `walkTree` entry: the ear frame (`base`/`bE`/`sv`/`sd`, the
@@ -142,6 +157,10 @@ structure WalkInv (G : TreeGhost) (t : DfsTree) (d : Nat) (s : WalkState) : Prop
   segRead : SegRead s.items G.segs
   base_out : ∀ t' ∈ segsStack G.segs, t'.vStart ∉ t.verts
   stItems : StItems G.g s (simBlocks G.g G.prev G.fs (DirsOf s d))
+  segs_len : G.segs.length = G.fs.length
+  live_lower : ∀ j (hj : j < G.segs.length),
+    StLive G.g s.items G.segs[j].1
+      (openBlock G.g (G.fs.take (G.fs.length - 1 - j)) (DirsOf s (G.fs.length - 1 - j)) G.segs[j].2)
 
 /-- The backbone conclusion at the exit of `walkTree t d` started from `s`. -/
 structure WalkInvEnd (G : TreeGhost) (t : DfsTree) (d : Nat) (s s' : WalkState) : Prop where
@@ -163,6 +182,11 @@ structure WalkInvEnd (G : TreeGhost) (t : DfsTree) (d : Nat) (s s' : WalkState) 
   vStart : ∀ t' ∈ s'.tstack, t'.vStart ∈ t.verts ∨ ∃ t₀ ∈ segsStack G.segs, t'.vStart = t₀.vStart
   segRead : SegRead s'.items G.segs
   st : StSim G.g G.prev G.fs t (segsStack G.segs) s'
+  live : ∀ new, s'.tstack = new ++ segsStack G.segs →
+    StLive G.g s'.items new (openBlock G.g G.fs (DirsOf s' d) (refTree G.g t d (DirsOf s' d)).1)
+  live_lower : ∀ j (hj : j < G.segs.length),
+    StLive G.g s'.items G.segs[j].1
+      (openBlock G.g (G.fs.take (G.fs.length - 1 - j)) (DirsOf s' (G.fs.length - 1 - j)) G.segs[j].2)
 
 /-- The per-site hypotheses of the component inductions, all produced by the conjunction. -/
 structure Sites (G : TreeGhost) (t : DfsTree) (d : Nat) (s : WalkState) : Prop where
@@ -235,45 +259,6 @@ theorem sites (h : WalkInv G t d s) : Sites G t d s := by
     (by rw [h.g_eq]; exact h.sv_size) R.parent R.outs R.chain R.top
 
 end WalkInv
-
-/-- **The backbone theorem**: the conjunction at the entry gives the conjunction at the exit. -/
-theorem walkTree_inv (h : WalkInv G t d s) :
-    wp (walkTree t d) (fun _ s' => WalkInvEnd G t d s s') s := by
-  have S := h.sites
-  have hE := h.earTree
-  have hI := invTree t d s h.inv' h.shape S.guards S.book
-  have hR := rgTree G.σ G.n t d s h.ranges' h.shape h.σ_nodup h.σ_lt S.guards S.book S.rg
-  have hC := ccTree G.σ G.n t d s h.ranges' h.shape h.σ_nodup h.σ_lt S.guards S.book S.frontiers
-    S.rg S.cs h.close
-  have hV := (h.coverTree S.guards S.book S.frontiers S.cs).2
-  have hS := (stWalk G.g).1 t d s G.prev G.fs G.segs G.P G.X h.d_fs h.inv' h.shape S.guards S.book
-    h.full h.v_lt h.e_lt h.nodup.of_append_right h.enodup h.Pv h.Pe h.height h.tstack h.segRead
-    h.base_out h.stItems
-  have hRR : wp (walkTree t d) (fun _ s' => s.g.TwoConnected → ∀ dp, d = dp + 1 →
-      RWalk G.dfs G.F t.v d s' ∧ BotKeep s.tstack.length s s' ∧
-        (∀ k, k < d → s'.stackVerts[k]! = s.stackVerts[k]!) ∧ Items.RSkelInv s'.g s'.items) s := by
-    by_cases h2 : s.g.TwoConnected
-    · rcases d with _ | dp
-      · exact wp_of_forall fun _ _ _ dp hd => by omega
-      · have R := h.r h2 dp rfl
-        have hside := S.rside h2 dp rfl
-        have hW := rrTree t (dp + 1) s G.F dp rfl h.inv' h.shape S.guards S.book hside h2 R.spec
-          R.rooted R.frames R.top
-        have hK := rkTree t (dp + 1) s G.F dp rfl h.inv' h.shape S.guards S.book hside h2 R.spec
-          R.rooted R.frames R.top R.skel
-        refine wp_mono _ (wp_and hW hK) fun _ s' ⟨⟨hw, hk, hg, hsv⟩, hskel⟩ _ dp' hd => ?_
-        cases hd
-        refine ⟨?_, hk, hsv, by rw [hg]; exact hskel⟩
-        cases t with
-        | node v outs => exact hw v outs rfl
-    · exact wp_of_forall fun _ _ h2' => absurd h2' h2
-  refine wp_mono _ (wp_and hE.2 (wp_and hI (wp_and hR (wp_and hC (wp_and hV (wp_and hS hRR))))))
-    fun _ s' ⟨hte, ⟨hi, hs⟩, hrs, hcl, ⟨hpl, how, hvc⟩, ⟨hg, hsd, hvs, hsr, hst⟩, hrr⟩ => ?_
-  have hvc' : s'.stackVerts[d]! = t.v ∧ VertCover t.v s' := by
-    cases t with
-    | node v outs => exact hvc v outs rfl
-  exact ⟨hte, hi, hs, hrs, hcl, hpl, how, hvc'.1, hvc'.2, hrr, hg, hsd, hvs, hsr, hst⟩
-
 
 /-! ## The between-edge level
 
@@ -724,6 +709,297 @@ theorem walkOuts_inv : ∀ (rest : List DfsOut) (done : List (DfsOut × Bool)) (
         · rcases List.mem_append.1 he with he | he
           · exact Or.inl (Or.inl (Or.inr (Or.inr ⟨e, he, rfl⟩)))
           · exact Or.inr (Or.inr ⟨e, he, rfl⟩)
+
+
+/-! ## Tree-level glue
+
+`WalkInv.toOut` carries the `walkTree` conjunction to the first between-edge site;
+`WalkInvOut.exit_true`/`exit_false` carry the last one through the end of `walkTree`
+(no vertex entry pushed / `setStackDir d true; pushVertTstack v d`); `walkTree_inv` is the
+composition through `walkOuts_inv`. -/
+
+namespace WalkInv
+
+theorem d_lt (h : WalkInv G t d s) : d < G.g.nv := by
+  have h1 := h.height; have h2 := h.sd_size
+  cases t; simp only [DfsTree.height] at h1; omega
+
+/-- Entry glue: the `walkTree` conjunction at `(.node v outs, d)` gives the between-edge
+conjunction before the first out-edge, after `stackVerts.set! d v`. -/
+theorem toOut {v : Nat} {outs : List DfsOut} (h : WalkInv G (.node v outs) d s) :
+    WalkInvOut { G with sts := G.sts ++ [G.n], origs := G.origs ++ [s.tstack.length] }
+      s.tstack.length v d outs [] outs false G.n G.P
+      { s with stackVerts := s.stackVerts.set! d v } := by
+  have hdlt : d < G.g.nv := h.d_lt
+  have hstd : (G.sts ++ [G.n])[d]! = G.n := by
+    rw [← h.sts_len]; exact getElem!_concat_length' _ _
+  have hord : (G.origs ++ [s.tstack.length])[d]! = s.tstack.length := by
+    rw [← h.origs_len]; exact getElem!_concat_length' _ _
+  have hwf := h.wf
+  simp only [DfsTree.WF] at hwf
+  have hends := h.ends
+  simp only [DfsTree.Ends] at hends
+  have hnd := h.nodup; have hvlt := h.v_lt; have helt := h.e_lt; have hen := h.enodup
+  have hcomp := h.comp; have hpe := h.pe_anc; have hpost := h.post; have hpath := h.path
+  have hPv := h.Pv; have hPe := h.Pe; have hbase := h.base_out
+  simp only [DfsTree.verts, DfsTree.edges] at hnd hvlt helt hen hcomp hpe hPv hPe hbase
+  simp only [DfsTree.edgePostorder] at hpost hpath
+  have hv : v < G.g.nv := hvlt v (List.mem_cons_self ..)
+  have hnew : ∀ new, ({ s with stackVerts := s.stackVerts.set! d v } : WalkState).tstack =
+      new ++ segsStack G.segs → new = [] := fun new hts =>
+    List.append_cancel_right (hts.symm.trans (by rw [List.nil_append]; exact h.tstack))
+  exact {
+    full := h.full.of_eq rfl rfl rfl
+    d_anc := h.d_anc
+    split := by simp
+    sorted := hwf.1
+    wf := hwf.2
+    ends := hends
+    nodup := hnd
+    anc_lt := h.anc_lt
+    v_lt := hv
+    w_lt := fun w hw => hvlt w (List.mem_cons_of_mem _ hw)
+    e_lt := helt
+    enodup := hen
+    comp := hcomp
+    pe_anc := hpe
+    sv_size := by simp [h.sv_size]
+    sd_size := h.sd_size
+    anc_sv := fun k hk => by
+      show G.anc[k]? = some (s.stackVerts.set! d v)[k]!
+      rw [getElem!_set!_ne' _ _ _ _ (Nat.ne_of_lt hk)]; exact h.anc_sv k hk
+    sv_d := getElem!_set!_self' _ _ _ (by rw [h.sv_size]; exact hdlt)
+    ear := h.ear
+    inv := h.inv
+    shape := h.shape.frame'
+    ranges := h.ranges
+    σ_nodup := h.σ_nodup
+    σ_lt := h.σ_lt
+    post := hpost
+    path := hpath
+    close := h.close.frame rfl rfl (fun _ h => h)
+    P_past := h.P_past
+    owned := h.owned
+    sts_len := by simp [h.sts_len]
+    origs_len := by simp [h.origs_len]
+    sts_le := fun k hk => by
+      rw [hstd]
+      rcases Nat.lt_or_eq_of_le hk with hk | rfl
+      · rw [getElem!_append_left' (h.sts_len ▸ hk)]; exact h.sts_le k hk
+      · rw [hstd]
+    sts_n := le_of_eq hstd
+    origs_le := fun k hk => by
+      rw [hord]
+      rcases Nat.lt_or_eq_of_le hk with hk | rfl
+      · rw [getElem!_append_left' (h.origs_len ▸ hk)]; exact h.origs_le k hk
+      · rw [hord]
+    Pv := fun w hw => hPv w (List.mem_cons_of_mem _ hw)
+    Pe := hPe
+    Pcur := fun _ => hPv v (List.mem_cons_self ..)
+    Pcur' := fun h => by cases h
+    vcover := fun h => by cases h
+    r := fun h2 dp hd => by
+      have R := h.r h2 dp hd
+      have hr := h.sites.rside h2 dp hd
+      subst hd
+      unfold RSideTree at hr
+      obtain ⟨hanc, hstab, hvs, -⟩ := hr
+      simp only [Nat.add_sub_cancel] at hvs
+      exact {
+        wf := R.wf, spec := R.spec, rooted := R.rooted
+        outs_v := R.outs _ (DfsTree.Sub.refl _)
+        sub := fun e cls child hm t' hs => R.outs t' (hs.step hm)
+        chain := hanc
+        rwalk := ⟨fun f hf => ⟨(R.frames f hf).1, ⟨fun t ht hd hne => hstab t (List.mem_of_mem_drop ht)
+              ((R.frames f hf).2.entries t ht hd hne), (R.frames f hf).2.disj⟩⟩,
+          ⟨fun t ht hd hne => hstab t ht (R.top.entries t ht (by omega) fun h => by
+            have := hvs t ht h; omega), R.top.disj⟩⟩
+        fB := fun f hf => (R.frames f hf).1
+        B_le := le_refl _
+        hvB := fun h => nomatch h
+        skel := R.skel }
+    d_fs := h.d_fs
+    height := by
+      have := h.height; simp only [DfsTree.height] at this
+      show d + _ < s.stackDir.size; omega
+    base_out := hbase
+    stPre := {
+      read := ⟨[], by simpa using h.tstack, by rw [List.map_nil, StRefEt.refOuts_nil]; exact StRead.nil, fun _ => rfl⟩
+      hv := by rw [List.map_nil, StRefEt.refOuts_nil]
+      segRead := h.segRead
+      vStart := fun t ht => Or.inr ⟨t, by rw [← h.tstack]; exact ht, rfl⟩
+      items := by rw [List.map_nil, StRefEt.refOuts_nil, List.append_nil]; exact h.stItems.congr rfl rfl }
+    segs_len := h.segs_len
+    live_cur := fun new hts => by
+      rw [hnew new hts]; intro x hx; simp [readStack, readL, readR] at hx
+    live_lower := h.live_lower }
+
+end WalkInv
+
+namespace WalkInvOut
+
+variable {outs : List DfsOut} {done' : List (DfsOut × Bool)} {s₂ : WalkState}
+
+/-- Exit glue, `hasVert = true`: the end-of-`walkOuts` conjunction is the `walkTree` conclusion. -/
+theorem exit_true (hW : WalkInv G (.node v outs) d s)
+    (h : WalkInvOut { G with sts := G.sts ++ [G.n], origs := G.origs ++ [s.tstack.length] }
+      s.tstack.length v d outs done' [] true (G.n + (DfsOut.edgePostorderList outs).length)
+      (Pushed G.g (fun i => G.P i ∨ (true = true ∧ i = vertItem v))
+        (DfsOut.vertsList outs) (DfsOut.edgesList outs)) s₂) :
+    WalkInvEnd G (.node v outs) d s s₂ := by
+  have hmap : done'.map (·.1) = outs := by simpa using h.split
+  obtain ⟨new, hts₂, hR₂, -⟩ := h.stPre.read
+  have hhv := h.stPre.hv
+  have hI := h.stPre.items
+  have hvs := h.stPre.vStart
+  have hlc := h.live_cur new hts₂
+  rw [hmap] at hhv hR₂ hI hvs hlc
+  exact {
+    treeEnd := ⟨done', true, s₂, false, [], false, s₂.stackDir, rfl, h.ear, hmap, by simp, rfl,
+      fun _ _ => rfl, fun h => absurd h Bool.false_ne_true⟩
+    inv := h.inv
+    shape := h.shape
+    ranges := h.rgs
+    close := h.close
+    place := h.full.place.mono (fun i hi => Pushed.vert i hi) (fun _ h => h)
+    owned := h.owned.mono fun i hi => Pushed.vert i hi
+    sv_v := h.sv_d
+    vertCover := h.vcover rfl
+    r := fun h2 dp hd => by
+      have R := h.r (by rw [h.g_eq, ← hW.g_eq]; exact h2) dp hd
+      exact ⟨R.rwalk,
+        botKeep_of_base (A := []) (A' := new) (by simpa using hW.tstack) hts₂
+          (le_of_eq (congrArg List.length hW.tstack)),
+        fun k hk => Option.some.inj ((h.anc_sv k hk).symm.trans (hW.anc_sv k hk)), R.skel⟩
+    g_eq := h.g_eq.trans hW.g_eq.symm
+    sd_size := h.sd_size.trans hW.sd_size.symm
+    vStart := hvs
+    segRead := h.stPre.segRead
+    st := ⟨⟨new, hts₂, by rw [StRefEt.refTree_node, ← h.d_fs, hhv]; exact hR₂⟩,
+      by rw [StRefEt.refTree_node, ← h.d_fs]; exact hI⟩
+    live := fun new' hts' => by
+      obtain rfl : new' = new := List.append_cancel_right (hts'.symm.trans hts₂)
+      rw [StRefEt.refTree_node, hhv]; simpa using hlc
+    live_lower := h.live_lower }
+
+/-- Exit glue, `hasVert = false`: the end-of-`walkOuts` conjunction gives the `walkTree`
+conclusion after `setStackDir d true; pushVertTstack v d`. -/
+theorem exit_false (hW : WalkInv G (.node v outs) d s)
+    (h : WalkInvOut { G with sts := G.sts ++ [G.n], origs := G.origs ++ [s.tstack.length] }
+      s.tstack.length v d outs done' [] false (G.n + (DfsOut.edgePostorderList outs).length)
+      (Pushed G.g (fun i => G.P i ∨ (false = true ∧ i = vertItem v))
+        (DfsOut.vertsList outs) (DfsOut.edgesList outs)) s₂) :
+    WalkInvEnd G (.node v outs) d s
+      { s₂ with
+        stackDir := s₂.stackDir.set! d true,
+        tstack := ⟨v, d, s₂.nxtEdgeIdx,
+          setSides (getElem! (s₂.stackDir.set! d true) d) [vertItem v] []⟩ :: s₂.tstack } := by
+  have hmap : done'.map (·.1) = outs := by simpa using h.split
+  obtain ⟨new, hts₂, hR₂, -⟩ := h.stPre.read
+  have hhv := h.stPre.hv
+  have hI := h.stPre.items
+  have hvs := h.stPre.vStart
+  have hlc := h.live_cur new hts₂
+  rw [hmap] at hhv hR₂ hI hvs hlc
+  have hv : v < s₂.g.nv := by rw [h.g_eq]; exact h.v_lt
+  have hdlt : d < s₂.stackDir.size := by have := h.height; omega
+  have hDd : (s₂.stackDir.set! d true)[d]! = true := Array.getElem!_set!_self _ _ _ hdlt
+  obtain ⟨hc, ha⟩ := h.ear.vert_book rfl
+  have hi₂ : ({ s₂ with stackDir := s₂.stackDir.set! d true } : WalkState).Inv' d := h.inv.frame'
+  have hs₂ : Shape { s₂ with stackDir := s₂.stackDir.set! d true } := h.shape.frame'
+  have hnP : ¬ Pushed G.g (fun i => G.P i ∨ (false = true ∧ i = vertItem v))
+      (DfsOut.vertsList outs) (DfsOut.edgesList outs) (vertItem v) := h.Pcur rfl
+  have hv0 : 0 < vertItem v := by show 0 < 1 + v; omega
+  have hvG : v < G.g.nv := h.v_lt
+  have hvlt : vertItem v < 1 + G.g.nv + G.g.ne := by show 1 + v < _; omega
+  have hpush : ∀ i, (Pushed G.g (fun i => G.P i ∨ (false = true ∧ i = vertItem v))
+      (DfsOut.vertsList outs) (DfsOut.edgesList outs) i ∨ i = vertItem v) →
+      Pushed G.g G.P (v :: DfsOut.vertsList outs) (DfsOut.edgesList outs) i := fun i hi => by
+    rcases hi with hi | rfl
+    · exact Pushed.vert i hi
+    · exact Or.inr (Or.inl ⟨v, List.mem_cons_self .., rfl⟩)
+  have hSt := Step.pushVert hi₂ hs₂ d hv hc ha
+  have hRg := RgStep.pushVert (h.ranges.frame' (s' := { s₂ with stackDir := s₂.stackDir.set! d true }))
+    hs₂ d hv hc ha ((h.full.place.set_stackDir _).pushVertR h.v_lt h.P_past)
+  obtain ⟨hroot, hoff⟩ := Place.fresh h.full.place hv0 hvlt hnP
+  have hty : Items.type s₂.items (vertItem v) = .V := h.shape.vert v hv
+  have hsz : vertItem v < s₂.items.size := by
+    have := h.shape.size; show 1 + v < _; omega
+  have hdirs := DirsOf_push s₂ d true
+    ⟨v, d, s₂.nxtEdgeIdx, setSides (getElem! (s₂.stackDir.set! d true) d) [vertItem v] []⟩
+  have hd : d = G.fs.length := h.d_fs
+  exact {
+    treeEnd := ⟨done', false, s₂, (s₂.stackDir.set! d true)[d]!, _, true, s₂.stackDir.set! d true, rfl,
+      h.ear, hmap, by simp, rfl, fun k hk => getElem!_set!_ne' s₂.stackDir d k true (Nat.ne_of_lt hk),
+      fun _ hd => getElem!_set!_self' _ _ _ (by simpa using hd)⟩
+    inv := hSt.inv
+    shape := hSt.shape
+    ranges := ⟨hRg.ranges, hSt.shape, h.σ_lt⟩
+    close := (h.close.frame (s' := { s₂ with stackDir := s₂.stackDir.set! d true }) rfl rfl
+      (fun _ h => h)).pushVert v d hv (by have := h.shape.size; show s₂.g.nv < s₂.items.size; omega)
+    place := ((h.full.place.set_stackDir (s₂.stackDir.set! d true)).cons_fixed hv0 hvlt hnP v d
+      s₂.nxtEdgeIdx (s₂.stackDir.set! d true)[d]!).mono hpush (fun _ h => h)
+    owned := (h.owned.pushVert (s' := { s₂ with
+          stackDir := s₂.stackDir.set! d true,
+          tstack := ⟨v, d, s₂.nxtEdgeIdx, setSides (getElem! (s₂.stackDir.set! d true) d) [vertItem v] []⟩ :: s₂.tstack })
+      h.sv_d h.sts_le rfl rfl rfl rfl).mono fun i hi => Pushed.vert i hi
+    sv_v := h.sv_d
+    vertCover := vertCover_pushVert rfl
+    r := fun h2 dp hd => by
+      have h2' : s₂.g.TwoConnected := by rw [h.g_eq, ← hW.g_eq]; exact h2
+      have R := h.r h2' dp hd
+      have hfree₀ : VertFree v s₂ :=
+        rSide_vertFree_site h.inv h.shape (fun _ => ⟨hv, hc, ha⟩) h2' R.spec R.rooted R.chain R.rwalk
+      have hfree : VertFree v { s₂ with stackDir := s₂.stackDir.set! d true } := hfree₀
+      exact ⟨(RWalk.of_eq (s := s₂) (s' := { s₂ with stackDir := s₂.stackDir.set! d true }) rfl rfl rfl rfl
+          R.rwalk).pushVert (k := d) hfree,
+        (botKeep_of_base (A := []) (A' := new) (by simpa using hW.tstack) hts₂
+          (le_of_eq (congrArg List.length hW.tstack))).trans
+          (botKeep_cons (s := { s₂ with stackDir := s₂.stackDir.set! d true }) rfl R.B_le),
+        fun k hk => Option.some.inj ((h.anc_sv k hk).symm.trans (hW.anc_sv k hk)), R.skel⟩
+    g_eq := h.g_eq.trans hW.g_eq.symm
+    sd_size := by simp; exact h.sd_size.trans hW.sd_size.symm
+    vStart := by
+      intro t ht
+      rcases List.mem_cons.1 ht with rfl | ht
+      · exact Or.inl (List.mem_cons_self ..)
+      · exact hvs t ht
+    segRead := h.stPre.segRead
+    st := ⟨⟨⟨v, d, s₂.nxtEdgeIdx, setSides (getElem! (s₂.stackDir.set! d true) d) [vertItem v] []⟩ :: new,
+        by show _ :: s₂.tstack = _; rw [hts₂, List.cons_append],
+        by
+          rw [StRefEt.refTree_node, ← h.d_fs, hdirs, hhv]
+          simp only [Bool.false_eq_true, ↓reduceIte]
+          rw [hDd]
+          exact StRead.pushEntry v d s₂.nxtEdgeIdx true (vertItem v) (Or.inl hty) hR₂⟩,
+      by
+        rw [StRefEt.refTree_node, ← h.d_fs, hdirs]
+        exact (StItems.pushEntry v d s₂.nxtEdgeIdx _ (vertItem v) hsz hroot hoff hI).congr rfl rfl⟩
+    live := fun new' hts' => by
+      obtain rfl : new' = _ :: new :=
+        List.append_cancel_right (hts'.symm.trans (by show _ :: s₂.tstack = _; rw [hts₂, List.cons_append]))
+      rw [StRefEt.refTree_node, hdirs, hhv]
+      simp only [Bool.false_eq_true, ↓reduceIte]
+      exact StLive.cons_vert (by simpa using hlc) hty
+    live_lower := fun j hj => by
+      have := h.live_lower j hj
+      rwa [DirsOf_congr fun k hk => Array.getElem!_set!_ne _ _ _ _ (by omega)] }
+
+end WalkInvOut
+
+/-- **The backbone theorem**: the conjunction at the entry gives the conjunction at the exit,
+through `walkOuts_inv` and the exit glue. -/
+theorem walkTree_inv (h : WalkInv G t d s) :
+    wp (walkTree t d) (fun _ s' => WalkInvEnd G t d s s') s := by
+  obtain ⟨v, outs⟩ := t
+  unfold walkTree
+  simp only [wp_bind, wp_modify]
+  refine wp_mono _ (walkOuts_inv outs [] false G.n G.P _ h.toOut) fun hv' s₂ ⟨_, done', h₂⟩ => ?_
+  cases hv'
+  · simp only [Bool.false_eq_true, ↓reduceIte, wp_bind, wp_setStackDir, wp_pushVertTstack]
+    exact h₂.exit_false h
+  · simp only [↓reduceIte, wp_pure]
+    exact h₂.exit_true h
 
 end WalkState
 end Spqr
