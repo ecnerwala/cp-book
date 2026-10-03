@@ -2443,8 +2443,14 @@ theorem of this group has only `propext`, `Classical.choice`, `Quot.sound`.
 
 **Fold.** `PlanarEmbedFacesFold.lean` dispatches `embedItem_step_faces` (leaf, F, V, Q
 proved) and folds `gluedFaces_planarEmbed`; `planarEmbed_sound` now uses it (through
-`GluedFaces.toGluedUpTo` into `glued_root`). The one remaining gluing admission is
-`embedItem_step_node_faces` (S/P/R). Its executable side is done: `PlanarEmbedNodeExec.lean`
+`GluedFaces.toGluedUpTo` into `glued_root`). The S/P/R step `embedItem_step_node_faces`
+(`PlanarEmbedNode.lean`) is proved from `embedItem_node` and two lemmas: `node_capped_glued`
+(proved: `GluedFaces g i` from a `Piece.Capped` certificate of the node's piece whose four exposed
+ends fill the node's row, `rotAdj` framed outside the piece, other rows unchanged — the node's
+`PieceWitness`/`CapFace` are read off the certificate, the row's vertices from `pair0`/`pair2` and
+`SameVertex`, the parent-type side conditions from `PieceSep.node_parent`) and `nodeFold_capped`
+(the one remaining gluing admission: the fold of `nodeStep` over the node's quarter-edges frames
+`rotAdj` outside the piece and produces such a certificate at the cap's endpoints). Its executable side is done: `PlanarEmbedNodeExec.lean`
 unfolds the node branch exactly (`embedItem_node`: the loop over `[4·neSt : 4·neEn]` is
 `List.foldl (nodeStep i neSt)` over `List.range'`, where `nodeStep` links the exposed slots
 `treeQe` of the children owning the twins of `ta` and its rotation successor `tb > ta`, through
@@ -2471,9 +2477,20 @@ to `PlanarNodeSpec.lean`); `planarEmbed_sound` discharges it with `nodePlanar_so
 `planarTree_nodePlanar_size : nodePlanar.size = size` for `g.planarTree …` — a fact
 `planarEmbed_sound` genuinely depends on (with a short flag array `hall` would be vacuous); it is
 `RotInv.np_size` (`PlanarRotInv.lean`), threaded through `Frame`/`RotInv.step` like `ne_size`.
+Facts recorded for (N2)/(N3) in `PieceSep` (checked by `CheckPieceSep.lean`, seeds 0..300 + tiny
+cases, 0 violations): `node_parent` (an S/P/R node hangs under a Q or a node), `nv_child` (a
+node-vertex's V item is a child of the node iff the node-vertex is not a cap endpoint),
+`v_child_nv`, `nv_vert_inj`. `PlanarNodeSpec.NodeCorners` states the corner structure the node
+step relies on (`CornerAt i nv ta`: the `(side 1, dir 0)` quarter-edge of a non-cap edge at `nv`
+whose rotation successor is a `(side 0, dir 1)` quarter-edge; cap endpoints have none, every inner
+node-vertex exactly one with `ta < tb`); `planarTree_nodeCorners` is a named admission (not
+reached by `planarEmbed_sound` yet; it will be a hypothesis of `nodeFold_capped` once used).
+`Proofs/PlanarDegree.lean` (`lbl_stepC`, `sameOrbit_of_lbl`, `rot_div_ne`) and
+`OrbitSplit.conj_not_sameOrbit_split`/`insert_not_sameFaceOrbit` are proved building blocks for
+(N1)/(N3).
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through `walk_items_wf`,
 `spqrTree_r_three_connected`, `spqrTree_pieceSep`, `nodePlanar_sound_R` and
-`embedItem_step_node_faces`.
+`nodeFold_capped`.
 
 `glued_root` is proved. `edgesBelow 0` is a permutation of `range t.ne`, rather
 than the identity enumeration claimed by its old docstring. Each item's piece is
@@ -2551,7 +2568,11 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `embedItem_Q_nil`, `embedItem_Q_O`, `embedItem_Q_cons`, `qUpper`, `qLower`, `setOuter4` | `PlanarEmbedQExec.lean` | **proved** (exact unfolding of the executable `Q` branch) |
 | `q_edge_not_below`, `q_fresh`, `q_lower_boundary`, `q_capped_child`, `q_open_glued`, `q_leaf_glued`, `q_loop_glued`, `q_block_glued`, `embedItem_step_Q_faces` | `PlanarEmbedQ.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `treeQe`, `nodeStep`, `embedItem_node`, `forIn_state_foldl`, `nodeStep_outerE_ne`/`_outerE_size`/`_rotAdj_size`/`_exposedAt_ne`, `nodeFold_*` | `PlanarEmbedNodeExec.lean` | **proved** (exact unfolding of the executable `S`/`P`/`R` branch + frame lemmas) |
-| `embedItem_step_node_faces`, `embedItem_step_faces`, `gluedFaces_planarEmbed` | `PlanarEmbedFacesFold.lean` | sorry (node step) / proved modulo it |
+| `node_capped_glued`, `embedItem_step_node_faces` | `PlanarEmbedNode.lean` | **proved** modulo `nodeFold_capped` |
+| `nodeFold_capped` | `PlanarEmbedNode.lean` | sorry (semantic node fold: (N1)–(N3)) |
+| `embedItem_step_faces`, `gluedFaces_planarEmbed` | `PlanarEmbedFacesFold.lean` | proved modulo `nodeFold_capped` |
+| `CornerAt`, `NodeCorners`; `planarTree_nodeCorners` | `PlanarNodeSpec.lean`, `PlanarSpec.lean` | def / sorry (not reached by `planarEmbed_sound`) |
+| `conj_not_sameOrbit_split`, `insert_not_sameFaceOrbit`, `Proofs/PlanarDegree.lean` | `Proofs/OrbitSplit.lean`, `Proofs/PlanarInsert.lean`, `Proofs/PlanarDegree.lean` | **proved** (standard axioms) |
 | `localSkeleton`, `nodeRot`, `isPlanar`, `isPlanar_of_all`; `RotInv.np_size`, `planarTree_nodePlanar_size` | `PlanarNodeSpec.lean`, `PlanarRotInv.lean`, `PlanarSpec.lean` | def / **proved** |
 | `planarEmbed_sound` | `PlanarSpec.lean` | proved from `gluedFaces_planarEmbed` (with `WF`/`ChildShape` of `g.planarTree …` from `spqrTree_wf'`/`spqrTree_childShape` via `planarRelabel_proj`, hence the `g.WF`/`OrderOK` hypotheses) + `glued_root` |
 | `spqrTree_planar` (`→` from `planarEmbed_sound`; `←` needs completeness + skeletons are minors of `g`) | `PlanarSpec.lean` | sorry |
@@ -2559,7 +2580,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): `spqrTree_wf` (inherited by `planarRelabel_rot_spec`, `neRotAdj_segment`);
 `nodePlanar_sound_R`; the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
 `planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`,
-`embedItem_step_node_faces` (hence `planarEmbed_sound`; the old `GluedUpTo`-level
+`nodeFold_capped` (hence `planarEmbed_sound`; the old `GluedUpTo`-level
 `embedItem_step_Q`/`embedItem_step_node` are no longer reached by it — the former is
 refuted by `badFaceState_*`); `spqrTree_planar`. The S and P
 cases of `nodePlanar_sound` are proved except for the `Shape` of the
