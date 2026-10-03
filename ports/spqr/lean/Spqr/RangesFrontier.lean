@@ -317,4 +317,61 @@ theorem loop1BodyAdj_of_frontier {orig d : Nat} {base : List TEntry} {E : Nat �
   rw [hσ₂, st.step.g]
   exact hσ
 
+theorem RgStep.iter_loop1_ranges {v d orig : Nat} {edgeDir : Bool} {base : List TEntry} {E : Nat → Prop}
+    (h : s.RangesInv σ n D) (hs : Shape s) (hv : v < s.g.nv)
+    (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+    (hinterval : ∀ a b c, a ≤ b → b ≤ c → c < σ.length → E σ[a]! → E σ[c]! → E σ[b]!)
+    (hok : ∀ k, (∀ j, j ≤ k → result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) j s) = true) →
+      Loop1BodyOk D d edgeDir (iter (Spqr.loop1Body d edgeDir) k s))
+    (hf : ∀ k, (∀ j, j ≤ k → result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) j s) = true) →
+      let sk := iter (Spqr.loop1Body d edgeDir) k s
+      FrontierOwns orig base E sk ∧ orig + (if d < (nxtE sk).topDepth then 3 else 2) ≤ sk.tstack.length) :
+    ∀ k, (∀ j, j < k → result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) j s) = true) →
+      RgStep σ n D v s (iter (Spqr.loop1Body d edgeDir) k s) := by
+  intro k
+  induction k with
+  | zero => exact fun _ => RgStep.refl h hs
+  | succ k ih =>
+    intro hk
+    have st := ih fun j hj => hk j (by omega)
+    have hk' : ∀ j, j ≤ k → result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) j s) = true :=
+      fun j hj => hk j (by omega)
+    have ha := loop1BodyAdj_of_frontier (hf k hk').1 (hf k hk').2 st.ranges st.step.shape hnd
+      (st.hσ hσ) (hok k hk') hinterval
+    rw [iter_succ']
+    exact st.trans (RgStep.loop1Body st.ranges st.step.shape hnd (st.hσ hσ)
+      (by rw [st.step.g]; exact hv) (hok k hk') ha)
+
+theorem closeEarsAdj_of_frontier {o : DfsOut} {d orig v : Nat}
+    (hf : Frontier (o := o) d orig s) (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d)
+    (h : (feS₀ d o s).RangesInv σ n D) (hs : Shape (feS₀ d o s)) (hv : v < (feS₀ d o s).g.nv)
+    (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < (feS₀ d o s).g.ne) (ho : o.block <:+: σ)
+    (hpos : σ[n]? = some o.e) (hety : Items.type (feS₀ d o s).items (edgeItem (feS₀ d o s).g o.e) ≠ .V)
+    (hok : CloseEarsOk D o.dest d o.e s.stackDir[d]! (feS₀ d o s)) :
+    CloseEarsAdj σ n o.dest d o.e s.stackDir[d]! (feS₀ d o s) := by
+  have st : RgStep σ (n + 1) D v (feS₀ d o s) (ceS₁ o.dest d o.e (feS₀ d o s)) :=
+    RgStep.pushEdge h hs hnd _ _ _ hok.e_lt hok.q hety hok.ends hok.d_le hpos
+  have hf' : ∀ k, (∀ j, j ≤ k → result (loop1Cond d)
+      (iter (loop1Body d s.stackDir[d]!) j (ceS₁ o.dest d o.e (feS₀ d o s))) = true) →
+      let sk := iter (loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s))
+      FrontierOwns orig (s.tstack.drop (s.tstack.length - orig)) (subEdges o) sk ∧
+        orig + (if d < (nxtE sk).topDepth then 3 else 2) ≤ sk.tstack.length := by
+    intro k hk
+    obtain ⟨hown, hlen⟩ := hf.loop1 ht hlow k (fun j hj => hk j (by omega))
+    exact ⟨hown, hlen (hk k (Nat.le_refl _))⟩
+  refine ⟨hpos, hety, fun k hk => ?_⟩
+  have sk := RgStep.iter_loop1_ranges st.ranges st.step.shape (v := v) (by rw [st.step.g]; exact hv)
+    hnd (st.hσ hσ) (subEdges_interval hnd ho) hok.body hf' k (fun j hj => hk j (by omega))
+  exact loop1BodyAdj_of_frontier (hf' k hk).1 (hf' k hk).2 sk.ranges sk.step.shape hnd
+    (sk.hσ (st.hσ hσ)) (hok.body k hk) (subEdges_interval hnd ho)
+
+theorem finishTailAdj_of_vert {curV d : Nat} {hasVert isSingle : Bool}
+    (hv : hasVert = false → PushVertR σ n curV s) : FinishTailAdj σ n curV d hasVert isSingle s := by
+  refine ⟨hv, fun hh _ cur nxt rest hts a b c _ _ _ _ hp => ?_⟩
+  have ht := (hv hh).vtype
+  rw [after, pushVertTstack, run_pushTstack] at hts
+  have hc := (List.cons.inj hts).1
+  subst cur
+  exact (TEntry.piece_vertEntry _ _ _ _ ht _ hp).elim
+
 end Spqr.WalkState

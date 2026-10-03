@@ -1048,8 +1048,12 @@ from the corresponding `Frontier` fields and `MergeLateOk` / `CloseVertOk` guard
 `FrontierOwns.replaceNxt` / `mergeTop` / `congr` / `unwrap` preserve ownership through the
 local stack changes. `loop1BodyAdj_of_frontier` discharges both sites of a loop-1 body,
 including its optional S merge and following unwrap, from the frontier's 3/2-entry bound.
-All fifteen lemmas have only standard axioms. Full `FinishAdj` still needs loop 1's iterate
-induction, the vertex close and the P merge into the base; the frontier lemma alone applies only
+`RgStep.iter_loop1_ranges` threads preservation through these bodies, and
+`closeEarsAdj_of_frontier` supplies all of `CloseEarsAdj` from the loop-1 frontier export.
+`finishTailAdj_of_vert` discharges the tail merge because the pushed vertex has no piece
+edges; the `PushVertR` processed-edge bound remains a separate obligation.
+All eighteen lemmas have only standard axioms. Full `FinishAdj` still needs the vertex
+close and the P merge into the base; the frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece
 on that entry, so its `MergeAdj` obligation is vacuous.
 The final assembly must avoid importing `RangesFrontier` into `WalkWF`: the current
