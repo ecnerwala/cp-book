@@ -823,9 +823,20 @@ the child's end push (`L'`/`push'`/`D₃`, `pushEnd`). Derived: `tstack`, `back_
 `boundary`, `base_touch`, `bd_noVert`. Named admissions (each the field verbatim over the site's
 `sub`, `EarCtxAt.lean`): `earAt_tree_loop1_side`, `earAt_tree_loop1_touch`, `earAt_tree_loop1`,
 `earAt_tree_bottom`, `earAt_tree_loops`, `earAt_tree_late`, `earAt_tree_late_fo`,
-`earAt_tree_close`, `earAt_tree_bd_bridge`, `earAt_tree_bd_comp`, `earAt_tree_bd_term`,
-`earAt_tree_bd_side`, `earAt_tree_lower` — the chain-anchor clauses they need are not yet in
-`EarCtx`. Two `TreeSite` statement corrections while assembling: `ends` is guarded by
+`earAt_tree_close`, `earAt_tree_bd_term`, `earAt_tree_bd_side`, `earAt_tree_lower` — the
+chain-anchor clauses they need are not yet in `EarCtx`. Proved from the child's end shape:
+`earAt_tree_bd_bridge` (`lowval = d + 1` forces `cls = .bridge`; `bridge_bd` ⇒ `hv' = false`, the
+child's `top` is empty by `CtxTop.ret`, so `sub = L'` is the single end push `(y, d + 1)`) and
+`earAt_tree_bd_comp` (`d ≤ lowval ≠ d + 1` on a tree class forces `cls = .component`;
+`tree_comp_shape` gives `sub = [t₁, (y, d + 1)]` with `t₁.topDepth = d = lowval`). Elaboration
+caveat fixed alongside: the section hypothesis `hsub` of these lemmas was written with the local
+notation `s₃` inside a `variable` binder, which Lean elaborated to `pushEnd sorry sorry sorry`
+(hygiene: the notation's identifiers do not resolve inside `variable`); the hypothesis is now the
+explicit `(pushEnd sE D₃ L').tstack = sub ++ (L ++ s.tstack)`. Only the statements of these
+section lemmas were affected (their consumer `earAt_tree_of_ctx` passes the real `htstack`, and
+the `s₃` uses in theorem statements elaborate correctly); no theorem reported without `sorryAx`
+was involved, since a suppressed elaboration error still records `sorryAx`. Two `TreeSite`
+statement corrections while assembling: `ends` is guarded by
 `d ≤ cls.lowval d` (only a boundary out has every subtree edge's endpoints in `v :: child.verts`;
 for a returning out a back edge leaves the subtree — `ends` is consumed only by `boundary`), and
 `hpush` records the actual push condition of `walkOutPre`, `hasVert = false ∧ lowval < d ∧

@@ -660,7 +660,7 @@ theorem tree_comp_shape : cls = .component → hv' = true ∧ ∃ t₁ f₂,
 /-! ### Named admissions (PROOF.md §4.2b): the `EarFinish` fields at a tree-edge site not yet
 derived from the child's end-of-outs context. Each is the field verbatim, over the site's `sub`. -/
 section
-variable (sub : List TEntry) (hsub : (s₃).tstack = sub ++ (L ++ s.tstack))
+variable (sub : List TEntry) (hsub : (pushEnd sE D₃ L').tstack = sub ++ (L ++ s.tstack))
 include hsub
 
 theorem earAt_tree_loop1_side : (o₀).cls.lowval d < d → ∀ hi, Loop1Range d sub hi →
@@ -708,12 +708,71 @@ theorem earAt_tree_close : (o₀).cls.isTree = true → (o₀).cls.lowval d < d 
 
 theorem earAt_tree_bd_bridge : (o₀).cls.isTree = true → (o₀).cls.lowval d = d + 1 →
     ∃ t, sub = [t] ∧ t.vStart = (o₀).dest ∧ t.topDepth = d + 1 := by
-  sorry
+  intro _ hl
+  change OutClass.lowval d cls = d + 1 at hl
+  have hb : cls = .bridge := by
+    cases hc : cls with
+    | bridge => rfl
+    | component => rw [hc] at hl; simp [OutClass.lowval] at hl
+    | selfLoop => rw [hc] at hl; simp [OutClass.lowval] at hl
+    | ret lv k =>
+      have := H.cls_ret lv k hc
+      rw [hc] at hl; simp [OutClass.lowval] at hl; omega
+  have hC' := H.ctx'
+  have hbd := H.bridge_bd hb
+  have hv'f : hv' = false := by
+    cases hh : hv'
+    · rfl
+    · obtain ⟨o', ho', hl'⟩ := hC'.hv_ret hh
+      exact absurd (hbd o' ho') (Nat.not_le.2 hl')
+  have hpf : push = false := by
+    cases hp : push
+    · rfl
+    · have := (H.hpush.1 hp).2.1
+      omega
+  have hp' : push' = true := H.hpush'.2 hv'f
+  have hdir : dir' = true := H.hdir' hp'
+  have hL : L = [] := by rw [H.hL, hpf]; rfl
+  have hL' : L' = [⟨y, d + 1, sE.nxtEdgeIdx, setSides true [vertItem y] []⟩] := by
+    rw [H.hL', hp', hdir]; rfl
+  have hsEts : sE.tstack = s.tstack := by
+    obtain ⟨top', htop', hCT'⟩ := hC'.top
+    rw [hL, List.nil_append] at htop'
+    cases top' with
+    | nil => simpa using htop'
+    | cons t tl =>
+      obtain ⟨o', ho', hl'⟩ := hCT'.ret (List.cons_ne_nil _ _)
+      exact absurd (hbd o' ho') (Nat.not_le.2 hl')
+  have h : L' ++ sE.tstack = sub ++ (L ++ s.tstack) := hsub
+  rw [hL, hL', hsEts, List.nil_append] at h
+  exact ⟨_, (List.append_cancel_right h).symm, rfl, rfl⟩
 
 theorem earAt_tree_bd_comp : (o₀).cls.isTree = true → d ≤ (o₀).cls.lowval d → (o₀).cls.lowval d ≠ d + 1 →
     ∃ t₁ t₂, sub = [t₁, t₂] ∧ t₁.vStart = (o₀).dest ∧ t₁.topDepth = (o₀).cls.lowval d ∧
       t₂.vStart = (o₀).dest ∧ t₂.topDepth = d + 1 := by
-  sorry
+  intro ht hge hne
+  change OutClass.isTree cls = true at ht
+  change d ≤ OutClass.lowval d cls at hge
+  change OutClass.lowval d cls ≠ d + 1 at hne
+  have hc : cls = .component := by
+    cases hc : cls with
+    | component => rfl
+    | bridge => rw [hc] at hne; simp [OutClass.lowval] at hne
+    | selfLoop => rw [hc] at ht; simp [OutClass.isTree] at ht
+    | ret lv k =>
+      have := H.cls_ret lv k hc
+      rw [hc] at hge; simp [OutClass.lowval] at hge; omega
+  obtain ⟨hv't, t₁, f₂, hts, hvs, htop, -⟩ := tree_comp_shape H hc
+  have hp' : push' = false := by
+    cases hp : push'
+    · rfl
+    · rw [H.hpush'.1 hp] at hv't; cases hv't
+  have hL' : L' = [] := by rw [H.hL', hp']; rfl
+  have h : L' ++ sE.tstack = sub ++ (L ++ s.tstack) := hsub
+  rw [hL', List.nil_append, hts] at h
+  have h' : [t₁, ⟨y, d + 1, f₂, ([], [vertItem y])⟩] ++ (L ++ s.tstack) = sub ++ (L ++ s.tstack) := h
+  refine ⟨t₁, _, (List.append_cancel_right h').symm, hvs, ?_, rfl, rfl⟩
+  rw [htop]; subst hc; rfl
 
 theorem earAt_tree_bd_term : (o₀).cls.isTree = true → d ≤ (o₀).cls.lowval d → ∀ u ∈ (s₃).tstack.tail,
     (s₃).g.Touches (u.edges (s₃).g (s₃).items) v → u.vStart = v ∨ u.topDepth ≤ d := by
