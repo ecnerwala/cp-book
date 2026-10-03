@@ -1,6 +1,7 @@
 import Spqr.Proofs.RSkelFinish
 import Spqr.Proofs.RInvWalk
 import Spqr.Proofs.RLoop1
+import Spqr.Proofs.RVert
 
 /-!
 # `Items.RSkelInv` through the walk (PROOF.md §4.5)
@@ -119,14 +120,11 @@ theorem loop1_r_keepsR' {D v d : Nat} {o : DfsOut} {hi lo base : List TEntry}
   rw [loop1Body_run_of_R hb.tstack hb.cur_top hb.nxt_top hty]
   exact rCloseItems_rSkelInv hinv st.shape hb hR' st.inv (hg ▸ h2) (hg ▸ hsp) (hg ▸ hrt) _ hside
 
-/-- Admitted (PROOF.md §4.5): the type-1 vertex close of a returning tree edge with
-`isSingle = false` (`maybeUnwrapNxt .R` at `cvS₁`, then two merges, the retarget to `curV` and
-`finishTstackTop`) builds an R item whose skeleton is 3-connected: the pieces are the items of
-the merged ear (the whole subtree ear at `curV` plus the back edge and the vertex entry), the
-parent piece its complement at `(curV, stackVerts[lv])`. The vertex-level analogue of
-`RBranch.rSkel3`: it needs the merged entry's items to be pairwise edge-disjoint maximal pieces
-(`RInvH` at `feS₂`, `FinishRShape.unwrap`) and the HT argument that no separation pair survives
-(`RCloseShape.threeConnected`). -/
+/-- The type-1 vertex close of a returning tree edge with `isSingle = false` (`maybeUnwrapNxt .R`
+at `cvS₁`, then two merges, the retarget to `curV` and `finishTstackTop`) builds an R item whose
+skeleton is 3-connected: `vClose_rSkel3` (`RVert.lean`) on the stack `c :: py :: vy :: base` of
+`EarClose` at `feS₂`, with the `RCloseShape` of its data from the named admission
+`closeVert_type1_rCloseShape`. -/
 theorem closeVert_type1_rSkel3 {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsOut)
     (origTstack : Nat) (ho : o.cls = .ret lv kind) (hk : kind ≠ .backEdge) (hlow : lv < d)
     (hv : curV < s.g.nv) (hi : s.Inv' D) (hs : Shape s)
@@ -140,7 +138,39 @@ theorem closeVert_type1_rSkel3 {D : Nat} (curV d lv : Nat) (kind : RetKind) (o :
     (h1 : o.cls.isType1 = true) (hsingle : feSingle d o s = false) :
     Items.RSkel3 s.g (feS₃ curV d o origTstack s).items
       (cvS₁ o.cls.isType1 origTstack (feSingle d o s) (feS₂ d o s)).items.size := by
-  sorry
+  have ht : o.cls.isTree = true := by
+    rw [ho]; cases kind <;> first | rfl | exact absurd rfl hk
+  have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
+  have hlow' : o.cls.lowval d < d := by omega
+  obtain ⟨sub, base, hbl, hE⟩ := hshape.ear
+  obtain ⟨c, mid, py, vy, hC⟩ := hE.close ht hlow'
+  rw [hlv] at hC
+  obtain ⟨rfl, -⟩ := hC.type1 h1
+  have hts : (feS₂ d o s).tstack = c :: py :: vy :: base := by simpa using hC.tstack
+  have st₀ : Step D curV s (feS₀ d o s) :=
+    Step.modifyVs hi hs (edgeItem s.g o.e) _ (by show 1 + s.g.nv + o.e < _; have := hok.e_lt; omega)
+  have hv₀ : curV < (feS₀ d o s).g.nv := by rw [st₀.g]; exact hv
+  have st₁ : Step D curV _ (feS₁ d o s) := Step.closeEars st₀.inv st₀.shape hv₀ (hok.ears ht)
+  have hv₁ : curV < (feS₁ d o s).g.nv := by rw [st₁.g]; exact hv₀
+  have st₂ : Step D curV _ (feS₂ d o s) := Step.mergeLate st₁.inv st₁.shape hv₁ (hok.late ht)
+  have htop : (vMerged curV s.stackDir[d]! c py vy).topDepth = lv := by
+    rw [vMerged_topDepth]
+    have := hC.c_top; have := hC.py_top; have := hC.vy_top
+    omega
+  have hfin := (hok.vert ht rfl).finish h1
+  rw [h1, hsingle, cvS₅_type1 curV s.stackDir[d]! origTstack hts] at hfin
+  have hside := hfin.side
+  simp only [curE, List.head!_cons] at hside
+  have hRC := closeVert_type1_rCloseShape curV d lv kind o origTstack ho hk hlow hv hi hs hok
+    hfront hshape h2 hsp hrt hd hcur hanc hR h1 hsingle hbl hE hC
+  rw [← htop] at hRC
+  rw [← hC.g]
+  show Items.RSkel3 (feS₂ d o s).g
+    ((closeVert' curV s.stackDir[d]! o.cls.isType1 origTstack (feSingle d o s)).run (feS₂ d o s)).2.items
+    (cvS₁ o.cls.isType1 origTstack (feSingle d o s) (feS₂ d o s)).items.size
+  rw [h1, hsingle]
+  exact vClose_rSkel3 st₂.shape hts hside hRC (by rw [hC.g]; exact hsp) (by rw [hC.g]; exact hrt)
+    (by rw [hC.g]; exact h2)
 
 /-- `KeepsR` at a returning `finishEdge` site of the walk induction (`lv < d`), from the site
 facts of `rrOut`: the Loop-1 R close by `loop1_r_keepsR`, the type-1 vertex close by
