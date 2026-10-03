@@ -103,5 +103,12 @@ structure CloseContent (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert :
           ¬ t.edges (l1Pre d o s k).g (l1Pre d o s k).items e) ∧
       VContent t.vStart (l1Node d o s k) t (l1Pre d o s k)
 
+variable {σ : List Nat} {n D : Nat} {s : WalkState}
+
+theorem after_mergeTstackTops_eq {a b : TEntry} {rest : List TEntry} (hts : s.tstack = a :: b :: rest) :
+    after mergeTstackTops s = { s with tstack := TEntry.mergeInto a b :: rest } := by
+  show (mergeTstackTops.run s).2 = _; rw [mergeTstackTops_run_eq s a b rest hts]
+
+
 end WalkState
 end Spqr
