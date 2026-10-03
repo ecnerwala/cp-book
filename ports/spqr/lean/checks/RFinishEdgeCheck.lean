@@ -1,4 +1,4 @@
-import Spqr.Proofs.RInvFrame
+import Spqr.Proofs.RInvTree
 
 /-!
 # Empirical check of the provisional-frontier `finishEdge` R contract (`finishEdge_rInvTop`)
@@ -17,7 +17,11 @@ edges) and `post` (after `finishEdge`):
 * `D`: the whole stack is edge-disjoint.
 A-failures are reported as `expected-old-contract` and do not count: entries topping out above `d`
 are provisional until the walk returns to their top (`checks/RFinishEdgeCounter.lean`,
-`Deep`/`Base`). B/D failures, Loop-1 emulation mismatches and the R-branch `RTop` checks count.
+`Deep`/`Base`). B/D failures, Loop-1 emulation mismatches, the R-branch `RTop` checks and `FinishRShape`
+(`Proofs/RInvTree.lean`, the call-site hypotheses of the tree-edge branch: the pending tree edge
+is unowned, after loop 1 every frontier entry below the top is settled, the type-1 `closeVert`
+unwraps an exempt entry, the first-edge vertex entry takes unowned edges; plus the admitted
+`finishEdge_tree_top_settled` (a): the top after the P-check is settled; `shape` lines) count.
 
 `dfs` is `DfsData.ofForest forest`; `Anc` is read off the parent map, `Type2Pair` is evaluated
 through `NoBothSides`/`BetweenStays`, `SepClass a b` through the components of `g − {a, b}`.
@@ -236,6 +240,41 @@ partial def loop1Emu (D : Dfs) (d : Nat) (edgeDir : Bool) (s : WalkState) (fuel 
     (s', bad ++ bad')
   else (s, [])
 
+/-- `Exempt v d t`, decidably. -/
+def exempt (v d : Nat) (t : TEntry) : Bool := t.topDepth < d || t.vStart == v
+
+/-- `d ≤ t.topDepth → t.vStart ≠ v → EntryR t`, as failure lines. -/
+def settledEntry (D : Dfs) (v d : Nat) (s : WalkState) (t : TEntry) (tag : String) : List String :=
+  if exempt v d t then [] else (entryR D s t).map fun b => s!"{tag} {showT t}: {b}"
+
+/-- `FinishRShape dfs v d o orig hv s` (`Proofs/RInvTree.lean`) plus the admitted
+`finishEdge_tree_top_settled` (a) (the top after the P-check, first-edge case), computed on the
+library's `feS₁`, `feS₂`, `feP`. -/
+def shapeCheck (D : Dfs) (v d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
+    List String := Id.run do
+  let mut bad := []
+  for t in s.tstack do
+    if (t.spans.1 ++ t.spans.2).any fun i => (belowList s i).contains o.e then
+      bad := s!"pend owned by {showT t}" :: bad
+  let s₁ := WalkState.feS₁ d o s
+  for t in s₁.tstack.tail.take (s₁.tstack.length - 1 - orig) do
+    bad := settledEntry D v d s₁ t "settled" ++ bad
+  let s₂ := WalkState.feS₂ d o s
+  if hv && o.cls.isType1 then
+    match s₂.tstack with
+    | _ :: b :: _ => if !exempt v d b then bad := s!"unwrap nonexempt nxt={showT b}" :: bad
+    | _ => pure ()
+  if !hv then
+    let sP := WalkState.feP v d o s
+    let vE := belowList sP (vertItem v)
+    for t in sP.tstack do
+      if (t.spans.1 ++ t.spans.2).any fun i => (belowList sP i).any vE.contains then
+        bad := s!"vert_own {showT t}" :: bad
+    match sP.tstack with
+    | t :: _ => bad := settledEntry D v d sP t "ptop" ++ bad
+    | [] => pure ()
+  return bad.reverse
+
 def isBlock (g : Graph) : Bool := (List.range g.nv).all fun v => Id.run do
   let mut seen := if g.ne == 0 then [] else [0]
   for _ in List.range g.ne do
@@ -275,6 +314,8 @@ partial def outs (D : Dfs) (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkS
       let (sEnd, rbad) := loop1Emu D d s.stackDir[d]! sp sp.tstack.length
       (if sEnd.tstack.map showT != (WalkState.feS₁ d o s).tstack.map showT then [s!"emu-mismatch {tag}"] else []) ++
         tagged "" (rbad.map fun b => if b.startsWith "stat:" then b else s!"{b} {tag}") else []
+    let shp := if site && o.isTree then
+      tagged s!"shape {tag}" ("stat:shape-site" :: shapeCheck D v d o orig hv s) else []
     let (hv, s) := (finishEdge v d o orig hv).run s
     let nB := (s.tstack.filter fun t => t.vStart != v && t.topDepth ≥ d).length
     let post := if site then
@@ -282,7 +323,7 @@ partial def outs (D : Dfs) (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkS
       tagged s!"postB {tag}" ((List.replicate nB "stat:postB-entry") ++ checkEntries D d s.tstack s (fun t => t.vStart != v && t.topDepth ≥ d)) ++
       tagged s!"postD {tag}" (disjoint s) else []
     let (hv, s, bad', n') := outs D v d rest hv s
-    (hv, s, bad ++ pre ++ rcl ++ post ++ bad', n + n' + (if site then 1 else 0))
+    (hv, s, bad ++ pre ++ rcl ++ shp ++ post ++ bad', n + n' + (if site then 1 else 0))
 end
 
 def runGraph (g : Graph) (vo eo : List Nat) (tern : Bool) : List String × Nat := Id.run do
@@ -370,5 +411,5 @@ def main : IO UInt32 := do
           IO.println s!"seed={seed} tern={tern}: nv={g.nv} edges={g.edges} vo={vo} eo={eo}"
           for b in bad do IO.println s!"  {b}"
   IO.println s!"stats={stats.toList}"
-  IO.println s!"cases={toks[0]!} + fixed + 6000 extra; block cases={blocks}; finishEdge sites checked (both ternarize)={sites}; old-contract-A runs failing (expected)={expectedA}; failures (contract B / disjointness / loop-1 emulation / R-branch RTop)={fails}"
+  IO.println s!"cases={toks[0]!} + fixed + 6000 extra; block cases={blocks}; finishEdge sites checked (both ternarize)={sites}; old-contract-A runs failing (expected)={expectedA}; failures (contract B / disjointness / loop-1 emulation / R-branch RTop / FinishRShape)={fails}"
   return if fails == 0 then 0 else 1

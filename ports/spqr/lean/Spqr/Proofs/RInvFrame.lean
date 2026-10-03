@@ -12,10 +12,11 @@ transports them across the bookkeeping steps of `finishEdge`: `modifyItem` of a 
 (`feS₀`), `setStackDir`, the `firstOccurrence`/`nxtEdgeIdx` update, and `pushVertTstack` (a vertex
 entry has no edges and no pieces: `EntryR.vert`).
 
-The content-carrying blocks live in `Proofs/RInvBack.lean`: the back-edge branch of
-`finishEdge_rInvTop` is proved there, the tree-edge branch (Loop 1's closes, Loop 2, `closeVert`,
-the P-check) is the admitted `finishEdge_tree_rInvTop`, and `loop1_rBranch` below admits the
-stack shape at Loop 1's R branch. `WalkTreeRReturnSpec` states the provisional-return
+The content-carrying blocks live in `Proofs/RInvBack.lean` (the back-edge branch of
+`finishEdge_rInvTop`) and `Proofs/RInvTree.lean` (the tree-edge branch: Loop 1 positionally,
+Loop 2, `closeVert` and the P-check below the top; the `EntryR` of the entry built on top is the
+admitted `finishEdge_tree_top_settled`), and `loop1_rBranch` below admits the stack shape at
+Loop 1's R branch. `WalkTreeRReturnSpec` states the provisional-return
 obligation. `loop1_r_threeConnected` combines the last admission with `RBranch.threeConnected`.
 -/
 
