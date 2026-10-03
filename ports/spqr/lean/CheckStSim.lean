@@ -102,7 +102,7 @@ partial def chkTree (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : 
     report st (baseOk s base) s!"base changed at end of walkTree {v} d={d}"
     report st (stReadB s.items (above s base) ps)
       s!"read at end of walkTree {v} d={d}: {(readStack (above s base)).flatMap (leavesB s.items)} vs {stNest ps}"
-    for m in stItemsB g s (refBlocks g (prev ++ [truncTree fs t])) do
+    for m in stItemsB g s (simBlocks g prev fs (DirsOf s d) ++ (refTree g t d (DirsOf s d)).2) do
       report st false s!"items at end of walkTree {v} d={d}: {m}"
     return s
 
@@ -114,7 +114,7 @@ partial def chkOuts (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : 
   report st (stReadB s.items (above s base) ps)
     s!"read at out-edge {done.length} of {v} d={d}: {(readStack (above s base)).flatMap (leavesB s.items)} vs {stNest ps}"
   report st (hv == hasVert) s!"hasVert at out-edge {done.length} of {v} d={d}: ref {hv} walk {hasVert}"
-  for m in stItemsB g s (refBlocks g (prev ++ [truncTree fs (.node v done)])) do
+  for m in stItemsB g s (simBlocks g prev fs (DirsOf s d) ++ (refOuts g v d (DirsOf s d) done false).2.1) do
     report st false s!"items at out-edge {done.length} of {v} d={d}: {m}"
   match outs with
   | [] => return (hasVert, s)
@@ -136,13 +136,13 @@ partial def chkOut (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : L
       let s : WalkState := { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
       chkTree st g prev (fs ++ [⟨v, done, o⟩]) child (d + 1) s
     | .back .. => pure s
-  let psChild := match o with
-    | .tree _ _ child => (refTree g child (d + 1) (DirsOf s (d + 1))).1
-    | .back .. => []
+  let (psChild, blChild) := match o with
+    | .tree _ _ child => refTree g child (d + 1) (DirsOf s (d + 1))
+    | .back .. => ([], [])
   report st (baseOk s orig) s!"orig changed before finishEdge {o.e} of {v} d={d}"
   report st (stReadB s.items (above s orig) psChild)
     s!"read before finishEdge {o.e} of {v} d={d}: {(readStack (above s orig)).flatMap (leavesB s.items)} vs {stNest psChild}"
-  for m in stItemsB g s (refBlocks g (prev ++ [truncTree fs (.node v (done ++ [o]))])) do
+  for m in stItemsB g s (simBlocks g prev fs (DirsOf s d) ++ (refOuts g v d (DirsOf s d) done false).2.1 ++ blChild) do
     report st false s!"items before finishEdge {o.e} of {v} d={d}: {m}"
   return (finishEdge v d o orig.length hasVert).run s
 end
