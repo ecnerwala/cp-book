@@ -340,4 +340,81 @@ theorem walkOutPre_st {g : Graph} {blocks : List StBlock} {base new : List TEntr
     simp only [hp, Bool.false_eq_true, ↓reduceIte, List.append_nil]
     exact hR₁
 
+theorem DirsOf_getD (s : WalkState) {k d : Nat} (h : k < d) : (DirsOf s d).getD k false = s.stackDir[k]! := by
+  simp [DirsOf, List.getD_eq_getElem?_getD, List.getElem?_range h]
+
+/-- The state after `finishP` on a returning edge: `feS₂` (tree) resp. `feBack` (back edge). -/
+def fePState (curV lv d : Nat) (o : DfsOut) (s : WalkState) : WalkState :=
+  if o.cls.isTree then after (finishP curV lv o.cls.isType1) (feS₂ d o s)
+  else after (finishP curV lv o.cls.isType1) (feBack curV lv d o s)
+
+/-- `finishEdge` for a returning edge (`lowval = lv < d`): the reference's `mid ++ post` pieces for
+`o` (with `lowDir = !stackDir[d]`, `sd = stackDir[d]`) are appended to `qs`, above the untouched `B`. -/
+theorem finishEdge_st {D d lv : Nat} {kind : RetKind} {o : DfsOut} {s : WalkState} {curV : Nat}
+    {hasVert : Bool} {sub pre B : List TEntry} {g : Graph} {ps qs : List StPiece}
+    {blocks : List StBlock}
+    (hE : s.EarFinish curV d o hasVert sub (pre ++ B)) (hi : s.Inv' D) (hs : Shape s)
+    (hD : D = if o.cls.isTree then d + 1 else d)
+    (hok : FinishOk D curV d lv o (pre ++ B).length hasVert s)
+    (ho : o.cls = .ret lv kind) (hlow : lv < d)
+    (hv : curV < s.g.nv) (he : o.e < s.g.ne) (hq : Items.ch s.items (edgeItem s.g o.e) = [])
+    (hends : Items.PairEq (if o.cls.isTree then (o.dest, s.stackVerts[d]!) else (curV, s.stackVerts[lv]!))
+      s.g.edges[o.e]!)
+    (hqty : Items.type s.items (edgeItem s.g o.e) = .Q)
+    (hsd : s.stackDir[d]! = !s.stackDir[lv]!)
+    (hB : ∀ t ∈ B, t.vStart ≠ curV)
+    (hpre : hasVert = false → pre = [] ∧ qs = [])
+    (hvf : hasVert = false →
+      (∀ p, ¬ Items.IsParent (fePState curV lv d o s).items p (vertItem curV)) ∧
+      vertItem curV ∉ readStack (fePState curV lv d o s).tstack)
+    (hR : StRead s.items sub ps) (hRq : StRead s.items pre qs) (hI : StItems g s blocks) :
+    let r := (finishEdge curV d o (pre ++ B).length hasVert).run s
+    r.1 = true ∧ r.2.g = s.g ∧
+    (∀ k, k ≤ d → r.2.stackDir[k]! = s.stackDir[k]!) ∧
+    ∃ new', r.2.tstack = new' ++ B ∧
+      StRead r.2.items new'
+        (qs ++
+          (if o.cls.isTree then
+            (if hasVert then
+              [⟨!s.stackDir[d]!, stNest (ps ++ [⟨s.stackDir[d]!, [edgeItem s.g o.e]⟩])⟩]
+            else ps ++ [⟨s.stackDir[d]!, [edgeItem s.g o.e]⟩])
+          else [⟨!s.stackDir[d]!, [edgeItem s.g o.e]⟩]) ++
+          (if hasVert then [] else [⟨s.stackDir[d]!, [vertItem curV]⟩])) ∧
+      StItems g r.2 blocks := by
+  dsimp only
+  have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
+  have hge : ¬ (lv ≥ d) := by omega
+  have hr : (finishEdge curV d o (pre ++ B).length hasVert).run s =
+      if o.cls.isTree = true then
+        (finishTree curV d o (pre ++ B).length hasVert s.stackDir[d]!).run (feS₀ d o s)
+      else (finishBack curV d o hasVert).run (feS₀ d o s) := by
+    rw [finishEdge_eq]
+    simp only [finishEdge', hlv, hge, ↓reduceIte, WalkM.run_bind, WalkM.get_run, run_stackDir, run_makeVs,
+      run_modifyItem]
+    by_cases ht : o.cls.isTree = true <;> simp only [ht, ↓reduceIte, Bool.false_eq_true] <;> rfl
+  rw [hr]
+  by_cases ht : o.cls.isTree = true
+  · rw [if_pos ht]
+    rw [if_pos ht] at hD hends
+    simp only [fePState, ht, ↓reduceIte] at hvf
+    have hT := finishTree_st hE hi hs hD hok ho hlow ht hv he hq hends hqty hsd hB hpre hvf hR hRq hI
+    dsimp only at hT
+    obtain ⟨h1, hg, hdirs, new', hts, hR', hI'⟩ := hT
+    refine ⟨h1, hg, hdirs, new', hts, ?_, hI'⟩
+    simp only [ht, ↓reduceIte]
+    cases hasVert <;>
+      simp only [Bool.false_eq_true, ↓reduceIte, List.append_assoc, List.append_nil, List.singleton_append,
+        List.cons_append, List.nil_append] at hR' ⊢ <;> exact hR'
+  · have ht' : o.cls.isTree = false := by simpa using ht
+    rw [if_neg ht]
+    rw [if_neg ht] at hD hends
+    simp only [fePState, ht, Bool.false_eq_true, ↓reduceIte] at hvf
+    have hBk := finishBack_st hE hi hs hD hok ho hlow ht' hv he hq hends hqty hB hvf hRq hI
+    dsimp only at hBk
+    obtain ⟨h1, hg, hsd', new', hts, hR', hI'⟩ := hBk
+    refine ⟨h1, hg, fun k _ => by rw [hsd'], new', hts, ?_, hI'⟩
+    simp only [ht, Bool.false_eq_true, ↓reduceIte]
+    simp only [hsd, Bool.not_not, List.append_assoc] at hR' ⊢
+    exact hR'
+
 end Spqr
