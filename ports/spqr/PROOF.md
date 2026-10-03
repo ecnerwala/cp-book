@@ -2530,7 +2530,11 @@ with its cap re-inserted by `RotationSystem.insert` between its two cofacial exp
 (`WF.face` from `insert_not_sameFaceOrbit`, `WF.conn` from `edgesConn_of_sameOrbit`); the final
 `Capped` certificate then needs the inverse of `insert` (delete the cap edge, pair its four
 neighbours, the two sides merge into one face) — a dual lemma `IsPlanarEmbedding.uninsert` still
-to be written.
+to be written. Its hypothesis "the cap's two sides are distinct faces" is the classical
+edge-on-a-cycle fact, which needs the genus inequality
+`numFaceOrbits + 2·numNonIsolated ≤ 2·(2·numComponents + es.length)` for arbitrary valid rotation
+systems; the repo does not have it (`twoSum_planar` assumes `face ∨ conn`). The S/P routes via
+`join`/`parJoin` do not need it.
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through `walk_items_wf`,
 `spqrTree_r_three_connected`, `spqrTree_pieceSep`, `nodePlanar_sound_R` and
 `nodeFold_capped`.
