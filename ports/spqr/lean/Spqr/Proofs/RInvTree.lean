@@ -746,6 +746,9 @@ structure FinishRShape (dfs : DfsData) (curV d : Nat) (o : DfsOut) (origTstack :
   vert_own : hasVert = false → ∀ t ∈ (feP curV d o s).tstack, ∀ e,
     t.edges (feP curV d o s).g (feP curV d o s).items e →
     ¬ Items.EdgeBelow (feP curV d o s).g (feP curV d o s).items (vertItem curV) e
+  /-- The ear contract at the site (`EarFinish` over some split `sub ++ base` of the stack with
+  `base.length = origTstack`), as `FinishBook.ear` provides it at the `walkOut` call site. -/
+  ear : s.EarAt curV d o origTstack hasVert
 
 /-- The top entry (if any) starts at `v`. -/
 def TopStart (v : Nat) (s : WalkState) : Prop := ∀ t rest, s.tstack = t :: rest → t.vStart = v
@@ -847,18 +850,113 @@ theorem finishEdge_tree_vert_topStart (curV d lv : Nat) (kind : RetKind) (o : Df
   exact topStart_finishRest_vert (k := d) o.cls.isType1 (feB₃ curV d o origTstack s)
     (topStart_closeVert' _ _ _ _)
 
-/-- Admitted: (Lemma 4.3, R-maximality content proper, first-edge case) the entry the tree-edge branch builds on
-top of the stack is `EntryR` whenever it tops out at depth `≥ d` and does not start at `curV`:
-after the P-check (`feP`; the first-edge vertex entry is pushed on top of it) and in the output
-(the vertex entry, or the old top with the vertex entry merged in). With `hasVert = true` the top
-starts at `curV` after `closeVert` and is exempt (`finishEdge_tree_vert_topStart`), so only the
-first-edge case is content. Its pieces are the S/P/R items closed by loop 1 (the complement of a closed
+theorem l2Cur_topDepth_le (c₀ : TEntry) (done : List TEntry) :
+    (l2Cur c₀ done).topDepth ≤ c₀.topDepth := by
+  induction done generalizing c₀ with
+  | nil => exact Nat.le_refl _
+  | cons t R ih =>
+    rw [l2Cur_cons]
+    exact Nat.le_trans (ih _) (Nat.min_le_right _ _)
+
+theorem topStart_pushVert {v : Nat} (k : Nat) : TopStart v (after (pushVertTstack v k) s) := by
+  intro t rest hts
+  have h : (after (pushVertTstack v k) s).tstack =
+      ⟨v, k, s.nxtEdgeIdx, setSides s.stackDir[k]! [vertItem v] []⟩ :: s.tstack := rfl
+  rw [h] at hts; cases hts; rfl
+
+/-- The P-check leaves the top alone, or (when it fires) replaces it by one starting at `v`. -/
+theorem finishP_top {v lowval : Nat} (isType1 : Bool) {c : TEntry} {rest : List TEntry}
+    (hts : s.tstack = c :: rest) :
+    ∃ t' rest', (after (Spqr.finishP v lowval isType1) s).tstack = t' :: rest' ∧
+      (t'.vStart = v ∨ (t' = c ∧ rest' = rest)) := by
+  show ∃ t' rest', ((Spqr.finishP v lowval isType1).run s).2.tstack = t' :: rest' ∧ _
+  simp only [Spqr.finishP, WalkM.run_bind, run_condP]
+  by_cases hc : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == v) &&
+      (s.tstack.tail.head!.topDepth == lowval)) = true
+  · simp only [hc, ↓reduceIte, WalkM.run_bind]
+    simp only [Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hc
+    match rest, hts with
+    | [], hts => rw [hts] at hc; simp at hc
+    | b :: rest, hts =>
+      have hbv : b.vStart = v := by rw [hts] at hc; exact hc.1.2
+      obtain ⟨b', hts₁, hb'v, -⟩ := maybeUnwrapNxt_tstack .P c b rest hts
+      have hts₁' : ((maybeUnwrapNxt .P).run s).2.tstack = c :: b' :: rest := hts₁
+      have hts₂ : (mergeTstackTops.run ((maybeUnwrapNxt .P).run s).2).2.tstack =
+          TEntry.mergeInto c b' :: rest := by
+        rw [mergeTstackTops_run_eq _ c b' rest hts₁']
+      obtain ⟨x', items, he, hv, -, -⟩ := finishTstackTop_run ((maybeUnwrapNxt .P).run s).1 _ hts₂
+      refine ⟨x', rest, ?_, .inl ?_⟩
+      · rw [he]
+      · rw [hv]; show b'.vStart = v; rw [hb'v, hbv]
+  · have h' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == v) &&
+        (s.tstack.tail.head!.topDepth == lowval)) = false := Bool.eq_false_iff.2 hc
+    simp only [h', Bool.false_eq_true, ↓reduceIte]
+    exact ⟨c, rest, hts, .inr ⟨rfl, rfl⟩⟩
+
+/-- The P-check keeps the top settled: when it fires the new top starts at `v`. -/
+theorem settledTop_finishP {v lowval d : Nat} (isType1 : Bool) (h : s.SettledTop dfs v d) :
+    (after (Spqr.finishP v lowval isType1) s).SettledTop dfs v d := by
+  show ((Spqr.finishP v lowval isType1).run s).2.SettledTop dfs v d
+  simp only [Spqr.finishP, WalkM.run_bind, run_condP]
+  by_cases hc : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == v) &&
+      (s.tstack.tail.head!.topDepth == lowval)) = true
+  · simp only [hc, ↓reduceIte, WalkM.run_bind]
+    simp only [Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hc
+    match hts : s.tstack with
+    | [] | [_] => rw [hts] at hc; simp at hc
+    | a :: b :: rest =>
+      have hbv : b.vStart = v := by rw [hts] at hc; exact hc.1.2
+      obtain ⟨b', hts₁, hb'v, -⟩ := maybeUnwrapNxt_tstack .P a b rest hts
+      have hts₁' : ((maybeUnwrapNxt .P).run s).2.tstack = a :: b' :: rest := hts₁
+      have hts₂ : (mergeTstackTops.run ((maybeUnwrapNxt .P).run s).2).2.tstack =
+          TEntry.mergeInto a b' :: rest := by
+        rw [mergeTstackTops_run_eq _ a b' rest hts₁']
+      refine TopStart.settledTop (topStart_finishTstackTop _ ?_)
+      intro t r ht
+      rw [hts₂] at ht; cases ht
+      show b'.vStart = v
+      rw [hb'v, hbv]
+  · have h' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == v) &&
+        (s.tstack.tail.head!.topDepth == lowval)) = false := Bool.eq_false_iff.2 hc
+    simp only [h', Bool.false_eq_true, ↓reduceIte]
+    exact h
+
+/-- **Named admission** (Lemma 4.3, R-maximality content proper, first-edge case). Exact
+obligation: at a first-edge (`hasVert = false`) tree-edge site with `lowval < d`, the top `c` of
+the stack after loops 1–2 (`feS₂`) is `EntryR` whenever `c.topDepth = d` and `c.vStart ≠ curV`.
+By `EarFinish.loops`, `lowval ≤ c.topDepth ≤ d`; `c.topDepth = d` forces loop 2 not to have
+fired (`finishEdge_tree_top_settled_first`: a loop-2 merge pulls the top down to the entry below
+the loop-1 output, which tops out below `d` by the exit condition of loop 1), so `c` is the
+loop-1 output: the tree edge `o.e` plus the S/P/R items closed by loop 1 (`Loop1Spec`,
+`loop1_rBranch`), each a maximal piece at `(nxt.vStart, curV)` (the complement of a closed
 `(nxt.vStart, d)` set is one class because all `(nxt.vStart, d)` classes were P-merged when
-`nxt.vStart` was finished and the path class is merged here), merged by loop 2 and `closeVert`;
-the R close is `loop1_rBranch`. Everything else the branch does keeps the entries below the top
-settled (`finishEdge_tree_rInvTop_of_top`). Checked on seeds 0..300 and 6000 extra multigraphs,
-both ternarize modes (`checks/RFinishEdgeCheck.lean`, contract B, 6414 sites; `ptop` lines, 278
-non-exempt first-edge tops). -/
+`nxt.vStart` was finished and the path class is merged here), with `firstIdx ≤
+firstOccurrence[d]`. Checked on seeds 0..300 and 6000 extra multigraphs, both ternarize modes
+(`checks/RFinishEdgeCheck.lean`, contract B, 6414 sites; `ptop` lines, 278 non-exempt
+first-edge tops, 0 failures). -/
+theorem feS₂_top_entryR {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsOut)
+    (origTstack : Nat) (ho : o.cls = .ret lv kind) (hk : kind ≠ .backEdge)
+    (hlow : lv < d) (hv : curV < s.g.nv)
+    (hi : s.Inv' D) (hs : Shape s) (hok : FinishOk D curV d lv o origTstack false s)
+    (hg : FinishGuards d o origTstack false s)
+    (hfront : Frontier (o := o) d origTstack s)
+    (hshape : FinishRShape dfs curV d o origTstack false s)
+    (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
+    (hd : dfs.depth curV = d) (hcur : s.stackVerts[d]! = curV)
+    (hanc : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! curV ∧ dfs.depth s.stackVerts[k]! = k)
+    (hR : s.RInvFront dfs curV d origTstack)
+    (c : TEntry) (rest : List TEntry) (hts : (feS₂ d o s).tstack = c :: rest)
+    (htop : c.topDepth = d) (hne : c.vStart ≠ curV) :
+    (feS₂ d o s).EntryR dfs c := by
+  sorry
+
+/-- (Lemma 4.3, first-edge case) the entry the tree-edge branch builds on top of the stack is
+settled after the P-check (`feP`) and in the output. The content is `feS₂_top_entryR` (the `feS₂`
+top `c` with `c.topDepth = d`); the rest is bookkeeping: the P-check either leaves the top alone or
+replaces it by one starting at `curV` (`settledTop_finishP`, `finishP_top`); the first-edge vertex
+push puts the exempt vertex entry on top, and when loop 2 fired (`isSingle = false`) the merge of
+the two gives a top with `topDepth = min c.topDepth d < d` — loop 2 merged the entry below the
+loop-1 output, which tops out below `d` by loop 1's exit condition (`RInvG.closeEars`). -/
 theorem finishEdge_tree_top_settled_first {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsOut)
     (origTstack : Nat) (ho : o.cls = .ret lv kind) (hk : kind ≠ .backEdge)
     (hlow : lv < d) (hv : curV < s.g.nv)
@@ -872,7 +970,143 @@ theorem finishEdge_tree_top_settled_first {D : Nat} (curV d lv : Nat) (kind : Re
     (hR : s.RInvFront dfs curV d origTstack) :
     (feP curV d o s).SettledTop dfs curV d ∧
       (after (finishEdge curV d o origTstack false) s).SettledTop dfs curV d := by
-  sorry
+  have ht : o.cls.isTree = true := by
+    rw [ho]; cases kind with
+    | backEdge => exact absurd rfl hk
+    | type1Child => rfl
+    | type2Child => rfl
+  have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
+  have hge : ¬ (lv ≥ d) := by omega
+  have hlow' : o.cls.lowval d < d := by rw [hlv]; exact hlow
+  obtain ⟨sub, base, hl, hE⟩ := hshape.ear
+  obtain ⟨c, mid, py, vy, hts₂, -, -, hctop, -⟩ := hE.loops ht hlow'
+  have hts₂' : (feS₂ d o s).tstack = c :: (mid ++ [py, vy] ++ base) := by rw [hts₂]; rfl
+  have hcE : d ≤ c.topDepth → c.vStart ≠ curV → (feS₂ d o s).EntryR dfs c := fun hdc hne =>
+    feS₂_top_entryR curV d lv kind o origTstack ho hk hlow hv hi hs hok hg hfront hshape h2 hsp hrt
+      hd hcur hanc hR c _ hts₂' (Nat.le_antisymm hctop hdc) hne
+  -- loop 1's exit condition at `feS₁`
+  have st₀ : Step D curV s (feS₀ d o s) :=
+    Step.modifyVs hi hs (edgeItem s.g o.e) _ (by show 1 + s.g.nv + o.e < _; have := hok.e_lt; omega)
+  have hv₀ : curV < (feS₀ d o s).g.nv := by rw [st₀.g]; exact hv
+  set f : Item → Item := fun it =>
+    { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) } with hf
+  have hfree₀ : ∀ t ∈ s.tstack, edgeItem s.g o.e ∉ t.spans.1 ++ t.spans.2 := fun t ht hmem =>
+    hshape.pend t ht ⟨_, hmem, .refl⟩
+  have R₀ : (feS₀ d o s).RInvG dfs curV d origTstack :=
+    (RInvG.of_front hR).modifyVs_free (edgeItem s.g o.e) f (fun _ => rfl) (fun _ => rfl) hfree₀
+  have hown₀ : ∀ t ∈ (feS₀ d o s).tstack, ¬ t.edges (feS₀ d o s).g (feS₀ d o s).items o.e :=
+    fun t ht hte => hshape.pend t ht ((TEntry.edges_congr (fun i _ e =>
+      Items.Below_modify_ch_eq (edgeItem s.g o.e) f (fun _ => rfl)) o.e).1 hte)
+  have hn₀ : origTstack ≤ (feS₀ d o s).tstack.length := hfront.size
+  obtain ⟨k, heq, -, hexit, -, -⟩ := R₀.closeEars st₀.inv st₀.shape hv₀ hn₀ (hok.ears ht) hown₀
+    (fun k hk hck => (hfront.loop1 ht hlow' k hk).2 hck)
+  have hexit₁ : result (loop1Cond d) (feS₁ d o s) = false := by
+    have heq' : feS₁ d o s =
+        iter (Spqr.loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s)) := heq
+    rw [heq']; exact hexit
+  have hnxt₁ : 2 ≤ (feS₁ d o s).tstack.length → (feS₁ d o s).tstack.tail.head!.topDepth < d := by
+    intro h2le
+    by_contra hge'
+    have := (result_loop1Cond_iff d (feS₁ d o s)).2 ⟨h2le, Nat.le_of_not_lt hge'⟩
+    rw [this] at hexit₁; cases hexit₁
+  -- loop 2 fired ⇒ the `feS₂` top tops out below `d`
+  have hsingle : feSingle d o s = false → c.topDepth < d := by
+    intro hsg
+    have hrun := mergeLate_run d (feS₁ d o s)
+    have hfeS₂ : feS₂ d o s = ((mergeLate d).run (feS₁ d o s)).2 := rfl
+    have hfeSg : feSingle d o s = ((mergeLate d).run (feS₁ d o s)).1 := rfl
+    by_cases hc₀ : (curE (feS₁ d o s)).firstIdx > (feS₁ d o s).firstOccurrence[d]!
+    · rw [if_pos hc₀] at hrun
+      obtain ⟨c₀, R, hL⟩ := hE.late ht hlow'
+      obtain ⟨k₂, -, heq₂, -, hend⟩ := loop_run_iter (feS₁ d o s).tstack.length
+        (loop2Cond (feS₁ d o s).firstOccurrence[d]!) mergeTstackTops (feS₁ d o s)
+        (fun s => by rw [run_loop2Cond])
+      have hS₂ : feS₂ d o s = iter mergeTstackTops k₂ (feS₁ d o s) := by rw [hfeS₂, hrun]; exact heq₂
+      have hlen₂ : 3 ≤ (feS₂ d o s).tstack.length := by
+        rw [hts₂']; simp only [List.length_cons, List.length_append]; omega
+      have hk₂R : k₂ ≤ R.length := by
+        by_contra hgt
+        have h1 : (iter mergeTstackTops R.length (feS₁ d o s)).tstack.length ≤ 1 := by
+          rw [iter_merge_eq _ c₀ R hL.tstack R.length (Nat.le_refl _)]; simp
+        have h2' := iter_merge_short _ h1 (k₂ - R.length)
+        rw [← iter_add, Nat.sub_add_cancel (by omega), ← hS₂] at h2'
+        omega
+      have hiter := iter_merge_eq _ c₀ R hL.tstack k₂ hk₂R
+      have hc : l2Cur c₀ (R.take k₂) = c := by
+        have h := hts₂'
+        rw [hS₂, hiter] at h
+        exact (List.cons_eq_cons.1 h).1
+      obtain ⟨k', rfl⟩ : ∃ k', k₂ = k' + 1 := by
+        cases k₂ with
+        | zero =>
+          rcases hend with hfuel | hfalse
+          · rw [hL.tstack] at hfuel; simp at hfuel
+          · have hfalse' : ((loop2Cond (feS₁ d o s).firstOccurrence[d]!).run (feS₁ d o s)).1 = false :=
+              hfalse
+            have := (result_loop2Cond_iff (feS₁ d o s).firstOccurrence[d]! (feS₁ d o s)).2 hc₀
+            unfold result at this
+            rw [this] at hfalse'; cases hfalse'
+        | succ k' => exact ⟨k', rfl⟩
+      obtain ⟨t, R', rfl⟩ : ∃ t R', R = t :: R' := by
+        cases R with
+        | nil => simp at hk₂R
+        | cons t R' => exact ⟨t, R', rfl⟩
+      have hct : c.topDepth ≤ t.topDepth := by
+        rw [← hc, List.take_succ_cons, l2Cur_cons]
+        exact Nat.le_trans (l2Cur_topDepth_le _ _) (Nat.min_le_left _ _)
+      have htd : t.topDepth < d := by
+        have h := hnxt₁ (by rw [hL.tstack]; simp)
+        rw [hL.tstack] at h
+        exact h
+      omega
+    · rw [if_neg hc₀] at hrun
+      rw [hfeSg, hrun] at hsg
+      cases hsg
+  have hS : (feS₂ d o s).SettledTop dfs curV d := by
+    intro _ hdc hvne
+    have hcur : curE (feS₂ d o s) = c := by rw [curE, hts₂']; rfl
+    rw [hcur] at hdc hvne ⊢
+    exact hcE hdc hvne
+  have hP : (feP curV d o s).SettledTop dfs curV d := settledTop_finishP _ hS
+  refine ⟨hP, ?_⟩
+  rw [finishEdge_eq]
+  simp only [finishEdge', finishTree, hlv, hge, ↓reduceIte, ht, closeVert_eq]
+  show (after (Spqr.finishRest curV d lv o.cls.isType1 false (feSingle d o s)) (feS₂ d o s)).SettledTop
+    dfs curV d
+  show ((Spqr.finishTail curV d false (feSingle d o s)).run
+    (after (Spqr.finishP curV lv o.cls.isType1) (feS₂ d o s))).2.SettledTop dfs curV d
+  have hfeP : after (Spqr.finishP curV lv o.cls.isType1) (feS₂ d o s) = feP curV d o s := by
+    rw [feP, hlv]
+  rw [hfeP]
+  obtain ⟨t', rest', htsP, ht'⟩ := finishP_top (v := curV) (lowval := o.cls.lowval d) o.cls.isType1 hts₂'
+  have htsP' : (feP curV d o s).tstack = t' :: rest' := htsP
+  simp only [Spqr.finishTail, Bool.not_false, ↓reduceIte, WalkM.run_bind]
+  cases hsg : feSingle d o s
+  · simp only [Bool.not_false, ↓reduceIte, WalkM.run_bind, WalkM.pure_run]
+    have hpush : (after (pushVertTstack curV d) (feP curV d o s)).tstack =
+        ⟨curV, d, (feP curV d o s).nxtEdgeIdx, setSides (feP curV d o s).stackDir[d]! [vertItem curV] []⟩ ::
+          t' :: rest' := by
+      show (⟨curV, d, (feP curV d o s).nxtEdgeIdx, setSides (feP curV d o s).stackDir[d]! [vertItem curV] []⟩ :
+        TEntry) :: (feP curV d o s).tstack = _
+      rw [htsP']
+    have hm := mergeTstackTops_run_eq _ _ t' rest' hpush
+    show (after mergeTstackTops (after (pushVertTstack curV d) (feP curV d o s))).SettledTop dfs curV d
+    intro _ hdc hvne
+    have hcur : curE (after mergeTstackTops (after (pushVertTstack curV d) (feP curV d o s))) =
+        TEntry.mergeInto ⟨curV, d, (feP curV d o s).nxtEdgeIdx,
+          setSides (feP curV d o s).stackDir[d]! [vertItem curV] []⟩ t' := by
+      show (mergeTstackTops.run (after (pushVertTstack curV d) (feP curV d o s))).2.tstack.head! = _
+      rw [hm]; rfl
+    rw [hcur] at hdc hvne
+    exfalso
+    rcases ht' with hv' | ⟨heq, -⟩
+    · exact hvne hv'
+    · rw [heq] at hdc
+      have hdc' : d ≤ min c.topDepth d := hdc
+      have := hsingle hsg
+      omega
+  · simp only [Bool.not_true, Bool.false_eq_true, ↓reduceIte, WalkM.pure_run]
+    exact (topStart_pushVert (s := feP curV d o s) d).settledTop
 
 /-- The top of the tree-edge branch's output is settled: for `hasVert = true` the vertex close
 re-targets it to `curV` (`finishEdge_tree_vert_topStart`, exempt); the first-edge case is the

@@ -1383,13 +1383,21 @@ modulo one admission, the `EntryR` of the single entry it builds on top of the s
 Its `hasVert = true` half is proved: `closeVert` re-targets the top to `curV` (`retarget`), and
 `vertFinish`/`finishP`/`finishTail` keep a top starting at `curV` (when the P-check fires the
 merged top is `nxt`, whose `vStart = curV` is the P condition), so the output top is exempt
-(`TopStart`, `finishEdge_tree_vert_topStart`, standard axioms). What remains admitted is the
-first-edge case `finishEdge_tree_top_settled_first` (`hasVert = false`): the top `c` of `feS₂`
-(= `feP`: the P-check needs `nxt.vStart = curV`, and the child's entries start elsewhere) with
-`lowval ≤ c.topDepth ≤ d` (`EarFinish.loops`) is `EntryR` when `c.topDepth = d`, and so is the
-output top (the vertex entry when `isSingle`, else `c` with the vertex entry merged in). Checker:
-278 of the 6414 sites have a non-exempt first-edge top (`stat:ptop-nonexempt`), none a non-exempt
-output top (`stat:post-top-nonexempt`); all pass contract B.
+(`TopStart`, `finishEdge_tree_vert_topStart`, standard axioms). The first-edge case
+`finishEdge_tree_top_settled_first` (`hasVert = false`) is proved (R-4) modulo the single named
+admission `feS₂_top_entryR`: the top `c` of `feS₂` is `EntryR` when `c.topDepth = d` and
+`c.vStart ≠ curV`. Everything else is bookkeeping, from the ear contract now carried by
+`FinishRShape.ear` (= `FinishBook.ear`'s `EarAt`): `EarFinish.loops` gives
+`lowval ≤ c.topDepth ≤ d`, so the `feS₂` top is settled; the P-check keeps a settled top
+(`settledTop_finishP`: when `condP` fires the merged top starts at `curV`; `finishP_top`); the
+first-edge push puts the exempt vertex entry on top (`topStart_pushVert`), and when loop 2 fired
+(`feSingle = false`) the merged output top has `topDepth = min c.topDepth d < d`: loop 2's first
+merge pulls `c` down to the entry below loop 1's output (`l2Cur_topDepth_le`, `iter_merge_eq`),
+which tops out below `d` by loop 1's exit condition (`RInvG.closeEars`, `result_loop1Cond_iff`).
+So the content proper is exactly `feS₂_top_entryR`, i.e. `c.topDepth = d` forces loop 2 not to
+have fired and `c` is loop 1's output (the tree edge plus the S/P/R items closed by loop 1).
+Checker: 278 of the 6414 sites have a non-exempt first-edge top (`stat:ptop-nonexempt`), none a
+non-exempt output top (`stat:post-top-nonexempt`); all pass contract B.
 Two invariants carry everything else. `RInvG s dfs v d n` is `RInvFront` positionally: the bottom
 `n` entries are settled (depth-bounded, `vStart ≠ v` exempt) and the whole stack is edge-disjoint.
 Loop 1 preserves it with `n = origTstack` because, by `Frontier.loop1`, each iteration touches
@@ -1414,7 +1422,7 @@ hasVert s` (`pend`, `settled`, `unwrap`, `vert_own`) and the admission's part (a
 the 6414 finishEdge sites of `checks/RFinishEdgeCheck.lean` (`shape` lines, 0 failures);
 `finishEdge_tree_rInvTop_of_top`, `RInvG.*`, `RInvH.*` have standard axioms;
 `finishEdge_tree_rInvTop` and the dispatcher depend on `sorryAx` only through
-`finishEdge_tree_top_settled_first`.
+`feS₂_top_entryR` (via `finishEdge_tree_top_settled_first`).
 
 **`WalkTreeRReturnSpec`: induction design (frame proved; induction proved up to the side facts).** The walk induction
 (`rgTree`/`rgOuts`/`rgOut` style, `RangesTree.lean`) must carry two facts through the child's walk
@@ -1675,7 +1683,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | R correctness input domain | `Correctness.lean`, `Proofs/RItems.lean`, `checks/RInvalidOrderCheck.lean` | corrected to `g.WF` + `OrderOK` for both orders; K4 with invalid edge order `[6]` kernel-checks failure of the former public target (standard axioms) |
 | R coverage and laminarity edge domain | `RInv.lean`, `RClose.lean`, `RMax.lean`, `Proofs/RunSaturation.lean`, `checks/REdgeDomainCheck.lean` | restricted containment and coverage to `e < g.ne`; kernel-checked K4 failure of unrestricted coverage and success of bounded coverage; affected transport proofs audited (standard axioms) |
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |
-| 4.5 Depth-bounded settling `RInvTop`/`RInvFront`; `finishEdge_rInvTop` (replaces `finishEdge_rInvAt`): back-edge branch proved (`finishEdge_back_rInvTop`), tree-edge branch proved up to the top entry's `EntryR` in the first-edge case (`finishEdge_tree_rInvTop_of_top`; `hasVert = true` top exempt by `finishEdge_tree_vert_topStart`; admitted `finishEdge_tree_top_settled_first`) | `RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RInvBack.lean`, `Proofs/RInvTree.lean`, `checks/RFinishEdgeCounter.lean`, `checks/RFinishEdgeCheck.lean` | two kernel-checked counterexamples to the parent-only exemption (standard axioms); contract B checked on 6414 sites, 0 failures; frame lemmas, the back-edge branch (`RInvTop.pushEdge/finishP/unwrapNxt_exempt/mergeTop_exempt/finishTop_exempt`) and the tree-edge branch below the top (`RInvG.closeEars`, `RInvH.mergeLate/closeVert'/finishRest`) proved, standard axioms; `FinishRShape` checked on 6414 sites |
+| 4.5 Depth-bounded settling `RInvTop`/`RInvFront`; `finishEdge_rInvTop` (replaces `finishEdge_rInvAt`): back-edge branch proved (`finishEdge_back_rInvTop`), tree-edge branch proved up to the top entry's `EntryR` in the first-edge case (`finishEdge_tree_rInvTop_of_top`; `hasVert = true` top exempt by `finishEdge_tree_vert_topStart`; `hasVert = false` proved by `finishEdge_tree_top_settled_first` modulo the admitted `feS₂_top_entryR`: `EntryR` of the `feS₂` top when it tops out at `d` and does not start at `curV`) | `RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RInvBack.lean`, `Proofs/RInvTree.lean`, `checks/RFinishEdgeCounter.lean`, `checks/RFinishEdgeCheck.lean` | two kernel-checked counterexamples to the parent-only exemption (standard axioms); contract B checked on 6414 sites, 0 failures; frame lemmas, the back-edge branch (`RInvTop.pushEdge/finishP/unwrapNxt_exempt/mergeTop_exempt/finishTop_exempt`) and the tree-edge branch below the top (`RInvG.closeEars`, `RInvH.mergeLate/closeVert'/finishRest`) proved, standard axioms; `FinishRShape` checked on 6414 sites |
 | 4.5 Parent-base frame `finishEdge_rInvG_base` (any `finishEdge` with `n₀ ≤ origTstack` preserves `RInvG dfs p dp n₀`; positional `RInvG.*_pos` primitives, `loop3_iter_len`) | `Proofs/RInvBase.lean`, `checks/RFinishEdgeCheck.lean` (`base` lines) | proved (standard axioms); contract dump-checked on every ancestor frame of every `finishEdge` site, seeds 0..300 × both modes + 6000 random, 0 failures |
 | 4.5 Child-return induction `rrTree`/`rrOuts`/`rrOut` (`RWalk`: ancestor frames `RInvG` + `RInvTop` of the walked vertex; `BotKeep`/`finishEdge_bot_keep`), `walkTree_rReturn`, `walkTreeRReturnSpec`; side facts `RSideTree`/`RSideOuts`/`RSideOut` (`AncChain`, `EntryR` stability under `stackVerts.set!`, parent entries top out `≤ d-1`, non-root out-edges return, `VertFree`, `FinishRShape`) | `Proofs/RInvWalk.lean`, `checks/RFinishEdgeCheck.lean` (`anc`/`stab`/`entry`/`ret`/`vertown` lines) | induction and `walkTree_rReturn` proved from `finishEdge_rInvTop` + `finishEdge_rInvG_base` (non-standard axiom only via the admitted `finishEdge_tree_top_settled`); side facts dump-checked at every entry/site (seeds 0..300 × both modes + 6000 random, 0 failures) and admitted as `walkTree_rSide` |
 | 4.5 Child-return settling diagnostic and provisional contract | `Proofs/RInvFrame.lean`, `checks/RInvReturnCheck.lean` | `RReturn`/`WalkTreeRReturnSpec` stated without an admission; legacy conclusion still refuted; fixed base/settled-entry clauses kernel-checked (standard axioms); seeds 0..300 × both modes pass shape/disjointness, with content frames checked on the 65 block inputs; preservation proof remains open |
