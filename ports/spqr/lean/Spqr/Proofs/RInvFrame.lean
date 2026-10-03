@@ -99,8 +99,8 @@ This is a proposition naming the contract, not an admitted proof of preservation
 seeds 0..300 and 6000 extra multigraphs, both ternarize modes (`checks/RFinishEdgeCheck.lean`,
 contract B). -/
 def WalkTreeRReturnSpec (dfs : DfsData) : Prop :=
-  ∀ (s : WalkState) (D d c : Nat) (outs : List DfsOut),
-    s.Inv' D → Shape s → GuardsTree (.node c outs) (d + 1) s →
+  ∀ (s : WalkState) (d c : Nat) (outs : List DfsOut),
+    s.Inv' d → Shape s → GuardsTree (.node c outs) (d + 1) s →
     FrontiersTree (.node c outs) (d + 1) s → s.g.TwoConnected →
     dfs.Spec s.g → dfs.Rooted s.g → dfs.IsParent s.stackVerts[d]! c →
     outs = dfs.outs c → s.RInvTop dfs s.stackVerts[d]! d →
