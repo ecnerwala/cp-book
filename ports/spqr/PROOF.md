@@ -718,7 +718,8 @@ boundary for a bridge, and return exactly to `d` for a component; `EarDfs.bridge
 (the child's edges are connected to `y` inside any edge set containing them; `out_reach`/
 `outs_reach` from `Ends`). `ctx_step_tree` is a proved case split (`H.tree`/`H.cls_ret`) over
 `ctx_step_tree_bridge` (proved), `ctx_step_tree_comp` (proved up to the named admission
-`tree_comp_shape`) and the named admission `ctx_step_tree_ret`. `tree_comp_shape` (dump-checked
+`tree_comp_shape`) and `ctx_step_tree_ret` (proved up to the named admissions `tree_ret_shape`
+and `ctx_step_tree_ret_P`, below). `tree_comp_shape` (dump-checked
 `compEndCheck`, 0 violations 0..3000 both modes) is the child's end-of-outs stack at a component
 edge: `hasVert = true` (no end push) and exactly `t₁ :: ⟨y, d+1, _, ([], [V y])⟩` above the
 parent's `tstack`, with `t₁.vStart = y`, `t₁.topDepth = d`, `t₁.spans.2 = []`. From it
@@ -736,7 +737,36 @@ child's walk (`items_kept`: not a child vertex/edge item, allocated before) — 
 the parent's `tstack`, `V v` and `Q e` qualify — so the parent's edge sets, `touch_bot`, `disj`,
 `q_fresh`/`v_fresh` are unchanged; `vert_book` is rebuilt from the parent's book, the child's book
 (`ctx'.vert_book`, whose edges are exactly the child's edges by `bridge_bd`) and the bridge `e`
-(`e_ends`), with `ends`/`comp` for `TwoAttached`. One
+(`e_ends`), with `ends`/`comp` for `TwoAttached`. `ctx_step_tree_ret` (returning child,
+`lowval < d`) is reduced operationally: `wp_finishEdge_tree` (proved) rewrites `finishEdge` at a
+tree edge to `finishRest` (the P-check `finishP`, then `finishTail`'s first-edge vertex push) over
+the loop-1–3 state `feS₃`/`feS₂` (`modifyVs`, `closeEars`, `mergeLate`, `closeVert'`). The stack
+after loops 1–3 is the named admission `tree_ret_shape`, stated as the structure `RetTop v d s e
+cls y outs L hv sX R` (`EarCtxAt.lean`; dump-checked literally by `retCheck` in `EarCheck.lean`,
+0 violations 0..3000 both modes): relative to the parent's pre-push state `s` the post-loop state
+`sX` has `tstack = R ++ L ++ s.tstack`, `g`/`stackVerts ≤ d`/`stackDir < d` unchanged, items only
+grown, every item that is not a child vertex/edge item or `Q e` keeping its children and parents
+(`kept`), `ch_lt`, and the retained entries `R`: parentless span items (`span_root`) that are fresh
+or child/`Q e` items (`span_new`), `touch_bot`, edges exactly `subEdges o` (`edges`), touching
+only `v`, the child's vertices or `stackVerts[lowval..d]` (`touch`), pairwise edge/span disjoint,
+`vStart ∈ {v} ∪ child.verts`; with `hv = true` exactly one entry `⟨v, lowval, …⟩` carrying `V v`
+as its single parentless item on the active side (`vert`); with `hv = false` no entry starts at
+`v` and the entry holding `e` is the head (`noVert`). An earlier `retCheck` asserting a single
+retained entry in the `hv = false` case was false (type-2 children keep several) and was dropped.
+From `RetTop`, the `finishRest` cases are: `hv = false` — `cls.isType1 = false` (`hpush`), so
+`condP` splits on `result`: P-merge of the fresh `V v` entry into the head of `R`
+(`TEntry.mergeInto`) or a plain push of `V v`; `hv = true` — `result condP` true is the named
+admission `ctx_step_tree_ret_P` (P-merge of the `(v, lowval)` entry's single item), false leaves
+`R`. Each non-admitted case ends in `earCtx_ret` (proved, standard axioms): from `TreeSite`,
+`RetTop` and the final top `T` (`R`, `V v :: R`, or `mergeInto (V v) c :: R'`) it rebuilds the
+parent's `EarCtx` with `hasVert = true` and `o` appended to `done` — the old entries keep their
+edge sets via `below_kept` over `RetTop.kept` (every span item of `L ++ s.tstack`, `V v`, and the
+remaining outs' items qualify), `CtxTop.split` puts the retained vertex entry (or the fresh/merged
+`V v` entry) as the new `vt` with the old `above` (ordered by `lowval_le_of_rank` + `vfirst`), the
+old `V v` ownership (`vert_edges`) is unchanged because a returning out adds nothing below `V v`,
+and `v_fresh`'s touch clause for the remaining subtrees uses the new `TreeSite.done_rest` (the
+done outs' edges avoid the remaining subtrees' vertices; from `endsOut_wf` + nodup in `cOut`, like
+`ctx_init_child`'s `hnc`). One
 `EarFinish` statement change: `dest_edges` (every edge at the child's root is in `subEdges o`) is not
 derivable from `walkTree_ear`'s hypotheses (graph edges outside the DFS tree are allowed) and was
 only used for its touch consequence; it is replaced by `base_touch` (no enclosing `base` entry
@@ -765,8 +795,9 @@ the proved entry contexts `ctx_init_root` (root: empty stack, `done = []`) and `
 (child: base `L ++ s.tstack`, from the parent's `EarCtx`; its extra hypotheses `hinc`/`hnc`/`hndc`
 — the done outs' edges are incident to `v` and avoid the child's vertices, the child's vertices are
 nodup — come from `endsOut_wf` and the tree's nodup hypotheses in `cOut`), the back-edge step
-`ctx_step_back` (proved, standard axioms), and the named admissions `ctx_step_tree_ret`,
-`tree_comp_shape`, `walkTree_items_kept`, `walkTree_below_kept`, `ends_of_wf_boundary` (each
+`ctx_step_back` (proved, standard axioms), the tree step `ctx_step_tree` (proved over
+`tree_comp_shape`/`tree_ret_shape`/`ctx_step_tree_ret_P`), and the named admissions
+`tree_comp_shape`, `tree_ret_shape`, `ctx_step_tree_ret_P`, `walkTree_items_kept`, `walkTree_below_kept`, `ends_of_wf_boundary` (each
 dump-checked 0..3000 both modes: `ctxCheck` at every `walkOuts` step,
 `kept_items_ch`/`kept_items_par`/`kept_v_below` around every child walk, `kept_ends` at every
 boundary tree out). `walkTree_items_kept` (a child walk changes neither the children nor the
@@ -2403,7 +2434,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | §4.2b walk invariant `Inv' D` (`EntryInv' D above`: connected + attached at `Term'`; closed items 2-attached): closure lemmas (`GraphLemmas.lean`: `AttachedIn`, `twoAttached_iff`), primitives `Inv'.alloc`/`modifyVs`/`pushVert`/`pushEdge`/`mergeTop`/`retarget`/`pop`/`finishTop`, `Shape`/`Step` infrastructure, per-block lemmas `Step.closeEars`/`mergeLate`/`closeVert'`/`finishRest` under `CloseEarsOk`/`MergeLateOk`/`CloseVertOk`/`FinishRestOk` (`MergeTopOk`/`RetargetOk.disj`: entries below edge-disjoint from the touched ones) | `GraphLemmas.lean`, `WalkSpec.lean` | proved (the depth-indexed `Inv D` versions `mergeTstackTops_sound`/`finishTstackTop_complete` are kept; `Inv D` itself is false mid-walk) |
 | §4.2b `finishEdge_inv` (type-1 ± vertex entry, type-2 three loops, back edge) under `FinishOk`; `finishEdge_back_inv` corollary | `WalkSpec.lean` | proved for `Inv' D`; `FinishOk ← FinishGuards`/`EarFinish` (`ear_*` sorries, `ear_finishP_back` derived); `WalkInv.walkTree_inv'` (`Inv' d ∧ Shape`) proved modulo them — the `Inv d` form was **false** (`ear_lower` false, `Inv D` fails for every `D` under a type-2 chain with a sibling subtree; §4.2b correction), `ear_lower'` (`Inv' (d+1) → Inv' d` after a tree edge) derived from `EarFinish.lower` in its place; `walk_nodes_partition` proved in `WalkPlace.lean` under `ForestOK` + coverage |
 | Invariant W, Lemma 4.3 (`earOut_one_entry`) | `EarShape.lean` | restated as `finishEdge_one_entry` (at the `finishEdge` site, from `EarAt`, type-1 edges; §4.2b) and proved (standard axioms); the type-2 form needs `lowval ≤ topDepth` of the child's entries, not in the contract |
-| between-edges invariant `EarCtx` of `walkOuts` (induction hypothesis for `walkTree_ear`; §4.2b) | `EarCtx.lean`, `EarCtxAt.lean`, `checks/EarCheck.lean` (`ctxCheck`) | stated, dump-checked 0..3000 both modes (0 violations); `EarAt` at a back-edge site derived from it (`earAt_back_of_ctx`, standard axioms); `EarAt` at a tree-edge site derived from it + the child's end-of-outs `EarCtx` + frame (`TreeSite`, `earAt_tree_of_ctx`) up to the 13 named admissions `earAt_tree_{loop1_side,loop1_touch,loop1,bottom,loops,late,late_fo,close,bd_bridge,bd_comp,bd_term,bd_side,lower}`; `walkTree_ear` (with the edge-completeness hypothesis `hcomp`, forced by the kernel-checked `walkTree_ear_false`/`walkTree_book_false` in `EarFalse.lean`) proved as an assembly (`cTree`/`cOuts`/`cOut`, `WalkInv.lean`, §4.3) over these, the proved `ctx_init_root`/`ctx_init_child`/`ctx_step_back_boundary` (standard axioms; `earCtx_selfLoop`), the proved `ctx_step_back_ret` (standard axioms: `earCtx_pushBack` for the `Q` push, `ctx_step_back_ret_P` = `mergeP_single` + `earCtx_mergeP` for the P-merge), the proved `ctx_step_tree_bridge` (standard axioms: `earCtx_bridge`, `below_kept`), the proved `ctx_step_tree_comp` (`earCtx_comp`, standard axioms, over the named admission `tree_comp_shape` = the child's end-of-outs stack shape at a component edge, dump-checked `compEndCheck`), and the named admissions `ctx_step_tree_ret` (`ctx_step_tree` is the case split on the class), `tree_comp_shape`, `walkTree_items_kept` (`walkTree_{qroot,vroot}_kept` are corollaries), `walkTree_below_kept`, `ends_of_wf_boundary` (dump-checked: `ctxCheck`, `kept_*`, `kept_ends`); `endsOut_wf`/`endsOuts_wf` proved |
+| between-edges invariant `EarCtx` of `walkOuts` (induction hypothesis for `walkTree_ear`; §4.2b) | `EarCtx.lean`, `EarCtxAt.lean`, `checks/EarCheck.lean` (`ctxCheck`) | stated, dump-checked 0..3000 both modes (0 violations); `EarAt` at a back-edge site derived from it (`earAt_back_of_ctx`, standard axioms); `EarAt` at a tree-edge site derived from it + the child's end-of-outs `EarCtx` + frame (`TreeSite`, `earAt_tree_of_ctx`) up to the 13 named admissions `earAt_tree_{loop1_side,loop1_touch,loop1,bottom,loops,late,late_fo,close,bd_bridge,bd_comp,bd_term,bd_side,lower}`; `walkTree_ear` (with the edge-completeness hypothesis `hcomp`, forced by the kernel-checked `walkTree_ear_false`/`walkTree_book_false` in `EarFalse.lean`) proved as an assembly (`cTree`/`cOuts`/`cOut`, `WalkInv.lean`, §4.3) over these, the proved `ctx_init_root`/`ctx_init_child`/`ctx_step_back_boundary` (standard axioms; `earCtx_selfLoop`), the proved `ctx_step_back_ret` (standard axioms: `earCtx_pushBack` for the `Q` push, `ctx_step_back_ret_P` = `mergeP_single` + `earCtx_mergeP` for the P-merge), the proved `ctx_step_tree_bridge` (standard axioms: `earCtx_bridge`, `below_kept`), the proved `ctx_step_tree_comp` (`earCtx_comp`, standard axioms, over the named admission `tree_comp_shape` = the child's end-of-outs stack shape at a component edge, dump-checked `compEndCheck`), the proved `ctx_step_tree_ret` (`wp_finishEdge_tree`, `earCtx_ret`, standard axioms, over the named admissions `tree_ret_shape` = `RetTop` after loops 1–3, dump-checked `retCheck`, and `ctx_step_tree_ret_P` = the P-merge with a vertex entry; `ctx_step_tree` is the case split on the class), and the named admissions `tree_comp_shape`, `walkTree_items_kept` (`walkTree_{qroot,vroot}_kept` are corollaries), `walkTree_below_kept`, `ends_of_wf_boundary` (dump-checked: `ctxCheck`, `kept_*`, `kept_ends`); `endsOut_wf`/`endsOuts_wf` proved |
 | Lemma 4.4 (`ascend_frame_one_entry`: a finished frame's vertex owns one entry) | `EarSpec.lean` | **false** for chain frames (cycle `0..5` + chord `5-1`, frame `(4,4)`: five entries); removed, the collapse holds only at the ear's top (= `earOut_one_entry`) |
 | boundary branch of `finishEdge` keeps `Inv' D ∧ Shape` (`finishBoundary_inv`, via `BStep`, under `BoundaryOk`: popped entries exist, Q/V items are roots not on any span, popped blocks' terminals touched by no entry below) | `WalkInv.lean` | proved (`BoundaryOk ← ear_boundary`, derived from `dest_edges`/`bd_noVert`/`bd_bridge`/`bd_comp`/`bd_term`; `gone`/`gone₂` stated under `isTree`); the former `Step` form is false (the Q item goes under `vertItem curV`), as is `VertBook`'s `hasVert = false → ch (vertItem v) = []` (bridge `1-2` before back edge `1→0`) — replaced by connectivity + `TwoAttached v v` of the vertex item |
 | corrected attachment set `TEntry.Term'`, `EntryInv'`, `Stack`, `Inv'` (`Inv'.of_inv`, `Inv'.mono`, `Stack_iff`, `Inv'.setSv`); empirical check `checks/InvCheck.lean` | `WalkSpec.lean`, `WalkInv.lean` | def + proved; `Step`/`BStep`/`walkTree_inv'` stated through it |
