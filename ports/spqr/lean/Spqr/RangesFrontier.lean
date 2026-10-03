@@ -3,6 +3,7 @@ import Spqr.EarFrontier
 import Spqr.Proofs.ForestSpec
 
 namespace Spqr.WalkState
+open WalkM
 
 variable {σ : List Nat} {n D : Nat} {s : WalkState}
 
@@ -126,5 +127,63 @@ theorem RangesInv.mergeAdj_of_frontier (h : s.RangesInv σ n D) (hnd : σ.Nodup)
     ((hf.2.2 _ (getElem!_lt hσ hc)).1 ⟨cur, by simp [hfront], hcc.edges⟩)
   obtain ⟨t, ht, he⟩ := (hf.2.2 _ (getElem!_lt hσ (by omega : b < σ.length))).2 he
   exact ⟨t, List.mem_of_mem_take ht, he⟩
+
+theorem RangesInv.iter_merge_ranges (h : s.RangesInv σ n D) (hnd : σ.Nodup)
+    (hσ : ∀ e ∈ σ, e < s.g.ne) {cond : WalkM Bool} {orig : Nat} {base : List TEntry} {E : Nat → Prop}
+    (hinterval : ∀ a b c, a ≤ b → b ≤ c → c < σ.length → E σ[a]! → E σ[c]! → E σ[b]!)
+    (hok : ∀ k, (∀ j, j ≤ k → result cond (iter mergeTstackTops j s) = true) →
+      MergeTopOk D (iter mergeTstackTops k s))
+    (hf : ∀ k, (∀ j, j ≤ k → result cond (iter mergeTstackTops j s) = true) →
+      FrontierOwns orig base E (iter mergeTstackTops k s) ∧ orig + 2 ≤ (iter mergeTstackTops k s).tstack.length) :
+    ∀ k, (∀ j, j < k → result cond (iter mergeTstackTops j s) = true) →
+      (iter mergeTstackTops k s).RangesInv σ n D ∧ (iter mergeTstackTops k s).g = s.g := by
+  intro k
+  induction k with
+  | zero => exact fun _ => ⟨h, rfl⟩
+  | succ k ih =>
+    intro hk
+    obtain ⟨hr, hg⟩ := ih fun j hj => hk j (by omega)
+    have hk' : ∀ j, j ≤ k → result cond (iter mergeTstackTops j s) = true := fun j hj => hk j (by omega)
+    have hσ' : ∀ e ∈ σ, e < (iter mergeTstackTops k s).g.ne := by rwa [hg]
+    have ha := hr.mergeAdj_of_frontier hnd hσ' (hf k hk').1 (hf k hk').2 hinterval
+    rw [iter_succ']
+    exact ⟨hr.mergeTop' hnd hσ' (hok k hk') ha, by rw [run_mergeTstackTops]; exact hg⟩
+
+theorem RangesInv.iter_mergeAdj (h : s.RangesInv σ n D) (hnd : σ.Nodup)
+    (hσ : ∀ e ∈ σ, e < s.g.ne) {cond : WalkM Bool} {orig : Nat} {base : List TEntry} {E : Nat → Prop}
+    (hinterval : ∀ a b c, a ≤ b → b ≤ c → c < σ.length → E σ[a]! → E σ[c]! → E σ[b]!)
+    (hok : ∀ k, (∀ j, j ≤ k → result cond (iter mergeTstackTops j s) = true) →
+      MergeTopOk D (iter mergeTstackTops k s))
+    (hf : ∀ k, (∀ j, j ≤ k → result cond (iter mergeTstackTops j s) = true) →
+      FrontierOwns orig base E (iter mergeTstackTops k s) ∧ orig + 2 ≤ (iter mergeTstackTops k s).tstack.length)
+    (k : Nat) (hk : ∀ j, j ≤ k → result cond (iter mergeTstackTops j s) = true) :
+    MergeAdj σ (iter mergeTstackTops k s) := by
+  obtain ⟨hr, hg⟩ := h.iter_merge_ranges hnd hσ hinterval hok hf k (fun j hj => hk j (by omega))
+  exact hr.mergeAdj_of_frontier hnd (by rwa [hg]) (hf k hk).1 (hf k hk).2 hinterval
+
+theorem mergeLateAdj_of_frontier {o : DfsOut} {d orig : Nat}
+    (hf : Frontier (o := o) d orig s) (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d)
+    (h : (feS₁ d o s).RangesInv σ n D) (hnd : σ.Nodup)
+    (hσ : ∀ e ∈ σ, e < (feS₁ d o s).g.ne) (ho : o.block <:+: σ)
+    (hok : MergeLateOk D d (feS₁ d o s)) : MergeLateAdj σ d (feS₁ d o s) := by
+  refine ⟨fun hc => h.iter_mergeAdj hnd hσ (orig := orig)
+    (base := s.tstack.drop (s.tstack.length - orig)) (subEdges_interval hnd ho) (hok.body hc) ?_⟩
+  intro k hk
+  obtain ⟨hown, hlen⟩ := hf.loop2 ht hlow k (fun j hj => hk j (by omega))
+  exact ⟨hown, hlen (hk k (Nat.le_refl _))⟩
+
+theorem loop3Adj_of_frontier {o : DfsOut} {d orig : Nat}
+    (hf : Frontier (o := o) d orig s) (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d)
+    (h : (feS₂ d o s).RangesInv σ n D) (hnd : σ.Nodup)
+    (hσ : ∀ e ∈ σ, e < (feS₂ d o s).g.ne) (ho : o.block <:+: σ)
+    (hok : CloseVertOk D s.stackVerts[d]! s.stackDir[d]! o.cls.isType1 orig (feSingle d o s) (feS₂ d o s))
+    (hty : o.cls.isType1 = false) :
+    ∀ k, (∀ j, j ≤ k → result (loop3Cond orig) (iter mergeTstackTops j (feS₂ d o s)) = true) →
+      MergeAdj σ (iter mergeTstackTops k (feS₂ d o s)) := by
+  apply h.iter_mergeAdj hnd hσ (orig := orig)
+    (base := s.tstack.drop (s.tstack.length - orig)) (subEdges_interval hnd ho) (hok.loop3 hty)
+  intro k hk
+  obtain ⟨hown, hlen⟩ := hf.loop3 ht hlow hty k (fun j hj => hk j (by omega))
+  exact ⟨hown, hlen (hk k (Nat.le_refl _))⟩
 
 end Spqr.WalkState

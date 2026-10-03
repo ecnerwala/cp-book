@@ -1041,9 +1041,14 @@ the pending edge's postorder position and `o.block <:+: σ` (`subEdges_interval`
 `subEdges_iff_mem_block`, `infix_interval`). `RangesInv.mergeAdj_of_frontier` derives
 `MergeAdj` when the top two entries lie above `origTstack`, `FrontierOwns` covers an interval,
 and the state has `RangesInv`: the interval supplies a stack owner of each gap, and the
-stronger `ordered` excludes lower owners (`mergeAdj_of_cover`). All six lemmas have only
-standard axioms. Full `FinishAdj` still needs the loop/site induction, including the
-P merge into the base; the frontier lemma alone applies only to merges above the split.
+stronger `ordered` excludes lower owners (`mergeAdj_of_cover`). `iter_merge_ranges` /
+`iter_mergeAdj` mutually thread that argument with range preservation through guarded
+merge iterates; `mergeLateAdj_of_frontier` and `loop3Adj_of_frontier` discharge loops 2 and 3
+from the corresponding `Frontier` fields and `MergeLateOk` / `CloseVertOk` guards.
+All ten lemmas have only standard axioms. Full `FinishAdj` still needs loop 1's S/unwrap/close
+sites, the vertex close and the P merge into the base; the frontier lemma alone applies only
+to merges above the split. The tail merge against a newly pushed V entry has no piece
+on that entry, so its `MergeAdj` obligation is vacuous.
 The final assembly must avoid importing `RangesFrontier` into `WalkWF`: the current
 `EarFrontier → RInvFrame → EarShape → EarSpec → WalkWF` path would make a cycle.
 `WalkItemsWF`, already above the ear layer, can host that assembly.
