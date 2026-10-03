@@ -131,7 +131,7 @@ partial def iTree (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n : Nat) (t
     let sv₀ := s.stackVerts.toList.take (d+1)
     let sd₀ := s.stackDir.toList.take d
     let own : Ranges.OwnCtx := ⟨fs.map (·.nEntry) ++ [n], fs.map (·.baseLen) ++ [baseLen], visited ++ [v]⟩
-    let vs := vs ++ ofRanges (Ranges.checkOwned c.seed c.σ own n v d "entry" s)
+    let vs := vs ++ ofRanges (Ranges.checkOwned c.seed c.σ own n v d "entry" s ++ Ranges.checkPieceInv c.seed "entry" d s)
     let (hv, s, eb, visited, done, vs') := iOuts c prev fs n v d outs [] false base₀ bE₀ sv₀ sd₀ eb own s
     let vs := vs ++ vs'
     let own := { own with visited := visited }
@@ -141,10 +141,11 @@ partial def iTree (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n : Nat) (t
         | _ => []
       | none => [])
     let nEnd := n + t.edgePostorder.length
-    let vs := vs ++ ofRanges (Ranges.checkOwned c.seed c.σ own nEnd v d "end" s)
+    let vs := vs ++ ofRanges (Ranges.checkOwned c.seed c.σ own nEnd v d "end" s ++ Ranges.checkPieceInv c.seed "end" d s)
     let vs := vs ++ (if hv then ofRanges (Ranges.checkVCover c.seed v "end" s)
       else ofRanges (Ranges.checkVertPast c.seed c.σ v nEnd s) ++ Extra.e2Check c.seed "tail" v s)
     let s := if hv then s else ((setStackDir d true *> pushVertTstack v d).run s).2
+    let vs := vs ++ ofRanges (Ranges.checkPieceInv c.seed "tail" d s)
     let vs := vs ++ (Ear.ctxCheck c.seed v d done [] true base₀ bE₀ sv₀ sd₀ s true ++ Ear.leftCheck c.seed v d t s₀ s).map (ofEar tern)
     let pfs := pathFrames fs
     let dirs := DirsOf s d
@@ -228,6 +229,7 @@ partial def iOut (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n v d : Nat)
     Ranges.checkL1 c.seed v d o s ++ Ranges.checkRI c.seed σ v d o s ++
     Ranges.checkContent c.seed v d o orig hv s ++
     Ranges.checkCanon c.seed v d o orig hv s ++
+    Ranges.checkPieceInv c.seed "pre" d s ++ Ranges.checkPiece c.seed v d o orig hv s ++
     (Ranges.closeSites v d o orig hv s).flatMap (fun (st, r) => Ranges.checkClose c.seed st r) ++
     (if hv then [] else Ranges.checkVertPast c.seed σ v (σ.idxOf o.e) s))
   -- R (block graphs), before `finishEdge`
@@ -272,7 +274,7 @@ partial def iOut (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n v d : Nat)
   let (hv', s) := (finishEdge v d o orig hv).run s
   -- after `finishEdge`
   let post := s!"post v={v} d={d} {oStr} hv={hv'}"
-  let vs := vs ++ ofRanges (Ranges.checkOwned c.seed σ own (σ.idxOf o.e + 1) v d "post" s)
+  let vs := vs ++ ofRanges (Ranges.checkOwned c.seed σ own (σ.idxOf o.e + 1) v d "post" s ++ Ranges.checkPieceInv c.seed "post" d s)
   let vs := vs ++ (if hv' then ofRanges (Ranges.checkVCover c.seed v "post" s) else [])
   let vs := vs ++ (if !c.block || !rsite then [] else
     ofStrs c tern "r.postB" post (R.checkEntries c.D d s.tstack s (fun t => t.vStart != v && t.topDepth ≥ d)) ++
@@ -294,6 +296,7 @@ def iForest (c : Ctx) (forest : List DfsTree) (s : WalkState) : WalkState × Lis
     let s := ((popTstack >>= fun top => modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }).run s).2
     let prev := prev ++ [t]
     let vs' := vs' ++ (if s.tstack == [] then [] else [⟨c.seed, s.ternarize, "st.root_pop", s!"tstack not empty after tree {t.v}"⟩])
+    let vs' := vs' ++ ofRanges (Ranges.checkPieceInv c.seed "root" 0 s false)
     let vs' := vs' ++ ofStrs c s.ternarize "st.items_root" s!"after tree {t.v}" (St.stItemsB c.g s (simBlocks c.g prev [] []))
     (s, vs ++ vs', visited, n + t.edgePostorder.length, prev))
     (s, ([] : List Viol), ([] : List Nat), 0, ([] : List DfsTree))

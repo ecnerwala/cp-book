@@ -810,4 +810,113 @@ def checkFinal (seed : Nat) (s : WalkState) : List V := Id.run do
           if (verts b).contains v then out := bad "root_sep" s!"a={a} b={b} v={v} roots={roots}" :: out
   return out
 
+partial def itemsBelow (s : WalkState) (i : ItemId) : List ItemId :=
+  i :: (s.items[i]!.ch).flatMap (itemsBelow s)
+
+/-- `PieceInv d s` (`RangesPiece.lean`): the five final-items facts behind `spqrTree_pieceSep`
+(`QUpper`/`RootSep`/`RootV`/`QChildVs`/`PChildVs`) as a walk-state invariant, plus the frame clause
+`root_path` (no path vertex item lies below a root child; `PieceInv d s`). Evaluated at the tree
+entry/end, before and after every `finishEdge`, and (`PieceFacts` only, `path := false`) after every
+root append (`piece_*`). -/
+def checkPieceInv (seed : Nat) (site : String) (d : Nat) (s : WalkState) (path : Bool := true) :
+    List V := Id.run do
+  let g := s.g
+  let bad := fun (k info : String) => (⟨seed, s.ternarize, s.stackVerts[d]!, d, site, "piece_" ++ k, info⟩ : V)
+  let mut out := []
+  for v in List.range g.nv do
+    for c in s.items[vertItem v]!.ch do
+      if (s.items[c]!.vs).1 != some v then
+        out := bad "q_upper" s!"v={v} c={c} type={repr s.items[c]!.type} vs={s.items[c]!.vs}" :: out
+  for e in List.range g.ne do
+    let q := s.items[edgeItem g e]!
+    match q.ch with
+    | [c, w] =>
+      if s.items[c]!.vs != (q.vs.1, some (w - 1)) then
+        out := bad "q_child_vs" s!"e={e} q.vs={q.vs} ch={q.ch} vs c={s.items[c]!.vs}" :: out
+    | [c] =>
+      if s.items[c]!.vs != (q.vs.1, none) then
+        out := bad "q_child_vs" s!"e={e} q.vs={q.vs} ch={q.ch} vs c={s.items[c]!.vs}" :: out
+    | _ => pure ()
+  for i in List.range s.items.size do
+    let it := s.items[i]!
+    if it.type == .P then
+      for c in it.ch do
+        if s.items[c]!.type != .V && s.items[c]!.vs != it.vs then
+          out := bad "p_child_vs" s!"i={i} vs={it.vs} c={c} type={repr s.items[c]!.type} vs c={s.items[c]!.vs}" :: out
+  let roots := s.items[rootItem]!.ch
+  for c in roots do
+    if s.items[c]!.type != .V then out := bad "root_v" s!"c={c} type={repr s.items[c]!.type}" :: out
+  let verts := fun (i : ItemId) => (edgesBelow s i).flatMap fun e => [(g.edges[e]!).1, (g.edges[e]!).2]
+  for a in roots do
+    for b in roots do
+      if a < b then
+        for v in verts a do
+          if (verts b).contains v then out := bad "root_sep" s!"a={a} b={b} v={v} roots={roots}" :: out
+  for a in roots do
+    let bel := itemsBelow s a
+    for k in (if path then List.range (d + 1) else []) do
+      if bel.contains (vertItem s.stackVerts[k]!) then
+        out := bad "root_path" s!"a={a} k={k} w={s.stackVerts[k]!}" :: out
+  return out
+
+/-- `FinishPiece x r` (`RangesPiece.lean`): closing the top entry `t` into a P node `x` ⇒ every non-V
+item on the closing side has `vs = makeVs t.vStart t.topDepth` (the P's own `vs`). -/
+def checkFinishPiece (bad : String → V) (x : ItemId) (r : WalkState) : List V := Id.run do
+  if r.items[x]!.type != .P then return []
+  match r.tstack with
+  | [] => return [bad "_stack"]
+  | t :: _ =>
+    let dir := r.stackDir[t.topDepth]!
+    let vs := setSides dir (some r.stackVerts[t.topDepth]!) (some t.vStart)
+    let cs := getSide t.spans dir
+    return cs.filterMap fun c =>
+      if r.items[c]!.type != .V && r.items[c]!.vs != vs then
+        some (bad s!" c={c} type={repr r.items[c]!.type} vs={r.items[c]!.vs} want={vs}") else none
+
+/-- Every field of `ClosePiece curV d o orig hv s` (`RangesPiece.lean`) at its site state, reported
+separately: the boundary orientations (`piece_bd_bridge`/`piece_bd_node`), `FinishPiece` at the P /
+vertex / loop-1 closes (`piece_p`/`piece_v`/`piece_l1`); and the two frame hypotheses of
+`finishEdge_piece` (`piece_open_noparent`: spanned items have no parent; `piece_fresh_edge`: the edge
+item of `o.e` has no parent). -/
+def checkPiece (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
+    List V := Id.run do
+  let lv := o.cls.lowval d
+  let bad := fun (r : WalkState) (x : ItemId) k => (⟨seed, s.ternarize, curV, d, "ClosePiece", "piece_" ++ k,
+    s!"o.e={o.e} dest={o.dest} lv={lv} x={x} type={repr r.items[x]!.type} ch={r.items[x]!.ch} stack={r.tstack.map showT}"⟩ : V)
+  let mut out := []
+  for t in s.tstack do
+    for j in spanItems t do
+      for p in List.range s.items.size do
+        if (s.items[p]!.ch).contains j then out := bad s j s!"open_noparent p={p}" :: out
+  for p in List.range s.items.size do
+    if (s.items[p]!.ch).contains (edgeItem s.g o.e) then out := bad s (edgeItem s.g o.e) s!"fresh_edge p={p}" :: out
+  if o.cls.isTree && d ≤ lv then
+    if lv == d + 1 then
+      if setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) != (some curV, some o.dest) then
+        out := bad s 0 "bd_bridge" :: out
+    else
+      match s.tstack with
+      | b :: _ =>
+        match b.spans.1 with
+        | [c] => if s.items[c]!.vs != (some curV, some o.dest) then out := bad s c s!"bd_node vs={s.items[c]!.vs}" :: out
+        | _ => out := bad s 0 "bd_node_shape" :: out
+      | [] => out := bad s 0 "bd_node_stack" :: out
+  if lv < d && o.cls.isType1 then
+    let r := feRest curV d o orig hv s
+    if result (condP curV lv true) r then
+      let (x, r₁) := (maybeUnwrapNxt .P).run r
+      let r₂ := after mergeTstackTops r₁
+      out := checkFinishPiece (fun k => bad r₂ x ("p" ++ k)) x r₂ ++ out
+  if o.cls.isTree && lv < d && hv && o.cls.isType1 then
+    let x := ((maybeUnwrapNxt (if feSingle d o s then NodeType.S else .R)).run (feS₂ d o s)).1
+    let r := cvS₅ curV s.stackDir[d]! true orig (feSingle d o s) (feS₂ d o s)
+    out := checkFinishPiece (fun k => bad r x ("v" ++ k)) x r ++ out
+  if o.cls.isTree && lv < d then
+    let dir := s.stackDir[d]!
+    for st in mergeSites (loop1Cond d) (loop1Body d dir) (ceS₁ o.dest d o.e (feS₀ d o s)) do
+      let x := result (maybeUnwrapNxt (l1Ty d dir st)) (l1S₁ d dir st)
+      let r := after mergeTstackTops (l1S₂ d dir st)
+      out := checkFinishPiece (fun k => bad r x ("l1" ++ k)) x r ++ out
+  return out
+
 end WalkInvCheck.Ranges
