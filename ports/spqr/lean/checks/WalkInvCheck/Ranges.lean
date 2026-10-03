@@ -1,3 +1,4 @@
+import Spqr.Build
 import WalkInvCheck.Common
 /-! Verbatim copy of the executable mirrors of `checks/RangesInvCheck.lean` (`RangesInv`, `FinishAdj`,
 `CloseInv`/`CloseAt`, `CloseCtx`, the P / vertex / loop-1 / `RangesInv`-iterate sites, `OwnedD`,
@@ -775,7 +776,32 @@ def checkFinal (seed : Nat) (s : WalkState) : List V := Id.run do
     for c in s.items[vertItem v]!.ch do
       if (s.items[c]!.vs).1 != some v then
         out := bad "q_upper" s!"v={v} c={c} type={repr s.items[c]!.type} vs={s.items[c]!.vs}" :: out
+  for e in List.range g.ne do
+    let q := s.items[edgeItem g e]!
+    match q.ch with
+    | [c, w] =>
+      if s.items[c]!.vs != (q.vs.1, some (w - 1)) then
+        out := bad "q_child_vs" s!"e={e} q.vs={q.vs} ch={q.ch} vs c={s.items[c]!.vs}" :: out
+    | [c] =>
+      if s.items[c]!.vs != (q.vs.1, none) then
+        out := bad "q_child_vs" s!"e={e} q.vs={q.vs} ch={q.ch} vs c={s.items[c]!.vs}" :: out
+    | _ => pure ()
+  for i in List.range s.items.size do
+    let it := s.items[i]!
+    if it.type == .P then
+      for c in it.ch do
+        if s.items[c]!.type != .V && s.items[c]!.vs != it.vs then
+          out := bad "p_child_vs" s!"i={i} vs={it.vs} c={c} type={repr s.items[c]!.type} vs c={s.items[c]!.vs}" :: out
+  let t := g.spqrTree s.ternarize [] []
+  for ne in List.range t.nodeEdges.size do
+    match t.twin ne with
+    | some tw =>
+      if t.neOrig ne != t.neOrig tw then
+        out := bad "tree_twin_orient" s!"ne={ne} tw={tw} {t.neOrig ne} {t.neOrig tw}" :: out
+    | none => pure ()
   let roots := s.items[rootItem]!.ch
+  for c in roots do
+    if s.items[c]!.type != .V then out := bad "root_v" s!"c={c} type={repr s.items[c]!.type}" :: out
   let verts := fun (i : ItemId) => (edgesBelow s i).flatMap fun e => [(g.edges[e]!).1, (g.edges[e]!).2]
   for a in roots do
     for b in roots do

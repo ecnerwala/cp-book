@@ -20,6 +20,26 @@ theorem walk_root_sep (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     Items.RootSep g (g.walk tern (g.dfsForest vo eo)).items := by
   sorry
 
+/-- Admitted (named hypothesis; checker field `ranges.root_v`): root children are V items. -/
+theorem walk_root_v (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
+    Items.RootV (g.walk tern (g.dfsForest vo eo)).items := by
+  sorry
+
+/-- Admitted (named hypothesis; checker field `ranges.q_child_vs`): a block-root Q's non-V child is
+oriented like the edge. -/
+theorem walk_q_child_vs (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
+    Items.QChildVs g (g.walk tern (g.dfsForest vo eo)).items := by
+  sorry
+
+/-- Admitted (named hypothesis; checker field `ranges.p_child_vs`): a P item's children carry its
+`vs`. -/
+theorem walk_p_child_vs (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
+    Items.PChildVs (g.walk tern (g.dfsForest vo eo)).items := by
+  sorry
+
 /-- Walk-side separation of the uncapped pieces (F components, V blocks, root Qs). -/
 theorem spqrTree_pieceSep (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
