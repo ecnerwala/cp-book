@@ -45,10 +45,18 @@ theorem closeBase_canon {σ : List Nat} {n D curV d : Nat} {o : DfsOut} {origTst
     CloseCanon curV d o origTstack hasVert s := by
   sorry
 
+/-- Admitted (Ranges content at the `finishEdge` site): the `FinishPiece` orientation facts at the
+boundary / P / V / loop-1 sites of one `finishEdge` call follow from `CloseBase` there (checker
+field `piece_*`, 0 violations). Obligation listed in `PROOF.md` §4.7. -/
+theorem closeBase_piece {σ : List Nat} {n D curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
+    {s : WalkState} (h : CloseBase σ n D curV d o origTstack hasVert s) :
+    ClosePiece curV d o origTstack hasVert s := by
+  sorry
+
 /-- The layer-independent part of one `finishEdge` step, from `CloseBase` at the site. -/
 theorem finish_core {σ : List Nat} {g : Graph} {n D m : Nat} {hv₁ : Bool} {s₀ s₃ : WalkState}
     {sts origs : List Nat} {P P' X : ItemId → Prop}
-    (hcb : CloseBase σ n D v d o m hv₁ s₃) (hi : s₃.Inv' D) (hc : s₃.CanonInv)
+    (hcb : CloseBase σ n D v d o m hv₁ s₃) (hi : s₃.Inv' D) (hc : s₃.CanonInv) (hpc : PieceInv d s₃)
     (hfull : s₃.Full g P' X) (how : OwnedD σ sts origs P d n s₃)
     (hv : v < g.nv) (he : o.e < g.ne) (hPe : ¬ P' (edgeItem g o.e))
     (hPv : hv₁ = false → ¬ P' (vertItem v)) (hPv' : hv₁ = true → P' (vertItem v))
@@ -63,7 +71,8 @@ theorem finish_core {σ : List Nat} {g : Graph} {n D m : Nat} {hv₁ : Bool} {s�
       (hv₁ = true → hv' = true) ∧ s'.Inv' d ∧ Shape s' ∧ s'.RangesInv σ (n + 1) d ∧ s'.g = s₃.g ∧
       s'.CloseInv ∧ OwnedD σ sts origs P d (n + 1) s' ∧ (hv' = true → VertCover v s') ∧
       s'.Full g (fun i => P' i ∨ i = edgeItem g o.e ∨ (hv' = true ∧ i = vertItem v)) X ∧
-      (∀ j, J j → Keep (d + 1) j s₀ s') ∧ s'.CanonInv ∧ s'.ternarize = s₃.ternarize) s₃ := by
+      (∀ j, J j → Keep (d + 1) j s₀ s') ∧ s'.CanonInv ∧ s'.ternarize = s₃.ternarize ∧
+      PieceInv d s') s₃ := by
   have hD := hcb.hD
   have hstep := finishEdge_step hD hi hcb.rgs.2.1 hcb.guards hcb.book
   have hrg := finishEdge_ranges hD hcb.rgs.1 hcb.rgs.2.1 hcb.nodup hcb.rgs.2.2 hcb.guards hcb.book
@@ -80,7 +89,8 @@ theorem finish_core {σ : List Nat} {g : Graph} {n D m : Nat} {hv₁ : Bool} {s�
     exact keep_finishEdge hT (hJ j hj).1 v d o m hv₁ (hJ j hj).2.1 (hJ j hj).2.2 (hK j hj)
   have hcn := finishEdge_canon hcb (closeBase_canon hcb) hc
   have htn := tern_finishEdge (b := s₃.ternarize) v d o m hv₁ rfl
-  exact ⟨hF.2, hstep.1, hstep.2, hrg.1, hrg.2.2, hcl, how', hvc, hF.1, hK', hcn, htn⟩
+  have hpi := finishEdge_piece hcb (closeBase_content hcb) (closeBase_piece hcb) hpc
+  exact ⟨hF.2, hstep.1, hstep.2, hrg.1, hrg.2.2, hcl, how', hvc, hF.1, hK', hcn, htn, hpi⟩
 
 theorem pushed_back_iff {g : Graph} {P : ItemId → Prop} {v e : Nat} {hv₁ hv' : Bool}
     (hh : hv₁ = true → hv' = true) (i : ItemId) :
@@ -211,7 +221,7 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
     have hbase : base = new₁ ++ segsStack G.segs := by simpa [hts₁] using hEf.tstack.symm
     subst hbase
     have hD : d = if (DfsOut.back e dest cls).cls.isTree then d + 1 else d := by simp [hnt]
-    have hcore := finish_core hcb₁ hp.inv hp.canon hp.full hp.owned h.v_lt helt hPe' hPv hPv'
+    have hcore := finish_core hcb₁ hp.inv hp.canon hp.piece hp.full hp.owned h.v_lt helt hPe' hPv hPv'
       (fun ht => absurd ht (by rw [hnt]; decide)) h.sts_le h.sts_n h.origs_le
       (hp.owned.len d (le_refl _)) hpath₁ hsvlt₁ h.types
       (J := FreshItem G.g (v :: (DfsOut.back e dest cls).verts) (DfsOut.back e dest cls).edges)
@@ -219,7 +229,7 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
         fun h' => hj.2.2 e (by simp [DfsOut.edges]) h'.symm⟩)
       (fun j _ => hp.keep j)
     rw [hts₁] at hg₁ hb₁ hf₁ hcb₁ hcore hE₁ hL₁ ⊢
-    obtain ⟨hhv', hi', hs', hrg', hgs', hc', ho', hvc', hF', hK', hcn', htn'⟩ := hcore
+    obtain ⟨hhv', hi', hs', hrg', hgs', hc', ho', hvc', hF', hK', hcn', htn', hpi'⟩ := hcore
     have hK0 := hK' 0 (FreshItem.zero _ _ _)
     have hgR : ((finishEdge v d (.back e dest cls) (new₁ ++ segsStack G.segs).length hv₁).run s₁).2.g =
       s₁.g := hgs'
@@ -439,6 +449,7 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
       close := hc'
       canon := hcn'
       tern := htn'.trans hp.tern
+      piece := hpi'
       P_past := pushed_past (fun e he hp => by
           rcases hp with hp | ⟨_, hp⟩
           · exact h.P_past e he hp
@@ -536,7 +547,7 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
     have hPv'₃ : hv₁ = true → Pushed G.g (fun i => P i ∨ (hv₁ = true ∧ i = vertItem v))
         (DfsTree.node c couts).verts (DfsTree.node c couts).edges (vertItem v) :=
       fun h1 => Or.inl (hPv' h1)
-    have hcore := finish_core hcb₃ hend.inv hend.canon hend.full how₃ h.v_lt helt hPe₃ hPv₃ hPv'₃
+    have hcore := finish_core hcb₃ hend.inv hend.canon hend.piece.exit hend.full how₃ h.v_lt helt hPe₃ hPv₃ hPv'₃
       (fun _ => Or.inr (Or.inl ⟨c, hcv, rfl⟩)) h.sts_le (Nat.le_trans h.sts_n (Nat.le_add_right _ _))
       h.origs_le (hp.owned.len d (le_refl _)) hpath₃ hsvlt₃ h.types
       (fun j hj => ⟨hj.1, fun h' => hj.2.1 v (List.mem_cons_self ..) h'.symm,
@@ -547,7 +558,7 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
       have hr := hend.r (by show s₁.g.TwoConnected; rw [hgeq₁]; exact h2) d rfl
       exact ⟨hr.1, hr.2.1, hr.2.2.2⟩
     rw [hts₁] at hg₃ hb₃ hcb₃ hcore hE₃ hL₃ hr₃ hR₂ ⊢
-    obtain ⟨hhv', hi', hs', hrg', hgs', hc', ho', hvc', hF', hK', hcn', htn'⟩ := hcore
+    obtain ⟨hhv', hi', hs', hrg', hgs', hc', ho', hvc', hF', hK', hcn', htn', hpi'⟩ := hcore
     have hK0 := hK' 0 (FreshItem.zero _ _ _)
     have hgR : ((finishEdge v d (.tree e cls (.node c couts)) (new₁ ++ segsStack G.segs).length hv₁).run
       s₃).2.g = s₃.g := hgs'
@@ -801,6 +812,7 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
       close := hc'
       canon := hcn'
       tern := htn'.trans hend.tern
+      piece := hpi'
       P_past := pushed_past (fun e he hp => by
           rcases hp with hp | ⟨_, hp⟩
           · exact h.P_past e he hp

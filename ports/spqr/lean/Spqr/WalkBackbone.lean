@@ -14,6 +14,7 @@ import Spqr.StOpenBlock
 import Spqr.StBdPop
 import Spqr.WalkTernFrame
 import Spqr.RangesCanon
+import Spqr.RangesPiece
 
 /-! # The backbone invariant (PROOF.md §4.7)
 
@@ -150,6 +151,7 @@ structure WalkInv (G : TreeGhost) (t : DfsTree) (d : Nat) (s : WalkState) : Prop
   close : s.CloseInv
   canon : s.CanonInv
   tern : s.ternarize = G.tern
+  piece : PieceInv d { s with stackVerts := s.stackVerts.set! d t.v }
   -- root coverage
   P_past : ∀ e, e < G.g.ne → G.P (edgeItem G.g e) → G.σ.idxOf e < G.n
   owned : OwnedD G.σ (G.sts ++ [G.n]) (G.origs ++ [s.tstack.length]) G.P d G.n
@@ -216,6 +218,7 @@ structure WalkInvEnd (G : TreeGhost) (t : DfsTree) (d : Nat) (s s' : WalkState) 
   close : s'.CloseInv
   canon : s'.CanonInv
   tern : s'.ternarize = G.tern
+  piece : PieceInv d s'
   full : s'.Full G.g (WalkM.Pushed G.g G.P t.verts t.edges) G.X
   owned : OwnedD G.σ (G.sts ++ [G.n]) (G.origs ++ [s.tstack.length]) (WalkM.Pushed G.g G.P t.verts t.edges) d
     (G.n + t.edgePostorder.length) s'
@@ -367,6 +370,7 @@ structure WalkInvOut (G : TreeGhost) (B v d : Nat) (outs₀ : List DfsOut) (done
   close : s.CloseInv
   canon : s.CanonInv
   tern : s.ternarize = G.tern
+  piece : PieceInv d s
   -- coverage
   P_past : ∀ e, e < G.g.ne → P (edgeItem G.g e) → G.σ.idxOf e < n
   owned : OwnedD G.σ G.sts G.origs P d n s
@@ -596,6 +600,7 @@ structure PreOut (G : TreeGhost) (B v d : Nat) (outs₀ : List DfsOut) (done : L
   close : s₁.CloseInv
   canon : s₁.CanonInv
   tern : s₁.ternarize = G.tern
+  piece : PieceInv d s₁
   full : s₁.Full G.g (fun i => P i ∨ (hv₁ = true ∧ i = vertItem v)) G.X
   owned : OwnedD G.σ G.sts G.origs P d n s₁
   vcover : hv₁ = true → VertCover v s₁
@@ -663,6 +668,7 @@ theorem walkOutPre_out (h : WalkInvOut G B v d outs₀ done (o :: rest) hasVert 
     (walkOutPre_pre s v d o hasVert hd₀ hts hR h.stPre.items hvert))))))))) ?_
   rintro hv₁ s₁ ⟨⟨push, hpush, hhv, hst⟩, ⟨hi, hs⟩, ⟨hrg, -, -⟩, hc, htn, ⟨hf, -⟩, ⟨ho, hvc⟩, hr, hp⟩
   exact ⟨push, ⟨hpush, hhv, hst, hi, hs, hrg, hc, h.canon.frame (by subst hst; rfl) (by subst hst; rfl), htn,
+    h.piece.frame (by subst hst; rfl) (by subst hst; rfl) (by subst hst; rfl),
     hf, ho, hvc, hr, hp, fun j => by subst hst; exact Keep.frame rfl rfl (by simp) rfl (fun _ _ => rfl) rfl⟩⟩
 
 end WalkInvOut
@@ -684,7 +690,7 @@ theorem PreOut.child {e : Nat} {cls : OutClass} {c : Nat} {couts : List DfsOut} 
           segs := (new₁, (refOuts G.g v d (DirsOf s d) (done.map (·.1)) false).1 ++
             if push = true then [⟨s₁.stackDir[d]!, [vertItem v]⟩] else []) :: G.segs }
         (.node c couts) (d + 1) { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } := by
-  obtain ⟨hpush, hhv, hst, hi₁, hs₁, hrg₁, hc₁, hcn₁, htn₁, hf₁, ho₁, hvc₁, hr₁, hp₁, hK₁⟩ := hp
+  obtain ⟨hpush, hhv, hst, hi₁, hs₁, hrg₁, hc₁, hcn₁, htn₁, hpi₁, hf₁, ho₁, hvc₁, hr₁, hp₁, hK₁⟩ := hp
   have hg := h.g_eq
   have hmem := h.mem
   have hwf_o := h.wf _ hmem
@@ -824,6 +830,12 @@ theorem PreOut.child {e : Nat} {cls : OutClass} {c : Nat} {couts : List DfsOut} 
       close := hc₁.frame rfl rfl fun _ hi => hi
       canon := hcn₁.frame rfl rfl
       tern := htn₁
+      piece := by
+        have hnpc : ∀ p, ¬ Items.IsParent s₁.items p (vertItem c) :=
+          (Place.fresh hf₁.place (by show 0 < 1 + c; omega) (by show 1 + c < _; omega)
+            fun hp => hp.elim (h.Pv_o c hcmem) fun hp => hvnc (vertItem_inj hp.2 ▸ hcmem)).1
+        exact (hpi₁.setVert c (by rw [hsvE]; exact hsvsz) fun a ha hb =>
+          hnpc rootItem (hb.eq_of_no_parent hnpc ▸ ha)).frame rfl rfl rfl
       P_past := fun e' he' hp => hp.elim (h.P_past e' he')
         fun hp => absurd hp.2.symm (vertItem_ne_edgeItem h.v_lt e')
       owned := (ho₁.mono fun _ hi => Or.inl hi).entry h.sts_len h.origs_len (hgE ▸ hc')
@@ -1098,6 +1110,7 @@ theorem toOut {v : Nat} {outs : List DfsOut} (h : WalkInv G (.node v outs) d s) 
     close := h.close.frame rfl rfl (fun _ h => h)
     canon := h.canon.frame rfl rfl
     tern := h.tern
+    piece := h.piece
     P_past := h.P_past
     owned := h.owned
     sts_len := by simp [h.sts_len]
@@ -1209,6 +1222,7 @@ theorem exit_true (hW : WalkInv G (.node v outs) d s)
     close := h.close
     canon := h.canon
     tern := h.tern
+    piece := h.piece
     full := h.full.monoP fun i => ⟨Pushed.vert i, fun hi => by
       rcases hi with hi | ⟨w, hw, rfl⟩ | hi
       · exact Or.inl (Or.inl hi)
@@ -1295,6 +1309,7 @@ theorem exit_false (hW : WalkInv G (.node v outs) d s)
     ranges := ⟨hRg.ranges, hSt.shape, h.σ_lt⟩
     canon := h.canon.frame rfl rfl
     tern := h.tern
+    piece := h.piece.frame rfl rfl rfl
     close := (h.close.frame (s' := { s₂ with stackDir := s₂.stackDir.set! d true }) rfl rfl
       (fun _ h => h)).pushVert v d hv (by have := h.shape.size; show s₂.g.nv < s₂.items.size; omega)
     full := ((h.full.set_stackDir (s₂.stackDir.set! d true)).cons hv0 hvlt hnP v d

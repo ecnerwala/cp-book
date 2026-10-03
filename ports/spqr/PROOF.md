@@ -2333,6 +2333,31 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   admitted until stage 3 derives them from `walkTree_inv` at the root. Reachable from `backbone`:
   the 25 admissions of stage 2g plus `closeBase_canon` (26).
 
+* **Stage 2i — `PieceInv` as a backbone field; `KeepF` exit frame.** On 194eed3 (Ranges-3's
+  `Spqr/RangesPiece.lean`). `WalkInv`/`WalkInvOut`/`PreOut`/`WalkInvEnd` carry `piece : PieceInv d`
+  (`WalkInv.piece` at the entry state after `stackVerts[d] := t.v`, like `inv`/`ranges`). Between
+  sites: `PieceInv.frame` (`walkOutPre`, `toOut`, `exit_false`'s vertex push), `PieceInv.setVert`
+  at the child entry (the child's vertex item has no parent — `Place.fresh` — so nothing is
+  `Below` it), `PieceInv.exit` from the child's `WalkInvEnd` back to depth `d`; at the `finishEdge`
+  site `finish_core` takes `PieceInv d s₃` and returns `PieceInv d s'` by
+  `finishEdge_piece hcb (closeBase_content hcb) (closeBase_piece hcb) hpc`. New named admission
+  `closeBase_piece : CloseBase σ n D curV d o origTstack hasVert s → ClosePiece curV d o origTstack
+  hasVert s` (`WalkBackboneStep.lean`): the `FinishPiece` orientation facts at the boundary / P /
+  V / loop-1 sites from `CloseBase` there; checker fields Ranges-3's `piece_*`/`checkPieceInv` at
+  every site, 0 violations on 0..3000 both modes. `walk_pieceInv` (`WalkPieceSep.lean`) remains
+  admitted until stage 3 derives it from `walkTree_inv` at the root (`PieceFacts.root`/
+  `PieceFacts.rootAppend`). Exit frame generalized: `WalkInvEnd.keep : KeepF G.g d (t.verts)
+  (t.edges) s s'` (= `∀ j, FreshItem G.g t.verts t.edges j → Keep d j s s'`, every item that is
+  neither a vertex/edge item of the tree nor out of range is untouched; `FreshItem.zero` recovers
+  the old `Keep d 0`), likewise `BbOuts`/`BbOut`; `finish_core` is parameterized by the item
+  predicate `J` and uses `keep_finishEdge` pointwise; `KeepF.cons_out` composes out-steps. This is
+  the frame the root pop needs (stage 3) without re-walking `walkTree_frame`. Reachable from
+  `backbone` (`#print sorries`): 23 — ear `earAt_tree_{bottom,close,late,late_fo,loop1,loop1_side,
+  loop1_touch,loops,lower}`, `tree_ret_frame`, `treeSite_wf`; Ranges `closeBase_content`,
+  `closeBase_canon`, `closeBase_piece`; R `rSide_{entry,vertFree,finish_content}_site`,
+  `loop1_rBranch_{fields,mid}_ctx`, `loop1_rTop_ctx`, `feS₂_top_entryR`,
+  `closeVert_type1_rCloseShape`; ST `walkOut_stLive`.
+
 ## 5. Phase 3: relabel
 
 `relabelTree` **[def]** takes the item array and produces `SpqrTree`. It is a plain preorder walk:
