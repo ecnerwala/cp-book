@@ -241,7 +241,7 @@ theorem planarEmbed_sound (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder 
     have hsh : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.ChildShape := by
       rw [planarRelabel_proj]; exact spqrTree_childShape g ternarize vertOrder edgeOrder
     have hrep : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.Represents g := by
-      rw [planarRelabel_proj]; exact spqrTree_represents g ternarize vertOrder edgeOrder
+      rw [planarRelabel_proj]; exact spqrTree_represents g hg ternarize vertOrder edgeOrder hvo heo
     have hsep : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.PieceSep g := by
       rw [planarRelabel_proj]; exact spqrTree_pieceSep g hg ternarize vertOrder edgeOrder hvo heo
     exact glued_root g ternarize vertOrder edgeOrder hwf _

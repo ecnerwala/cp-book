@@ -44,7 +44,8 @@ theorem relabelTree_represents (g : Graph) (items : Items) (h : items.WF g)
     (relabelTree g items).Represents g :=
   relabelTree_represents' g items h hR
 
-theorem spqrTree_r_three_connected (g : Graph) (tern : Bool) (vo eo : List Nat) :
+theorem spqrTree_r_three_connected (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
     let t := g.spqrTree tern vo eo
     ∀ i, i < t.size → t.type i = .R →
       SpqrTree.ThreeConnected (t.nVerts i)
@@ -63,9 +64,10 @@ malformed graphs (`PROOF.md` §7.6), so the hypothesis-free statement is open. -
 theorem spqrTree_wf (g : Graph) (tern : Bool) (vo eo : List Nat) : (g.spqrTree tern vo eo).WF := by
   sorry
 
-theorem spqrTree_represents (g : Graph) (tern : Bool) (vo eo : List Nat) :
+theorem spqrTree_represents (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
     (g.spqrTree tern vo eo).Represents g := by
-  have h := spqrTree_r_three_connected g tern vo eo
+  have h := spqrTree_r_three_connected g hg tern vo eo hvo heo
   rw [spqrTree_eq] at h ⊢
   exact relabelTree_represents_of_r g _ (walk_items_wf g tern vo eo) h
 

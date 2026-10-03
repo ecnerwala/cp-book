@@ -875,6 +875,18 @@ with two non-V children and one V child. The former bounds of six non-V R childr
 two V S children were false. `RelabelOK.nvList_S` and `.nvList_S'` use the corrected S bound;
 the public minimum skeleton sizes remain six edges for R and three vertices/edges for S.
 
+The public R-connectivity statement also needs valid input orders. On the valid K4 graph
+`[(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]`, `spqrTree false [] [6]` has an R node at index 3
+with only one vertex. Edge ID 6 is outside the graph's edge range. The corresponding walk
+item 11 still has type R but has terminals `(some 0, none)`, so it cannot satisfy `RSkel3`.
+`checks/RInvalidOrderCheck.lean` kernel-checks the graph WF, invalid order, output node,
+item terminals, and failures of both connectivity specifications using standard axioms.
+`items_r_three_connected`, `spqrTree_r_three_connected`, and `spqrTree_represents` now take
+the standard `g.WF`, `OrderOK g.nv vo`, and `OrderOK g.ne eo` hypotheses used by the DFS
+and `spqrTree_wf'` interfaces. The planar embedding soundness caller already supplies these.
+The item and public R-connectivity theorems remain admitted; correcting their domain does
+not discharge the walk invariants or the block-local reduction.
+
 ## 5. Phase 3: relabel
 
 `relabelTree` **[def]** takes the item array and produces `SpqrTree`. It is a plain preorder walk:
@@ -1102,6 +1114,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 HT 3-connectivity implies 2-connectivity with ≥ 3 edges: `Graph.ThreeConnected.twoConnected` | `Proofs/ThreeConnected.lean` | proved (standard axioms); no block or simplicity assumption |
 | 4.5 Item HT-to-cut bridge: `Items.RSkel3.rThreeConnected` | `Proofs/RItems.lean`, `Proofs/ThreeConnected.lean` | proved (standard axioms), including active vertices and either cap orientation; takes item WF and non-V-child edge coverage |
 | Item S/R shape minimum counts | `ItemSpec.lean`, `checks/SkeletonShapeCheck.lean` | corrected: ≥ 1 V child for S, ≥ 5 non-V children for R; kernel-checked sharp triangle/K4 outputs (standard axioms) |
+| R correctness input domain | `Correctness.lean`, `Proofs/RItems.lean`, `checks/RInvalidOrderCheck.lean` | corrected to `g.WF` + `OrderOK` for both orders; K4 with invalid edge order `[6]` kernel-checks failure of the former public target (standard axioms) |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
 | 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge`/`walkTree` induction and `walk_ranges` admitted; saturation not a field (attachment-count forms false, §4.6) |
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |

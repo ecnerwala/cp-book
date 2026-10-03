@@ -419,7 +419,8 @@ end WalkState
 `loop1_rBranch`) or as the type-1 R close of `finishEdge` (the `isSingle = false` case, the same
 argument with `cur` the type-1 entry); the skeleton is then untouched by later steps (items are
 only modified when allocated or closed). -/
-theorem items_r_three_connected (g : Graph) (tern : Bool) (vo eo : List Nat) (h2 : g.TwoConnected) :
+theorem items_r_three_connected (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) (h2 : g.TwoConnected) :
     let items := (g.walk tern (g.dfsForest vo eo)).items
     ∀ i, i < items.size → Items.type items i = NodeType.R → Items.RSkel3 g items i := by
   sorry
