@@ -64,22 +64,6 @@ theorem chain_lt_size {items : Items} (hlt : ∀ p c, Items.IsParent items p c �
 
 /-! ## `Items.leaves` agrees with `Expands` -/
 
-theorem ExpandsList.nil_inv {items : Items} {L : List ItemId} (h : ExpandsList items [] L) : L = [] := by
-  cases h; rfl
-
-theorem Expands.leaf_inv {items : Items} {x : ItemId} {L : List ItemId} (h : Expands items x L)
-    (hx : Items.type items x = .V ∨ Items.type items x = .Q) : L = [x] := by
-  cases h with
-  | leaf _ h' => rw [ExpandsList.nil_inv h']
-  | node h' _ => exact absurd hx h'
-
-theorem Expands.node_inv {items : Items} {x : ItemId} {L : List ItemId} (h : Expands items x L)
-    (hx : ¬ (Items.type items x = .V ∨ Items.type items x = .Q)) :
-    ExpandsList items (Items.ch items x) L := by
-  cases h with
-  | leaf h' _ => exact absurd h' hx
-  | node _ h' => simpa using h'
-
 theorem leaves_eq_of_expands {items : Items} : ∀ (fuel : Nat) {xs L : List ItemId},
     ExpandsList items xs L →
     (∀ x ∈ xs, ∀ c, List.IsChain (Items.IsParent items) (x :: c) → c.length < fuel) →
