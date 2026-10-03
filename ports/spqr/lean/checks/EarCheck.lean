@@ -468,6 +468,32 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
     if t.vStart == v && t.topDepth ≠ d then out := bad "vt_vstart" (showT t) :: out
     if t.vStart == v && spanItems t ≠ [vertItem v] then out := bad "vt_single" (showT t) :: out
   | none => pure ()
+  -- candidate clauses for `tree_comp_shape`
+  let retDone := done.filter (fun o => o.1.cls.lowval d < d)
+  let allT1 := retDone.all (fun o => o.1.cls.isType1)
+  let oneLow := match retDone with
+    | [] => true
+    | o :: _ => retDone.all (fun o' => o'.1.cls.lowval d == o.1.cls.lowval d)
+  if retDone ≠ [] && !hv then out := bad "ret_hv" "" :: out
+  for o in retDone do
+    if o.1.cls.isType1 && !o.2 then out := bad "t1_flag" "" :: out
+  for i in List.range above.length do
+    for j in List.range above.length do
+      if allT1 && i < j && above[i]!.topDepth ≤ above[j]!.topDepth then
+        out := bad "t1_above_distinct" s!"{showT above[i]!} {showT above[j]!}" :: out
+  if hv && allT1 && below ≠ [] then out := bad "t1_below" (toString (below.map showT)) :: out
+  if hv && retDone ≠ [] && allT1 && oneLow && !(above.length == 1 && below.isEmpty && vt.any (·.vStart == v)) then
+    out := bad "t1_top" (toString (top.map showT)) :: out
+  match vt with
+  | some t =>
+    if hv && allT1 && t.vStart ≠ v then out := bad "t1_vt" (showT t) :: out
+    if t.vStart == v && t.spans ≠ ([], [vertItem v]) &&
+        !retDone.any (fun o => t.spans == setSides (!s.stackDir[o.1.cls.lowval d]!) [vertItem v] []) then
+      out := bad "vt_side" (showT t) :: out
+    if !endPush && t.vStart == v &&
+        !retDone.any (fun o => t.spans == setSides (!s.stackDir[o.1.cls.lowval d]!) [vertItem v] []) then
+      out := bad "vt_side_strict" (showT t) :: out
+  | none => pure ()
   -- every open entry touches its bottom; every span item is a root; `hasVert` only after a return
   for t in s.tstack do
     if (E t) ≠ [] && !touches s (E t) t.vStart then out := bad "touch_bot" (showT t) :: out
@@ -679,6 +705,7 @@ def retCheck (seed v d : Nat) (o : DfsOut) (hv : Bool) (s₂ s : WalkState) : Li
     if sX.g.edges ≠ s₂.g.edges || sX.g.nv ≠ s₂.g.nv then out := bad "g" "" :: out
     if (List.range (d+1)).any (fun k => sX.stackVerts[k]! ≠ s₂.stackVerts[k]!) then out := bad "sv" "" :: out
     if (List.range d).any (fun k => sX.stackDir[k]! ≠ s₂.stackDir[k]!) then out := bad "sd" "" :: out
+    if sX.stackDir[d]! ≠ !s₂.stackDir[lowval]! then out := bad "sdd" "" :: out
     if sX.items.size < s₂.items.size then out := bad "size" "" :: out
     if sX.nxtEdgeIdx < s₂.nxtEdgeIdx then out := bad "nxt" "" :: out
     let childItem (j : Nat) : Bool :=

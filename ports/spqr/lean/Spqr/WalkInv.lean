@@ -101,6 +101,86 @@ theorem comp_outs_ret {anc : List Nat} {v y : Nat} {cls : OutClass} {outs : List
   have := lmin_le_of_mem (d := anc.length + 1) (retDepths_sub (y := y) ho _ (hm hlt))
   omega
 
+theorem comp_outs_ex {anc : List Nat} {v y : Nat} {cls : OutClass} {outs : List DfsOut}
+    (hwf : (DfsTree.node y outs).WF (anc ++ [v]))
+    (hcls : cls = classify anc.length true
+      (low2 (anc.length + 1) ((DfsTree.node y outs).retDepths (anc.length + 1))))
+    (hc : cls = .component) : ∃ o ∈ outs, o.cls.lowval (anc.length + 1) < anc.length + 1 := by
+  rw [DfsTree.WF] at hwf
+  have hlen : (anc ++ [v]).length = anc.length + 1 := by simp
+  rw [hcls, classify_eq_component_iff, low2_fst] at hc
+  rcases lmin_eq_or_mem (anc.length + 1) ((DfsTree.node y outs).retDepths (anc.length + 1))
+    with h | h
+  · omega
+  · rw [hc] at h
+    change anc.length ∈ DfsOut.retDepthsList _ outs at h
+    rw [DfsOut.retDepthsList_eq, List.mem_flatMap] at h
+    obtain ⟨o, ho, hm⟩ := h
+    refine ⟨o, ho, ?_⟩
+    have := lowval_eq_lmin (hwf.2 o ho)
+    rw [hlen] at this
+    rw [this]
+    have := lmin_le_of_mem (d := anc.length + 1 + 1) hm
+    omega
+
+theorem comp_outs_t1 {anc : List Nat} {v y : Nat} {cls : OutClass} {outs : List DfsOut}
+    (hwf : (DfsTree.node y outs).WF (anc ++ [v]))
+    (hcls : cls = classify anc.length true
+      (low2 (anc.length + 1) ((DfsTree.node y outs).retDepths (anc.length + 1))))
+    (hc : cls = .component) : ∀ o ∈ outs, o.cls.isType1 = true := by
+  intro o ho
+  rw [DfsTree.WF] at hwf
+  have hwo := hwf.2 o ho
+  have hlen : (anc ++ [v]).length = anc.length + 1 := by simp
+  rw [hcls, classify_eq_component_iff, low2_fst] at hc
+  cases o with
+  | back e dest cls' =>
+    rw [DfsOut.WF] at hwo
+    obtain ⟨i, -, rfl⟩ := hwo
+    simp only [DfsOut.cls, classify]
+    split
+    · split <;> rfl
+    · rfl
+  | tree e cls' child =>
+    rw [DfsOut.WF] at hwo
+    obtain ⟨-, rfl⟩ := hwo
+    simp only [DfsOut.cls, hlen]
+    by_contra hne
+    have hk : ∃ l, classify (anc.length + 1) true
+        (low2 (anc.length + 1 + 1) (child.retDepths (anc.length + 1 + 1))) = .ret l .type2Child := by
+      generalize classify (anc.length + 1) true
+        (low2 (anc.length + 1 + 1) (child.retDepths (anc.length + 1 + 1))) = c at hne
+      cases c with
+      | ret l k => cases k <;> simp_all [OutClass.isType1]
+      | _ => simp [OutClass.isType1] at hne
+    obtain ⟨l, hl⟩ := hk
+    rw [classify_eq_ret_iff_tree] at hl
+    obtain ⟨h1, hld, h2⟩ := hl
+    have h2' : (low2 (anc.length + 1 + 1) (child.retDepths (anc.length + 1 + 1))).2 < anc.length + 1 := by
+      by_contra hge
+      rw [ite_eq_right hge] at h2
+      cases h2
+    rw [low2_snd] at h2'
+    rw [low2_fst] at h1
+    rcases lmin_eq_or_mem (anc.length + 1 + 1)
+      ((child.retDepths (anc.length + 1 + 1)).filter (· ≠ lmin (anc.length + 1 + 1) (child.retDepths (anc.length + 1 + 1))))
+      with h | h
+    · omega
+    · rw [List.mem_filter] at h
+      obtain ⟨hm, hne'⟩ := h
+      have hsub := retDepths_sub (d := anc.length + 1) (y := y) ho _ hm
+      have hge := lmin_le_of_mem (d := anc.length + 1) hsub
+      rw [hc] at hge
+      have hl' : lmin (anc.length + 1 + 1) (child.retDepths (anc.length + 1 + 1)) = l := h1
+      have hlm : l ∈ child.retDepths (anc.length + 1 + 1) := by
+        rcases lmin_eq_or_mem (anc.length + 1 + 1) (child.retDepths (anc.length + 1 + 1)) with h3 | h3
+        · omega
+        · rwa [hl'] at h3
+      have := lmin_le_of_mem (d := anc.length + 1) (retDepths_sub (d := anc.length + 1) (y := y) ho _ hlm)
+      rw [hc] at this
+      have hne2 := of_decide_eq_true hne'
+      omega
+
 end EarDfs
 
 open WalkM
@@ -1839,7 +1919,9 @@ theorem ctx_step_back_boundary {v d : Nat} {done : List (DfsOut × Bool)} {rest 
     (hge : d ≤ cls.lowval d) :
     wp (finishEdge v d (.back e dest cls) (L ++ s.tstack).length (hasVert || push))
       (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, hasVert || push)]) rest hv' base bE sv sd s' ∧
-        OutFrame v (.back e dest cls) base s s')
+        OutFrame v (.back e dest cls) base s s' ∧
+        (CtxShape v d done hasVert base s →
+          CtxShape v d (done ++ [(.back e dest cls, hasVert || push)]) hv' base s'))
       { s with stackDir := s.stackDir.set! d (if cls.lowval d ≥ d then false
                  else !s.stackDir[cls.lowval d]!),
                tstack := L ++ s.tstack } := by
@@ -1869,7 +1951,8 @@ theorem ctx_step_back_boundary {v d : Nat} {done : List (DfsOut × Bool)} {rest 
   refine (fun hch => ⟨earCtx_selfLoop hC hv he hge hsz hend' hinc hrest_e hrest_v rfl rfl rfl
     (fun k hk => getElem!_set!_ne' _ _ _ _ (by omega)) (by simp) hch,
     outFrame_selfLoop hv he hsz (hC.q_fresh _ (List.mem_cons_self ..) e (subEdges_e _)).2.1
-      rfl rfl (by simp) hch⟩) ?_
+      rfl rfl (by simp) hch,
+    fun hS => ctxShape_same hS hge (by simp) fun k hk => getElem!_set!_ne' _ _ _ _ (Nat.ne_of_lt hk)⟩) ?_
   intro j
   have hqlt : edgeItem s.g e < s.items.size := by show 1 + s.g.nv + e < _; omega
   have hvlt : vertItem v < s.items.size := by show 1 + v < _; omega
@@ -1898,6 +1981,173 @@ theorem lowval_le_of_rank {d : Nat} {c c' : OutClass} (h : c'.lowval d < d) (h' 
   cases c <;> cases c' <;> simp only [OutClass.lowval, OutClass.rank] at h h' hr ⊢ <;> try omega
   rename_i lv k lv' k'
   have := RetKind.rank_le_two k; have := RetKind.rank_le_two k'; omega
+
+theorem spans_setSides_single (dir : Bool) (i : ItemId) :
+    (setSides dir [i] []).1 ++ (setSides dir [i] []).2 = [i] := by
+  unfold setSides; cases dir <;> rfl
+
+theorem mem_mergeInto_spans (u c : TEntry) (i : ItemId) :
+    i ∈ (TEntry.mergeInto u c).spans.1 ++ (TEntry.mergeInto u c).spans.2 ↔
+      i ∈ u.spans.1 ++ u.spans.2 ∨ i ∈ c.spans.1 ++ c.spans.2 := by
+  simp only [TEntry.mergeInto, List.mem_append]
+  tauto
+
+/-- The shape after the `Q e` push (and the first-edge `V v` push) at a returning back edge, when
+the P-check fails (`hnoP`). -/
+theorem ctxShape_pushBack {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
+    {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
+    {s s' : WalkState} {e dest : Nat} {cls : OutClass}
+    (hC : EarCtx v d done (.back e dest cls :: rest) hasVert base bE sv sd s)
+    (hS : CtxShape v d done hasVert base s)
+    (hv : v < s.g.nv) (hlt : cls.lowval d < d)
+    (hrank : ∀ o' ∈ done, o'.1.cls.rank ≤ cls.rank)
+    (L : List TEntry) (push dirD : Bool)
+    (hpush : push = true ↔ hasVert = false)
+    (hL : L = if push then [⟨v, d, s.nxtEdgeIdx, setSides dirD [vertItem v] []⟩] else [])
+    (hdirD : push = true → dirD = !s.stackDir[cls.lowval d]!)
+    (hnoP : push = false → ∀ a tl, s.tstack = a :: tl → a.vStart = v → a.topDepth ≠ cls.lowval d)
+    (hsd : ∀ k, k < d → s'.stackDir[k]! = s.stackDir[k]!)
+    (hts : s'.tstack = ⟨v, cls.lowval d, s.nxtEdgeIdx,
+      setSides s.stackDir[cls.lowval d]! [edgeItem s.g e] []⟩ :: (L ++ s.tstack)) :
+    CtxShape v d (done ++ [(.back e dest cls, true)]) true base s' := by
+  set lv := cls.lowval d with hlv
+  set c : TEntry := ⟨v, lv, s.nxtEdgeIdx, setSides s.stackDir[lv]! [edgeItem s.g e] []⟩ with hc
+  have hcV : vertItem v ∉ c.spans.1 ++ c.spans.2 := by
+    show vertItem v ∉ (setSides s.stackDir[lv]! [edgeItem s.g e] []).1 ++
+      (setSides s.stackDir[lv]! [edgeItem s.g e] []).2
+    rw [spans_setSides_single, List.mem_singleton]; exact vertItem_ne_edgeItem' hv
+  obtain ⟨top, htop, hCT⟩ := hC.top
+  refine
+    { ret_hv := fun _ => rfl
+      t1_flag := fun o ho hl ht => by
+        rcases List.mem_append.1 ho with h | h
+        · exact hS.t1_flag o h hl ht
+        · rw [List.mem_singleton] at h; subst h; rfl
+      t1 := fun _ hT => ?_
+      vt_side := fun top' htop' t ht htv hm => ?_ }
+  · cases hp : push
+    · have hhv : hasVert = true := by
+        cases h : hasVert
+        · exact absurd (hpush.2 h) (by rw [hp]; decide)
+        · rfl
+      simp only [hp, Bool.false_eq_true, ↓reduceIte] at hL
+      rw [hL, List.nil_append] at hts
+      obtain ⟨above, vt, hab, hvtv, hvtm, hpw⟩ :=
+        hS.t1 hhv fun o ho hl => hT o (List.mem_append_left _ ho) hl
+      refine ⟨c :: above, vt, by rw [hts, hab]; rfl, hvtv, hvtm, List.pairwise_cons.2 ⟨?_, hpw⟩⟩
+      obtain ⟨above₀, below₀, hsp, hCE, -, -, hLow, -, -⟩ := hCT.split
+      simp only [hhv, ↓reduceIte] at hsp
+      obtain ⟨vt₀, htv₀, -, hvtm₀, -, -, -, -⟩ := hsp
+      have hab₀ : s.tstack = above₀ ++ vt₀ :: (below₀ ++ base) := by rw [htop, htv₀]; simp
+      obtain ⟨rfl, rfl, -⟩ := split_unique hab hab₀ hvtm hvtm₀ hC.span_disj
+      have hle : ∀ t ∈ above, t.topDepth ≤ lv := fun t ht => by
+        obtain ⟨o, ho, hto⟩ := hLow t ht
+        have hr := hrank (o, true) (mem_afterVert ho)
+        rw [hto]
+        exact lowval_le_of_rank (by rw [← hto]; exact (hCE t ht).depth) hlt hr
+      rcases above with _ | ⟨a, above'⟩
+      · intro t ht; exact absurd ht List.not_mem_nil
+      · have ha : a.topDepth < lv := Nat.lt_of_le_of_ne (hle a (List.mem_cons_self ..))
+          (hnoP hp a _ (by rw [hab]; rfl) (hCE a (List.mem_cons_self ..)).vStart)
+        intro t ht
+        rcases List.mem_cons.1 ht with rfl | ht'
+        · exact ha
+        · exact Nat.lt_trans ((List.pairwise_cons.1 hpw).1 t ht') ha
+    · have hhv : hasVert = false := hpush.1 hp
+      have htop0 : top = [] := by
+        by_contra h
+        exact absurd (hS.ret_hv (hCT.ret h)) (by rw [hhv]; decide)
+      simp only [hp, ↓reduceIte] at hL
+      rw [hL] at hts
+      refine ⟨[c], ⟨v, d, s.nxtEdgeIdx, setSides dirD [vertItem v] []⟩, ?_, rfl, ?_,
+        List.pairwise_singleton _ _⟩
+      · rw [hts, htop, htop0]; rfl
+      · show vertItem v ∈ (setSides dirD [vertItem v] []).1 ++ (setSides dirD [vertItem v] []).2
+        rw [spans_setSides_single]; exact List.mem_singleton_self _
+  · have htop'' : top' = c :: (L ++ top) := by
+      apply List.append_cancel_right (bs := base)
+      rw [← htop', hts, htop]; simp
+    rw [htop''] at ht
+    rcases List.mem_cons.1 ht with rfl | ht
+    · exact absurd hm hcV
+    · rcases List.mem_append.1 ht with ht | ht
+      · rw [hL] at ht
+        split at ht
+        · rw [List.mem_singleton] at ht; subst ht
+          refine ⟨(.back e dest cls, true), List.mem_append_right _ (List.mem_singleton_self _),
+            hlt, ?_⟩
+          show setSides dirD [vertItem v] [] = setSides (!s'.stackDir[lv]!) [vertItem v] []
+          rw [hdirD ‹_›, hsd _ hlt]
+        · exact absurd ht List.not_mem_nil
+      · obtain ⟨o, ho, hl, hsp⟩ := hS.vt_side top htop t ht htv hm
+        exact ⟨o, List.mem_append_left _ ho, hl, by rw [hsd _ hl]; exact hsp⟩
+
+/-- The shape after a P-merge: the returning type-1 out's entry `(v, lowval)` merged into the
+previous ear at the same lowval (the top of `above`), leaving one entry `a'` in its place. -/
+theorem ctxShape_mergeP {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
+    {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
+    {s s' : WalkState} {o : DfsOut} {a a' : TEntry} {tl : List TEntry} {p : ItemId} {dir : Bool}
+    (hC : EarCtx v d done (o :: rest) true base bE sv sd s)
+    (hS : CtxShape v d done true base s)
+    (hv : v < s.g.nv) (hlt : o.cls.lowval d < d)
+    (hsz : 1 + s.g.nv + s.g.ne ≤ s.items.size)
+    (hts : s.tstack = a :: tl) (hav : a.vStart = v) (had : a.topDepth = o.cls.lowval d)
+    (hp : p ∈ a.spans.1 ++ a.spans.2 ∨ s.items.size ≤ p)
+    (ha'v : a'.vStart = v) (ha'd : a'.topDepth = o.cls.lowval d)
+    (ha's : a'.spans = setSides dir [p] [])
+    (hsd : ∀ k, k < d → s'.stackDir[k]! = s.stackDir[k]!)
+    (hts' : s'.tstack = a' :: tl) :
+    CtxShape v d (done ++ [(o, true)]) true base s' := by
+  obtain ⟨top, htop, hCT⟩ := hC.top
+  obtain ⟨above₀, below₀, hsp, -, -, -, -, -, -⟩ := hCT.split
+  simp only [↓reduceIte] at hsp
+  obtain ⟨vt₀, htv₀, -, hvtm₀, hvtd, hvt4, -, -⟩ := hsp
+  have hab₀ : s.tstack = above₀ ++ vt₀ :: (below₀ ++ base) := by rw [htop, htv₀]; simp
+  obtain ⟨above', rfl⟩ : ∃ above', above₀ = a :: above' := by
+    rcases above₀ with _ | ⟨a₀, above'⟩
+    · exfalso
+      have h := hab₀; rw [hts] at h
+      rw [← (List.cons.inj h).1] at hvtd
+      exact absurd (hvtd hav).1 (by rw [had]; exact Nat.ne_of_lt hlt)
+    · have h := hab₀; rw [hts] at h
+      exact ⟨above', by rw [(List.cons.inj h).1]⟩
+  have htl : tl = above' ++ vt₀ :: (below₀ ++ base) := by
+    have h := hab₀; rw [hts] at h; exact (List.cons.inj h).2
+  have haV : vertItem v ∉ a.spans.1 ++ a.spans.2 := hvt4 a (List.mem_cons_self ..)
+  have hpV : p ≠ vertItem v := by
+    rintro rfl
+    rcases hp with h | h
+    · exact haV h
+    · exact absurd h (Nat.not_le.2 (by show 1 + v < _; omega))
+  have ha'V : vertItem v ∉ a'.spans.1 ++ a'.spans.2 := by
+    rw [ha's, spans_setSides_single, List.mem_singleton]; exact fun h => hpV h.symm
+  refine
+    { ret_hv := fun _ => rfl
+      t1_flag := fun o' ho' hl ht => by
+        rcases List.mem_append.1 ho' with h | h
+        · exact hS.t1_flag o' h hl ht
+        · rw [List.mem_singleton] at h; subst h; rfl
+      t1 := fun _ hT => ?_
+      vt_side := fun top' htop' t ht htv hm => ?_ }
+  · obtain ⟨above, vt, hab, hvtv, hvtm, hpw⟩ :=
+      hS.t1 rfl fun o' ho' hl => hT o' (List.mem_append_left _ ho') hl
+    obtain ⟨rfl, rfl, -⟩ := split_unique hab hab₀ hvtm hvtm₀ hC.span_disj
+    refine ⟨a' :: above', vt, ?_, hvtv, hvtm, ?_⟩
+    · have h := hab; rw [hts] at h
+      rw [hts', (List.cons.inj h).2]; rfl
+    · rw [List.pairwise_cons] at hpw ⊢
+      refine ⟨fun t ht => ?_, hpw.2⟩
+      rw [ha'd, ← had]; exact hpw.1 t ht
+  · have htop'' : top' = a' :: (above' ++ vt₀ :: below₀) := by
+      apply List.append_cancel_right (bs := base)
+      rw [← htop', hts', htl]; simp
+    rw [htop''] at ht
+    rcases List.mem_cons.1 ht with rfl | ht
+    · exact absurd hm ha'V
+    · have ht₀ : t ∈ top := by rw [htv₀]; exact List.mem_cons_of_mem _ ht
+      obtain ⟨o', ho', hl, hsp⟩ := hS.vt_side top htop t ht₀ htv hm
+      exact ⟨o', List.mem_append_left _ ho', hl, by rw [hsd _ hl]; exact hsp⟩
+
 
 /-- The returning back-edge push (no P-merge): the post-state has the new one-edge entry
 `(v, lowval)` holding `Q e` on top of `L ++ s.tstack`, the items' children unchanged (`Q e` only got
@@ -2934,7 +3184,9 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
     wp (finishRest v d (cls.lowval d) cls.isType1 true true)
       (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, true)]) rest true base bE sv sd s₂ →
         EarCtx v d (done ++ [(.back e dest cls, true)]) rest hv' base bE sv sd s' ∧
-        OutFrame v (.back e dest cls) base s₂ s') s₂ := by
+        OutFrame v (.back e dest cls) base s₂ s' ∧
+        (CtxShape v d done hasVert base s →
+          CtxShape v d (done ++ [(.back e dest cls, true)]) hv' base s')) s₂ := by
   have hc' : (cls.isType1 && decide (s₂.tstack.length ≥ 2) && (s₂.tstack.tail.head!.vStart == v) &&
       (s₂.tstack.tail.head!.topDepth == cls.lowval d)) = true := by
     rw [result, run_condP] at hc; exact hc
@@ -2951,6 +3203,15 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
       simp only [List.tail_cons, List.head!_cons] at hnd
       exact absurd hnd (Nat.ne_of_gt hlt)
   rw [hL0, List.nil_append] at hts
+  have hp0 : push = false := by
+    cases hp : push
+    · rfl
+    · exfalso; simp [hp, hL0] at hL
+  have hhvT : hasVert = true := by
+    cases hhv : hasVert
+    · exact absurd (hpush.2 hhv) (by rw [hp0]; decide)
+    · rfl
+  subst hhvT
   cases hst : s.tstack with
   | nil =>
     exfalso
@@ -3035,7 +3296,10 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
       (fun h => absurd rfl h) hP (fun j hj => Items.ch_modify_of_ne _ _ hj)
       (by simp) (by rw [Array.size_modify]; exact hilt) rfl rfl rfl rfl rfl,
       outFrame_mergeP hts₂ hcs (by rw [hai, mem_setSides]; exact List.mem_singleton_self _)
-        (.inl rfl) hS hP (fun j hj => Items.ch_modify_of_ne _ _ hj) rfl (by simp) rfl⟩) ?_ ?_
+        (.inl rfl) hS hP (fun j hj => Items.ch_modify_of_ne _ _ hj) rfl (by simp) rfl,
+      fun hS0 => ctxShape_mergeP hC hS0 hv hlt hsz hst hnv hnd (p := i) (hts' := rfl)
+        (hsd := fun k hk => hsd k hk)
+        (Or.inl (by rw [hai, mem_setSides]; exact List.mem_singleton_self _)) rfl rfl rfl⟩) ?_ ?_
     · intro r hr
       rcases (hSmem r).1 hr with h | h
       · exact .inl h
@@ -3062,7 +3326,9 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
       outFrame_mergeP hts₂ hcs (by rw [hai, mem_setSides]; exact List.mem_singleton_self _)
         (.inr (Nat.le_refl _)) hS hP
         (fun j hj => by rw [Items.ch_modify_of_ne _ _ hj, Items.ch_push, if_neg hj])
-        rfl (by simp) rfl⟩) ?_ ?_
+        rfl (by simp) rfl,
+      fun hS0 => ctxShape_mergeP hC hS0 hv hlt hsz hst hnv hnd (p := s₂.items.size) (hts' := rfl)
+        (hsd := fun k hk => hsd k hk) (Or.inr (Nat.le_of_eq hsz'.symm)) rfl rfl rfl⟩) ?_ ?_
     · intro r hr
       rcases (hSmem r).1 hr with h | h
       · exact .inl h
@@ -3092,7 +3358,8 @@ theorem ctx_step_back_ret_rest {v d : Nat} {done : List (DfsOut × Bool)} {rest 
       ∀ y ∈ child.verts, y < s.g.nv)
     (hnc : ∀ o' ∈ done, ∀ e', subEdges o'.1 e' → ∀ x, s.g.Inc e' x →
       ∀ o'' ∈ rest, ∀ e₁ cls₁ child, o'' = .tree e₁ cls₁ child → x ∉ child.verts)
-    (L : List TEntry) (push dirD : Bool)
+    (L : List TEntry) (push dirD : Bool) (ht1 : cls.isType1 = true)
+    (hdirD : push = true → dirD = !s.stackDir[cls.lowval d]!)
     (hpush : push = true ↔ hasVert = false)
     (hL : L = if push then [⟨v, d, s.nxtEdgeIdx, setSides dirD [vertItem v] []⟩] else [])
     (hg : s₂.g = s.g) (hsv : s₂.stackVerts = s.stackVerts)
@@ -3104,7 +3371,9 @@ theorem ctx_step_back_ret_rest {v d : Nat} {done : List (DfsOut × Bool)} {rest 
       setSides s.stackDir[cls.lowval d]! [edgeItem s.g e] []⟩ :: (L ++ s.tstack)) :
     wp (finishRest v d (cls.lowval d) cls.isType1 (hasVert || push) true)
       (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, hasVert || push)]) rest hv'
-        base bE sv sd s' ∧ OutFrame v (.back e dest cls) base s s') s₂ := by
+        base bE sv sd s' ∧ OutFrame v (.back e dest cls) base s s' ∧
+        (CtxShape v d done hasVert base s →
+          CtxShape v d (done ++ [(.back e dest cls, hasVert || push)]) hv' base s')) s₂ := by
   have hhv' : (hasVert || push) = true := by
     cases h : hasVert
     · rw [hpush.2 h]; rfl
@@ -3117,13 +3386,19 @@ theorem ctx_step_back_ret_rest {v d : Nat} {done : List (DfsOut × Bool)} {rest 
     exact outFrame_pushBack htop hL hg hsz' hch hts
   by_cases hc : result (condP v (cls.lowval d) cls.isType1) s₂ = true
   · exact wp_mono _ (ctx_step_back_ret_P hC hv he hlt hsz hrank hinc hend hdest hrest_e hrest_v hnc
-      L push dirD hpush hL hg hsv hsd hsz' hch hnx hts hc) fun _ _ h => ⟨(h hpb).1, hPB.trans (h hpb).2⟩
+      L push dirD hpush hL hg hsv hsd hsz' hch hnx hts hc) fun _ _ h =>
+        ⟨(h hpb).1, hPB.trans (h hpb).2.1, (h hpb).2.2⟩
   · have hc' : (cls.isType1 && decide (s₂.tstack.length ≥ 2) && (s₂.tstack.tail.head!.vStart == v) &&
         (s₂.tstack.tail.head!.topDepth == cls.lowval d)) = false := Bool.eq_false_iff.2 hc
     unfold finishRest finishP finishTail condP
     simp only [wp_bind, wp_tstackSize, wp_nxt, wp_pure, wp_ite, hc', Bool.false_eq_true,
       ↓reduceIte, Bool.not_true]
-    exact ⟨hpb, hPB⟩
+    have hnoP : push = false → ∀ a tl, s.tstack = a :: tl → a.vStart = v →
+        a.topDepth ≠ cls.lowval d := by
+      intro hp a tl hst hav hd
+      rw [hts, hL, hp, ite_eq_right Bool.false_ne_true, List.nil_append, hst] at hc'
+      simp [hav, hd, ht1] at hc'
+    exact ⟨hpb, hPB, fun hS => ctxShape_pushBack hC hS hv hlt hrank L push dirD hpush hL hdirD hnoP hsd hts⟩
 
 /-- After a returning back-edge out (`lowval < d`): `finishBack` (the `Q` push, the P-check, the
 first-edge vertex push) re-establishes the context. -/
@@ -3152,7 +3427,9 @@ theorem ctx_step_back_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
     (hlt : cls.lowval d < d) :
     wp (finishEdge v d (.back e dest cls) (L ++ s.tstack).length (hasVert || push))
       (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, hasVert || push)]) rest hv' base bE sv sd s' ∧
-        OutFrame v (.back e dest cls) base s s')
+        OutFrame v (.back e dest cls) base s s' ∧
+        (CtxShape v d done hasVert base s →
+          CtxShape v d (done ++ [(.back e dest cls, hasVert || push)]) hv' base s'))
       { s with stackDir := s.stackDir.set! d (if cls.lowval d ≥ d then false
                  else !s.stackDir[cls.lowval d]!),
                tstack := L ++ s.tstack } := by
@@ -3172,8 +3449,8 @@ theorem ctx_step_back_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
     ↓reduceIte, wp_makeVs, wp_modifyItem, hb, Bool.false_eq_true]
   unfold finishBack
   simp only [wp_bind, wp_pushEdgeTstack, wp_modify, DfsOut.cls, DfsOut.e]
-  refine ctx_step_back_ret_rest hC hv he hlt hsz hrank hinc hend hdest hrest_e hrest_v hnc L push _
-    hpush' hL rfl rfl (fun k hk => getElem!_set!_ne' _ _ _ _ (Nat.ne_of_lt hk)) (by simp) ?_ rfl ?_
+  refine ctx_step_back_ret_rest hC hv he hlt hsz hrank hinc hend hdest hrest_e hrest_v hnc L push _ ht1
+    (fun _ => by rw [getElem!_set!_self' _ _ _ hsd, ite_eq_right hge']) hpush' hL rfl rfl (fun k hk => getElem!_set!_ne' _ _ _ _ (Nat.ne_of_lt hk)) (by simp) ?_ rfl ?_
   · intro j
     simp only [Items.ch, Array.getElem?_modify]
     by_cases hj : edgeItem s.g e = j
@@ -3208,7 +3485,9 @@ theorem ctx_step_back_frame {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
         else !s.stackDir[cls.lowval d]!))[d]! [vertItem v] []⟩] else []) :
     wp (finishEdge v d (.back e dest cls) (L ++ s.tstack).length (hasVert || push))
       (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, hasVert || push)]) rest hv' base bE sv sd s' ∧
-        OutFrame v (.back e dest cls) base s s')
+        OutFrame v (.back e dest cls) base s s' ∧
+        (CtxShape v d done hasVert base s →
+          CtxShape v d (done ++ [(.back e dest cls, hasVert || push)]) hv' base s'))
       { s with stackDir := s.stackDir.set! d (if cls.lowval d ≥ d then false
                  else !s.stackDir[cls.lowval d]!),
                tstack := L ++ s.tstack } := by
@@ -3888,7 +4167,9 @@ theorem ctx_step_tree_bridge {v d : Nat} {done : List (DfsOut × Bool)} {rest : 
     (hb : cls = .bridge) :
     wp (finishEdge v d (.tree e cls (.node y outs)) (L ++ s.tstack).length (hasVert || push))
       (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) rest hv''
-        base bE sv sd s' ∧ OutFrame v (.tree e cls (.node y outs)) base s s')
+        base bE sv sd s' ∧ OutFrame v (.tree e cls (.node y outs)) base s s' ∧
+        (CtxShape v d done hasVert base s →
+          CtxShape v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) hv'' base s'))
       (pushEnd sE D₃ L') := by
   have hC := H.ctx
   have hC' := H.ctx'
@@ -3942,7 +4223,8 @@ theorem ctx_step_tree_bridge {v d : Nat} {done : List (DfsOut × Bool)} {rest : 
     DfsOut.cls, DfsOut.e, DfsOut.dest, OutClass.isTree, OutClass.lowval, beq_self_eq_true,
     ↓reduceIte, pushEnd, hL', hgE, List.singleton_append, List.head!_cons, List.tail_cons, setSides]
   refine (fun hch => ⟨earCtx_bridge H rfl rfl hsEts (fun k hk => H.svlo k hk) hsdk (by simp) hch,
-    outFrame_bridge H rfl rfl hsEts (by simp) hch⟩) ?_
+    outFrame_bridge H rfl rfl hsEts (by simp) hch,
+    fun hS => ctxShape_same hS hge' (by simp [hsEts]) hsdk⟩) ?_
   intro j
   simp only [Items.ch, Array.getElem?_modify, Array.getElem?_push, Array.size_modify]
   by_cases h1 : j = vertItem v
@@ -4495,7 +4777,9 @@ theorem ctx_step_tree_comp {v d : Nat} {done : List (DfsOut × Bool)} {rest : Li
     (hc : cls = .component) :
     wp (finishEdge v d (.tree e cls (.node y outs)) (L ++ s.tstack).length (hasVert || push))
       (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) rest hv''
-        base bE sv sd s' ∧ OutFrame v (.tree e cls (.node y outs)) base s s')
+        base bE sv sd s' ∧ OutFrame v (.tree e cls (.node y outs)) base s s' ∧
+        (CtxShape v d done hasVert base s →
+          CtxShape v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) hv'' base s'))
       (pushEnd sE D₃ L') := by
   have hC := H.ctx
   have hge : d ≤ cls.lowval d := by rw [hc]; exact Nat.le_refl d
@@ -4538,7 +4822,8 @@ theorem ctx_step_tree_comp {v d : Nat} {done : List (DfsOut × Bool)} {rest : Li
     OutClass.isTree, OutClass.lowval, hne, Bool.false_eq_true, ↓reduceIte, pushEnd,
     hL', List.nil_append, hsh, List.head!_cons, List.tail_cons]
   refine (fun hch => ⟨earCtx_comp H rfl hsh ht₁ hgE (by simp) (fun k hk => H.svlo k hk) hsdk (by simp) hch,
-    outFrame_comp H hsh hgE (by simp) (by simp) hch⟩) ?_
+    outFrame_comp H hsh hgE (by simp) (by simp) hch,
+    fun hS => ctxShape_same hS hge' (by simp [hsh]) hsdk⟩) ?_
   intro j
   simp only [Items.ch, Array.getElem?_modify]
   by_cases h1 : j = vertItem v
@@ -4566,16 +4851,6 @@ theorem wp_finishEdge_tree (curV d : Nat) (o : DfsOut) (orig : Nat) (hasVert : B
     simp only [finishEdge', finishTree, wp_bind, wp_get, wp_stackDir, hge, ↓reduceIte, ht,
       closeVert_eq, Bool.false_eq_true, wp_makeVs, wp_modifyItem] <;>
     exact Iff.rfl
-
-theorem spans_setSides_single (dir : Bool) (i : ItemId) :
-    (setSides dir [i] []).1 ++ (setSides dir [i] []).2 = [i] := by
-  unfold setSides; cases dir <;> rfl
-
-theorem mem_mergeInto_spans (u c : TEntry) (i : ItemId) :
-    i ∈ (TEntry.mergeInto u c).spans.1 ++ (TEntry.mergeInto u c).spans.2 ↔
-      i ∈ u.spans.1 ++ u.spans.2 ∨ i ∈ c.spans.1 ++ c.spans.2 := by
-  simp only [TEntry.mergeInto, List.mem_append]
-  tauto
 
 /-- The parent context after a returning tree out from `RetTop` and the final top `T`: `R` itself
 (the vertex entry was already pushed), or `V v` pushed above `R` (`isSingle`), or merged into `R`'s
@@ -4605,7 +4880,7 @@ theorem earCtx_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOu
   have hsz : 1 + s.g.nv + s.g.ne ≤ s.items.size := H.hsz
   set C : DfsTree := .node y outs with hCdef
   set o : DfsOut := .tree e cls C with ho
-  obtain ⟨-, hRg, hRsv, hRsd, hRsz, hRnx, hRkept, hRch, hRlt, hRroot, hRnew, hRtb, hRE, hRtouch,
+  obtain ⟨-, hRg, hRsv, hRsd, -, hRsz, hRnx, hRkept, hRch, hRlt, hRroot, hRnew, hRtb, hRE, hRtouch,
     hRdisj, hRsdisj, hRvs, hRvert, hRnoV⟩ := HR
   rw [← hit] at hRsz hRkept hRch hRlt hRroot hRtb hRE hRtouch hRdisj hRvert hRnoV
   rw [← hnx] at hRnx hRvert
@@ -5274,6 +5549,140 @@ theorem earCtx_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOu
       · exact hRnv' t (List.mem_cons_of_mem _ h)
       · exact hBel t (htb ▸ h)
 
+theorem ctxShape_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
+    {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
+    {s : WalkState} {e : Nat} {cls : OutClass} {y : Nat} {outs : List DfsOut} {L : List TEntry}
+    {push : Bool} {done' : List (DfsOut × Bool)} {hv' : Bool} {bE' : List (Nat → Prop)}
+    {sv' : List Nat} {sd' : List Bool} {sE : WalkState} {dir' : Bool} {L' : List TEntry}
+    {push' : Bool} {D₃ : Array Bool}
+    (H : TreeSite v d done rest hasVert base bE sv sd s e cls y outs L push done' hv' bE' sv' sd'
+      sE dir' L' push' D₃)
+    (hS : CtxShape v d done hasVert base s)
+    (hr : cls.lowval d < d) {hv₀ : Bool}
+    (hb : (hasVert || push) = hv₀) {sX : WalkState} {R : List TEntry}
+    (HR : RetTop v d s e cls y outs L hv₀ sX R) (T : List TEntry) {s' : WalkState}
+    (hT : (hv₀ = true ∧ T = R) ∨ (hv₀ = false ∧ ∃ f,
+      T = ⟨v, d, f, setSides (!s.stackDir[cls.lowval d]!) [vertItem v] []⟩ :: R ∨
+      ∃ c R', R = c :: R' ∧
+        T = TEntry.mergeInto ⟨v, d, f, setSides (!s.stackDir[cls.lowval d]!) [vertItem v] []⟩ c
+          :: R'))
+    (hnoP : hasVert = true → cls.isType1 = true → ∀ a tl, s.tstack = a :: tl → a.vStart = v →
+      a.topDepth ≠ cls.lowval d)
+    (hts : s'.tstack = T ++ (L ++ s.tstack))
+    (hsd : ∀ k, k < d → s'.stackDir[k]! = sX.stackDir[k]!) :
+    CtxShape v d (done ++ [(.tree e cls (.node y outs), hv₀)]) true base s' := by
+  have hC := H.ctx
+  have hv : v < s.g.nv := H.hv
+  set lv := cls.lowval d with hlv
+  have hsdX : ∀ k, k < d → s'.stackDir[k]! = s.stackDir[k]! := fun k hk =>
+    (hsd k hk).trans (HR.sd k hk)
+  have ht1hv : cls.isType1 = true → hv₀ = true := fun ht1 => by
+    cases hhv : hasVert
+    · have hp : push = true := H.hpush.2 ⟨hhv, hr, ht1⟩
+      rw [← hb, hhv, hp]; rfl
+    · rw [← hb, hhv]; rfl
+  have hVlt : vertItem v < s.items.size := by
+    have := H.hsz; show 1 + v < _; omega
+  have hVR : ∀ t ∈ R, vertItem v ∉ t.spans.1 ++ t.spans.2 := fun t ht hm => by
+    rcases (HR.span_new t ht _ hm).2 hVlt with ⟨x, hx, hxe⟩ | ⟨e', -, he'⟩ | he'
+    · exact H.v_nc (by rw [vertItem_inj' hxe]; exact hx)
+    · exact vertItem_ne_edgeItem' hv he'
+    · exact vertItem_ne_edgeItem' hv he'
+  have hLmem : ∀ t ∈ L, t.vStart = v ∧ t.spans = setSides (!s.stackDir[lv]!) [vertItem v] [] := by
+    intro t ht
+    rw [H.hL] at ht
+    split at ht
+    · rw [List.mem_singleton] at ht; subst ht
+      refine ⟨rfl, ?_⟩
+      show setSides _ [vertItem v] [] = _
+      rw [getElem!_set!_self' _ _ _ H.hsd, ite_eq_right (Nat.not_le.2 hr)]
+    · exact absurd ht List.not_mem_nil
+  obtain ⟨top, htop, hCT⟩ := hC.top
+  refine
+    { ret_hv := fun _ => rfl
+      t1_flag := fun o ho hl ht => by
+        rcases List.mem_append.1 ho with h | h
+        · exact hS.t1_flag o h hl ht
+        · rw [List.mem_singleton] at h; subst h; exact ht1hv ht
+      t1 := fun _ hT1 => ?_
+      vt_side := fun top' htop' t ht htv hm => ?_ }
+  · have ht1 : cls.isType1 = true :=
+      hT1 _ (List.mem_append_right _ (List.mem_singleton_self _)) hr
+    have hv₀t : hv₀ = true := ht1hv ht1
+    have hTR : T = R := by
+      rcases hT with ⟨-, h⟩ | ⟨h, -⟩
+      · exact h
+      · rw [hv₀t] at h; exact absurd h (by decide)
+    obtain ⟨x, hRx, hxv, hxd, -⟩ := HR.vert hv₀t
+    rw [hTR, hRx] at hts
+    cases hp : push
+    · have hhv : hasVert = true := by
+        cases h : hasVert
+        · exact absurd (H.hpush.2 ⟨h, hr, ht1⟩) (by rw [hp]; decide)
+        · rfl
+      have hL0 : L = [] := by rw [H.hL, hp, ite_eq_right Bool.false_ne_true]
+      rw [hL0, List.nil_append] at hts
+      obtain ⟨above, vt, hab, hvtv, hvtm, hpw⟩ :=
+        hS.t1 hhv fun o ho hl => hT1 o (List.mem_append_left _ ho) hl
+      refine ⟨x :: above, vt, by rw [hts, hab]; rfl, hvtv, hvtm, List.pairwise_cons.2 ⟨?_, hpw⟩⟩
+      obtain ⟨above₀, below₀, hsp, hCE, -, -, hLow, -, -⟩ := hCT.split
+      simp only [hhv, ↓reduceIte] at hsp
+      obtain ⟨vt₀, htv₀, -, hvtm₀, -, -, -, -⟩ := hsp
+      have hab₀ : s.tstack = above₀ ++ vt₀ :: (below₀ ++ base) := by rw [htop, htv₀]; simp
+      obtain ⟨rfl, rfl, -⟩ := split_unique hab hab₀ hvtm hvtm₀ hC.span_disj
+      have hle : ∀ t ∈ above, t.topDepth ≤ lv := fun t ht => by
+        obtain ⟨o, ho, hto⟩ := hLow t ht
+        have hrk := H.rank (o, true) (mem_afterVert ho)
+        rw [hto]
+        exact lowval_le_of_rank (by rw [← hto]; exact (hCE t ht).depth) hr hrk
+      rw [hxd]
+      rcases above with _ | ⟨a, above'⟩
+      · intro t ht; exact absurd ht List.not_mem_nil
+      · have ha : a.topDepth < lv := Nat.lt_of_le_of_ne (hle a (List.mem_cons_self ..))
+          (hnoP hhv ht1 a _ (by rw [hab]; rfl) (hCE a (List.mem_cons_self ..)).vStart)
+        intro t ht
+        rcases List.mem_cons.1 ht with rfl | ht'
+        · exact ha
+        · exact Nat.lt_trans ((List.pairwise_cons.1 hpw).1 t ht') ha
+    · have hhv : hasVert = false := (H.hpush.1 hp).1
+      have htop0 : top = [] := by
+        by_contra h
+        exact absurd (hS.ret_hv (hCT.ret h)) (by rw [hhv]; decide)
+      rw [H.hL, hp, ite_eq_left rfl] at hts
+      refine ⟨[x], ⟨v, d, s.nxtEdgeIdx, setSides (s.stackDir.set! d (if lv ≥ d then false
+        else !s.stackDir[lv]!))[d]! [vertItem v] []⟩, ?_, rfl, ?_, List.pairwise_singleton _ _⟩
+      · rw [hts, htop, htop0]; rfl
+      · show vertItem v ∈ (setSides _ [vertItem v] []).1 ++ (setSides _ [vertItem v] []).2
+        rw [mem_setSides]; exact List.mem_singleton_self _
+  · have htop'' : top' = T ++ (L ++ top) := by
+      apply List.append_cancel_right (bs := base)
+      rw [← htop', hts, htop]; simp
+    rw [htop''] at ht
+    rcases List.mem_append.1 ht with ht | ht
+    · rcases hT with ⟨hv₀t, rfl⟩ | ⟨hv₀f, f, hT | ⟨c, R', hRc, hT⟩⟩
+      · exact absurd hm (hVR t ht)
+      · subst hT
+        rcases List.mem_cons.1 ht with rfl | ht
+        · exact ⟨(.tree e cls (.node y outs), hv₀),
+            List.mem_append_right _ (List.mem_singleton_self _), hr, by
+              show setSides (!s.stackDir[lv]!) [vertItem v] [] =
+                setSides (!s'.stackDir[lv]!) [vertItem v] []
+              rw [hsdX _ hr]⟩
+        · exact absurd htv ((HR.noVert hv₀f).2 t ht).1
+      · subst hT
+        rcases List.mem_cons.1 ht with rfl | ht
+        · exact absurd htv ((HR.noVert hv₀f).2 c (by rw [hRc]; exact List.mem_cons_self ..)).1
+        · exact absurd htv ((HR.noVert hv₀f).2 t (by rw [hRc]; exact List.mem_cons_of_mem _ ht)).1
+    · rcases List.mem_append.1 ht with ht | ht
+      · obtain ⟨-, hsp⟩ := hLmem t ht
+        exact ⟨(.tree e cls (.node y outs), hv₀),
+          List.mem_append_right _ (List.mem_singleton_self _), hr, by
+            show _ = setSides (!s'.stackDir[lv]!) [vertItem v] []
+            rw [hsp, hsdX _ hr]⟩
+      · obtain ⟨o, ho, hl, hsp⟩ := hS.vt_side top htop t ht htv hm
+        exact ⟨o, List.mem_append_left _ ho, hl, by rw [hsdX _ hl]; exact hsp⟩
+
+
 /-- The P-merge at a returning tree edge with the vertex entry (`condP` fires): `condP` forces
 `push = false` (a pushed `V v` entry would sit at depth `d ≠ lowval`), hence `hasVert = true` and
 `L = []`, and the entry below the retained `(v, lowval)` entry is the enclosing parallel ear.
@@ -5292,7 +5701,9 @@ theorem ctx_step_tree_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
     (hc : result (condP v (cls.lowval d) cls.isType1) sX = true) :
     wp (finishRest v d (cls.lowval d) cls.isType1 true b)
       (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), true)]) rest hv''
-        base bE sv sd s' ∧ OutFrame v (.tree e cls (.node y outs)) base s s') sX := by
+        base bE sv sd s' ∧ OutFrame v (.tree e cls (.node y outs)) base s s' ∧
+        (CtxShape v d done hasVert base s →
+          CtxShape v d (done ++ [(.tree e cls (.node y outs), true)]) hv'' base s')) sX := by
   have hc' : (cls.isType1 && decide (sX.tstack.length ≥ 2) && (sX.tstack.tail.head!.vStart == v) &&
       (sX.tstack.tail.head!.topDepth == cls.lowval d)) = true := by
     rw [result, run_condP] at hc; exact hc
@@ -5324,6 +5735,11 @@ theorem ctx_step_tree_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
     cases hhv : hasVert
     · exact absurd (H.hpush.2 ⟨hhv, hr, ht1⟩) (by rw [hp0]; decide)
     · rfl
+  have hhvT : hasVert = true := by
+    cases hhv : hasVert
+    · exact absurd (H.hpush.2 ⟨hhv, hr, ht1⟩) (by rw [hp0]; decide)
+    · rfl
+  subst hhvT
   rw [hL0, List.nil_append] at hts₀
   cases hst : s.tstack with
   | nil =>
@@ -5421,7 +5837,10 @@ theorem ctx_step_tree_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
       (fun h => absurd rfl h) hP (fun j hj => Items.ch_modify_of_ne _ _ hj)
       (by simp) (by rw [Array.size_modify]; exact hilt) rfl rfl rfl rfl rfl,
       hF0.trans (outFrame_mergeP hts₂ hcs (by rw [hai, mem_setSides]; exact List.mem_singleton_self _)
-        (.inl rfl) hS hP (fun j hj => Items.ch_modify_of_ne _ _ hj) rfl (by simp) rfl)⟩) ?_ ?_
+        (.inl rfl) hS hP (fun j hj => Items.ch_modify_of_ne _ _ hj) rfl (by simp) rfl),
+      fun hS0 => ctxShape_mergeP H.ctx hS0 H.hv hr H.hsz hst hnv hnd (p := i) (hts' := rfl)
+        (hsd := fun k hk => HR.sd k hk)
+        (Or.inl (by rw [hai, mem_setSides]; exact List.mem_singleton_self _)) rfl rfl rfl⟩) ?_ ?_
     · intro r hrS
       rcases (hSmem r).1 hrS with h | h
       · exact .inl h
@@ -5448,7 +5867,9 @@ theorem ctx_step_tree_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
       hF0.trans (outFrame_mergeP hts₂ hcs (by rw [hai, mem_setSides]; exact List.mem_singleton_self _)
         (.inr (Nat.le_refl _)) hS hP
         (fun j hj => by rw [Items.ch_modify_of_ne _ _ hj, Items.ch_push, if_neg hj])
-        rfl (by simp) rfl)⟩) ?_ ?_
+        rfl (by simp) rfl),
+      fun hS0 => ctxShape_mergeP H.ctx hS0 H.hv hr H.hsz hst hnv hnd (p := sX.items.size) (hts' := rfl)
+        (hsd := fun k hk => HR.sd k hk) (Or.inr HR.size) rfl rfl rfl⟩) ?_ ?_
     · intro r hrS
       rcases (hSmem r).1 hrS with h | h
       · exact .inl h
@@ -5479,7 +5900,9 @@ theorem ctx_step_tree_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
       (fun hv'' s' =>
         EarCtx v d
           (done ++ [(.tree e cls (.node y outs), hasVert || push)])
-          rest hv'' base bE sv sd s' ∧ OutFrame v (.tree e cls (.node y outs)) base s s')
+          rest hv'' base bE sv sd s' ∧ OutFrame v (.tree e cls (.node y outs)) base s s' ∧
+          (CtxShape v d done hasVert base s →
+            CtxShape v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) hv'' base s'))
       (pushEnd sE D₃ L') := by
   obtain ⟨R, HR⟩ := tree_ret_shape H hr
   obtain ⟨top, htop, -⟩ := H.ctx.top
@@ -5501,7 +5924,10 @@ theorem ctx_step_tree_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
       refine (fun hts => ⟨earCtx_ret H hr hb HR
         (TEntry.mergeInto ⟨v, d, sX.nxtEdgeIdx, setSides sX.stackDir[d]! [vertItem v] []⟩ c :: R')
         (Or.inr ⟨rfl, sX.nxtEdgeIdx, sX.stackDir[d]!, Or.inr ⟨c, R', hR, rfl⟩⟩) hts rfl rfl rfl
-        (fun _ _ => rfl) rfl, outFrame_retTop HR htop H.L_spans ?_ hts rfl rfl⟩) ?_
+        (fun _ _ => rfl) rfl, outFrame_retTop HR htop H.L_spans ?_ hts rfl rfl,
+        fun hS => ctxShape_ret H hS hr hb HR _
+          (Or.inr ⟨rfl, sX.nxtEdgeIdx, by rw [← HR.sdd rfl]; exact Or.inr ⟨c, R', hR, rfl⟩⟩)
+          (fun hhv => absurd hhv (by rw [hhp.1]; decide)) hts (fun _ _ => rfl)⟩) ?_
       · simp only [HR.tstack, hR, List.cons_append]
         rfl
       · intro t ht i hi
@@ -5513,7 +5939,10 @@ theorem ctx_step_tree_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
     · refine (fun hts => ⟨earCtx_ret H hr hb HR
         (⟨v, d, sX.nxtEdgeIdx, setSides sX.stackDir[d]! [vertItem v] []⟩ :: R)
         (Or.inr ⟨rfl, sX.nxtEdgeIdx, sX.stackDir[d]!, Or.inl rfl⟩) hts rfl rfl rfl
-        (fun _ _ => rfl) rfl, outFrame_retTop HR htop H.L_spans ?_ hts rfl rfl⟩) ?_
+        (fun _ _ => rfl) rfl, outFrame_retTop HR htop H.L_spans ?_ hts rfl rfl,
+        fun hS => ctxShape_ret H hS hr hb HR _
+          (Or.inr ⟨rfl, sX.nxtEdgeIdx, by rw [← HR.sdd rfl]; exact Or.inl rfl⟩)
+          (fun hhv => absurd hhv (by rw [hhp.1]; decide)) hts (fun _ _ => rfl)⟩) ?_
       · simp only [HR.tstack, List.cons_append]
       · intro t ht i hi
         rcases List.mem_cons.1 ht with rfl | ht
@@ -5529,8 +5958,20 @@ theorem ctx_step_tree_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
       unfold finishRest finishP finishTail condP
       simp only [wp_bind, wp_tstackSize, wp_nxt, wp_pure, wp_ite, DfsOut.cls, hc',
         Bool.false_eq_true, ↓reduceIte, Bool.not_true]
+      have hnoP : hasVert = true → cls.isType1 = true → ∀ a tl, s.tstack = a :: tl → a.vStart = v →
+          a.topDepth ≠ cls.lowval d := by
+        intro hhv ht1 a tl hst hav hd
+        have hp : push = false := by
+          cases hp : push
+          · rfl
+          · exact absurd (H.hpush.1 hp).1 (by rw [hhv]; decide)
+        have hL0 : L = [] := by rw [H.hL, hp]; rfl
+        obtain ⟨x, hRx, -⟩ := HR.vert rfl
+        rw [HR.tstack, hRx, hL0, hst] at hc'
+        simp [hav, hd, ht1] at hc'
       exact ⟨earCtx_ret H hr hb HR R (Or.inl ⟨rfl, rfl⟩) HR.tstack rfl rfl rfl (fun _ _ => rfl) rfl,
-        outFrame_retTop HR htop H.L_spans (fun t ht i hi => Or.inr ⟨t, ht, hi⟩) HR.tstack rfl rfl⟩
+        outFrame_retTop HR htop H.L_spans (fun t ht i hi => Or.inr ⟨t, ht, hi⟩) HR.tstack rfl rfl,
+        fun hS => ctxShape_ret H hS hr hb HR R (Or.inl ⟨rfl, rfl⟩) hnoP HR.tstack (fun _ _ => rfl)⟩
 
 /-- `finishEdge` at a tree-edge site re-establishes the context with the out appended to `done`,
 from the `TreeSite` data of `earAt_tree_of_ctx`: a case split on the class (bridge / component /
@@ -5545,7 +5986,9 @@ theorem ctx_step_tree_frame {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
       sE dir' L' push' D₃) :
     wp (finishEdge v d (.tree e cls (.node y outs)) (L ++ s.tstack).length (hasVert || push))
       (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) rest hv''
-        base bE sv sd s' ∧ OutFrame v (.tree e cls (.node y outs)) base s s')
+        base bE sv sd s' ∧ OutFrame v (.tree e cls (.node y outs)) base s s' ∧
+        (CtxShape v d done hasVert base s →
+          CtxShape v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) hv'' base s'))
       (pushEnd sE D₃ L') := by
   have key : cls = .bridge ∨ cls = .component ∨ cls.lowval d < d := by
     have ht := H.tree
@@ -5612,6 +6055,18 @@ def TreeEnd (y d : Nat) (outs : List DfsOut) (base : List TEntry) (bE : List (Na
     (∀ k, k < d → D₃[k]! = sE.stackDir[k]!) ∧
     (push' = true → d < D₃.size → dir' = true)
 
+/-- `TreeEnd` with the end-of-outs shape `CtxShape` of the finished vertex. -/
+def TreeEndS (y d : Nat) (outs : List DfsOut) (base : List TEntry) (bE : List (Nat → Prop))
+    (sv : List Nat) (sd : List Bool) (s' : WalkState) : Prop :=
+  ∃ (done' : List (DfsOut × Bool)) (hv' : Bool) (sE : WalkState) (dir' : Bool) (L' : List TEntry)
+    (push' : Bool) (D₃ : Array Bool),
+    s' = pushEnd sE D₃ L' ∧ EarCtx y d done' [] hv' base bE sv sd sE ∧
+    CtxShape y d done' hv' base sE ∧ done'.map (·.1) = outs ∧
+    (push' = true ↔ hv' = false) ∧
+    L' = (if push' then [⟨y, d, sE.nxtEdgeIdx, setSides dir' [vertItem y] []⟩] else []) ∧
+    (∀ k, k < d → D₃[k]! = sE.stackDir[k]!) ∧
+    (push' = true → d < D₃.size → dir' = true)
+
 /-- The per-out part of `EarOut` after `walkOutPre` (literally its inner match). -/
 def OutMid (v d : Nat) (o : DfsOut) (hasVert' : Bool) (s₁ : WalkState) : Prop :=
   match o with
@@ -5635,7 +6090,8 @@ abbrev CTree (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
     wp (walkTree t d) (fun _ s' => KeptRel g s t.verts t.edges s' ∧
       ∀ top, s'.tstack = top ++ base → ∀ t' ∈ top, ∀ i ∈ t'.spans.1 ++ t'.spans.2,
         (∃ x ∈ t.verts, i = vertItem x) ∨ (∃ e ∈ t.edges, i = edgeItem g e) ∨
-        s.items.size ≤ i) s
+        s.items.size ≤ i) s ∧
+    wp (walkTree t d) (fun _ s' => TreeEndS t.v d t.outs base bE sv sd s') s
 
 abbrev COuts (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
   ∀ (g : Graph) (anc : List Nat) (outs₀ : List DfsOut) (done : List (DfsOut × Bool))
@@ -5652,12 +6108,15 @@ abbrev COuts (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) :
     EarCtx v d done outs hasVert base bE sv sd s →
     EarOuts v d outs hasVert s ∧ wp (walkOuts v d outs hasVert)
       (fun hv' s' => ∃ done', done'.map (·.1) = outs₀ ∧ EarCtx v d done' [] hv' base bE sv sd s') s ∧
-    ∀ (s₀ : WalkState) (sz₀ : Nat), s₀.items.size ≤ sz₀ → sz₀ ≤ s.items.size →
+    (∀ (s₀ : WalkState) (sz₀ : Nat), s₀.items.size ≤ sz₀ → sz₀ ≤ s.items.size →
       KeptRel g s₀ (v :: DfsOut.vertsList outs₀) (DfsOut.edgesList outs₀) s →
       Fresh g v outs₀ sz₀ base s →
       wp (walkOuts v d outs hasVert) (fun _ s' => sz₀ ≤ s'.items.size ∧ s'.g = g ∧
         KeptRel g s₀ (v :: DfsOut.vertsList outs₀) (DfsOut.edgesList outs₀) s' ∧
-        Fresh g v outs₀ sz₀ base s') s
+        Fresh g v outs₀ sz₀ base s') s) ∧
+    (CtxShape v d done hasVert base s → wp (walkOuts v d outs hasVert)
+      (fun hv' s' => ∃ done', done'.map (·.1) = outs₀ ∧ EarCtx v d done' [] hv' base bE sv sd s' ∧
+        CtxShape v d done' hv' base s') s)
 
 abbrev COut (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
   ∀ (g : Graph) (anc : List Nat) (outs₀ rest : List DfsOut) (done : List (DfsOut × Bool))
@@ -5674,7 +6133,10 @@ abbrev COut (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
     EarCtx v d done (o :: rest) hasVert base bE sv sd s →
     EarOut v d o hasVert s ∧ wp (walkOut v d o hasVert)
       (fun hv' s' => ∃ hvF, EarCtx v d (done ++ [(o, hvF)]) rest hv' base bE sv sd s') s ∧
-    wp (walkOut v d o hasVert) (fun _ s' => OutFrame v o base s s') s
+    wp (walkOut v d o hasVert) (fun _ s' => OutFrame v o base s s') s ∧
+    (CtxShape v d done hasVert base s → wp (walkOut v d o hasVert)
+      (fun hv' s' => ∃ hvF, EarCtx v d (done ++ [(o, hvF)]) rest hv' base bE sv sd s' ∧
+        CtxShape v d (done ++ [(o, hvF)]) hv' base s') s)
 
 mutual
 theorem cTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), CTree t d s
@@ -5684,13 +6146,13 @@ theorem cTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), CTree t d s
     simp only [DfsTree.WF] at hwf
     simp only [DfsTree.Ends] at hends
     have hv : v < g.nv := hvlt v (List.mem_cons_self ..)
-    obtain ⟨hEO, hpost, hfr⟩ := cOuts v d outs false { s with stackVerts := s.stackVerts.set! d v } g anc
+    obtain ⟨hEO, hpost, hfr, hpostS⟩ := cOuts v d outs false { s with stackVerts := s.stackVerts.set! d v } g anc
       outs [] base bE sv sd pe ⟨hT.g_eq, hT.size, hT.root, hT.vert, hT.edge⟩ hd rfl hwf.1 hwf.2 hends hnd
       hanc hv (fun w hw => hvlt w (List.mem_cons_of_mem _ hw)) helt hen hcomp hpe (by simp [hsz]) hsdz
       (fun k hk => by
         show anc[k]? = some (s.stackVerts.set! d v)[k]!
         rw [getElem!_set!_ne' _ _ _ _ (Nat.ne_of_lt hk)]; exact hancsv k hk) hC
-    refine ⟨by unfold EarTree; exact hEO, ?_, ?_⟩
+    refine ⟨by unfold EarTree; exact hEO, ?_, ?_, ?_⟩
     · unfold walkTree
       simp only [wp_bind, wp_modify]
       refine wp_mono _ hpost fun hv' s' ⟨done', hmap, hC'⟩ => ?_
@@ -5734,13 +6196,31 @@ theorem cTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), CTree t d s
           · exact Or.inl ⟨v, List.mem_cons_self .., by rw [mem_setSides] at hi; simpa using hi⟩
           · exact hF' top₁ htop₁ t' ht i hi
       · exact ⟨hK', hF'⟩
+    · have hts0 : ({ s with stackVerts := s.stackVerts.set! d v } : WalkState).tstack = base := by
+        obtain ⟨top₀, htop₀, hCT⟩ := hC.top
+        have h0 : top₀ = [] := by
+          by_contra h
+          obtain ⟨o, ho, -⟩ := hCT.ret h
+          simp at ho
+        rw [h0] at htop₀; exact htop₀
+      unfold walkTree
+      simp only [wp_bind, wp_modify]
+      refine wp_mono _ (hpostS (ctxShape_init hts0)) fun hv' s' ⟨done', hmap, hC', hS'⟩ => ?_
+      cases hv'
+      · simp only [Bool.false_eq_true, ↓reduceIte, wp_bind, wp_setStackDir, wp_pushVertTstack]
+        exact ⟨done', false, s', (s'.stackDir.set! d true)[d]!, _, true, s'.stackDir.set! d true, rfl,
+          hC', hS', hmap, by simp, rfl,
+          fun k hk => getElem!_set!_ne' s'.stackDir d k true (Nat.ne_of_lt hk),
+          fun _ hd => getElem!_set!_self' _ _ _ (by simpa using hd)⟩
+      · exact ⟨done', true, s', false, [], false, s'.stackDir, rfl, hC', hS', hmap, by simp, rfl,
+          fun _ _ => rfl, fun h => absurd h Bool.false_ne_true⟩
 
 theorem cOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState),
     COuts v d outs hasVert s
   | v, d, [], hasVert, s => by
     intro g anc outs₀ done base bE sv sd pe hT hd hmap hsort hwf hends hnd hanc hv hw he hen hcomp hpe hsz hsdz
       hancsv hC
-    refine ⟨?_, ?_, ?_⟩
+    refine ⟨?_, ?_, ?_, ?_⟩
     · unfold EarOuts VertBook
       intro h
       exact ⟨by rw [hT.g_eq]; exact hv, hC.vert_book h⟩
@@ -5749,10 +6229,13 @@ theorem cOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkS
     · intro s₀ sz₀ hs₀ hsz₀ hK hF
       unfold walkOuts; simp only [wp_pure]
       exact ⟨hsz₀, hT.g_eq, hK, hF⟩
+    · intro hS
+      unfold walkOuts; simp only [wp_pure]
+      exact ⟨done, by simpa using hmap, hC, hS⟩
   | v, d, o :: rest, hasVert, s => by
     intro g anc outs₀ done base bE sv sd pe hT hd hmap hsort hwf hends hnd hanc hv hw he hen hcomp hpe hsz hsdz
       hancsv hC
-    obtain ⟨hEo, hstep, hOF⟩ := cOut v d o hasVert s g anc outs₀ rest done base bE sv sd pe hT hd hmap hsort
+    obtain ⟨hEo, hstep, hOF, hstepS⟩ := cOut v d o hasVert s g anc outs₀ rest done base bE sv sd pe hT hd hmap hsort
       hwf hends hnd hanc hv hw he hen hcomp hpe hsz hsdz hancsv hC
     have hK0 : wp (walkOut v d o hasVert) (fun _ s' => Keep (d + 1) 0 s s') s :=
       kOut v d o hasVert s g (d + 1) 0 s hT (Nat.le_refl _) (by have := hT.size; omega)
@@ -5766,7 +6249,7 @@ theorem cOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkS
         (hK.sd.trans hsdz)
         (fun k hk => by rw [hancsv k hk, hC.sv k hk.le, hC'.sv k hk.le]) hC'
       exact ⟨h.1, h.2.1⟩
-    refine ⟨?_, ?_, ?_⟩
+    refine ⟨?_, ?_, ?_, ?_⟩
     · unfold EarOuts
       exact ⟨hEo, wp_mono _ hrest fun _ _ h => h.1⟩
     · unfold walkOuts; simp only [wp_bind]
@@ -5782,10 +6265,17 @@ theorem cOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkS
         exact (cOuts v d rest hv' s' g anc outs₀ (done ++ [(o, hvF)]) base bE sv sd pe
           (hT.of_keep hK') hd (by simpa using hmap) hsort hwf hends hnd hanc hv hw he hen hcomp hpe
           (hK'.sv.trans hsz) (hK'.sd.trans hsdz)
-          (fun k hk => by rw [hancsv k hk, hC.sv k hk.le, hC'.sv k hk.le]) hC').2.2
+          (fun k hk => by rw [hancsv k hk, hC.sv k hk.le, hC'.sv k hk.le]) hC').2.2.1
           s₀ sz₀ hs₀ hsz₁ hK₁ hF₁
       unfold walkOuts; simp only [wp_bind]
       exact hrest'
+    · intro hS
+      unfold walkOuts; simp only [wp_bind]
+      refine wp_mono _ (wp_and (hstepS hS) hK0) fun hv' s' ⟨⟨hvF, hC', hS'⟩, hK⟩ => ?_
+      exact (cOuts v d rest hv' s' g anc outs₀ (done ++ [(o, hvF)]) base bE sv sd pe (hT.of_keep hK) hd
+        (by simpa using hmap) hsort hwf hends hnd hanc hv hw he hen hcomp hpe (hK.sv.trans hsz)
+        (hK.sd.trans hsdz)
+        (fun k hk => by rw [hancsv k hk, hC.sv k hk.le, hC'.sv k hk.le]) hC').2.2.2 hS'
 
 theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), COut v d o hasVert s
   | v, d, o, hasVert, s => by
@@ -5830,7 +6320,10 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
     have hcore : wp (walkOutPre v anc.length o hasVert) (fun hvF s₁ =>
         OutMid v anc.length o hvF s₁ ∧ wp (walkOutRest v anc.length o hvF)
           (fun hv' s' => (∃ hvF', EarCtx v anc.length (done ++ [(o, hvF')]) rest hv' base bE sv sd s') ∧
-            OutFrame v o base s s')
+            OutFrame v o base s s' ∧
+            (CtxShape v anc.length done hasVert base s → ∃ hvF',
+              EarCtx v anc.length (done ++ [(o, hvF')]) rest hv' base bE sv sd s' ∧
+              CtxShape v anc.length (done ++ [(o, hvF')]) hv' base s'))
           s₁) s := by
       refine wp_walkOutPre fun push L hpush hL => ?_
       cases o with
@@ -5909,7 +6402,8 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
         unfold walkOutRest
         rw [wp_bind, wp_tstackSize]
         exact wp_mono _ (ctx_step_back_frame hC hv' hsd hrank hinc hnd_e hb hcls he_e hszS hend' hself
-          hrest_e hrest_v hdest hnc L push hpush hL) fun _ _ h => ⟨⟨_, h.1⟩, h.2⟩
+          hrest_e hrest_v hdest hnc L push hpush hL) fun _ _ h =>
+            ⟨⟨_, h.1⟩, h.2.1, fun hS => ⟨_, h.1, h.2.2 hS⟩⟩
       | tree e cls child =>
         obtain ⟨y, outs'⟩ := child
         obtain ⟨ht, hcls⟩ := tree_wf_facts hwf_o
@@ -6013,7 +6507,7 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
             (L ++ s.tstack) ((L ++ s.tstack).map fun (t : TEntry) (e' : Nat) => t.edges s.g s.items e')
             sv' sd' { S₂ with stackVerts := S₂.stackVerts.set! (anc.length + 1) (DfsTree.node y outs').v } := by
           subst hS₂; exact hC₂
-        obtain ⟨hET, hend, hfr⟩ := cTree (.node y outs') (anc.length + 1) S₂ g (anc ++ [v]) (L ++ s.tstack)
+        obtain ⟨hET, -, hfr, hendS⟩ := cTree (.node y outs') (anc.length + 1) S₂ g (anc ++ [v]) (L ++ s.tstack)
           ((L ++ s.tstack).map fun (t : TEntry) (e' : Nat) => t.edges s.g s.items e') sv' sd' (· = e) hT₂
           (by simp) hwf_c.1 hends_c.2 hnd_c (fun a ha => by
             rcases List.mem_append.1 ha with ha | ha
@@ -6057,10 +6551,16 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
                 (hasVert || push))
               (fun hv' s' => (∃ hvF', EarCtx v anc.length
                 (done ++ [(.tree e cls (.node y outs'), hvF')]) rest hv' base bE sv sd s') ∧
-                OutFrame v (.tree e cls (.node y outs')) base s s') s₃) S₂ := by
-          refine wp_mono _ (wp_and hend (wp_and hK (wp_and hsdb (wp_and hq (wp_and hvr
+                OutFrame v (.tree e cls (.node y outs')) base s s' ∧
+                (CtxShape v anc.length done hasVert base s → ∃ hvF',
+                  EarCtx v anc.length (done ++ [(.tree e cls (.node y outs'), hvF')]) rest hv'
+                    base bE sv sd s' ∧
+                  CtxShape v anc.length (done ++ [(.tree e cls (.node y outs'), hvF')]) hv' base s'))
+                s₃) S₂ := by
+          refine wp_mono _ (wp_and hendS (wp_and hK (wp_and hsdb (wp_and hq (wp_and hvr
             (wp_and hbel (wp_and hik hfr))))))) ?_
-          rintro _ s₃ ⟨⟨done', hv'', sE, dir', L', push', D₃, rfl, hC', hdone', hpush', hL', hsd₃, hdir₃⟩,
+          rintro _ s₃ ⟨⟨done', hv'', sE, dir', L', push', D₃, rfl, hC', hS', hdone', hpush', hL', hsd₃,
+            hdir₃⟩,
             hK3, hsdb3, hq3, hvr3, hbel3, hik3, hfr3⟩
           have H : TreeSite v anc.length done rest hasVert base bE sv sd s e cls y outs' L push done'
               hv'' _ sv' sd' sE dir' L' push' D₃ :=
@@ -6138,13 +6638,22 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
                 (by have h := List.mem_map_of_mem (f := (·.1)) ho'; rw [hdone'] at h; exact h)
               comp_ret := fun hc o' ho' => EarDfs.comp_outs_ret hwf_c.1 hwf_c.2 hc o'.1
                 (by have h := List.mem_map_of_mem (f := (·.1)) ho'; rw [hdone'] at h; exact h)
+              comp_ex := fun hc => by
+                obtain ⟨o', ho', hl⟩ := EarDfs.comp_outs_ex hwf_c.1 hwf_c.2 hc
+                have ho'' : o' ∈ done'.map (·.1) := by rw [hdone']; exact ho'
+                obtain ⟨o'', hmem, hEq⟩ := List.mem_map.1 ho''
+                exact ⟨o'', hmem, by rw [hEq]; exact hl⟩
+              comp_t1 := fun hc o' ho' _ => EarDfs.comp_outs_t1 hwf_c.1 hwf_c.2 hc o'.1
+                (by have h := List.mem_map_of_mem (f := (·.1)) ho'; rw [hdone'] at h; exact h)
+              shape' := hS'
               c_reach := fun E hE e' he' => by
                 rw [hgs]
                 exact outs_reach g E y outs' hEt (fun e'' h =>
                   ⟨he _ (mem_subEdges_edgesList.2 ⟨_, ho, Or.inr h⟩), hE e'' h⟩) e' he'
               edges_lt := fun e' he' => by
                 rw [hgs]; exact he _ (mem_subEdges_edgesList.2 ⟨_, ho, Or.inr he'⟩) }
-          refine ⟨⟨fun h => ?_, earAt_tree_of_ctx H⟩, wp_mono _ (ctx_step_tree_frame H) fun _ _ h => ⟨⟨_, h.1⟩, h.2⟩⟩
+          refine ⟨⟨fun h => ?_, earAt_tree_of_ctx H⟩, wp_mono _ (ctx_step_tree_frame H) fun _ _ h =>
+            ⟨⟨_, h.1⟩, h.2.1, fun hS => ⟨_, h.1, h.2.2 hS⟩⟩⟩
           have h0 : hasVert = false := (Bool.or_eq_false_iff.1 h).1
           obtain ⟨h1, h2⟩ := hC.vert_book h0
           have hg3 : (pushEnd sE D₃ L').g = s.g := hK3.g.trans (by rw [hS₂])
@@ -6162,7 +6671,8 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
         exact wp_mono _ hboth fun _ _ h => h.2
     exact ⟨⟨hvb0, wp_mono _ hcore fun _ _ h => h.1⟩,
       wp_mono _ hcore fun _ _ h => wp_mono _ h.2 fun _ _ h' => h'.1,
-      wp_mono _ hcore fun _ _ h => wp_mono _ h.2 fun _ _ h' => h'.2⟩
+      wp_mono _ hcore fun _ _ h => wp_mono _ h.2 fun _ _ h' => h'.2.1,
+      fun hS => wp_mono _ hcore fun _ _ h => wp_mono _ h.2 fun _ _ h' => h'.2.2 hS⟩
 end
 
 /-- Admitted: the ear content of a root walk — `FinishBook.ear`/`vert` at every `finishEdge`

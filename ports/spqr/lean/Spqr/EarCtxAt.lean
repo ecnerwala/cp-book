@@ -320,6 +320,84 @@ child's outs left no vertex entry; `D₃` is the direction array afterwards. -/
 def pushEnd (sE : WalkState) (D₃ : Array Bool) (L' : List TEntry) : WalkState :=
   { sE with stackDir := D₃, tstack := L' ++ sE.tstack }
 
+/-- Shape facts about the entries above `base` between outs (`ctxCheck`: `ret_hv`, `t1_flag`,
+`t1_above_distinct`/`t1_below`/`t1_vt`, `vt_side_strict`): a returning done out means the vertex
+entry is pushed; type-1 returning outs are recorded after it; while every returning done out is
+type 1 the vertex entry is the bottom of the top and the ears above it have distinct depths
+(decreasing upwards: the sorted outs' lowvals, P-merged when equal); the vertex entry sits on the
+side opposite to one of the returning outs' lowval directions. -/
+structure CtxShape (v d : Nat) (done : List (DfsOut × Bool)) (hasVert : Bool) (base : List TEntry)
+    (s : WalkState) : Prop where
+  ret_hv : (∃ o ∈ done, o.1.cls.lowval d < d) → hasVert = true
+  t1_flag : ∀ o ∈ done, o.1.cls.lowval d < d → o.1.cls.isType1 = true → o.2 = true
+  t1 : hasVert = true → (∀ o ∈ done, o.1.cls.lowval d < d → o.1.cls.isType1 = true) →
+    ∃ above vt, s.tstack = above ++ vt :: base ∧ vt.vStart = v ∧
+      vertItem v ∈ vt.spans.1 ++ vt.spans.2 ∧
+      above.Pairwise (fun t t' => t'.topDepth < t.topDepth)
+  vt_side : ∀ top, s.tstack = top ++ base → ∀ t ∈ top, t.vStart = v →
+    vertItem v ∈ t.spans.1 ++ t.spans.2 → ∃ o ∈ done, o.1.cls.lowval d < d ∧
+      t.spans = setSides (!s.stackDir[o.1.cls.lowval d]!) [vertItem v] []
+
+theorem ctxShape_init {v d : Nat} {base : List TEntry} {s : WalkState} (hts : s.tstack = base) :
+    CtxShape v d [] false base s where
+  ret_hv := fun ⟨_, ho, _⟩ => nomatch ho
+  t1_flag := fun _ ho => nomatch ho
+  t1 := fun h => nomatch h
+  vt_side := fun top htop t ht => by
+    rw [hts] at htop
+    have : top = [] := by simpa using htop.symm
+    rw [this] at ht
+    exact absurd ht List.not_mem_nil
+
+theorem ctxShape_same {v d : Nat} {done : List (DfsOut × Bool)} {hasVert : Bool}
+    {base : List TEntry} {s s' : WalkState} {o : DfsOut} {b : Bool}
+    (hS : CtxShape v d done hasVert base s) (hol : d ≤ o.cls.lowval d)
+    (hts : s'.tstack = s.tstack) (hsd : ∀ k, k < d → s'.stackDir[k]! = s.stackDir[k]!) :
+    CtxShape v d (done ++ [(o, b)]) hasVert base s' where
+  ret_hv := fun ⟨o', ho', hl⟩ => by
+    rcases List.mem_append.1 ho' with h | h
+    · exact hS.ret_hv ⟨o', h, hl⟩
+    · rw [List.mem_singleton] at h; subst h; exact absurd hl (Nat.not_lt.2 hol)
+  t1_flag := fun o' ho' hl ht => by
+    rcases List.mem_append.1 ho' with h | h
+    · exact hS.t1_flag o' h hl ht
+    · rw [List.mem_singleton] at h; subst h; exact absurd hl (Nat.not_lt.2 hol)
+  t1 := fun hv ht1 => by
+    rw [hts]
+    exact hS.t1 hv fun o' ho' hl => ht1 o' (List.mem_append_left _ ho') hl
+  vt_side := fun top htop t ht htv hm => by
+    obtain ⟨o', ho', hl, hsp⟩ := hS.vt_side top (by rw [← hts]; exact htop) t ht htv hm
+    exact ⟨o', List.mem_append_left _ ho', hl, by rw [hsd _ hl]; exact hsp⟩
+
+/-- Two decompositions of a span-disjoint stack around an entry holding the item `i` coincide. -/
+theorem split_unique {i : ItemId} : ∀ {a a' : List TEntry} {l b b' : List TEntry} {x x' : TEntry},
+    l = a ++ x :: b → l = a' ++ x' :: b' →
+    i ∈ x.spans.1 ++ x.spans.2 → i ∈ x'.spans.1 ++ x'.spans.2 →
+    l.Pairwise (fun t t' => ∀ j ∈ t.spans.1 ++ t.spans.2, j ∉ t'.spans.1 ++ t'.spans.2) →
+    a = a' ∧ x = x' ∧ b = b'
+  | [], [], _, _, _, _, _, h, h', _, _, _ => by
+    subst h
+    obtain ⟨rfl, rfl⟩ := List.cons.inj h'
+    exact ⟨rfl, rfl, rfl⟩
+  | [], _ :: _, _, _, _, _, _, h, h', hx, hx', hd => by
+    subst h
+    obtain ⟨rfl, rfl⟩ := List.cons.inj h'
+    exact absurd hx' ((List.pairwise_cons.1 hd).1 _
+      (List.mem_append_right _ (List.mem_cons_self ..)) i hx)
+  | _ :: _, [], _, _, _, _, _, h, h', hx, hx', hd => by
+    subst h'
+    obtain ⟨rfl, rfl⟩ := List.cons.inj h
+    exact absurd hx ((List.pairwise_cons.1 hd).1 _
+      (List.mem_append_right _ (List.mem_cons_self ..)) i hx')
+  | y :: a, y' :: a', _, _, _, _, _, h, h', hx, hx', hd => by
+    subst h
+    rw [List.cons_append, List.cons_append, List.cons.injEq] at h'
+    obtain ⟨rfl, h'⟩ := h'
+    rw [List.cons_append] at hd
+    obtain ⟨rfl, rfl, rfl⟩ :=
+      split_unique (a := a) (a' := a') rfl h' hx hx' (List.pairwise_cons.1 hd).2
+    exact ⟨rfl, rfl, rfl⟩
+
 /-- A tree-edge site `o = (e, cls, node y outs)` of `walkOuts v d`: the parent context at `s`
 (before `walkOutPre`), the WF facts of the out (rank order, nodup, endpoints), the vertex push
 (`L`, `push`) of `walkOutPre`, the child's end-of-outs context at `sE` over the pushed stack, the
@@ -393,6 +471,11 @@ structure TreeSite (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOu
   bridge_bd : cls = .bridge → ∀ o' ∈ done', d + 1 ≤ o'.1.cls.lowval (d + 1)
   comp_ret : cls = .component → ∀ o' ∈ done', o'.1.cls.lowval (d + 1) < d + 1 →
     o'.1.cls.lowval (d + 1) = d
+  comp_ex : cls = .component → ∃ o' ∈ done', o'.1.cls.lowval (d + 1) < d + 1
+  comp_t1 : cls = .component → ∀ o' ∈ done', o'.1.cls.lowval (d + 1) < d + 1 →
+    o'.1.cls.isType1 = true
+  /-- The child's end-of-outs shape (`ctxCheck` at the child's end). -/
+  shape' : CtxShape y (d + 1) done' hv' (L ++ s.tstack) sE
   /-- The child's edges are connected to `y` through the child (DFS tree), within any edge set
   containing them. -/
   c_reach : ∀ E : Nat → Prop, (∀ e' ∈ (DfsTree.node y outs).edges, E e') →
@@ -413,6 +496,8 @@ structure RetTop (v d : Nat) (s : WalkState) (e : Nat) (cls : OutClass) (y : Nat
   g : sX.g = s.g
   sv : ∀ k, k ≤ d → sX.stackVerts[k]! = s.stackVerts[k]!
   sd : ∀ k, k < d → sX.stackDir[k]! = s.stackDir[k]!
+  /-- Without the vertex entry, loop 2 set the direction of `d` opposite to the lowval's. -/
+  sdd : hv = false → sX.stackDir[d]! = !s.stackDir[cls.lowval d]!
   size : s.items.size ≤ sX.items.size
   nxt : s.nxtEdgeIdx ≤ sX.nxtEdgeIdx
   kept : ∀ j, j < s.items.size → (∀ x ∈ (DfsTree.node y outs).verts, j ≠ vertItem x) →
@@ -449,6 +534,71 @@ structure RetTop (v d : Nat) (s : WalkState) (e : Nat) (cls : OutClass) (y : Nat
   noVert : hv = false → (∃ c R', R = c :: R' ∧ c.edges s.g sX.items e) ∧
     ∀ t ∈ R, t.vStart ≠ v ∧ ∀ k, k ≤ d → s.stackVerts[k]! ≠ t.vStart
 
+theorem tree_comp_shape_of_shape {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
+    {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
+    {s : WalkState} {e : Nat} {cls : OutClass} {y : Nat} {outs : List DfsOut} {L : List TEntry}
+    {push : Bool} {done' : List (DfsOut × Bool)} {hv' : Bool} {bE' : List (Nat → Prop)}
+    {sv' : List Nat} {sd' : List Bool} {sE : WalkState} {dir' : Bool} {L' : List TEntry}
+    {push' : Bool} {D₃ : Array Bool}
+    (H : TreeSite v d done rest hasVert base bE sv sd s e cls y outs L push done' hv' bE' sv' sd'
+      sE dir' L' push' D₃)
+    (hS' : CtxShape y (d + 1) done' hv' (L ++ s.tstack) sE)
+    (hex : ∃ o' ∈ done', o'.1.cls.lowval (d + 1) < d + 1)
+    (ht1 : ∀ o' ∈ done', o'.1.cls.lowval (d + 1) < d + 1 → o'.1.cls.isType1 = true)
+    (hc : cls = .component) :
+    hv' = true ∧ ∃ t₁ f₂,
+      sE.tstack = t₁ :: ⟨y, d + 1, f₂, ([], [vertItem y])⟩ :: (L ++ s.tstack) ∧
+      t₁.vStart = y ∧ t₁.topDepth = d ∧ t₁.spans.2 = [] := by
+  have hv't : hv' = true := hS'.ret_hv hex
+  have hsdd : sE.stackDir[d]! = false := by
+    rw [H.sdlo d (Nat.le_refl _), getElem!_set!_self' _ _ _ H.hsd, hc]
+    simp [OutClass.lowval]
+  have hC' := H.ctx'
+  obtain ⟨top, htop, hCT⟩ := hC'.top
+  obtain ⟨above₀, below₀, hsp, hCE, -, -, hLow, -, -⟩ := hCT.split
+  simp only [hv't, ↓reduceIte] at hsp
+  obtain ⟨vt₀, htv₀, -, hvtm₀, hvtd, -, hcov, -⟩ := hsp
+  have hab₀ : sE.tstack = above₀ ++ vt₀ :: (below₀ ++ (L ++ s.tstack)) := by
+    rw [htop, htv₀]; simp
+  obtain ⟨above, vt, hab, hvtv, hvtm, hpw⟩ := hS'.t1 hv't ht1
+  obtain ⟨rfl, rfl, hbelow⟩ := split_unique hab hab₀ hvtm hvtm₀ hC'.span_disj
+  have hbelow0 : below₀ = [] := by simpa using hbelow.symm
+  subst hbelow0
+  have hvtd' : vt.topDepth = d + 1 := (hvtd hvtv).1
+  have hdep : ∀ t ∈ above, t.topDepth = d := fun t ht => by
+    obtain ⟨o, ho, hto⟩ := hLow t ht
+    rw [hto]
+    exact H.comp_ret hc (o, true) (mem_afterVert ho) (by rw [← hto]; exact (hCE t ht).depth)
+  obtain ⟨o', ho', hl'⟩ := hex
+  have ho'a : o'.1 ∈ afterVert done' := by
+    have h2 := hS'.t1_flag o' ho' hl' (ht1 o' ho' hl')
+    exact List.mem_map.2 ⟨o', List.mem_filter.2 ⟨ho', by simp [h2]⟩, rfl⟩
+  have hlo' : o'.1.cls.lowval (d + 1) = d := H.comp_ret hc o' ho' hl'
+  rcases above with _ | ⟨t₁, _ | ⟨t₂, above''⟩⟩
+  · exfalso
+    rcases hcov o'.1 ho'a with ⟨t, ht, -⟩ | h
+    · exact absurd ht List.not_mem_nil
+    · rw [hvtd', hlo'] at h; omega
+  · refine ⟨hv't, t₁, vt.firstIdx, ?_, (hCE t₁ (List.mem_cons_self ..)).vStart,
+      hdep t₁ (List.mem_cons_self ..), ?_⟩
+    · obtain ⟨o'', ho'', hl'', hsp⟩ := hS'.vt_side top htop vt
+        (by rw [htv₀]; simp) hvtv hvtm
+      have hlo'' : o''.1.cls.lowval (d + 1) = d := H.comp_ret hc o'' ho'' hl''
+      rw [hlo'', hsdd] at hsp
+      rw [hab]
+      rcases vt with ⟨a, b, c, sp⟩
+      simp only at hvtv hvtd' hsp
+      subst hvtv hvtd' hsp
+      rfl
+    · have hside := (hCE t₁ (List.mem_cons_self ..)).side
+      rw [hdep t₁ (List.mem_cons_self ..), hsdd] at hside
+      exact hside
+  · exfalso
+    have h12 := (List.pairwise_cons.1 hpw).1 t₂ (List.mem_cons_self ..)
+    rw [hdep t₁ (List.mem_cons_self ..),
+      hdep t₂ (List.mem_cons_of_mem _ (List.mem_cons_self ..))] at h12
+    exact Nat.lt_irrefl _ h12
+
 section
 variable {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut} {hasVert : Bool}
   {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool} {s : WalkState}
@@ -463,13 +613,14 @@ include H
 local notation "o₀" => DfsOut.tree e cls (DfsTree.node y outs)
 local notation "s₃" => pushEnd sE D₃ L'
 
-/-- Admitted (dump-checked, `compEndCheck`): at a component edge the child's end-of-outs stack is
-`[(y, d), V y]` above the parent's, its vertex entry already pushed (so there is no end push), the
-`(y, d)` entry on side 1 and `V y` on side 2 — the two entries `finishBoundary` pops. -/
+/-- At a component edge the child's end-of-outs stack is `[(y, d), V y]` above the parent's, its
+vertex entry already pushed (so there is no end push), the `(y, d)` entry on side 1 and `V y` on
+side 2 — the two entries `finishBoundary` pops (`compEndCheck`; from the child's end shape: every
+returning child out is type 1 at lowval `d`). -/
 theorem tree_comp_shape : cls = .component → hv' = true ∧ ∃ t₁ f₂,
     sE.tstack = t₁ :: ⟨y, d + 1, f₂, ([], [vertItem y])⟩ :: (L ++ s.tstack) ∧
-    t₁.vStart = y ∧ t₁.topDepth = d ∧ t₁.spans.2 = [] := by
-  sorry
+    t₁.vStart = y ∧ t₁.topDepth = d ∧ t₁.spans.2 = [] := fun hc =>
+  tree_comp_shape_of_shape H H.shape' (H.comp_ex hc) (H.comp_t1 hc) hc
 
 /-- Admitted (dump-checked, `retCheck`): the stack shape after loops 1–3 at a returning tree edge
 (`RetTop`), at the state `finishRest` runs from. -/
