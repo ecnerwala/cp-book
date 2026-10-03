@@ -6076,6 +6076,64 @@ def OutMid (v d : Nat) (o : DfsOut) (hasVert' : Bool) (s₁ : WalkState) : Prop 
       wp (walkTree child (d + 1)) (fun _ s₃ => FinishEar v d o s₁.tstack.length hasVert' s₃) s₂) s₁
   | .back .. => FinishEar v d o s₁.tstack.length hasVert' s₁
 
+/-- The `TreeSite` of a tree out as a public conclusion at its `finishEdge` site: `s` is the state
+at the out's entry, `s₃` the state `finishEdge` runs on; the intermediate witnesses (the entry push
+`L`/`push`, the child's end-of-outs data, its end push) are existential. -/
+def TreeSiteAt (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut) (hasVert : Bool)
+    (base : List TEntry) (bE : List (Nat → Prop)) (sv : List Nat) (sd : List Bool) (s : WalkState)
+    (e : Nat) (cls : OutClass) (y : Nat) (outs : List DfsOut) (s₃ : WalkState) : Prop :=
+  ∃ (L : List TEntry) (push : Bool) (done' : List (DfsOut × Bool)) (hv' : Bool)
+    (bE' : List (Nat → Prop)) (sv' : List Nat) (sd' : List Bool) (sE : WalkState) (dir' : Bool)
+    (L' : List TEntry) (push' : Bool) (D₃ : Array Bool),
+    s₃ = pushEnd sE D₃ L' ∧
+    TreeSite v d done rest hasVert base bE sv sd s e cls y outs L push done' hv' bE' sv' sd' sE
+      dir' L' push' D₃
+
+mutual
+/-- `EarTree` for the contexts (public conclusions of `cTree`/`cOuts`/`cOut`, PROOF.md §4.2b):
+`EarCtx` at every out's entry and at the end of every `walkOuts`, the child's `EarCtxTree` over
+the pushed stack at every child entry, and `TreeSiteAt` at every tree `finishEdge` site. -/
+def EarCtxTree (t : DfsTree) (d : Nat) (base : List TEntry) (bE : List (Nat → Prop))
+    (sv : List Nat) (sd : List Bool) (s : WalkState) : Prop :=
+  match t with
+  | .node v outs => EarCtxOuts v d [] outs false base bE sv sd
+      { s with stackVerts := s.stackVerts.set! d v }
+
+def EarCtxOuts (v d : Nat) (done : List (DfsOut × Bool)) (outs : List DfsOut) (hasVert : Bool)
+    (base : List TEntry) (bE : List (Nat → Prop)) (sv : List Nat) (sd : List Bool)
+    (s : WalkState) : Prop :=
+  match outs with
+  | [] => EarCtx v d done [] hasVert base bE sv sd s
+  | o :: rest => EarCtxOut v d done o rest hasVert base bE sv sd s ∧
+      wp (walkOut v d o hasVert) (fun hv' s' => ∃ hvF,
+        EarCtxOuts v d (done ++ [(o, hvF)]) rest hv' base bE sv sd s') s
+
+def EarCtxOut (v d : Nat) (done : List (DfsOut × Bool)) (o : DfsOut) (rest : List DfsOut)
+    (hasVert : Bool) (base : List TEntry) (bE : List (Nat → Prop)) (sv : List Nat)
+    (sd : List Bool) (s : WalkState) : Prop :=
+  EarCtx v d done (o :: rest) hasVert base bE sv sd s ∧
+  wp (walkOutPre v d o hasVert) (fun _ s₁ =>
+    match o with
+    | .tree e cls child =>
+      wp (modify fun s => { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }) (fun _ s₂ =>
+        (∃ bE' sv' sd', EarCtxTree child (d + 1) s₂.tstack bE' sv' sd' s₂) ∧
+        wp (walkTree child (d + 1)) (fun _ s₃ =>
+          TreeSiteAt v d done rest hasVert base bE sv sd s e cls child.v child.outs s₃) s₂) s₁
+    | .back .. => True) s
+end
+
+/-- The per-out part of `EarCtxOut` after `walkOutPre` (literally its inner match). -/
+def OutCtxMid (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut) (hasVert : Bool)
+    (base : List TEntry) (bE : List (Nat → Prop)) (sv : List Nat) (sd : List Bool)
+    (s : WalkState) (o : DfsOut) (s₁ : WalkState) : Prop :=
+  match o with
+  | .tree e cls child =>
+    wp (modify fun s => { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }) (fun _ s₂ =>
+      (∃ bE' sv' sd', EarCtxTree child (d + 1) s₂.tstack bE' sv' sd' s₂) ∧
+      wp (walkTree child (d + 1)) (fun _ s₃ =>
+        TreeSiteAt v d done rest hasVert base bE sv sd s e cls child.v child.outs s₃) s₂) s₁
+  | .back .. => True
+
 abbrev CTree (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
   ∀ (g : Graph) (anc : List Nat) (base : List TEntry) (bE : List (Nat → Prop)) (sv : List Nat)
     (sd : List Bool) (pe : Nat → Prop), Types g s → d = anc.length → t.WF anc → t.Ends g →
@@ -6091,7 +6149,8 @@ abbrev CTree (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
       ∀ top, s'.tstack = top ++ base → ∀ t' ∈ top, ∀ i ∈ t'.spans.1 ++ t'.spans.2,
         (∃ x ∈ t.verts, i = vertItem x) ∨ (∃ e ∈ t.edges, i = edgeItem g e) ∨
         s.items.size ≤ i) s ∧
-    wp (walkTree t d) (fun _ s' => TreeEndS t.v d t.outs base bE sv sd s') s
+    wp (walkTree t d) (fun _ s' => TreeEndS t.v d t.outs base bE sv sd s') s ∧
+    EarCtxTree t d base bE sv sd s
 
 abbrev COuts (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
   ∀ (g : Graph) (anc : List Nat) (outs₀ : List DfsOut) (done : List (DfsOut × Bool))
@@ -6116,7 +6175,8 @@ abbrev COuts (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) :
         Fresh g v outs₀ sz₀ base s') s) ∧
     (CtxShape v d done hasVert base s → wp (walkOuts v d outs hasVert)
       (fun hv' s' => ∃ done', done'.map (·.1) = outs₀ ∧ EarCtx v d done' [] hv' base bE sv sd s' ∧
-        CtxShape v d done' hv' base s') s)
+        CtxShape v d done' hv' base s') s) ∧
+    EarCtxOuts v d done outs hasVert base bE sv sd s
 
 abbrev COut (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
   ∀ (g : Graph) (anc : List Nat) (outs₀ rest : List DfsOut) (done : List (DfsOut × Bool))
@@ -6136,7 +6196,8 @@ abbrev COut (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
     wp (walkOut v d o hasVert) (fun _ s' => OutFrame v o base s s') s ∧
     (CtxShape v d done hasVert base s → wp (walkOut v d o hasVert)
       (fun hv' s' => ∃ hvF, EarCtx v d (done ++ [(o, hvF)]) rest hv' base bE sv sd s' ∧
-        CtxShape v d (done ++ [(o, hvF)]) hv' base s') s)
+        CtxShape v d (done ++ [(o, hvF)]) hv' base s') s) ∧
+    EarCtxOut v d done o rest hasVert base bE sv sd s
 
 mutual
 theorem cTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), CTree t d s
@@ -6146,13 +6207,13 @@ theorem cTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), CTree t d s
     simp only [DfsTree.WF] at hwf
     simp only [DfsTree.Ends] at hends
     have hv : v < g.nv := hvlt v (List.mem_cons_self ..)
-    obtain ⟨hEO, hpost, hfr, hpostS⟩ := cOuts v d outs false { s with stackVerts := s.stackVerts.set! d v } g anc
+    obtain ⟨hEO, hpost, hfr, hpostS, hEC⟩ := cOuts v d outs false { s with stackVerts := s.stackVerts.set! d v } g anc
       outs [] base bE sv sd pe ⟨hT.g_eq, hT.size, hT.root, hT.vert, hT.edge⟩ hd rfl hwf.1 hwf.2 hends hnd
       hanc hv (fun w hw => hvlt w (List.mem_cons_of_mem _ hw)) helt hen hcomp hpe (by simp [hsz]) hsdz
       (fun k hk => by
         show anc[k]? = some (s.stackVerts.set! d v)[k]!
         rw [getElem!_set!_ne' _ _ _ _ (Nat.ne_of_lt hk)]; exact hancsv k hk) hC
-    refine ⟨by unfold EarTree; exact hEO, ?_, ?_, ?_⟩
+    refine ⟨by unfold EarTree; exact hEO, ?_, ?_, ?_, by unfold EarCtxTree; exact hEC⟩
     · unfold walkTree
       simp only [wp_bind, wp_modify]
       refine wp_mono _ hpost fun hv' s' ⟨done', hmap, hC'⟩ => ?_
@@ -6220,7 +6281,7 @@ theorem cOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkS
   | v, d, [], hasVert, s => by
     intro g anc outs₀ done base bE sv sd pe hT hd hmap hsort hwf hends hnd hanc hv hw he hen hcomp hpe hsz hsdz
       hancsv hC
-    refine ⟨?_, ?_, ?_, ?_⟩
+    refine ⟨?_, ?_, ?_, ?_, ?_⟩
     · unfold EarOuts VertBook
       intro h
       exact ⟨by rw [hT.g_eq]; exact hv, hC.vert_book h⟩
@@ -6232,11 +6293,12 @@ theorem cOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkS
     · intro hS
       unfold walkOuts; simp only [wp_pure]
       exact ⟨done, by simpa using hmap, hC, hS⟩
+    · unfold EarCtxOuts; exact hC
   | v, d, o :: rest, hasVert, s => by
     intro g anc outs₀ done base bE sv sd pe hT hd hmap hsort hwf hends hnd hanc hv hw he hen hcomp hpe hsz hsdz
       hancsv hC
-    obtain ⟨hEo, hstep, hOF, hstepS⟩ := cOut v d o hasVert s g anc outs₀ rest done base bE sv sd pe hT hd hmap hsort
-      hwf hends hnd hanc hv hw he hen hcomp hpe hsz hsdz hancsv hC
+    obtain ⟨hEo, hstep, hOF, hstepS, hECo⟩ := cOut v d o hasVert s g anc outs₀ rest done base bE sv sd pe hT hd
+      hmap hsort hwf hends hnd hanc hv hw he hen hcomp hpe hsz hsdz hancsv hC
     have hK0 : wp (walkOut v d o hasVert) (fun _ s' => Keep (d + 1) 0 s s') s :=
       kOut v d o hasVert s g (d + 1) 0 s hT (Nat.le_refl _) (by have := hT.size; omega)
         (vertItem_ne_zero v) (fun w _ => vertItem_ne_zero w) (fun e _ => edgeItem_ne_zero g e) Keep.refl
@@ -6249,7 +6311,7 @@ theorem cOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkS
         (hK.sd.trans hsdz)
         (fun k hk => by rw [hancsv k hk, hC.sv k hk.le, hC'.sv k hk.le]) hC'
       exact ⟨h.1, h.2.1⟩
-    refine ⟨?_, ?_, ?_, ?_⟩
+    refine ⟨?_, ?_, ?_, ?_, ?_⟩
     · unfold EarOuts
       exact ⟨hEo, wp_mono _ hrest fun _ _ h => h.1⟩
     · unfold walkOuts; simp only [wp_bind]
@@ -6275,7 +6337,13 @@ theorem cOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkS
       exact (cOuts v d rest hv' s' g anc outs₀ (done ++ [(o, hvF)]) base bE sv sd pe (hT.of_keep hK) hd
         (by simpa using hmap) hsort hwf hends hnd hanc hv hw he hen hcomp hpe (hK.sv.trans hsz)
         (hK.sd.trans hsdz)
-        (fun k hk => by rw [hancsv k hk, hC.sv k hk.le, hC'.sv k hk.le]) hC').2.2.2 hS'
+        (fun k hk => by rw [hancsv k hk, hC.sv k hk.le, hC'.sv k hk.le]) hC').2.2.2.1 hS'
+    · unfold EarCtxOuts
+      refine ⟨hECo, wp_mono _ (wp_and hstep hK0) fun hv' s' ⟨⟨hvF, hC'⟩, hK⟩ => ⟨hvF, ?_⟩⟩
+      exact (cOuts v d rest hv' s' g anc outs₀ (done ++ [(o, hvF)]) base bE sv sd pe (hT.of_keep hK) hd
+        (by simpa using hmap) hsort hwf hends hnd hanc hv hw he hen hcomp hpe (hK.sv.trans hsz)
+        (hK.sd.trans hsdz)
+        (fun k hk => by rw [hancsv k hk, hC.sv k hk.le, hC'.sv k hk.le]) hC').2.2.2.2
 
 theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), COut v d o hasVert s
   | v, d, o, hasVert, s => by
@@ -6318,7 +6386,9 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
     simp only [wp_bind]
     have hvb0 : VertBook v hasVert s := fun h => ⟨hv', hC.vert_book h⟩
     have hcore : wp (walkOutPre v anc.length o hasVert) (fun hvF s₁ =>
-        OutMid v anc.length o hvF s₁ ∧ wp (walkOutRest v anc.length o hvF)
+        OutMid v anc.length o hvF s₁ ∧
+        OutCtxMid v anc.length done rest hasVert base bE sv sd s o s₁ ∧
+        wp (walkOutRest v anc.length o hvF)
           (fun hv' s' => (∃ hvF', EarCtx v anc.length (done ++ [(o, hvF')]) rest hv' base bE sv sd s') ∧
             OutFrame v o base s s' ∧
             (CtxShape v anc.length done hasVert base s → ∃ hvF',
@@ -6398,7 +6468,8 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
           · exact List.disjoint_of_nodup_append (List.nodup_cons.1 (List.nodup_append.1 hndV).2.1).2
               (List.mem_flatMap.2 ⟨o'.1, List.mem_map_of_mem ho', h⟩) (List.mem_append_right _ hxR)
         refine ⟨⟨fun h => hC.vert_book (Bool.or_eq_false_iff.1 h).1,
-          earAt_back_of_ctx hC hv' hsd hrank hinc hnd_e hb hcls L push hpush hL⟩, ?_⟩
+          earAt_back_of_ctx hC hv' hsd hrank hinc hnd_e hb hcls L push hpush hL⟩,
+          (by show True; trivial), ?_⟩
         unfold walkOutRest
         rw [wp_bind, wp_tstackSize]
         exact wp_mono _ (ctx_step_back_frame hC hv' hsd hrank hinc hnd_e hb hcls he_e hszS hend' hself
@@ -6507,7 +6578,7 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
             (L ++ s.tstack) ((L ++ s.tstack).map fun (t : TEntry) (e' : Nat) => t.edges s.g s.items e')
             sv' sd' { S₂ with stackVerts := S₂.stackVerts.set! (anc.length + 1) (DfsTree.node y outs').v } := by
           subst hS₂; exact hC₂
-        obtain ⟨hET, -, hfr, hendS⟩ := cTree (.node y outs') (anc.length + 1) S₂ g (anc ++ [v]) (L ++ s.tstack)
+        obtain ⟨hET, -, hfr, hendS, hECT⟩ := cTree (.node y outs') (anc.length + 1) S₂ g (anc ++ [v]) (L ++ s.tstack)
           ((L ++ s.tstack).map fun (t : TEntry) (e' : Nat) => t.edges s.g s.items e') sv' sd' (· = e) hT₂
           (by simp) hwf_c.1 hends_c.2 hnd_c (fun a ha => by
             rcases List.mem_append.1 ha with ha | ha
@@ -6556,7 +6627,8 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
                   EarCtx v anc.length (done ++ [(.tree e cls (.node y outs'), hvF')]) rest hv'
                     base bE sv sd s' ∧
                   CtxShape v anc.length (done ++ [(.tree e cls (.node y outs'), hvF')]) hv' base s'))
-                s₃) S₂ := by
+                s₃ ∧
+            TreeSiteAt v anc.length done rest hasVert base bE sv sd s e cls y outs' s₃) S₂ := by
           refine wp_mono _ (wp_and hendS (wp_and hK (wp_and hsdb (wp_and hq (wp_and hvr
             (wp_and hbel (wp_and hik hfr))))))) ?_
           rintro _ s₃ ⟨⟨done', hv'', sE, dir', L', push', D₃, rfl, hC', hS', hdone', hpush', hL', hsd₃,
@@ -6653,7 +6725,8 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
               edges_lt := fun e' he' => by
                 rw [hgs]; exact he _ (mem_subEdges_edgesList.2 ⟨_, ho, Or.inr he'⟩) }
           refine ⟨⟨fun h => ?_, earAt_tree_of_ctx H⟩, wp_mono _ (ctx_step_tree_frame H) fun _ _ h =>
-            ⟨⟨_, h.1⟩, h.2.1, fun hS => ⟨_, h.1, h.2.2 hS⟩⟩⟩
+            ⟨⟨_, h.1⟩, h.2.1, fun hS => ⟨_, h.1, h.2.2 hS⟩⟩,
+            L, push, done', hv'', _, sv', sd', sE, dir', L', push', D₃, rfl, H⟩
           have h0 : hasVert = false := (Bool.or_eq_false_iff.1 h).1
           obtain ⟨h1, h2⟩ := hC.vert_book h0
           have hg3 : (pushEnd sE D₃ L').g = s.g := hK3.g.trans (by rw [hS₂])
@@ -6664,15 +6737,19 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
         subst hS₂
         unfold OutMid
         simp only [wp_modify]
-        refine ⟨⟨hET, wp_mono _ hboth fun _ _ h => h.1⟩, ?_⟩
+        refine ⟨⟨hET, wp_mono _ hboth fun _ _ h => h.1⟩, ?_, ?_⟩
+        · unfold OutCtxMid
+          simp only [wp_modify]
+          exact ⟨⟨_, sv', sd', hECT⟩, wp_mono _ hboth fun _ _ h => h.2.2⟩
         unfold walkOutRest
         rw [wp_bind, wp_tstackSize]
         simp only [wp_bind, wp_modify]
-        exact wp_mono _ hboth fun _ _ h => h.2
+        exact wp_mono _ hboth fun _ _ h => h.2.1
     exact ⟨⟨hvb0, wp_mono _ hcore fun _ _ h => h.1⟩,
-      wp_mono _ hcore fun _ _ h => wp_mono _ h.2 fun _ _ h' => h'.1,
-      wp_mono _ hcore fun _ _ h => wp_mono _ h.2 fun _ _ h' => h'.2.1,
-      fun hS => wp_mono _ hcore fun _ _ h => wp_mono _ h.2 fun _ _ h' => h'.2.2 hS⟩
+      wp_mono _ hcore fun _ _ h => wp_mono _ h.2.2 fun _ _ h' => h'.1,
+      wp_mono _ hcore fun _ _ h => wp_mono _ h.2.2 fun _ _ h' => h'.2.1,
+      fun hS => wp_mono _ hcore fun _ _ h => wp_mono _ h.2.2 fun _ _ h' => h'.2.2 hS,
+      by unfold EarCtxOut; exact ⟨hC, wp_mono _ hcore fun _ _ h => h.2.1⟩⟩
 end
 
 /-- Admitted: the ear content of a root walk — `FinishBook.ear`/`vert` at every `finishEdge`
@@ -6697,6 +6774,26 @@ theorem walkTree_ear (t : DfsTree) (s : WalkState) (hwf : t.WF []) (hends : t.En
     hwf hends (by simpa using hvn) (fun a ha => nomatch ha) hvlt helt hen
     (fun e' he' x hx hv => Or.inl (hcomp e' he' x hx hv)) (fun _ h => h.elim) hsv hsd
     (fun k hk => absurd hk (Nat.not_lt_zero _)) hC).1
+
+/-- The contexts of a root walk (PROOF.md §4.2b): `EarCtx` at every out's entry and end of outs,
+and `TreeSiteAt` at every tree `finishEdge` site, from the same hypotheses as `walkTree_ear`. -/
+theorem walkTree_earCtx (t : DfsTree) (s : WalkState) (hwf : t.WF []) (hends : t.Ends s.g)
+    (hvlt : ∀ v ∈ t.verts, v < s.g.nv) (helt : ∀ e ∈ t.edges, e < s.g.ne)
+    (hvn : t.verts.Nodup) (hen : t.edges.Nodup)
+    (hcomp : ∀ e, e < s.g.ne → ∀ x, s.g.Inc e x → x ∈ t.verts → e ∈ t.edges)
+    (hsv : s.stackVerts.size = s.g.nv) (hsd : s.stackDir.size = s.g.nv)
+    (hfo : s.firstOccurrence.size = s.g.nv)
+    (hts : s.tstack = []) (hi : s.Inv' 0) (hs : Shape s)
+    (hvfresh : ∀ v ∈ t.verts, Items.ch s.items (vertItem v) = [] ∧
+      ∀ p, ¬ Items.IsParent s.items p (vertItem v))
+    (hefresh : ∀ e ∈ t.edges, Items.ch s.items (edgeItem s.g e) = [] ∧
+      ∀ p, ¬ Items.IsParent s.items p (edgeItem s.g e)) :
+    ∃ sv sd, EarCtxTree t 0 [] [] sv sd s := by
+  obtain ⟨sv, sd, hC⟩ := ctx_init_root t s hwf hends hvlt helt hvn hen hsv hsd hfo hts hi hs hvfresh hefresh
+  exact ⟨sv, sd, (cTree t 0 s s.g [] [] [] sv sd (fun _ => False) ⟨rfl, hs.size, hs.root, hs.vert, hs.edge⟩ rfl
+    hwf hends (by simpa using hvn) (fun a ha => nomatch ha) hvlt helt hen
+    (fun e' he' x hx hv => Or.inl (hcomp e' he' x hx hv)) (fun _ h => h.elim) hsv hsd
+    (fun k hk => absurd hk (Nat.not_lt_zero _)) hC).2.2.2.2⟩
 
 /-! `BookTree` from `EarTree`: the endpoint field `ends` comes from `DfsTree.Ends`/`WF` with the
 stack vertices below the current depth equal to the ancestor path, and `q` from the freshness of

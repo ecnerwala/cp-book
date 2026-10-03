@@ -538,6 +538,20 @@ sides; and type-2 separation pairs always lie along a single ear (Fact C), so th
 split cuts off is uniformly on one side and its entry has the empty-side shape. Only type-1
 closes / ear boundaries produce genuinely two-sided entries.
 
+**Public contexts (`WalkInv.lean`, `EarCtxTree`/`EarCtxOuts`/`EarCtxOut`, `TreeSiteAt`,
+`walkTree_earCtx`).** The between-edges contexts are conclusions of the same induction, as an
+`EarTree`-shaped predicate carried by `CTree`/`COuts`/`COut` (additive last conjuncts):
+`EarCtxOuts v d done outs hasVert base bE sv sd s` is `EarCtx` at the end of outs and, at
+`o :: rest`, `EarCtxOut` plus (after `walkOut`) `EarCtxOuts` with `(o, hvF)` appended;
+`EarCtxOut` is `EarCtx … (o :: rest) …` at the out's entry and, for a tree out, after
+`walkOutPre` and the `firstOccurrence` write, the child's `EarCtxTree` over the pushed stack
+(`s₂.tstack = L ++ s.tstack`, `bE'`/`sv'`/`sd'` existential) and `TreeSiteAt … s₃` at the
+`finishEdge` site — the full `TreeSite` of the out with the intermediate witnesses (`L`/`push`,
+the child's end-of-outs data, its end push `sE`/`D₃`/`L'`) existential and
+`s₃ = pushEnd sE D₃ L'`. Consumers read `EarCtx.top`/`CtxTop.split`/`CtxEntry.depth`/the
+below-entry `vStart ≠ v`/`CtxTop.vert_edges` from the records. `walkTree_earCtx` exports
+`∃ sv sd, EarCtxTree t 0 [] [] sv sd s` under `walkTree_ear`'s hypotheses.
+
 **Lean target (`WalkCover.lean`).** The "nothing is dropped" half of `Items.Tree` is proved from a
 single admitted predicate, `walk_sides : SidesForest forest (WalkState.init g tern)` (hypotheses:
 `ForestOK`, `∀ t ∈ forest, t.WF []`). `SidesForest`/`SidesTree`/`SidesOuts`/`SidesOut` mirror the
