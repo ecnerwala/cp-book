@@ -270,17 +270,25 @@ end Items
 namespace WalkState
 open WalkM
 
-/-- Closed records are required for the root and for items occurring in a span or child list.
+/-- Closed records are required for the root, all vertices, and items occurring in a span or child list.
 Freshly allocated and reopened items are loose until their next close. -/
 structure CloseInv (s : WalkState) : Prop where
-  closed : ∀ i, i < s.items.size → i = rootItem ∨ 0 < s.cnt i → Items.CloseAt s.g s.items i
+  closed : ∀ i, i < s.items.size → i ≤ s.g.nv ∨ 0 < s.cnt i → Items.CloseAt s.g s.items i
 
 theorem init_closeInv (g : Graph) (tern : Bool) : (init g tern).CloseInv := by
   constructor
   intro i hi hc
-  rcases hc with rfl | hc
-  · exact Items.CloseAt.root (by simp [init, Items.initialItems_type, rootItem])
-      (by simp [init, Items.initialItems_ch])
+  rcases hc with hc | hc
+  · change i ≤ g.nv at hc
+    by_cases hz : i = 0
+    · subst i
+      exact Items.CloseAt.root (by simp [init, Items.initialItems_type, rootItem])
+        (by simp [init, Items.initialItems_ch])
+    · have heq : i = vertItem (i - 1) := by dsimp [vertItem]; omega
+      rw [heq]
+      apply Items.CloseAt.vertex (by dsimp [init] at hc ⊢; omega)
+      · simp [init, Items.initialItems_type, vertItem]; omega
+      · intro c hh; simp [Items.IsParent, init, Items.initialItems_ch] at hh
   · rw [init_cnt] at hc; omega
 
 theorem CloseInv.frame {s s' : WalkState} (h : s.CloseInv) (hg : s'.g = s.g)
@@ -288,7 +296,8 @@ theorem CloseInv.frame {s s' : WalkState} (h : s.CloseInv) (hg : s'.g = s.g)
   constructor
   intro i hil hl
   rw [hg, hi]
-  exact h.closed i (by rwa [hi] at hil) (hl.imp_right (hc i))
+  have hl' : i ≤ s.g.nv ∨ 0 < s'.cnt i := by simpa only [hg] using hl
+  exact h.closed i (by rwa [hi] at hil) (hl'.imp_right (hc i))
 
 theorem CloseInv.pop {s : WalkState} (h : s.CloseInv) :
     ({ s with tstack := s.tstack.tail } : WalkState).CloseInv := by
@@ -318,16 +327,31 @@ theorem CloseInv.push {s : WalkState} (h : s.CloseInv) (v d i : Nat)
       rw [spansCount_cons, count_setSides] at hl
       simpa [List.count_singleton, Ne.symm hji, cnt] using hl
 
+theorem CloseInv.pushVert {s : WalkState} (h : s.CloseInv) (v d : Nat)
+    (hv : v < s.g.nv) (hs : s.g.nv < s.items.size) :
+    (after (pushVertTstack v d) s).CloseInv := by
+  apply h.push v d
+  apply h.closed (vertItem v) (by dsimp [vertItem]; omega)
+  exact Or.inl (by dsimp [vertItem]; omega)
+
+theorem CloseInv.pushEdge {s : WalkState} (h : s.CloseInv) (v d e a b : Nat)
+    (ht : Items.type s.items (edgeItem s.g e) = .Q) (hc : Items.ch s.items (edgeItem s.g e) = [])
+    (hvs : Items.vs s.items (edgeItem s.g e) = (some a, some b)) (hne : a ≠ b)
+    (hp : Items.PairEq (a, b) s.g.edges[e]!)
+    (ha : Items.Att s.g s.items (edgeItem s.g e) a) (hb : Items.Att s.g s.items (edgeItem s.g e) b) :
+    (after (pushEdgeTstack v d e) s).CloseInv := by
+  exact h.push v d _ (Items.CloseAt.leafQ ht hc hvs hne hp ha hb)
+
 theorem CloseInv.alloc {s : WalkState} {P X : ItemId → Prop} (h : s.CloseInv)
     (hp : s.Place s.g P X) (ty : NodeType) : (after (allocItem ty) s).CloseInv := by
   change ({ s with items := s.items.push { type := ty } } : WalkState).CloseInv
   constructor
   intro i hi hc
-  have hc' : i = rootItem ∨ 0 < s.cnt i := by
+  have hc' : i ≤ s.g.nv ∨ 0 < s.cnt i := by
     simpa only [cnt, Items.chCount_push s.items { type := ty } rfl] using hc
   have hi' : i < s.items.size := by
-    rcases hc' with rfl | hc'
-    · have := hp.size; dsimp [rootItem]; omega
+    rcases hc' with hc' | hc'
+    · have := hp.size; omega
     · exact hp.alloc i hc'
   have hchild : ∀ c, Items.IsParent s.items i c → c < s.items.size := by
     intro c hc
@@ -379,7 +403,7 @@ theorem CloseInv.finishTop {s : WalkState} (h : s.CloseInv) {x : ItemId}
         simp only [ht, head!_cons, spansCount_cons, count_setSides, List.append_nil,
           List.count_singleton, beq_iff_eq, Ne.symm hix, ite_false, Nat.zero_add] at h1 h2 ⊢
         omega
-    have hc' : i = rootItem ∨ 0 < s.cnt i := hc.imp_right fun hpos => lt_of_lt_of_le hpos hle
+    have hc' : i ≤ s.g.nv ∨ 0 < s.cnt i := hc.imp_right fun hpos => lt_of_lt_of_le hpos hle
     exact (h.closed i (by simpa using hi) hc').modify_of_not_below
       (fun it => { it with vs := vs, ch := getSide s.tstack.head!.spans dir })
       fun hb => hix (Items.Below.eq_of_no_parent hn hb)
@@ -394,7 +418,7 @@ theorem CloseInv.unwrap {s : WalkState} (h : s.CloseInv) {a t : TEntry} {rest : 
   omega
 
 theorem CloseInv.modifyLoose {s : WalkState} (h : s.CloseInv) {x : ItemId}
-    (hx : x ≠ rootItem) (hz : s.cnt x = 0) (f : Item → Item) (hf : ∀ it, (f it).ch = it.ch) :
+    (hx : s.g.nv < x) (hz : s.cnt x = 0) (f : Item → Item) (hf : ∀ it, (f it).ch = it.ch) :
     ({ s with items := s.items.modify x f } : WalkState).CloseInv := by
   have hn : ∀ p, ¬ Items.IsParent s.items p x := by
     intro p hp
@@ -410,10 +434,87 @@ theorem CloseInv.modifyLoose {s : WalkState} (h : s.CloseInv) {x : ItemId}
   have hix : i ≠ x := by
     intro heq; subst i
     rcases hc with hc | hc
-    · exact hx hc
+    · exact (Nat.not_le_of_lt hx hc).elim
     · omega
   exact (h.closed i (by simpa using hi) hc).modify_of_not_below f
     fun hb => hix (Items.Below.eq_of_no_parent hn hb)
+
+theorem CloseInv.writeChildren {s : WalkState} (h : s.CloseInv) {x : ItemId}
+    (hx : x < s.items.size) (hn : Items.NoParent s.items x) (cs : List ItemId)
+    (hnew : Items.CloseAt s.g (s.items.modify x fun it => { it with ch := cs }) x)
+    (hcs : ∀ c ∈ cs, Items.CloseAt s.g s.items c) :
+    ({ s with items := s.items.modify x fun it => { it with ch := cs } } : WalkState).CloseInv := by
+  constructor
+  intro i hi hc
+  by_cases hix : i = x
+  · subst i; exact hnew
+  apply Items.CloseAt.modify_of_not_below (f := fun it => { it with ch := cs })
+    (hj := fun hb => hix (hn.below_eq hb))
+  by_cases hic : i ∈ cs
+  · exact hcs i hic
+  · apply h.closed i (by simpa using hi)
+    rcases hc with hc | hc
+    · exact Or.inl hc
+    · apply Or.inr
+      have hh := Items.chCount_modify s.items hx (fun it => { it with ch := cs }) i
+      have hz : cs.count i = 0 := List.count_eq_zero.mpr hic
+      dsimp only at hh
+      rw [hz, Nat.add_zero] at hh
+      dsimp only [cnt] at hc ⊢
+      omega
+
+theorem CloseInv.root_append {s : WalkState} {P X : ItemId → Prop} (h : s.CloseInv)
+    (hp : s.Place s.g P X) (cs : List ItemId)
+    (hcs : ∀ c ∈ cs, ∃ v, v < s.g.nv ∧ c = vertItem v) :
+    ({ s with items := s.items.modify rootItem fun it => { it with ch := it.ch ++ cs } } : WalkState).CloseInv := by
+  have hr : rootItem < s.items.size := Nat.lt_of_lt_of_le (by show 0 < 1 + s.g.nv + s.g.ne; omega) hp.size
+  have hn : Items.NoParent s.items rootItem := by
+    intro p hc
+    have := List.count_pos_iff.mpr hc
+    have hpc := Items.count_le_chCount s.items (Items.parent_lt hc) rootItem
+    have hz := hp.root
+    dsimp [cnt] at hz
+    omega
+  have hroot := h.closed rootItem hr (Or.inl (Nat.zero_le _))
+  have heq : (s.items.modify rootItem fun it => { it with ch := it.ch ++ cs }) =
+      (s.items.modify rootItem fun it => { it with ch := Items.ch s.items rootItem ++ cs }) := by
+    apply Array.ext
+    · simp
+    · intro i hi₁ hi₂
+      simp only [Array.getElem_modify]
+      split
+      · next hEq => subst i; simp [Items.ch, Array.getElem?_eq_getElem hr]
+      · rfl
+  rw [heq]
+  apply h.writeChildren hr hn
+  · apply Items.CloseAt.root_of_children
+    · rw [Items.type_modify s.items rootItem _ (fun it => { it with ch := Items.ch s.items rootItem ++ cs }) (fun _ => rfl)]
+      exact hp.root_type
+    · intro c hc
+      have hc' : c ∈ Items.ch s.items rootItem ++ cs := by
+        simpa only [Items.IsParent, Items.ch_modify_self _ _ _ hr] using hc
+      simp only [Items.type_modify s.items rootItem _ (fun it => { it with ch := Items.ch s.items rootItem ++ cs }) (fun _ => rfl)]
+      rcases List.mem_append.mp hc' with hc' | hc'
+      · constructor <;> intro ht
+        · have := hroot.io_parent c hc' (Or.inl ht); simp [hp.root_type] at this
+        · have := hroot.io_parent c hc' (Or.inr ht); simp [hp.root_type] at this
+      · obtain ⟨v, hv, rfl⟩ := hcs c hc'
+        simp [hp.vert v hv]
+  · intro c hc
+    rcases List.mem_append.mp hc with hc | hc
+    · apply h.closed c
+      · apply hp.alloc c
+        have := Items.count_le_chCount s.items hr c
+        have := List.count_pos_iff.mpr hc
+        dsimp [cnt]; omega
+      · apply Or.inr
+        have := Items.count_le_chCount s.items hr c
+        have := List.count_pos_iff.mpr hc
+        dsimp [cnt]; omega
+    · obtain ⟨v, hv, rfl⟩ := hcs c hc
+      apply h.closed
+      · have := hp.size; dsimp [vertItem]; omega
+      · exact Or.inl (by dsimp [vertItem]; omega)
 
 theorem CloseInv.of_tree {s : WalkState} (h : s.CloseInv) (ht : Items.Tree s.g s.items)
     (hty : WalkTyping s.g s.items) : Items.CloseFacts s.g s.items := by
@@ -421,7 +522,7 @@ theorem CloseInv.of_tree {s : WalkState} (h : s.CloseInv) (ht : Items.Tree s.g s
     intro i hi
     apply h.closed i hi
     by_cases hz : i = rootItem
-    · exact Or.inl hz
+    · subst i; exact Or.inl (Nat.zero_le _)
     · obtain ⟨p, hp, -⟩ := ht.unique_parent i (Nat.pos_of_ne_zero hz) hi
       have hpos := List.count_pos_iff.mpr hp
       have hle := Items.count_le_chCount s.items (Items.parent_lt hp) i
