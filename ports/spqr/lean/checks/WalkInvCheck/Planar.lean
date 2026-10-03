@@ -8,7 +8,10 @@ Separately reported fields, per S/P/R item recorded `.planar m`:
   `pf.nodup`: the four matches are distinct; `pf.ch_lt`: children below `1 + nv + 2 ne`;
 * `pf.closed`: the `qem` entries of the skeleton's quarter-edges (cap linked, flips applied) point
   back into the skeleton;
-* `pf.planar`: `finishRot` is a planar embedding of the skeleton (`PlanarFinish.embedded`).
+* `pf.planar`: `finishRot` is a planar embedding of the skeleton (`PlanarFinish.embedded`);
+* `pf.corners` (R items): per node vertex, the corner edges `cornerVes` (edge children ending there
+  whose quarter-edge `2` faces a side-0 quarter-edge): none at the cap endpoints, exactly one
+  elsewhere, facing a non-cap edge with strictly larger `loc₀` (`PlanarFinish.corners`).
 
 The children's flips are part of the fact: without `flipped` (reading `readRot P (capLinked g qem m)`
 directly) the embedding test fails on 530 of the 6002 runs over seeds 0..3000, first at seed 6
@@ -43,6 +46,19 @@ def finishB (seed : Nat) (g : Graph) (tern : Bool) (f : List DfsTree) : List Vio
         vs := vs ++ [bad "pf.closed" s!"{site} ves={P.ves} qem={P.ves.map fun ve => (List.range 4).map fun z => qf[4 * ve + z]!}"]
       unless IsPlanarEmbedding P.es g.nv (finishRot g w it m) do
         vs := vs ++ [bad "pf.planar" s!"{site} es={P.es} rot={(finishRot g w it m).rotAdj}"]
+      if ty == .R then
+        let vl := Spqr.Items.nvList g items it
+        for j in List.range vl.length do
+          let cs := cornerVes g items it qf vl[j]!
+          let ok :=
+            if j == 0 || j + 1 == vl.length then cs.isEmpty
+            else match cs with
+              | [ve] => match qf[4 * ve + 2]! with
+                | some o => QE.edge o != capVe g &&
+                    loc₀ g items it (1 + g.nv + ve) < loc₀ g items it (1 + g.nv + QE.edge o)
+                | none => false
+              | _ => false
+          unless ok do vs := vs ++ [bad "pf.corners" s!"{site} vl={vl} j={j} cs={cs}"]
     | _ => pure ()
   return vs
 

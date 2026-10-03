@@ -12,6 +12,7 @@ import Spqr.PlanarEmbedRoot
 import Spqr.WalkPieceSep
 import Spqr.PlanarSoundR
 import Spqr.PlanarRelabelBridge
+import Spqr.PlanarRelabelCornersR
 import Spqr.RelabelChildShape
 import Spqr.Spec
 
@@ -173,7 +174,7 @@ theorem nodePlanar_sound_R (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder
       ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i)
       ((g.planarTree ternarize vertOrder edgeOrder).nodeRot i) := by
   simp only [Graph.planarTree, Graph.planarSpqrTree] at hi hR h ⊢
-  have hwf := planarWalk_items_wf g ternarize vertOrder edgeOrder
+  have hwf := planarWalk_items_wf' g hg ternarize vertOrder edgeOrder hvo heo
   exact nodePlanar_sound_R_of g _ _ hwf (planarWalk_planarFinish g ternarize _) i
     (planarRelabelTree_relabelNodeR g _ hwf (planarWalk_planarFinish g ternarize _) i hi hR h)
 
@@ -202,24 +203,29 @@ theorem nodePlanar_sound (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder e
   · exact nodePlanar_sound_R g hg ternarize vertOrder edgeOrder hvo heo i hi hR h
 
 /-- Corner structure of the node rotation systems (`NodeCorners`), under the all-planar flag.
-Admitted; checked empirically by `check_piece_sep`. For S and P it is mechanical from the explicit
-`layoutRot` cycle/bond layouts (`neRotAdj_segment'`); for R it is the left/right structure of the
-embedding routine's `mapRot`: at each vertex the quarter-edges of edges towards lower node-vertices
-form one contiguous block, and edges are sorted by endpoint midpoint (`RelabelSt` ordering), so the
-unique `(side 1, dir 0) → (side 0, dir 1)` transition has `ta < tb`. -/
-theorem planarTree_nodeCorners (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
+S/P: from the explicit `layoutRot` cycle/bond layouts (`PlanarRelabelCornersSP.lean`); R: from the
+relabel rows `NodeRow` and `PlanarFinish.corners` (`PlanarRelabelCornersR.lean`). -/
+theorem planarTree_nodeCorners (g : Graph) (hg : g.WF) (ternarize : Bool)
+    (vertOrder edgeOrder : List Nat) (hvo : OrderOK g.nv vertOrder) (heo : OrderOK g.ne edgeOrder)
     (hall : (g.planarTree ternarize vertOrder edgeOrder).nodePlanar.all id = true) :
     (g.planarTree ternarize vertOrder edgeOrder).NodeCorners := by
-  sorry
+  have hwf : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.WF := by
+    rw [planarRelabel_proj]; exact spqrTree_wf' g hg ternarize vertOrder edgeOrder hvo heo
+  exact planarRelabelTree_nodeCorners g _
+    (planarWalk_items_wf' g hg ternarize vertOrder edgeOrder hvo heo)
+    (planarWalk_planarFinish g ternarize _) hwf
+    (fun i hi => neRotAdj_segment g hg ternarize vertOrder edgeOrder hvo heo i hi) hall
 
 /-- The rotation entries of every `R` node stay inside the node's own segment (`NodeRotClosed`),
-under the all-planar flag. Admitted; checked empirically by `check_piece_sep` (`rot_closed`).
-Mechanical from `layoutRot .R`: `mapRot` only produces quarter-edges `4 * rotEdgeNe[..] + _` of the
-node's own edges. -/
-theorem planarTree_nodeRotClosed (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
+under the all-planar flag: from the relabel rows `NodeRow` and `PlanarFinish.closed`
+(`PlanarRelabelClosed.lean`). -/
+theorem planarTree_nodeRotClosed (g : Graph) (hg : g.WF) (ternarize : Bool)
+    (vertOrder edgeOrder : List Nat) (hvo : OrderOK g.nv vertOrder) (heo : OrderOK g.ne edgeOrder)
     (hall : (g.planarTree ternarize vertOrder edgeOrder).nodePlanar.all id = true) :
-    (g.planarTree ternarize vertOrder edgeOrder).NodeRotClosed := by
-  sorry
+    (g.planarTree ternarize vertOrder edgeOrder).NodeRotClosed :=
+  planarRelabelTree_nodeRotClosed g _
+    (planarWalk_items_wf' g hg ternarize vertOrder edgeOrder hvo heo)
+    (planarWalk_planarFinish g ternarize _) hall
 
 /-- Completeness of the per-node flag: a node flagged nonplanar has a nonplanar skeleton.
 Admitted (Kuratowski-style; plan in PROOF.md §8.3: the `mergePlanarity` nesting obstruction
@@ -290,14 +296,15 @@ theorem planarEmbed_sound (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder 
       fun i hi => neRotAdj_segment g hg ternarize vertOrder edgeOrder hvo heo i hi
     exact glued_root g hg ternarize vertOrder edgeOrder hvo heo hwf _
       ((g.planarTree ternarize vertOrder edgeOrder).gluedFaces_planarEmbed g hg hwf hsh hrep hsep
-        hloc hlay (planarTree_nodeRotClosed g ternarize vertOrder edgeOrder hall)
-        (planarTree_nodeCorners g ternarize vertOrder edgeOrder hall)).toGluedUpTo
+        hloc hlay (planarTree_nodeRotClosed g hg ternarize vertOrder edgeOrder hvo heo hall)
+        (planarTree_nodeCorners g hg ternarize vertOrder edgeOrder hvo heo hall)).toGluedUpTo
   · cases h
 
 /-- The eventual target: the planar SPQR tree yields an embedding iff `g` is planar. `→` is
 `planarEmbed_sound`; `←` needs `nodePlanar_complete` plus the fact that a minor (each skeleton is a
 minor of `g`) of a planar graph is planar. Admitted. -/
-theorem spqrTree_planar (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) :
+theorem spqrTree_planar (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
+    (hvo : OrderOK g.nv vertOrder) (heo : OrderOK g.ne edgeOrder) :
     (g.planarTree ternarize vertOrder edgeOrder).planarEmbed.isSome ↔ Planar g.edges.toList g.nv := by
   sorry
 

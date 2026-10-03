@@ -3842,8 +3842,8 @@ node-vertex's V item is a child of the node iff the node-vertex is not a cap end
 `v_child_nv`, `nv_vert_inj`. `PlanarNodeSpec.NodeCorners` states the corner structure the node
 step relies on (`CornerAt i nv ta`: the `(side 1, dir 0)` quarter-edge of a non-cap edge at `nv`
 whose rotation successor is a `(side 0, dir 1)` quarter-edge; cap endpoints have none, every inner
-node-vertex exactly one with `ta < tb`); `planarTree_nodeCorners` is a named admission (not
-reached by `planarEmbed_sound` yet; it will be a hypothesis of `nodeFold_capped` once used).
+node-vertex exactly one with `ta < tb`); `planarTree_nodeCorners` is proved below (relabel side,
+under `planarWalk_planarFinish`) and is a hypothesis of `nodeFold_capped_R`.
 `Proofs/PlanarDegree.lean` (`lbl_stepC`, `sameOrbit_of_lbl`, `rot_div_ne`) and
 `OrbitSplit.conj_not_sameOrbit_split`/`insert_not_sameFaceOrbit` are proved building blocks for
 (N1)/(N3). `Proofs/PieceJoin.lean` has the S-node building block `Capped.join` (standard axioms):
@@ -3978,17 +3978,44 @@ permutation is needed. `nodeFold_capped` (`PlanarEmbedNodeFold.lean`) dispatches
 `R` case is `nodeFold_capped_R` (proved below via `main_R`; it takes the extra hypotheses
 `hclosed : NodeRotClosed` and `hcor : NodeCorners`).
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through the walk/R-side admissions,
-`spqrTree_pieceSep`'s final-items hypothesis `walk_pieceInv`, `planarWalk_planarFinish`,
-`planarWalk_items_wf` (the two remaining ingredients of `nodePlanar_sound_R`; the relabel-side
-`planarRelabelTree_relabelNodeR` is proved), `planarTree_nodeRotClosed` and
-`planarTree_nodeCorners`.
+`spqrTree_pieceSep`'s final-items hypothesis `walk_pieceInv`, `planarWalk_planarFinish` (the one
+remaining ingredient of `nodePlanar_sound_R`; the relabel-side `planarRelabelTree_relabelNodeR` is
+proved and `Items.WF` comes from `walk_items_wf` under `g.WF`/`OrderOK`); `planarTree_nodeRotClosed`
+and `planarTree_nodeCorners` are proved from the relabel rows (below) and reach `sorryAx` only
+through `planarWalk_planarFinish` and the walk admissions.
+
+The hypothesis-free `planarWalk_items_wf` was false for the same reason as the hypothesis-free
+`spqrTree_wf` (`checks/RInvalidOrderCheck.lean` `not_wf`: K4 with the invalid edge order `[6]`
+yields an `R` item with terminals `(some 0, none)`); it was removed, and `nodePlanar_sound_R`,
+`nodePlanar_sound` and the target `spqrTree_planar` take `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo`
+like `planarEmbed_sound` and use `planarWalk_items_wf'`.
+
+**`NodeRotClosed` and `NodeCorners` from the relabel rows.** Both are consequences of
+`planarRelabel_rowInv` (`RowInv`/`NodeRow`, §8.6 (c)) plus `PlanarFinish`, so they inherit exactly
+the admissions of `nodePlanar_sound_R`. `planarRelabelTree_nodeRow` (`PlanarRelabelClosed.lean`)
+extracts the final relabel state `s` with `planarRelabelTree g w = {ofState s.base with nodePlanar,
+neRotAdj}` and a `NodeRow` for every `R` node under the all-planar flag.
+`planarRelabelTree_nodeRotClosed`: a nonempty entry `neRotAdj[4 * neSt + l]` of an `R` node is, by
+the row formula, `4 * (neSt + idxOf (QE.edge o)) + (o &&& 2) + (1 - l % 2)` with `QE.edge o ∈ ves`
+(from `PlanarFinish.closed`), hence inside `[4 * neSt, 4 * neEnd)`.
+`planarRelabelTree_nodeCorners`: S and P (`PlanarRelabelCornersSP.lean`, `cornersAt_S`/`cornersAt_P`)
+are read off the explicit `layoutRot` cycle/bond segments (`LayoutAt`, from `neRotAdj_segment`);
+for S the residue-2 slot of edge `k` points to `4 (s + k + 1) + 1` (or `4 s + 3` for the last edge),
+for P every residue-2 slot points to a residue-3 slot, so no `CornerAt` at all. R
+(`PlanarRelabelCornersR.lean`, `planarRelabelTree_cornersAt_R`): `CornerAt n nv ta` is equivalent
+to `ta = 4 (neSt + 1 + r) + 2` for the `r`-th edge child `c` with `(vs c).2 = nv` and
+`Q[4 ve + 2] = some o`, `o &&& 2 = 0` — i.e. `ve ∈ cornerVes` of `PlanarFinish.corners`, which
+gives none at cap endpoints and exactly one at inner node-vertices, with `loc₀` of the target edge
+strictly larger; `Items.loc`/`PosOK.pos_sub` turn `loc₀` ordering into `ta < tb`, and `NodeRow`
+turns the `Q` target into the `neRotAdj` entry. `nodeCorners_of_cornersAt` assembles the three
+cases. `#print axioms` of all relabel-side theorems: `propext`, `Classical.choice`, `Quot.sound`.
 
 **R node.** Route: the hybrid system. `hloc` is the local skeleton `localSkeleton i` with rotation
 `nodeRot i`; `rotR` (`PlanarEmbedNodeR.lean`) identifies the executable `neRotAdj` entries of the
 node's segment with `nodeRot i` shifted by `4 * neSt`, which needs `NodeRotClosed`
 (`PlanarNodeSpec.lean`: the entries of an `R` node stay inside its own segment — `nodeRot`
-subtracts `4 * neSt`, so `hloc` alone cannot say so; admitted as `planarTree_nodeRotClosed`,
-checked by `check_piece_sep`'s `rot_closed` on seeds 0..300 and the tiny cases). `child_R` is the
+subtracts `4 * neSt`, so `hloc` alone cannot say so; `planarTree_nodeRotClosed`, proved below,
+checked by `check_piece_sep`'s `rot_closed` on seeds 0..1000 and the tiny cases). `child_R` is the
 `treeQe` transport of the node quarter-edge `4 (neSt + j + 1) + r` to slot `r` of the `j`-th
 non-`V` child (whose cap is the twin of node-edge `j + 1`), `neOrig_R` gives the original
 endpoints of every node-edge as `sV` of its node-vertices. The generic side is complete and
@@ -4076,8 +4103,8 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `QemAgree`, `capLinked`/`flipped` lemmas (`size_*`, `*_get!_of`, `qemAgree_capLinked`, `qemAgree_flipped`), planar relabel `wp` semantics (`PlanarRelabelSem.lean`: `SetupSpec`/`setupNode_spec`, `applyFlips_spec`, `rotEdgeNe_init_*`, `wp_rabs`, `wp_jp_match1_rfr`, `wp_forIn_inv`) | `PlanarRelabelQem.lean`, `PlanarRelabelSem.lean` | **proved** |
 | `RowInv` (state = `init` outside the arrays being built, `rotEdgeNe`/`neBounds`/`nvBounds`/`neRotAdj` sizes in lockstep, `NodeRow` for every numbered planar R node), `NodeRow` (= `RelabelNodeR` read off the state's arrays), `Unch` (qem unchanged outside the current subtree's child slots), `Fresh` (qem of the current subtree's child slots = the walk's), `RowInv.init`, `NodeRow.push`, `layoutRot_R_get`, `orderedChildren_eq_ordered`, tree/slot helpers | `PlanarRelabelRows.lean` | **proved** |
 | `planarRelabel_rowInv` (the `planarRelabel` fold preserves `RowInv` and is `Unch` on its subtree, given `Fresh`; one R step = `setupNode` (`= capLinked`, `setupSpec_keep`: writes only the node's child slots, by `PlanarFinish.match_ends`/`ch_lt`), `applyFlips` (`= flipped`), `rotEdgeNe` init (`rotEdgeNe_node`: cap ↦ `neSt`, child edge ↦ `neSt + idxOf`), node-edge/rotation block append (`layoutNode_nvs_R`, `mapRot_R_get`, `qemAgree_node`), then the children in `Items.ordered` order (`wp_forIn_inv`, each `Fresh` by `Unch` of the earlier siblings); helpers `planarFinish_node`, `edgeVes_facts`) | `PlanarRelabelRowsFold.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
-| `readRot_perm` (`readRot` along a permutation of `ves`, by `IsPlanarEmbedding.reindex`), `nodePlanar_sound_R_of` (`PlanarFinish` + `RelabelNodeR` + `Items.WF` ⇒ `nodeRot n` is a planar embedding of `localSkeleton n`: reorder to `Items.ordered`, relabel vertices by `pos - nvSt` with `IsPlanarEmbedding.map`, injective by `PosOK`/`nv_nodup`), `planarWalk_items_wf'` (from `walk_items_wf`), `planarWalk_items_wf` (hypothesis-free form) | `PlanarSoundR.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) / proved / sorry (cf. `spqrTree_wf`) |
-| `nodePlanar_sound_R` | `PlanarSpec.lean` | proved from `nodePlanar_sound_R_of` modulo the three admissions above |
+| `readRot_perm` (`readRot` along a permutation of `ves`, by `IsPlanarEmbedding.reindex`), `nodePlanar_sound_R_of` (`PlanarFinish` + `RelabelNodeR` + `Items.WF` ⇒ `nodeRot n` is a planar embedding of `localSkeleton n`: reorder to `Items.ordered`, relabel vertices by `pos - nvSt` with `IsPlanarEmbedding.map`, injective by `PosOK`/`nv_nodup`), `planarWalk_items_wf'` (from `walk_items_wf`; the hypothesis-free form was false, cf. `spqrTree_wf`, and was removed) | `PlanarSoundR.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) / proved |
+| `nodePlanar_sound_R` (takes `g.WF`/`OrderOK`) | `PlanarSpec.lean` | proved from `nodePlanar_sound_R_of` modulo `planarWalk_planarFinish` and `walk_items_wf` |
 | `nodePlanar_sound` = S ∨ P ∨ R cases | `PlanarSpec.lean` | proved from the three |
 | `nodePlanar_complete` (Kuratowski-style certificate from the §8.3 crossing) | `PlanarSpec.lean` | sorry, hard |
 | `IsPlanarEmbedding.map`, `Planar.map` (relabelling the vertices by a map injective on the non-isolated ones; `numNonIsolated`/`ccCount` are transported) | `Proofs/PlanarMap.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
@@ -4115,23 +4142,25 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `LayoutAt`, `nodeFold_capped` (dispatch), `nodeFold_capped_R`, `embedItem_step_node_faces` | `PlanarEmbedNodeFold.lean` | **proved** (standard axioms) |
 | `IsPlanarEmbedding.subst`, `substSum`, `edgesConn_subst`, `deg_of_edgesConn`; `ThreeConnected.edgesConn_eraseIdx`; `vstep`; `subst_step`, `sh1`, `pick4`; `RG`, `InvV`, `InvC`, `csys`, `invV_all`, `invC_all`, `RG.Hyp.glue`, `cap_conn_children` | `Proofs/PlanarSubst.lean`, `Proofs/ThreeConn.lean`, `Proofs/PlanarVStep.lean`, `Proofs/PlanarSubstStep.lean`, `Proofs/PlanarRGlue.lean` | **proved** (standard axioms) |
 | R-node data layer (`shape_R`, `hasCap_R`, `capNe_R`, `neEn_R`, `noncap_R`, `sC_length_R`, `sC_getElem?_R`, `child_R`, `nvs_R`, `nvsOf_R`, `localSkeleton_length`, `localSkeleton_getElem?`, `nodeRot_get`, `nodeRot_size_le`, `rotR`, `neOrig_R`) | `PlanarEmbedNodeR.lean` | **proved** (standard axioms) |
-| `NodeRotClosed`; `planarTree_nodeRotClosed` | `PlanarNodeSpec.lean`, `PlanarSpec.lean` | def / sorry (checked: `check_piece_sep` `rot_closed`) |
+| `NodeRotClosed`; `planarTree_nodeRotClosed` | `PlanarNodeSpec.lean`, `PlanarSpec.lean` | def / **proved** modulo `planarWalk_planarFinish` + walk admissions (`planarRelabelTree_nodeRotClosed`, `PlanarRelabelClosed.lean`: standard axioms; checked: `check_piece_sep` `rot_closed` 0..1000) |
 | `RFold`, `InvR`, `partner`, `nodeFoldR`, `RFold.Q_inj`, `corner_iff` | `PlanarEmbedNodeRExec.lean` | **proved** (standard axioms) |
 | `rfold_R`, `slot_R`, `child_cert_R`, `corner_V_R`, `corner_R`, `capNvs_R`, `capEnd_R`, `sW_R`, `vOf_R`, `capT_R`, `T_facts` | `PlanarEmbedNodeRCert.lean` | **proved** (standard axioms) |
 | `rgR`, `rgR_m`, `rgR_Sk`, `rgR_skE`, `rgR_cap`, `rgR_cρ`, `rgR_cl`, `rgR_vρ`, `rgR_vw`, `hyp_R` | `PlanarEmbedNodeRGlue.lean` | **proved** (standard axioms) |
 | `vesV`, `vesC`, `pieceR`, `pieceR_es`, `pieceR_perm`, `locV_sub`, `locC_sub`, `locQ_R`, `locW_R`, `vert_slot_R`, `dir_slot_R`, `memQ_R`, `memW_R`, `mem_pieceR_iff`, `GlueOut`, `RG.Hyp.glue'`, `tgtV_ta_full`, `tgtV_tb_full`, `agrees_V_R`, `agrees_C_R`, `unset_R`, `fold_eq_R`, `main_R` | `PlanarEmbedNodeRMain.lean` | **proved** (standard axioms) |
 | `embedItem_step_faces`, `gluedFaces_planarEmbed` | `PlanarEmbedFacesFold.lean` | **proved** (standard axioms modulo the fold hypotheses) |
-| `CornerAt`, `NodeCorners`; `planarTree_nodeCorners` | `PlanarNodeSpec.lean`, `PlanarSpec.lean` | def / sorry (hypothesis of the node fold, reached by `planarEmbed_sound`) |
+| `CornerAt`, `NodeCorners`; `planarTree_nodeCorners` | `PlanarNodeSpec.lean`, `PlanarSpec.lean` | def / **proved** modulo `planarWalk_planarFinish` + walk admissions (`planarRelabelTree_nodeCorners`, `PlanarRelabelCornersR.lean`: standard axioms; checked: `check_piece_sep` `corner_*` 0..1000) |
 | `conj_not_sameOrbit_split`, `insert_not_sameFaceOrbit`, `Proofs/PlanarDegree.lean` | `Proofs/OrbitSplit.lean`, `Proofs/PlanarInsert.lean`, `Proofs/PlanarDegree.lean` | **proved** (standard axioms) |
 | `localSkeleton`, `nodeRot`, `isPlanar`, `isPlanar_of_all`; `RotInv.np_size`, `planarTree_nodePlanar_size` | `PlanarNodeSpec.lean`, `PlanarRotInv.lean`, `PlanarSpec.lean` | def / **proved** |
 | `planarEmbed_sound` | `PlanarSpec.lean` | proved from `gluedFaces_planarEmbed` (with `WF`/`ChildShape` of `g.planarTree …` from `spqrTree_wf'`/`spqrTree_childShape` via `planarRelabel_proj`, hence the `g.WF`/`OrderOK` hypotheses) + `glued_root` |
 | `spqrTree_planar` (`→` from `planarEmbed_sound`; `←` needs completeness + skeletons are minors of `g`) | `PlanarSpec.lean` | sorry |
 
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): the walk admissions behind `spqrTree_wf` (inherited by `planarRelabel_rot_spec`, `neRotAdj_segment`);
-`planarWalk_planarFinish`, `planarWalk_items_wf` (hence
-`nodePlanar_sound_R`; the relabel-side `planarRelabelTree_relabelNodeR` is proved); the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
+`planarWalk_planarFinish` (hence
+`nodePlanar_sound_R`; the relabel-side `planarRelabelTree_relabelNodeR` is proved and
+`planarWalk_items_wf'` is `walk_items_wf`); the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
 `planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`'s final-items hypothesis
-`walk_pieceInv` (§4.6), `planarTree_nodeRotClosed`, `planarTree_nodeCorners` (hence `planarEmbed_sound`; the old `GluedUpTo`-level
+`walk_pieceInv` (§4.6) (hence `planarEmbed_sound`; `planarTree_nodeRotClosed` and `planarTree_nodeCorners` are proved
+modulo `planarWalk_planarFinish`; the old `GluedUpTo`-level
 `embedItem_step_Q`/`embedItem_step_node` and the unattempted `TwoSum.planar_left` converse have
 been removed); `spqrTree_planar`. The S and P
 cases of `nodePlanar_sound` are proved except for the `Shape` of the

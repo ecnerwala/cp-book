@@ -446,11 +446,4 @@ theorem planarWalk_items_wf' (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List
   rw [planarWalk_base, Graph.dfsForestFast_eq]
   exact walk_items_wf g hg tern vo eo hvo heo
 
-/-- Hypothesis-free form of `planarWalk_items_wf'`, the planar layer's convention (cf.
-`spqrTree_wf`, whose `Items.WF` ingredient this is). Admitted: open for the same reason as
-`spqrTree_wf` (`walk_items_wf` needs `g.WF` and `OrderOK`; PROOF.md §7.6). -/
-theorem planarWalk_items_wf (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    Items.WF g (g.planarWalk tern (g.dfsForestFast vo eo)).base.items := by
-  sorry
-
 end Spqr

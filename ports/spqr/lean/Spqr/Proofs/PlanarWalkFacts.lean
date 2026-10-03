@@ -1,4 +1,5 @@
 import Spqr.PlanarInv
+import Spqr.RelabelSpec
 
 /-!
 # `PlanarFinish`: the planarity record of a closed node, read at the end of the walk
@@ -57,6 +58,21 @@ def finishRot (g : Graph) (w : PlanarWalkState) (it : ItemId) (m : Array Nat) : 
   readRot (nodeSkel g w.base.items it)
     (flipped g w.base.items[it]!.ch w.aux.itemFlips[it]! (capLinked g w.aux.qem m))
 
+/-- The edge children of the node item `it` (as walk virtual edges) whose second endpoint is `v`
+and whose quarter-edge `2` (side 1, dir 0) faces a side-0 quarter-edge in `Q`: the candidate
+corners where the node step splices the V item of `v` (`PlanarSpqrTree.CornerAt`). -/
+def cornerVes (g : Graph) (items : Array Item) (it : Nat) (Q : Array (Option Nat)) (v : Nat) : List Nat :=
+  ((items[it]!.ch.filter (· ≥ 1 + g.nv)).map (· - (1 + g.nv))).filter fun ve =>
+    (items[1 + g.nv + ve]!.vs).2 == some v &&
+      match Q[4 * ve + 2]! with
+      | some o => o &&& 2 == 0
+      | none => false
+
+/-- `Items.loc` with the node's vertices at their `nvList` indices: the sort key of
+`Items.ordered` for any `PosOK` positions, shifted to start at `0`. -/
+def loc₀ (g : Graph) (items : Array Item) (it c : Nat) : Nat :=
+  Items.loc g items 0 (fun v => (Items.nvList g items it).idxOf v) c
+
 /-- **Planar finish.** In the final walk state `w` of `g`, every S/P/R item recorded planar with
 matches `m` has `m` of size four listing distinct quarter-edges of its edge children, and the
 rotation system `planarRelabel` reads for it is a planar embedding of its skeleton. -/
@@ -83,6 +99,19 @@ structure PlanarFinish (g : Graph) (w : PlanarWalkState) : Prop where
     let it := 1 + g.nv + g.ne + k
     w.base.items[it]!.type ∈ [NodeType.S, .P, .R] →
     IsPlanarEmbedding (nodeSkel g w.base.items it).es g.nv (finishRot g w it m)
+  /-- Corner structure of an R node (`PlanarSpqrTree.NodeCorners`, the left/right structure of
+  the embedding routine): a cap endpoint has no corner edge; every other node vertex has exactly
+  one, and the edge its corner faces sorts strictly later in the node's output order. -/
+  corners : ∀ k m, w.aux.nodePlanarity[k]? = some (.planar m) →
+    let it := 1 + g.nv + g.ne + k
+    w.base.items[it]!.type = .R →
+    let vl : List Nat := Items.nvList g w.base.items it
+    let Q := flipped g w.base.items[it]!.ch w.aux.itemFlips[it]! (capLinked g w.aux.qem m)
+    ∀ j, j < vl.length →
+      ((j = 0 ∨ j + 1 = vl.length) → cornerVes g w.base.items it Q vl[j]! = []) ∧
+      (0 < j → j + 1 < vl.length → ∃ ve o, cornerVes g w.base.items it Q vl[j]! = [ve] ∧
+        Q[4 * ve + 2]! = some o ∧ QE.edge o ≠ capVe g ∧
+        loc₀ g w.base.items it (1 + g.nv + ve) < loc₀ g w.base.items it (1 + g.nv + QE.edge o))
 
 /-- `PlanarFinish` holds for the planar walk. Admitted; the walk-side counterpart of
 `nodePlanar_sound_R` (PROOF.md §8.4): `finishTstackTop` records `.planar (finishMatches …)` from

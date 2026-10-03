@@ -142,3 +142,6 @@ import Spqr.PlanarRelabelQem
 import Spqr.PlanarRelabelRows
 import Spqr.PlanarRelabelRowsFold
 import Spqr.PlanarRelabelBridge
+import Spqr.PlanarRelabelClosed
+import Spqr.PlanarRelabelCornersSP
+import Spqr.PlanarRelabelCornersR
