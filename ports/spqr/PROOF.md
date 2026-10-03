@@ -2774,9 +2774,11 @@ carries `StItems` through it; `StRead.complete` turns `StRead s.items sub ps` in
 every S/P/R item below a span item of `sub` — an item below a member of an expanded list either
 owns a segment of the expansion (`Items.Below.expands_cases`/`ExpandsList.segment_of_mem`) or lies
 below a leaf-type item and is already finished (`StItems.finished`). What `StRead` does not carry
-is the orientation core: `finishBoundary_vsOrientedAt` (proved from `finishBoundary_stLive`) states, on the pre-state, the
+is the orientation core: the live hypothesis `hlive` of `finishBoundary_st` (sim-5; `StLive` of the
+popped segment `sub` against the closing block, supplied by the named admission
+`finishBoundary_stLive`; `StLive.vsOrientedAt` turns it into the
 `VsOrientedAt g s.items ⟨some (curV, o.dest), stNest ps⟩ i L` clauses for every S/P/R item `i`
-below a span item of `sub` with leaves `L`.
+below a span item of `sub` with leaves `L`).
 
 *The open-block invariant (sim-4, `StLive`, `StBdPop.lean`).* `StLive g items new b := ∀ x ∈ readStack
 new, ∀ i, Below x i → i is S/P/R → InBlock g items b i`: every live S/P/R item under a stack segment
@@ -2822,8 +2824,100 @@ prefix down to `t'` are strictly between — the loop-1 closes, whose bottom is 
 `stackVerts[t.topDepth]`) fail on seeds 554/6 (stale depth of a buried entry), 0 (two-sided entry)
 and 9 (fold retarget); m18 ("loop 1's range has `topDepth ≤ d + 1`") fails on seeds 154, 195, 442 —
 the buried `V y`/`(y, l)` pair of a chain bottom sits in loop 1's range with its deeper `topDepth`
-(`EarBottom.vy_top`), so the loop-1 statement must be per consumed entry, not per depth. The
-original plan, for reference:
+(`EarBottom.vy_top`), so the loop-1 statement must be per consumed entry, not per depth.
+
+**StLive obligations (sim-5 handoff for the backbone induction).** The separate `stWalk`
+re-threading was stopped (regroup: one backbone induction carries `EarCtx`, `RangesInv`/`CloseInv`
+and the St relations together); the components below are what it should reuse.
+
+*Definition to carry (`StBdPop.lean`).* `HangingUnder items x i := ∃ y, Below x y ∧ y ≠ i ∧ y is
+V/Q ∧ Below y i` and
+`StLive g items new b := ∀ x ∈ readStack new, ∀ i, Below x i → i is S/P/R → ¬ HangingUnder x i →
+InBlock g items b i`. The `HangingUnder` filter is necessary: an S/P/R item below a V/Q item of a
+live span item belongs to an already completed block hanging off that vertex/edge, not to the open
+block (the unfiltered form is checker-false; those items are `InBlock` of a completed block by
+`StItems.finished`). The block of an open segment is `openBlock` (`StOpenBlock.lean`):
+`openBlock g fs dirs ps` is the block of the truncated reference containing the bottom pieces `ps`
+under the path frames `fs` with directions `dirs` — `openBlock_snoc_bd` (the innermost frame is a
+boundary edge: `⟨some (f.v, f.o.dest), stNest ps⟩`), `openBlock_snoc_ret` (a returning frame:
+the parent's block with `(refOuts g f.v k dirs f.done false).1 ++ retPieces … ps` as bottom
+pieces), `openBlock_ctx` (under `TreeFrames fs`: `openBlock g fs dirs ps = ⟨r, A ++ stNest ps ++ B⟩`
+with `r`, `A`, `B` independent of `ps` — the context into which the open segment's items are
+spliced; `TreeFrames.of_ok` from the per-frame bookkeeping `FrameOK`). The per-segment invariant to
+carry alongside `StSim`/`StItems` (`StPre` in `StInduct.lean`, with `segs` the lower segments
+`(new_k, qs_k)` of the frames `fs` and `new` the current segment, `tstack = new ++ segsStack segs`):
+
+* current segment at `v`, depth `d = fs.length`, out-edges `done` done, flag `hasVert`:
+  `StLive g s.items new (openBlock g fs (DirsOf s d) ((refOuts g v d (DirsOf s d) done false).1 ++
+  (if hasVert then [] else [⟨true, [vertItem v]⟩])))`;
+* lower segment `k < d`: `StLive g s.items new_k (openBlock g (fs.take k) (DirsOf s k) qs_k)`;
+* at the end of `walkTree t d` (what the parent's returning / boundary step consumes):
+  `StLive g s'.items new' (openBlock g fs (DirsOf s' d) (refTree g t d (DirsOf s' d)).1)`
+  (`refTree_node` relates it to the first form with `hasVert := (refOuts …).2.2`).
+
+Not yet added to `check_stsim` in this per-segment form: m8 checks the union form (every S/P/R
+item in *some* truncated block); the pairing segment ↔ `openBlock` is the only new content and
+should be added (`openBlock` is computable; sites: `chkOuts` with `above s base`, end of
+`chkTree`) before the backbone relies on it.
+
+*Transport lemmas that exist (`StOpen.lean`, all proved, axioms ⊆ {propext, Classical.choice,
+Quot.sound}).* `StLive.nil`, `StLive.of_subset` (any segment whose span items are among the
+old ones — covers `mergeTstackTops`, pops, and permutations of entries), `StLive.append`,
+`StLive.cons`, `StLive.of_leafTypes` (a segment whose span items are all V/Q, e.g. the pushed
+`⟨v, d, _, setSides dir [vertItem v] []⟩` / `[edgeItem e]` entries), `StLive.frame` (under
+`ItemsFrame items items' new`: type, children and `vs` of everything below the segment's span items
+unchanged — the lower segments across any sub-walk / `finishEdge`), `StLive.insert` (fresh items
+`P`, `Q` spliced around `M = stNest ps` inside the block `⟨r, A ++ M ++ B⟩`: given `StRead items
+new ps`, `P ++ Q` disjoint from the block and from `vertItem r.1`, and nothing below the segment
+in `P ++ Q`, the segment stays live in `⟨r, A ++ P ++ M ++ Q ++ B⟩` — the block growing by the
+pieces of later edges; built on `InBlock.insert`, `Precedes.insert`, `Oriented.insert`,
+`segment_insert`), `StLive.vsOrientedAt` (what `finishBoundary_st` consumes),
+`HangingUnder.iff_of_frame`, `Items.Below.{of_ch_frame, to_of_ch_frame}`. `StRetFrame.lean`'s
+`Fr` now also keeps `vs` of the protected items, so `finishRet_frame_st` and the frame conclusion
+of `finishBoundary_st` deliver `ItemsFrame` for every base segment (lower segments stay live by
+`StLive.frame` across every `finishEdge`). `StKeepSv.lean`: `KeepsSv`/`KeepsSvBelow` per primitive
+and `walk_keepsSvBelow` → `walkTree_stackVerts_below` (`walkTree t d` fixes `stackVerts[k]` for
+`k < d`), `walkOut_stackVerts_le` (`walkOut v d` fixes `k ≤ d`): the path identification
+`stackVerts[k]! = fs[k].v` that `openBlock`'s roots need.
+
+*Per-primitive status.* Covered by the lemmas above (composition not written): `walkOutPre`
+(`setStackDir` — `DirsOf s d` unchanged; type-1 vertex push: `StLive.cons`/`of_leafTypes` +
+`StLive.insert` with `openBlock_ctx` for the new piece `stNest_snoc`), the pushes of `finishBack`
+/ `finishBoundary` (`StRead.pushEntry` + `StLive.insert`), all merges (`StLive.of_subset`), the
+boundary step for the lower segments (`StLive.frame` with `finishBoundary_st`'s frame conclusion),
+the returning step for the lower segments (`finishRet_frame_st`), the root pop (nothing live
+remains). **Missing** — the closes, i.e. every allocation of an S/P/R item whose children are the
+span items of a consumed one-sided entry: `finishTstackTop` in loop 1 (`loop1Type`), the
+`closeVert` fold, `finishP` and `maybeUnwrapNxt`'s reopen (children appended to an existing S/P
+item). For the new item `i` the six `InBlock` clauses split as: segment of leaves — from `StRead`
+(`StRead.complete` / `Items.Below.expands_cases`); non-V children oriented and block edges below
+a non-V child between its endpoints — from the invariant itself (the child is live, hence
+`InBlock`, clauses 1 and 6 of the child); `vs i` oriented and the V children strictly between —
+exactly the site-level facts m13/m14 (fold and tail), m15 (loop-1 entries with `topDepth = d`),
+m16/m17 (`EarCtx.above` entries `(v, l)`, `l < d`, at every site) of `truncCtxB`/`truncSiteB`
+(seeds 0..1000). These are statements about the walk state against the truncated reference's
+order, so they cannot be `EarFinish` fields; they are additional invariant clauses for the
+backbone (`StLiveCtx`: m16/m17 at every site; m13/m15 at the `finishEdge` site). Their expected
+proofs are reference-side (`VInv.root_side`/`VInv.step_tree` of `StRefEt.lean`: a piece returning
+to depth `l` lies on side `dirs[l]` of the path vertex at `l`, nested inside the pieces of lower
+return depth), given the identification of the walk's terminals with the path: `EarFinish.sv_d`
+(`stackVerts[d] = curV`), `sv_child`, `path_child`, `path`, `dir_d` (`stackDir[d] =
+!stackDir[lowval]`), `EarCtx.sv`/`sv_d`/`path`, and of the consumed entries' sides:
+`EarFinish.loop1_side` (loop-1 entries are one-sided on `!stackDir[d]`), `p_entry` (the P entry),
+`close`/`bottom`/`late` (`FoldSpec`/`EarClose` for the fold's entry, whose `vStart` becomes
+`curV`), `EarCtx.above` (which entries are `(v, l)`). The false per-entry forms m9/m12/m18 and
+their seeds are listed above; do not restate them with `stackVerts[t.topDepth]`.
+
+*What `finishBoundary_stLive` needs.* With the invariant carried, it is an instance of the
+end-of-`walkTree` form for the child: `openBlock g (fs ++ [⟨curV, done, o⟩]) … ps =
+⟨some (curV, o.dest), stNest ps⟩` by `openBlock_snoc_bd` (from `hge : d ≤ lowval`), the popped
+segment `sub` being the child's `new'` (`EarFinish.tstack`, `bd_bridge`/`bd_comp`), and the
+block root `(curV, o.dest)` from `sv_d`/`sv_child`; no further ear fact is needed at the
+boundary site itself — the whole obligation lives in the closes listed above. Without the
+invariant it is unprovable from `EarFinish`/`EarCtx` alone (they do not mention the reference
+order).
+
+The original plan, for reference:
 What remains: (1) `finishBoundary` — the only place a block completes: popping the child's ear
 must give `InBlock ⟨some (v, o.dest), stNest ps⟩` for every S/P/R
 item below the popped entries, i.e. the segment clause from `StRead sub ps` (done) *and* the
@@ -2906,7 +3000,7 @@ Classical.choice, Quot.sound.
 | `StMerge.lean`: `mergeTopsN`, `iter_mergeTstackTops`, `mergeTopsN_length`, `mergeTopsN_above` (`k` merges above a suffix `B` keep `readL`/`readR` of the part above `B`), `L1StInv.mergeTopsN`, `L1StInv.mergeLoop` (any `loop _ cond mergeTstackTops` that ends with an entry above `B` keeps `L1StInv`: merges only shorten the stack, so all of them happened above `B`), `L1StInv.mergeLate` (loop 2) | `StMerge.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | `StVert.lean`: `ExpandsList.{unique, split}`, `StRead.{append, split, fold}`, `StItems.perm`, `closeVert_st` (the type-1 `closeVert` unwrap/reopen/merge/fold, lower entries `pre`/`qs` carried), `finishP_st` (P merge; `hP` side conditions only for `isType1 = true`; result `new' ≠ []`), `finishTail_st` (vertex push / merge; vertex-item conditions only for `hasVert = false`) | `StVert.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | `StTree.lean`: `mem_readStack_of_mem`, `mem_spans_setSides_single`, `finishTree_st` (`finishTree` for a tree edge with `lowval < d`: `closeEars_st`, `L1StInv.mergeLate`, `closeVert_st`, `finishP_st`, `finishTail_st` composed; `hvf` named hypothesis), `finishBack_st` (`finishBack` for a back edge with `lowval < d`), `walkOutPre_st` (`setStackDir d` keeps `DirsOf s d`; the type-1 vertex push appends the `pre` piece), `DirsOf_getD`, `fePState`, `finishEdge_st` (`finishEdge` for a returning edge via `finishEdge_eq`: `qs ++ mid ++ post` with `lowDir = !stackDir[d]`, `sd = stackDir[d]`, above the untouched `B`; `stackDir[k]`, `k ≤ d`, kept) | `StTree.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
-| `StBoundary.lean`: `Place.fresh`, `finishRet_frame_st` (frame facts of a returning `finishEdge`; from `finishRet_frame`, `StRetFrame.lean`) (proved); `finishBoundary_st` (block completion at a boundary edge `lowval ≥ d`: the entries above `base` read as the child's pieces and become the block `⟨some (curV, o.dest), stNest ps⟩`, every S/P/R item of them `InBlock`, `tstack = base`, `stackDir`/`hasVert` kept), `rootPop_st` (the root pop after a tree; proved from `StItems.finished` + `RootOK`), `finishBoundary_vsOrientedAt` (the `VsOrientedAt` clauses of the new block on the pre-state, for every S/P/R item below a span item of `sub`; proved from `finishBoundary_stLive`), `finishBoundary_stLive` (admitted: `StLive s.items sub ⟨some (curV, o.dest), stNest ps⟩` on the pre-state) | `StBoundary.lean`, `StBdPop.lean`, `CheckStSim.lean` | `finishBoundary_vsOrientedAt` **admitted** (`Admitted:` docstring; dump-checked by `check_stsim` on seeds 0..1000, 0 violations); `finishBoundary_st` proved from it (axioms propext, sorryAx, Classical.choice, Quot.sound through the admission only); `rootPop_st` proved (axioms propext, Quot.sound) |
+| `StBoundary.lean`: `Place.fresh`, `finishRet_frame_st` (frame facts of a returning `finishEdge`; from `finishRet_frame`, `StRetFrame.lean`) (proved); `finishBoundary_st` (block completion at a boundary edge `lowval ≥ d`: the entries above `base` read as the child's pieces and become the block `⟨some (curV, o.dest), stNest ps⟩`, every S/P/R item of them `InBlock`, `tstack = base`, `stackDir`/`hasVert` kept), `rootPop_st` (the root pop after a tree; proved from `StItems.finished` + `RootOK`), `finishBoundary_stLive` (admitted: `StLive s.items sub ⟨some (curV, o.dest), stNest ps⟩` on the pre-state; sim-5: `finishBoundary_st` takes it as the hypothesis `hlive`, and its frame conclusion now also keeps `vs` of the items below the base) | `StBoundary.lean`, `StBdPop.lean`, `CheckStSim.lean` | `finishBoundary_stLive` **admitted** (`Admitted:` docstring; dump-checked by `check_stsim` m8 on seeds 0..1000, 0 violations); `finishBoundary_st` proved from it (axioms propext, sorryAx, Classical.choice, Quot.sound through the admission only); `rootPop_st` proved (axioms propext, Quot.sound) |
 | `StBdPop.lean`: `ExpandsList.nil_inv`/`Expands.leaf_inv`/`Expands.node_inv` (moved from `StFinal.lean`), `BdPop` (the item-array change of a boundary step), `BdPop.{below_old, below_new, inBlock, mk'}`, `StItems.bdPop` (`StItems` through a boundary pop given `InBlock` for the popped S/P/R items), `ExpandsList.segment_of_mem`, `Items.Below.expands_cases`, `StRead.complete`, `readStack_nodup_mix`, `StLive` (the open-block invariant), `StLive.vsOrientedAt` | `StBdPop.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | `StVStart.lean`: `VsIn` (every stack entry's `vStart` satisfies `V`), `VsIn.{tail, cons, merge, modifyCur, modifyNxt}`, `vsIn_{mergeTstackTops, finishTstackTop, maybeUnwrapNxt, loop1Body, loop, finishRest, closeVertTail, closeVert, finishTree, finishBoundary, finishEdge}`, `finishEdge_vStart` (entries after `finishEdge` start at `curV`, at `o.dest` for a returning tree edge, or at an existing start) | `StVStart.lean` | proved (axioms propext, Quot.sound) |
 | `StNodup.lean`: `pieceItems`, `stNest_perm` (`stNest ps ~ pieceItems ps`), `Prov`/`Prov.ne`, `refOut_ret_items`, `refOut_items_of`, `refTree_items`/`refOuts_items` (the pieces and blocks of `refTree g t d dirs` are `Nodup` and hold only vertex items of `t.verts` / edge items of `t.edges`), `refOrder_nodup_of_forestOK`, `refOrder_nodup_of_perm`, `refOrder_nodup` (`StFinal.lean`) | `StNodup.lean`, `StFinal.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
@@ -2915,7 +3009,10 @@ Classical.choice, Quot.sound.
 | `StFinal.lean`: `no_cycle`, `chain_lt_size` (parent chains in a tree with unique parents are shorter than `items.size`), `ExpandsList.nil_inv`, `Expands.{leaf_inv, node_inv}`, `leaves_eq_of_expands`/`leaves_size_eq` (`Expands i L` ⇒ `L = Items.leaves items items.size i`), `ExpBelow`, `expandsList_ne_nil`, `spr_of_expBelow`, `spr_ch_ne_nil`, `expands_ne_nil` (an S/P/R item's expansion is nonempty), `collapseRuns_{cons_ne, replicate_append}`, `ExpandsList.expands_of_mem`, `restrict_mid`, `restrictCh_eq` (`restrictCh` of a `Nodup` order containing the expansion of `ch i` as a segment is `ch i`), `Items.WF.no_cycle`, `stItems_init`, `walk_sim` (`stForest` at `WalkState.init`), `walk_inBlock` (empty final stack ⇒ every S/P/R item is `InBlock` of a reference block) | `StFinal.lean` | proved (axioms propext, Classical.choice, Quot.sound for the generic lemmas; `walk_sim`/`walk_inBlock` modulo the admissions) |
 | `StIParent.lean`: `SpanAll`, `IOk` (vertex items `V`, edge items `Q`, child ids in range, stack span items are not `I`, every `I` child has a `Q` parent), `IOk.{tail, pop, merge, modifyCur, modifyNxt, push, push_vert, push_edge, modify_vs, modify_ch, modify_edge_ch, …}`, `iOk_{mergeTstackTops, finishTstackTop, maybeUnwrapNxt, loop1Body, loop, finishTail, finishRest, closeVertTail, closeVert, finishTree, finishBoundary, finishEdge, walk_aux, walkForest, init}`, `walk_i_parent'`, `walk_i_parent` (`StFinal.lean`; statement change: under `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo`) | `StIParent.lean`, `StFinal.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | `StRetFrame.lean`: `spansCount_pos_of_mem_readStack`, `lt_of_mem_ch`, `chCount_pos_of_mem_ch`, `mem_getSide'`, `UOk`/`UOk.{head, head_getSide}`, `Fr` (`U`-items keep type/children, non-`U` items get no `U` child), `Out` (entries above `B` are `U`-free), `FrO`, `Fr.{refl, of_items, push, modify_keep, modify_ch}`, `Out.{of_tstack, length, cons, merge, modifyCur, modifyNxt, head, nxt}`, `length_{mergeTop, modifyCur, modifyNxt, maybeUnwrapNxt, finishTstackTop, loop1Type, loop1Body, mergeLate}`, `wp_cond_result`, `wp_loop_cond`, `wp_loop_or`, `loop3Cond_result`, `after_finishTail_true`, `FrO.{of_eq, merge, merge', cons, unwrapNxt, finishTop, l1Type, l1Body, ears, late, finP, tail, vPre, vUnwrap, closeV, finishEdge_ret}`, `spansCount_append_eq`, `below_cases`, `finishRet_frame` | `StRetFrame.lean`, `StBoundary.lean`, `StInduct.lean` (`stRet_finish` takes `Full`) | proved (axioms propext, Classical.choice, Quot.sound) |
-| the open-block invariant `StLive` along the walk (the orientation core of `finishBoundary_st`, i.e. `finishBoundary_stLive`): `check_stsim` m8/m10/m11 (seeds 0..1000, 0 violations) | `CheckStSim.lean` (`truncItemsB`) | checked; preservation open (§7.6 "the open-block invariant"); the per-entry terminal facts m9/m12 are false as stated (`truncEntryChecks`); the popped-ear shape turned out to be the existing `EarFinish` fields `back_nil`/`bd_bridge`/`bd_comp` |
+| the open-block invariant `StLive` along the walk (the orientation core of `finishBoundary_st`, i.e. `finishBoundary_stLive`): `check_stsim` m8/m10/m11 (seeds 0..1000, 0 violations); site-level terminal facts m13–m17 (`truncCtxB`/`truncSiteB`, 0..1000) | `CheckStSim.lean` (`truncItemsB`, `truncCtxB`, `truncSiteB`) | checked; preservation open — to be carried by the backbone induction (§7.6 "StLive obligations"); the per-entry terminal facts m9/m12/m18 are false as stated (`truncEntryChecks`; seeds 554/6, 0, 9, 154/195/442); the popped-ear shape turned out to be the existing `EarFinish` fields `back_nil`/`bd_bridge`/`bd_comp` |
+| `StOpen.lean` (sim-5): `segment_insert`, `Precedes.insert`, `Oriented.insert`, `seqOf`, `InBlock.insert` (`InBlock` is kept when fresh items are spliced around the item's block context), `ItemsFrame`, `HangingUnder.iff_of_frame`, `StLive.{frame, nil, of_subset, append, cons, insert, of_leafTypes}` | `StOpen.lean` | proved (axioms ⊆ propext, Classical.choice, Quot.sound) |
+| `StOpenBlock.lean` (sim-5): `retPieces`/`childPieces`/`refOut_ret_pieces`, `openBlockP`/`openBlock` (the truncated reference's block of an open segment), `openBlock_snoc_bd`, `openBlock_snoc_ret`, `frame_ctx`, `TreeFrames`, `openBlockP_ctx`/`openBlock_ctx` (`openBlock g fs dirs ps = ⟨r, A ++ stNest ps ++ B⟩`), `stNest_snoc`, `FrameOK`/`FrameOK.mono`/`TreeFrames.of_ok` | `StOpenBlock.lean` | proved (axioms propext) |
+| `StKeepSv.lean` (sim-5): `KeepsSv`/`KeepsSvBelow` through every walk primitive, `walk_keepsSvBelow`, `walkTree_stackVerts_below`, `walkOut_stackVerts_le` | `StKeepSv.lean` | proved |
 | reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop`, `readStack_reopen`/`readStack_modifyNxt_reopen` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes and reopens) | `StRef.lean` | proved |
 
 ## 8. Planarity

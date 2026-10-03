@@ -72,6 +72,9 @@ import Spqr.StRefEt
 import Spqr.StFrame
 import Spqr.StTree
 import Spqr.StBoundary
+import Spqr.StOpen
+import Spqr.StOpenBlock
+import Spqr.StKeepSv
 import Spqr.Planar
 import Spqr.PlanarWalk
 import Spqr.PlanarRelabel

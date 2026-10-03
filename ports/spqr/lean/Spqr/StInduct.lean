@@ -268,7 +268,7 @@ theorem stRet_finish {g : Graph} {P X : ItemId → Prop} {D d : Nat} {o : DfsOut
   obtain ⟨h1, h2, h3, new', h4, h5, h6⟩ := finishEdge_st hE hi hs hD hok ho hlow hb.v_lt hb.e_lt hb.q
     (hb.ends lv kind ho) (hs.edge _ hb.e_lt) hsd hB hpre hfr.1 hR hRq hI
   exact ⟨h1, h2, DirsOf_congr fun k hk => h3 k (Nat.le_of_lt hk), ⟨new', h4, h5⟩, h6,
-    hseg.congr hfr.2, finishEdge_vStart v d o _ hv₁ s⟩
+    hseg.congr (fun x hx y hb => (hfr.2 x hx y hb).imp_right And.left), finishEdge_vStart v d o _ hv₁ s⟩
 
 theorem simBlocks_frame {g : Graph} {prev : List DfsTree} {fs : List PathFrame} {s : WalkState}
     {d : Nat} (hd : d = fs.length) (f : PathFrame) (b : Bool) :
@@ -356,6 +356,7 @@ theorem stOut_step (g : Graph) (v d : Nat) (o : DfsOut) (hasVert : Bool)
       have hok := ear_boundary hge hg₁ hi₁ hs₁ hb₁ hD
       obtain ⟨hr1, hrg, hrsd, hrts, hrI, hrfr⟩ :=
         finishBoundary_st hE hi₁ hs₁ hD hok hb₁ hge hsgeq StRead.nil hI₁
+          (fun ht => finishBoundary_stLive hE hi₁ hs₁ hD hok hb₁ hge ht hsgeq StRead.nil hI₁)
       have hpf : push = false := by rw [← hpush]; simp [Nat.not_lt.mpr hge]
       have hdr : DirsOf ((finishEdge v d (.back e dest cls) (new₁ ++ segsStack segs).length hv₁).run s₁).2 d
           = DirsOf s d := by
@@ -368,10 +369,10 @@ theorem stOut_step (g : Graph) (v d : Nat) (o : DfsOut) (hasVert : Bool)
         ⟨new₁, hrts, ?_, fun h => hnew₁ hpf ?_⟩, ?_, ?_, ?_, ?_⟩
       · rw [hdr, refOuts_snoc, hh.pre.hv, refOut_boundary_back hge']
         simp only [List.append_nil]
-        exact StRead.congr (fun x hx => hrfr x (mem_readStack_append.2 (Or.inl hx))) hR₁
+        exact StRead.congr (fun x hx => fun y hb => ((hrfr x (mem_readStack_append.2 (Or.inl hx)) y hb).imp_right And.left)) hR₁
       · rw [hr1, hhv₁, hpf, Bool.false_or] at h; exact h
       · rw [hdr, refOuts_snoc, hh.pre.hv, refOut_boundary_back hge', hr1, hhv₁, hpf, Bool.false_or]
-      · exact hseg₁.congr fun x hx => hrfr x (mem_readStack_append.2 (Or.inr hx))
+      · exact hseg₁.congr fun x hx => fun y hb => ((hrfr x (mem_readStack_append.2 (Or.inr hx)) y hb).imp_right And.left)
       · rw [hrts, ← hts₁, hvl]; exact hvs₁
       · rw [hdr, refOuts_snoc, hh.pre.hv, refOut_boundary_back hge']
         simpa only [List.append_nil] using hrI
@@ -501,6 +502,7 @@ theorem stOut_step (g : Graph) (v d : Nat) (o : DfsOut) (hasVert : Bool)
       subst hxv
       obtain ⟨hr1, hrg, hrsd, hrts, hrI, hrfr⟩ :=
         finishBoundary_st hE hi₃ hs₃ hD hok hb₃ hge hsgeq₃ hR₃ hI₃
+          (fun ht => finishBoundary_stLive hE hi₃ hs₃ hD hok hb₃ hge ht hsgeq₃ hR₃ hI₃)
       have hpf : push = false := by rw [← hpush]; simp [DfsOut.cls, Nat.not_lt.mpr hge']
       have hdr : DirsOf ((finishEdge v d (.tree e cls child) (new₁ ++ segsStack segs).length hv₁).run s₃).2 d
           = DirsOf s d := by
@@ -513,10 +515,10 @@ theorem stOut_step (g : Graph) (v d : Nat) (o : DfsOut) (hasVert : Bool)
         ⟨new₁, hrts, ?_, fun h => hnew₁ hpf ?_⟩, ?_, ?_, ?_, ?_⟩
       · rw [hdr, refOuts_snoc, hh.pre.hv, refOut_boundary_tree hge']
         simp only [List.append_nil]
-        exact StRead.congr (fun x hx => hrfr x (mem_readStack_append.2 (Or.inl hx))) hRq₃
+        exact StRead.congr (fun x hx => fun y hb => ((hrfr x (mem_readStack_append.2 (Or.inl hx)) y hb).imp_right And.left)) hRq₃
       · rw [hr1, hhv₁, hpf, Bool.false_or] at h; exact h
       · rw [hdr, refOuts_snoc, hh.pre.hv, refOut_boundary_tree hge', hr1, hhv₁, hpf, Bool.false_or]
-      · exact hseg₃'.congr fun x hx => hrfr x (mem_readStack_append.2 (Or.inr hx))
+      · exact hseg₃'.congr fun x hx => fun y hb => ((hrfr x (mem_readStack_append.2 (Or.inr hx)) y hb).imp_right And.left)
       · rw [hrts, ← hts₁]
         intro t ht; rw [hvl]; exact (hvs₁ t ht).imp_left mem_cons_append_left
       · rw [hdr, refOuts_snoc, hh.pre.hv, refOut_boundary_tree hge']
