@@ -76,6 +76,59 @@ def check (seed : Nat) (σ : List Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) 
           out := bad "cand_piece_consecutive" s!"{showT t} hole e={e}" :: out
         if !(E t).contains e then out := bad "convex" s!"{showT t} hole e={e}" :: out
     | _, _ => pure ()
+  -- candidate: adjacent entries are σ-adjacent (the gap between their pieces is their own edges),
+  -- and the variant allowing edges below the unpushed vertex items of the DFS path
+  let unpushed := fun (w : Nat) => !stk.any fun t => (spanItems t).contains (vertItem w)
+  let rec gaps (above : List TEntry) : List TEntry → List V
+    | t :: t' :: rest =>
+      (match ((P t').map pos).max?, ((P t).map pos).min? with
+      | some hi', some lo =>
+        (List.range' (hi' + 1) (lo - hi' - 1)).flatMap fun b =>
+          let e := σ[b]!
+          if (E t).contains e || (E t').contains e then []
+          else
+            let inAbove := above.any fun u => (E u).contains e
+            let inUnpushed := (List.range (D+1)).any fun k =>
+              unpushed s.stackVerts[k]! && (edgesBelow s (vertItem s.stackVerts[k]!)).contains e
+            [bad "cand_gapfree" s!"{showT t} / {showT t'} gap e={e} above={inAbove} unpushed={inUnpushed}"] ++
+            (if inAbove || inUnpushed then [] else [bad "cand_gapfree_gen" s!"{showT t} / {showT t'} gap e={e}"])
+      | _, _ => []) ++ gaps (above ++ [t]) (t' :: rest)
+    | _ => []
+  out := gaps [] stk ++ out
+  -- candidate: the top entry's edges reach the edge about to be pushed (positions from its first
+  -- piece edge up to n are its own edges)
+  if o.cls.lowval d < d then
+    match stk with
+    | t :: _ =>
+      match ((P t).map pos).min? with
+      | some lo =>
+        for b in List.range' lo (n - lo) do
+          if !(E t).contains σ[b]! then out := bad "cand_top_reaches" s!"{showT t} e={σ[b]!}" :: out
+      | none => pure ()
+    | [] => pure ()
+    -- generalized: from any entry's first piece edge up to n, every position is owned by an entry
+    -- at or above it
+    for j in List.range stk.length do
+      let t' := stk[j]!
+      let run := stk.take (j+1)
+      match ((P t').map pos).min? with
+      | some lo =>
+        for b in List.range' lo (n - lo) do
+          if !run.any (fun u => (E u).contains σ[b]!) then
+            out := bad "cand_reach_all" s!"{showT t'} j={j} e={σ[b]!}" :: out
+      | none => pure ()
+  -- candidate: runs of consecutive entries are σ-convex (holes are edges of the run)
+  for j in List.range stk.length do
+    for j' in List.range' (j+1) (stk.length - j - 1) do
+      let t := stk[j]!
+      let t' := stk[j']!
+      let run := (stk.drop j).take (j' - j + 1)
+      match ((P t').map pos).max?, ((P t).map pos).min? with
+      | some hi', some lo =>
+        for b in List.range' (hi' + 1) (lo - hi' - 1) do
+          if !run.any (fun u => (E u).contains σ[b]!) then
+            out := bad "cand_runs" s!"{showT t} j={j} / {showT t'} j'={j'} e={σ[b]!}" :: out
+      | _, _ => pure ()
   -- cover: processed edges are in some entry or below the root
   for b in List.range n do
     let e := σ[b]!
@@ -179,7 +232,8 @@ def runGraph (seed : Nat) (g : Graph) (tern : Bool) : Bool × List V :=
 
 def tiny : List Graph :=
   [⟨2, #[(0,1)]⟩, ⟨1, #[(0,0)]⟩, ⟨3, #[]⟩, ⟨4, #[(0,1),(0,2),(0,3)]⟩, ⟨5, #[(0,1),(1,2),(2,0),(2,3),(3,4),(4,2)]⟩,
-   ⟨3, #[(0,1),(1,2),(2,0)]⟩, ⟨2, #[(0,1),(1,0)]⟩, ⟨4, #[(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]⟩]
+   ⟨3, #[(0,1),(1,2),(2,0)]⟩, ⟨2, #[(0,1),(1,0)]⟩, ⟨4, #[(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]⟩,
+   ⟨4, #[(0,1),(1,2),(1,0),(2,3),(2,0)]⟩]
 
 def summarize (lo hi : Nat) : IO Unit := do
   let mut counts : List (String × Nat) := []
