@@ -1,5 +1,6 @@
-import Spqr.RangesStep
-import Spqr.WalkInv
+import Spqr.RangesBoundary
+
+set_option maxHeartbeats 2000000
 
 /-!
 # `walkTree_rangesInv`: the range invariant along the walk
@@ -11,8 +12,8 @@ bundle (edge position in `σ`, adjacency at each merge), and at every vertex pus
 edge counter `n` advances by one per `finishEdge`, i.e. by `o.block.length` per out-edge and by
 `t.edgePostorder.length` per subtree.
 
-`finishBoundary_rangesInv` (the block-closing edge, `d ≤ o.cls.lowval d`) is the one admission of
-this file; its ear-side counterpart `ear_boundary` is admitted in the ear layer.
+`finishBoundary_rangesInv` handles the block-closing edge (`d ≤ o.cls.lowval d`) using the
+ear-side `BoundaryOk` and the range-side `BoundaryAdj`.
 -/
 
 namespace Spqr
@@ -50,7 +51,7 @@ structure BoundaryAdj (σ : List Nat) (n d : Nat) (o : DfsOut) (s : WalkState) :
       (t₁.piece s.g s.items σ[a]! ∨ t₂.piece s.g s.items σ[a]!) →
       (t₁.edges s.g s.items σ[b]! ∨ t₂.edges s.g s.items σ[b]!)
 
-/-- ADMITTED: `finishBoundary` preserves the range invariant, advancing `n`, under `BoundaryOk`
+/-- `finishBoundary` preserves the range invariant, advancing `n`, under `BoundaryOk`
 (ear layer) and `BoundaryAdj`. -/
 theorem finishBoundary_rangesInv {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
     (hge : d ≤ o.cls.lowval d) (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup)
@@ -58,7 +59,202 @@ theorem finishBoundary_rangesInv {curV d : Nat} {o : DfsOut} {origTstack : Nat} 
     (hok : BoundaryOk D curV d o s) (hadj : BoundaryAdj σ n d o s) :
     (after (finishEdge curV d o origTstack hasVert) s).RangesInv σ (n + 1) D ∧
       (after (finishEdge curV d o origTstack hasVert) s).g = s.g := by
-  sorry
+  have hi := h.inv
+  have hge' : o.cls.lowval d ≥ d := hge
+  have hqlt : edgeItem s.g o.e < 1 + s.g.nv + s.g.ne := by
+    show 1 + s.g.nv + o.e < _; have := hb.e_lt; omega
+  have hvlt : vertItem curV < 1 + s.g.nv + s.g.ne := by
+    show 1 + curV < _; have := hb.v_lt; omega
+  have hvq : vertItem curV ≠ edgeItem s.g o.e := by
+    show 1 + curV ≠ 1 + s.g.nv + o.e; have := hb.v_lt; omega
+  have hvsz : vertItem curV < s.items.size := by
+    show 1 + curV < _; have := hb.v_lt; have := hs.size; omega
+  -- the Q item's `vs`, the block counter
+  have b₀ : BStep D s { s with items := s.items.modify (edgeItem s.g o.e) fun it => { it with vs := (some curV, none) } } :=
+    BStep.modifyVs hi hs _ _ hqlt
+  set s₀ := { s with items := s.items.modify (edgeItem s.g o.e) fun it => { it with vs := (some curV, none) } }
+    with hs₀
+  have b₁ : BStep D s { s₀ with totBlocks := s₀.totBlocks + 1 } := b₀.trans (BStep.frame b₀.inv b₀.shape)
+  set s₁ := { s₀ with totBlocks := s₀.totBlocks + 1 } with hs₁
+  have r₀ := h.modifyVs (edgeItem s.g o.e) (some curV, none) hqlt
+  have r₁ : s₁.RangesInv σ n D := r₀.frame'
+  have hn : n < σ.length := (List.getElem?_eq_some_iff.1 hadj.pos).1
+  have hq_root₁ : ∀ p, ¬ Items.IsParent s₁.items p (edgeItem s.g o.e) := fun p h =>
+    hok.q_root p ((isParent_modifyVs_iff _ _ _ _ _).1 h)
+  have hv_root₁ : ∀ p, ¬ Items.IsParent s₁.items p (vertItem curV) := fun p h =>
+    hok.v_root p ((isParent_modifyVs_iff _ _ _ _ _).1 h)
+  have hts₁ : s₁.tstack = s.tstack := rfl
+  have hsz₁ : s₁.items.size = s.items.size := by simp [hs₁, hs₀]
+  have fin : ∀ s₂ : WalkState, BStep D s s₂ → s₂.RangesInv σ n D → s₂.g = s.g →
+      (∀ p, ¬ Items.IsParent s₂.items p (vertItem curV)) →
+      (∀ t ∈ s₂.tstack, vertItem curV ∉ t.spans.1 ++ t.spans.2) →
+      let s₃ := { s₂ with items := s₂.items.modify (vertItem curV) fun it => { it with ch := it.ch ++ [edgeItem s.g o.e] } }
+      s₃.RangesInv σ (n + 1) D := by
+    intro s₂ b r hg hroot hfree
+    refine (r.modifyCh (vertItem curV)
+      (fun it => { it with ch := it.ch ++ [edgeItem s.g o.e] }) (by rw [hg]; exact hvlt)
+      (fun _ => rfl) hroot hfree ?_).advance (Nat.le_succ n)
+    intro ht
+    exact (ht (by simp [b.shape.vert curV (by rw [hg]; exact hb.v_lt)])).elim
+  show wp (finishEdge curV d o origTstack hasVert)
+    (fun _ s' => s'.RangesInv σ (n + 1) D ∧ s'.g = s.g) s
+  rw [finishEdge_eq]
+  simp only [finishEdge', wp_bind, wp_get, wp_stackDir, hge', ↓reduceIte]
+  unfold finishBoundary
+  simp only [wp_bind, wp_modifyItem, wp_modify, wp_ite, wp_allocItem, wp_makeVs, wp_popTstack, wp_pure, and_true]
+  split
+  · rename_i hT
+    have hpops := hok.pops hT
+    split
+    · -- bridge
+      rename_i hL
+      simp only [hL, ↓reduceIte] at hpops
+      obtain ⟨t, rest, hts⟩ : ∃ t rest, s.tstack = t :: rest := by
+        match h : s.tstack, hpops with
+        | t :: rest, _ => exact ⟨t, rest, rfl⟩
+      have ht : t ∈ s.tstack := by rw [hts]; exact List.mem_cons_self ..
+      have b₂ := b₁.trans (BStep.alloc b₁.inv b₁.shape .I)
+      have b₃ := b₂.trans (BStep.modifyVs_leaf b₂.inv b₂.shape s₁.items.size
+        (setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest)) (Items.ch_push_size _ rfl))
+      have b₄ := b₃.trans (BStep.pop' b₃.inv b₃.shape (s₀ := s) t rest hts rfl rfl
+        (fun a i => (Items.Below_modify_ch_eq s₁.items.size
+            (fun it => { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) }) fun _ => rfl).trans
+          ((Items.Below_push_nil ⟨.I, (none, none), []⟩ rfl).trans
+            (Items.Below_modify_ch_eq (edgeItem s.g o.e) (fun it => { it with vs := (some curV, none) }) fun _ => rfl)))
+        (hok.gone hT t rest hts))
+      have r₂ := r₁.alloc .I hσ b₁.shape.size b₁.shape.ch_lt b₁.shape.span
+      have r₃ := r₂.modifyVs_leaf s₁.items.size
+        (setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest)) (Items.ch_push_size _ rfl)
+      have r₄ := r₃.pop' b₄.inv
+      obtain ⟨hside, hfill⟩ := hadj.bridge hT (by simpa using hL) t rest hts
+      have cap := h.cap_of_entries hnd hσ [t] t.spans.2
+        (by simpa using ht) (by intro i; simp [hside])
+        (by simpa using hfill)
+      have cap₁ := cap.modifyVs (edgeItem s.g o.e) (some curV, none)
+      have cap₂ := cap₁.alloc .I
+        (fun i hi => by rw [hsz₁]; exact hs.span t ht i (by simpa [hside] using hi)) b₁.shape.ch_lt
+      have cap₃ := cap₂.modifyVs s₁.items.size
+        (setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest))
+      have cap₄ := cap₃.cons_leaf s₁.items.size (by have := hs.size; rw [hsz₁]; omega)
+        (by rw [Items.ch_modify_ch_eq _ (fun it => { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) }) (fun _ => rfl)]; exact Items.ch_push_size _ rfl) hσ (Nat.le_of_lt hn)
+      have hsz₄ : ((s₁.items.push ⟨.I, (none, none), []⟩).modify s₁.items.size fun it =>
+          { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) }).size = s.items.size + 1 := by
+        simp [hs₁, hs₀]
+      have hroot₄ : ∀ p, ¬ Items.IsParent ((s₁.items.push ⟨.I, (none, none), []⟩).modify s₁.items.size fun it =>
+          { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) }) p (edgeItem s.g o.e) :=
+        fun p h => hq_root₁ p ((isParent_push_iff _ _ _ _).1 ((isParent_modifyVs_iff _ _ _ _ _).1 h))
+      have hvroot₄ : ∀ p, ¬ Items.IsParent ((s₁.items.push ⟨.I, (none, none), []⟩).modify s₁.items.size fun it =>
+          { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) }) p (vertItem curV) :=
+        fun p h => hv_root₁ p ((isParent_push_iff _ _ _ _).1 ((isParent_modifyVs_iff _ _ _ _ _).1 h))
+      have b₅ := b₄.trans (BStep.modifyCh b₄.inv b₄.shape (edgeItem s.g o.e)
+        (fun it => { it with ch := s₁.items.size :: s.tstack.head!.spans.2 }) hqlt (fun _ => rfl) hroot₄
+        (fun t' ht' => hok.q_free t' (List.mem_of_mem_tail ht'))
+        (fun hj c hc => by
+          show c < ((s₁.items.push _).modify _ _).size
+          rw [hsz₄]
+          rcases List.mem_cons.1 hc with hc | hc
+          · rw [hc, hsz₁]; exact Nat.lt_succ_self _
+          · exact Nat.lt_succ_of_lt (hs.span t ht c (List.mem_append_right _ (by simpa [hts] using hc)))))
+      have r₅ := r₄.modifyCh (edgeItem s.g o.e)
+        (fun it => { it with ch := s₁.items.size :: s.tstack.head!.spans.2 }) hqlt (fun _ => rfl) hroot₄
+        (fun t' ht' => hok.q_free t' (List.mem_of_mem_tail ht')) (fun _ => by
+          apply Items.cap_convex (by simpa [hts] using cap₄) hnd hadj.pos
+            (by rw [hsz₄]; exact Nat.lt_succ_of_lt (Nat.lt_of_lt_of_le hqlt hs.size)) hroot₄
+          simp only [List.mem_cons, hts, List.head!_cons]
+          rintro (heq | hmem)
+          · exact (Nat.ne_of_lt (Nat.lt_of_lt_of_le hqlt hs.size)) (heq.trans hsz₁)
+          · exact hok.q_free t ht (List.mem_append_right _ hmem))
+      refine fin _ b₅ r₅ rfl (fun p h => ?_) (fun t' ht' => hok.v_free t' (List.mem_of_mem_tail ht'))
+      · rcases Items.IsParent_modify h with h | ⟨rfl, hj, hc⟩
+        · exact hvroot₄ p h
+        · rcases List.mem_cons.1 hc with hc | hc
+          · exact absurd (hc.trans hsz₁) (Nat.ne_of_lt hvsz)
+          · exact hok.v_free t ht (List.mem_append_right _ (by simpa [hts] using hc))
+    · -- component
+      rename_i hL
+      simp only [hL, Bool.false_eq_true, ↓reduceIte] at hpops
+      obtain ⟨t₁, t₂, rest, hts⟩ : ∃ t₁ t₂ rest, s.tstack = t₁ :: t₂ :: rest := by
+        match h : s.tstack, hpops with
+        | t₁ :: t₂ :: rest, _ => exact ⟨t₁, t₂, rest, rfl⟩
+      have ht₁ : t₁ ∈ s.tstack := by rw [hts]; exact List.mem_cons_self ..
+      have ht₂ : t₂ ∈ s.tstack := by rw [hts]; exact List.mem_cons_of_mem _ (List.mem_cons_self ..)
+      have hB₁ : ∀ a i, Items.Below s₁.items a i ↔ Items.Below s.items a i :=
+        fun a i => Items.Below_modify_ch_eq (edgeItem s.g o.e) (fun it => { it with vs := (some curV, none) }) fun _ => rfl
+      have b₂ := b₁.trans (BStep.pop' b₁.inv b₁.shape (s₀ := s) t₁ (t₂ :: rest) hts rfl rfl hB₁
+        (hok.gone hT t₁ (t₂ :: rest) hts))
+      have b₃ := b₂.trans (BStep.pop' b₂.inv b₂.shape (s₀ := s) t₂ rest
+        (by show s.tstack.tail = _; rw [hts, List.tail_cons]) rfl rfl hB₁ (hok.gone₂ hT (fun h => hL (by simp [h])) t₁ t₂ rest hts))
+      have r₂ := r₁.pop' b₂.inv
+      have r₃ := r₂.pop' b₃.inv
+      obtain ⟨hside₁, hside₂, hfill⟩ := hadj.component hT (by simpa using hL) t₁ t₂ rest hts
+      have cap := h.cap_of_entries hnd hσ [t₁, t₂] (t₁.spans.1 ++ t₂.spans.2)
+        (by intro t ht; simp at ht; rcases ht with rfl | rfl <;> assumption)
+        (by intro i; simp [hside₁, hside₂])
+        (by simpa using hfill)
+      have cap₁ := cap.modifyVs (edgeItem s.g o.e) (some curV, none)
+      have r₄ := r₃.modifyCh (edgeItem s.g o.e)
+        (fun it => { it with ch := s.tstack.head!.spans.1 ++ s.tstack.tail.head!.spans.2 }) hqlt
+        (fun _ => rfl) hq_root₁
+        (fun t' ht' => hok.q_free t' (List.mem_of_mem_tail (List.mem_of_mem_tail ht'))) (fun _ => by
+          apply Items.cap_convex (by simpa [hts] using cap₁) hnd hadj.pos
+            (by rw [hsz₁]; exact Nat.lt_of_lt_of_le hqlt hs.size) hq_root₁
+          simp only [hts, List.head!_cons, List.tail_cons, List.mem_append]
+          rintro (hm | hm)
+          · exact hok.q_free t₁ ht₁ (List.mem_append_left _ hm)
+          · exact hok.q_free t₂ ht₂ (List.mem_append_right _ hm))
+      have b₄ := b₃.trans (BStep.modifyCh b₃.inv b₃.shape (edgeItem s.g o.e)
+        (fun it => { it with ch := s.tstack.head!.spans.1 ++ s.tstack.tail.head!.spans.2 }) hqlt (fun _ => rfl) hq_root₁
+        (fun t' ht' => hok.q_free t' (List.mem_of_mem_tail (List.mem_of_mem_tail ht')))
+        (fun hj c hc => by
+          show c < s₁.items.size
+          rw [hsz₁]
+          rcases List.mem_append.1 hc with hc | hc
+          · exact hs.span t₁ ht₁ c (List.mem_append_left _ (by simpa [hts] using hc))
+          · exact hs.span t₂ ht₂ c (List.mem_append_right _ (by simpa [hts] using hc))))
+      refine fin _ b₄ r₄ rfl (fun p h => ?_)
+        (fun t' ht' => hok.v_free t' (List.mem_of_mem_tail (List.mem_of_mem_tail ht')))
+      · rcases Items.IsParent_modify h with h | ⟨rfl, hj, hc⟩
+        · exact hv_root₁ p h
+        · rcases List.mem_append.1 hc with hc | hc
+          · exact hok.v_free t₁ ht₁ (List.mem_append_left _ (by simpa [hts] using hc))
+          · exact hok.v_free t₂ ht₂ (List.mem_append_right _ (by simpa [hts] using hc))
+  · -- self-loop
+    have b₂ := b₁.trans (BStep.frame (s' := { s₁ with totSelfLoops := s₁.totSelfLoops + 1 }) b₁.inv b₁.shape)
+    set s₂ := { s₁ with totSelfLoops := s₁.totSelfLoops + 1 } with hs₂
+    have hsz₂ : s₂.items.size = s.items.size := by simp [hs₂, hs₁, hs₀]
+    have b₃ := b₂.trans (BStep.alloc b₂.inv b₂.shape .O)
+    have b₄ := b₃.trans (BStep.modifyVs_leaf b₃.inv b₃.shape s₂.items.size (some curV, none) (Items.ch_push_size _ rfl))
+    have r₂ : s₂.RangesInv σ n D := r₁.frame'
+    have r₃ := r₂.alloc .O hσ b₂.shape.size b₂.shape.ch_lt b₂.shape.span
+    have r₄ := r₃.modifyVs_leaf s₂.items.size (some curV, none) (Items.ch_push_size _ rfl)
+    have cap : Items.CapRange σ n s.g
+        ((s₂.items.push ⟨.O, (none, none), []⟩).modify s₂.items.size fun it => { it with vs := (some curV, none) }) [] :=
+      ⟨by simp, by simp⟩
+    have cap₄ := cap.cons_leaf s₂.items.size (by have := hs.size; rw [hsz₂]; omega)
+      (by rw [Items.ch_modify_ch_eq _ (fun it => { it with vs := (some curV, none) }) (fun _ => rfl)]; exact Items.ch_push_size _ rfl) hσ (Nat.le_of_lt hn)
+    have hsz₄ : ((s₂.items.push ⟨.O, (none, none), []⟩).modify s₂.items.size fun it =>
+        { it with vs := (some curV, none) }).size = s.items.size + 1 := by simp [hs₂, hs₁, hs₀]
+    have hroot₄ : ∀ p, ¬ Items.IsParent ((s₂.items.push ⟨.O, (none, none), []⟩).modify s₂.items.size fun it =>
+        { it with vs := (some curV, none) }) p (edgeItem s.g o.e) :=
+      fun p h => hq_root₁ p ((isParent_push_iff _ _ _ _).1 ((isParent_modifyVs_iff _ _ _ _ _).1 h))
+    have hvroot₄ : ∀ p, ¬ Items.IsParent ((s₂.items.push ⟨.O, (none, none), []⟩).modify s₂.items.size fun it =>
+        { it with vs := (some curV, none) }) p (vertItem curV) :=
+      fun p h => hv_root₁ p ((isParent_push_iff _ _ _ _).1 ((isParent_modifyVs_iff _ _ _ _ _).1 h))
+    have b₅ := b₄.trans (BStep.modifyCh b₄.inv b₄.shape (edgeItem s.g o.e)
+      (fun it => { it with ch := [s₂.items.size] }) hqlt (fun _ => rfl) hroot₄
+      (fun t' ht' => hok.q_free t' ht')
+      (fun hj c hc => by
+        show c < ((s₂.items.push _).modify _ _).size
+        rw [hsz₄, List.mem_singleton.1 hc, hsz₂]; exact Nat.lt_succ_self _))
+    have r₅ := r₄.modifyCh (edgeItem s.g o.e) (fun it => { it with ch := [s₂.items.size] })
+      hqlt (fun _ => rfl) hroot₄ (fun t' ht' => hok.q_free t' ht') (fun _ =>
+        Items.cap_convex cap₄ hnd hadj.pos (by rw [hsz₄]; exact Nat.lt_succ_of_lt (Nat.lt_of_lt_of_le hqlt hs.size)) hroot₄
+          (by simp only [List.mem_singleton]; rw [hsz₂]; exact Nat.ne_of_lt (Nat.lt_of_lt_of_le hqlt hs.size)))
+    refine fin _ b₅ r₅ rfl (fun p h => ?_) (fun t' ht' => hok.v_free t' ht')
+    · rcases Items.IsParent_modify h with h | ⟨rfl, hj, hc⟩
+      · exact hvroot₄ p h
+      · rw [List.mem_singleton] at hc
+        exact absurd (hc.trans hsz₂) (Nat.ne_of_lt hvsz)
 
 /-- The range hypotheses of one `finishEdge` call, at the state where it runs. -/
 def FinishR (σ : List Nat) (n curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool) (s : WalkState) :
