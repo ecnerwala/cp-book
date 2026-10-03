@@ -908,7 +908,7 @@ the first ear `1-4-6` while the tree edge `1→3` and the back edge `1→6` are 
 invariant the walk actually keeps is bounded by the top depth: an entry is settled only once the
 walk is back at its top, i.e. `RInvTop s dfs v d` (= `RInvAt` restricted to `d ≤ t.topDepth`),
 `RInvFront s dfs v d origTstack` (base below the split, same bound, plus whole-stack
-disjointness) is the input of the admitted `finishEdge_rInvTop` (replacing `finishEdge_rInvAt`;
+disjointness) is the input of `finishEdge_rInvTop` (back-edge branch proved, tree-edge branch admitted as `finishEdge_tree_rInvTop`; replacing `finishEdge_rInvAt`;
 `walkTree_rInvAt` is deleted), `RReturn before after dfs parent d` carries the same bound, and
 `WalkTreeRReturnSpec` starts from `RInvTop` at the parent. `loop1_rBranch` takes `RInvFront`.
 `checks/RFinishEdgeCheck.lean` evaluates both contracts at every `finishEdge` site on blocks
@@ -1106,6 +1106,25 @@ cap edge of the child. Everything in `Spec.lean`'s `WF` is a statement about thi
 relabeling **[lemma, mechanical but large]**; `r_three_connected` and `canonical` are
 `Items.Shapes` transported.
 
+
+**Back-edge branch of `finishEdge_rInvTop` (`Proofs/RInvBack.lean`).** `finishEdge_rInvTop`
+is now proved by dispatch on the edge kind: the back-edge branch is `finishEdge_back_rInvTop`
+(standard axioms) and only the tree-edge branch remains admitted as `finishEdge_tree_rInvTop`
+(same hypotheses, plus `kind ≠ .backEdge`). The dispatcher takes one extra call-site fact,
+`hback : kind = .backEdge → hasVert = true ∧ s.tstack.length ≤ origTstack` (a back edge is type 1
+with `lv < d`, so `walkOutPre` has pushed the vertex entry, and `walkOutRest` reads `origTstack`
+with nothing pushed since), under which `RInvFront` is `RInvTop` of the whole stack and
+`Frontier.base_disj` says no open entry owns the unprocessed back edge `o.e`. The branch itself
+is per-primitive: `RInvTop.modifyVs_free` (`feS₀` rewrites the terminals of the unspanned Q item),
+`RInvTop.pushEdge` (the new `(curV, lv)` entry owns exactly `o.e`, `edges_edgeEntry`),
+`RInvTop.modify` (bookkeeping), and `RInvTop.finishP` for the type-1 P-check — when `condP`
+fires the entry below the top starts at `curV`, so `RInvTop.unwrapNxt_exempt`,
+`RInvTop.mergeTop_exempt` and `RInvTop.finishTop_exempt` only have to track whole-stack
+disjointness (the unwrapped/merged/finished entries' edge sets are subsets or unions of the
+replaced ones; `maybeUnwrapNxt_tstack` keeps the start of the entry below the top), and
+`finishTail` is the identity for `hasVert = true`. No ownership fact is re-derived: the one
+needed (`o.e` unowned) is read off `Frontier`; `RangesInv.processed` with `FinishAdj.pos` would
+give the same fact schedule-agnostically.
 **Per-node characterization (`RelabelSpec.lean`, proved in `RelabelMain.lean`) [proved].**
 `relabel_node_spec : items.WF g → ∃ idx, idx rootItem = 0 ∧ RelabelIdx g items t idx ∧
 ∀ i < items.size, RelabelNode g items t idx i` (`t = relabelTree g items`) is the shared
@@ -1324,7 +1343,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | R correctness input domain | `Correctness.lean`, `Proofs/RItems.lean`, `checks/RInvalidOrderCheck.lean` | corrected to `g.WF` + `OrderOK` for both orders; K4 with invalid edge order `[6]` kernel-checks failure of the former public target (standard axioms) |
 | R coverage and laminarity edge domain | `RInv.lean`, `RClose.lean`, `RMax.lean`, `Proofs/RunSaturation.lean`, `checks/REdgeDomainCheck.lean` | restricted containment and coverage to `e < g.ne`; kernel-checked K4 failure of unrestricted coverage and success of bounded coverage; affected transport proofs audited (standard axioms) |
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |
-| 4.5 Depth-bounded settling `RInvTop`/`RInvFront`; `finishEdge_rInvTop` (admitted, replaces `finishEdge_rInvAt`) | `RInv.lean`, `Proofs/RInvFrame.lean`, `checks/RFinishEdgeCounter.lean`, `checks/RFinishEdgeCheck.lean` | two kernel-checked counterexamples to the parent-only exemption (standard axioms); contract B checked on 6414 sites, 0 failures; frame lemmas proved |
+| 4.5 Depth-bounded settling `RInvTop`/`RInvFront`; `finishEdge_rInvTop` (replaces `finishEdge_rInvAt`): back-edge branch proved (`finishEdge_back_rInvTop`), tree-edge branch admitted (`finishEdge_tree_rInvTop`) | `RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RInvBack.lean`, `checks/RFinishEdgeCounter.lean`, `checks/RFinishEdgeCheck.lean` | two kernel-checked counterexamples to the parent-only exemption (standard axioms); contract B checked on 6414 sites, 0 failures; frame lemmas and the back-edge branch (`RInvTop.pushEdge/finishP/unwrapNxt_exempt/mergeTop_exempt/finishTop_exempt`) proved, standard axioms |
 | 4.5 Child-return settling diagnostic and provisional contract | `Proofs/RInvFrame.lean`, `checks/RInvReturnCheck.lean` | `RReturn`/`WalkTreeRReturnSpec` stated without an admission; legacy conclusion still refuted; fixed base/settled-entry clauses kernel-checked (standard axioms); seeds 0..300 × both modes pass shape/disjointness, with content frames checked on the 65 block inputs; preservation proof remains open |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean`, `EarFrontier.lean` | stated and threaded into `finishEdge_rInvTop`; ear export proved: `finishEdge_frontier` (from `FinishBook.ear` + `Inv'`/`Shape`), `walkTree_frontiers` (`FrontiersTree` under the `walkTree_inv'` hypotheses), standard axioms; R interval/saturation preservation remains open |
 | 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge_rangesInv` (`RangesStep.lean`, under `FinishAdj`) and `walkTree_rangesInv` (`RangesTree.lean`, under `GuardsTree`/`BookTree`/`RgTree`) proved; `finishBoundary_rangesInv`, `walk_rangesInv`, `walk_closeFacts` (`WalkWF.lean`) admitted; `ranges_of_rangesInv` (`RangesFinal.lean`) derives `convex` + node `att_vs` from `RangesInv`, the rest is `Items.CloseFacts`; saturation not a field (attachment-count forms false, §4.6) |
