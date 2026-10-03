@@ -290,6 +290,12 @@ structure EarFinish (curV d : Nat) (o : DfsOut) (hasVert : Bool) (sub base : Lis
       t₂.vStart = o.dest ∧ t₂.topDepth = d + 1
   bd_term : o.cls.isTree = true → d ≤ o.cls.lowval d → ∀ u ∈ s.tstack.tail,
     s.g.Touches (u.edges s.g s.items) curV → u.vStart = curV ∨ u.topDepth ≤ d
+  /-- The popped boundary entries lie on the side the walk fixed for them (`BoundaryOK`): the
+  block entry has `spans.1 = []`; at a component edge the `(o.dest, lowval)` entry above it has
+  `spans.2 = []`. -/
+  bd_side : o.cls.isTree = true → d ≤ o.cls.lowval d →
+    if o.cls.lowval d = d + 1 then ∀ t ∈ s.tstack.head?, t.spans.1 = []
+    else (∀ b ∈ s.tstack.head?, b.spans.2 = []) ∧ ∀ t ∈ s.tstack.tail.head?, t.spans.1 = []
   /-- After a tree edge the child is attached only as a bottom: an entry of the final stack touching
   `o.dest` has it interior, or as its `vStart` or that of an entry above it (`ear_lower'`); the
   frame facts are included until the preservation induction supplies them. -/
