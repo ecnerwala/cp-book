@@ -566,11 +566,24 @@ entries by `bd_bridge`/`bd_comp`, with the frame `Fr` = `g`/`stackDir.size` fixe
 from `RootsBook forest (init g tern)` = `GuardsTree`/`BookTree`/`Inv' 0` at the start of every root,
 threaded through the root pop/append (`Shape`, empty stack and `stackDir.size` are carried; `Inv' 0`
 at a later root is an input because the root append needs `rootItem` parentless, a placement fact).
-So what `walk_sides` still admits is exactly `RootsBook forest (init)`: `walkTree_guards` (its `hne`/
-`hsz` hypotheses) and `walkTree_book` (its `hfresh`: all fixed items childless, true only at the
-first root as stated) at each root. `walk_sides` itself stays in `WalkCover.lean` (its consumers
-`walk_full`/`walk_tree` live there, below `EarSides`/`EarRoot` in the import order); wiring it to
-`walk_sides_of_roots` means moving `walk_sides`/`walk_full` and their consumers below `EarRoot`.
+`RootsBook forest (init)` is derived in `EarWalk.lean` (`rootsBook_of_state`, threading `RootState` =
+`Place` of the roots walked so far, `g`/array sizes, `Shape`, empty stack, `Inv' 0`, and the `ch` of
+every fixed item not yet walked empty): `BookTree` at a root is the admitted `walkTree_book` (restated:
+`t.WF []`, the endpoint fact `t.Ends g`, bounds/nodup, arrays sized `g.nv`, empty stack, `Inv' 0`,
+`Shape`, and freshness — childless and parentless — of the tree's *own* `V`/`Q` items only; the old
+`hfresh`, every fixed item childless, holds only at the first root), `GuardsTree` is `walkTree_guards'`
+(from `BookTree`), `Inv' 0` at a later root is `Inv' 0` after the previous root walk (`invTree`) through
+the pop (the stack is `[tt]` by `RootOK`, so `Stack` is vacuous) and the append onto `rootItem`
+(`Inv'.modifyCh`, `rootItem` parentless by `Place.root`), and the later root's freshness is `Place`
+(parentless: `cnt = 0` for an unpushed fixed item) plus the admitted frame `walkTree_frame` (`g`, the
+array sizes and the `ch` of fixed items outside the subtree are untouched; the `g`/size part could be
+absorbed into `Fr`). `walk_sides`/`walk_full` and their consumers (`walk_tstack_nil` … `walk_tree`,
+`WalkTree`) moved from `WalkCover.lean` to `EarWalk.lean` (below `EarRoot`/`EarShape`), statements
+unchanged except for the added hypothesis `hends : ∀ t ∈ forest, t.Ends g` (`DfsTree.Ends`,
+`WalkInv.lean`: a tree edge joins the child's vertex and `v`, a back edge joins `v` and its destination
+— `FinishBook.ends` needs it and `t.WF []` does not imply it); `walk_sides` is now
+`walk_sides_of_roots` + `rootsBook_of_state`, so its only admissions are `walkTree_book` and
+`walkTree_frame`.
 
 **Acyclicity (`ItemAcyc.lean`, `WalkState.Full.acyc`).** Exact placement plus coverage say every
 non-root item has exactly one parent but not that `Items.IsParent` is well-founded, so `Full`
@@ -1220,7 +1233,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | ear-structured walk (`descend`/`ascend` over chain `Frame`s) | `Ear.lean` | def |
 | `walkEarTree = walkTree` (`walkEarTree_eq_walkTree`, `walkEar_eq_walk`) | `EarSpec.lean` | proved |
 | span discipline / placement (`Place`: each item id placed ≤ 1 time over spans + ch lists; `walk_place`, `walk_ch_nodup`, `walk_parent_unique`, `root_no_parent`) | `WalkPlace.lean` | proved; `walk_tstack_nil`, `walk_covered`, `walk_root_children`, `walk_reach` moved to `WalkCover.lean` |
-| coverage + reachability half of `Items.Tree` (`WalkState.Full` = exact placement + `Acyc`; `walk_tstack_nil`, `walk_covered`, `walk_root_children`, `walk_reach`, `walk_tree`) | `WalkCover.lean`, `ItemAcyc.lean` | proved from `walk_sides : SidesForest forest (WalkState.init g tern)` (§4.4; the only `sorry` in the file, now including the `¬ Below c (vertItem curV)` clause of `BoundaryOK`); its per-`finishEdge` content `FinishSides` is derived (`finishEdge_sides`, `walkTree_sides` in `EarSides.lean`, standard axioms), `RootOK` after each root and the forest threading are derived (`walkTree_rootOK`, `sidesForest_of_roots`, `walk_sides_of_roots` in `EarRoot.lean`, standard axioms), leaving exactly `RootsBook forest (init)`: `GuardsTree`/`BookTree`/`Inv' 0` at each root (`walkTree_guards`/`walkTree_book`, admitted) |
+| coverage + reachability half of `Items.Tree` (`WalkState.Full` = exact placement + `Acyc`; `walk_tstack_nil`, `walk_covered`, `walk_root_children`, `walk_reach`, `walk_tree`) | `WalkCover.lean`, `ItemAcyc.lean` | proved from `walk_sides : SidesForest forest (WalkState.init g tern)` (§4.4; `walk_sides`/`walk_full`/the consumers now live in `EarWalk.lean`, `walk_sides` proved from `RootsBook forest (init)` = `rootsBook_of_state`, whose only admissions are `walkTree_book` (restated, true at every root) and the frame `walkTree_frame`; new hypothesis `hends : ∀ t ∈ forest, t.Ends g`); its per-`finishEdge` content `FinishSides` is derived (`finishEdge_sides`, `walkTree_sides` in `EarSides.lean`, standard axioms), `RootOK` after each root and the forest threading are derived (`walkTree_rootOK`, `sidesForest_of_roots`, `walk_sides_of_roots` in `EarRoot.lean`, standard axioms), leaving exactly `RootsBook forest (init)`: `GuardsTree`/`BookTree`/`Inv' 0` at each root, derived in `EarWalk.lean` (`RootState.book`/`RootState.step`/`rootsBook_of_state`) from `walkTree_book` + `walkTree_frame` (admitted) |
 | linear phase 2/3 refinements `walkFast` / `relabelTreeFast` (`CatList` spans, `Array` tstack, ticks): `walkFast_items`, `relabelTreeFast_eq`; `spqrTree_eq` routed through them | `CatList.lean`, `Refine.lean`, `WalkFast.lean`, `RelabelFast.lean`, `WalkWF.lean` | proved |
 | step bounds: `walk_ticks_le : (g.walkFast tern (g.dfsForest vo eo)).ticks ≤ 47·(nv+ne)` (via `walk_ticks_le_forest`, `dfsForest_size_le` from `dfsForest_spanning'`); `relabelRun_sizes_le` (`Items.desc` cardinalities), `relabel_ticks_le : ticks ≤ 288·(nv+ne) + 6` | `WalkCost.lean`, `ItemTree.lean`, `RelabelCost.lean` | proved; the relabel bounds take `Items.Tree` as hypothesis (`relabel_ticks_le'` discharges it with the admitted `walk_items_wf`) |
 | frame rule `walkTree_local` via `Lifts`/`Sim` simulation (`Sim.closeEars`, `Sim.mergeLate`, `Sim.finishRest`, `Sim.finishBoundary` proved) | `Sim.lean`, `Frame.lean`, `EarSpec.lean` | `Sim.closeVert`, `Sim.finishEdge`, `Sim.walkTree` proved; `walkTree_local` reduces to the stack-shape invariant `walkTree_guards` (admitted, with `earOut_one_entry`); `GuardsTree` is derived from `BookTree` (`EarShape.lean`: `finishGuards_of_ear`, `walkTree_guards'`, standard axioms), so the remaining content is `walkTree_book` |

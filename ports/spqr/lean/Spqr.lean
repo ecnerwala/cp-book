@@ -100,6 +100,7 @@ import Spqr.Proofs.RInvFrame
 import Spqr.EarFrontier
 import Spqr.EarSides
 import Spqr.EarRoot
+import Spqr.EarWalk
 import Spqr.Proofs.RItems
 import Spqr.PlanarGlue
 import Spqr.Proofs.Orbits

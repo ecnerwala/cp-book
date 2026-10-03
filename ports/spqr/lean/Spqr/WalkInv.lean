@@ -3,6 +3,7 @@ import Spqr.Frame
 import Spqr.EarInv
 import Spqr.EarLoop1
 import Spqr.EarLoop2
+import Spqr.Proofs.Dfs
 
 /-!
 # From the tstack guards to `FinishOk`
@@ -495,13 +496,44 @@ def BookOut (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
     | .back .. => FinishBook v d o s₁.tstack.length hasVert' s₁) s
 end
 
-/-- Bookkeeping of the walk, to be discharged from the DFS well-formedness and endpoint facts
-(`DfsTree.WF`, the `dfsForest` endpoint lemma), the fresh-items start state and the ear invariant
-(the `VertBook` connectivity/2-attachment of the vertex item after its boundary edges needs the
-popped block to be a connected piece attached only at `v`); cf. `walkTree_guards`. -/
-theorem walkTree_book (t : DfsTree) (d : Nat) (s : WalkState)
-    (hfresh : ∀ i, i < 1 + s.g.nv + s.g.ne → Items.ch s.items i = []) :
-    BookTree t d s := by
+mutual
+/-- The out-edges of `v` are edges of `g` with the DFS endpoints: a tree edge joins the child's
+vertex and `v`, a back edge joins `v` and its destination. -/
+def _root_.Spqr.DfsOut.Ends (g : Graph) (v : Nat) : DfsOut → Prop
+  | .back e dest _ => Items.PairEq (v, dest) g.edges[e]!
+  | .tree e _ child => Items.PairEq (child.v, v) g.edges[e]! ∧ DfsTree.Ends g child
+def _root_.Spqr.DfsTree.Ends (g : Graph) : DfsTree → Prop
+  | .node v outs => ∀ o ∈ outs, DfsOut.Ends g v o
+end
+
+/-- Admitted: the bookkeeping of a root walk — the ear contract `FinishBook.ear` (PROOF.md
+§4.1–4.3, every field 0 violations on 3000 seeds) and the endpoint/item fields at every `finishEdge`,
+from the DFS well-formedness and endpoint facts, the start state (empty tstack, `Inv' 0`, `Shape`,
+the arrays sized `g.nv`) and the freshness of the tree's own `V`/`Q` items (childless and
+parentless). True at every root of the forest (the previous statement asked every fixed item to be
+childless, which holds only at the first root): `walkTree_frame` keeps the other roots' items. -/
+theorem walkTree_book (t : DfsTree) (s : WalkState) (hwf : t.WF []) (hends : t.Ends s.g)
+    (hvlt : ∀ v ∈ t.verts, v < s.g.nv) (helt : ∀ e ∈ t.edges, e < s.g.ne)
+    (hvn : t.verts.Nodup) (hen : t.edges.Nodup)
+    (hsv : s.stackVerts.size = s.g.nv) (hsd : s.stackDir.size = s.g.nv)
+    (hfo : s.firstOccurrence.size = s.g.nv)
+    (hts : s.tstack = []) (hi : s.Inv' 0) (hs : Shape s)
+    (hvfresh : ∀ v ∈ t.verts, Items.ch s.items (vertItem v) = [] ∧
+      ∀ p, ¬ Items.IsParent s.items p (vertItem v))
+    (hefresh : ∀ e ∈ t.edges, Items.ch s.items (edgeItem s.g e) = [] ∧
+      ∀ p, ¬ Items.IsParent s.items p (edgeItem s.g e)) :
+    BookTree t 0 s := by
+  sorry
+
+/-- Admitted: the frame of a subtree walk — `g` and the array sizes are kept, and the `ch` of a
+fixed item that is not a `V`/`Q` item of the subtree (`rootItem`, the items of other roots) is
+untouched: the walk writes `ch` only on allocated items and on `vertItem curV` for `curV` in the
+subtree (`rootItem` only at forest level, `walkForest`). -/
+theorem walkTree_frame (t : DfsTree) (d : Nat) (s : WalkState) :
+    wp (walkTree t d) (fun _ s' => s'.g = s.g ∧ s'.stackVerts.size = s.stackVerts.size ∧
+      s'.stackDir.size = s.stackDir.size ∧ s'.firstOccurrence.size = s.firstOccurrence.size ∧
+      ∀ i, 0 < i → i < 1 + s.g.nv + s.g.ne → (∀ v ∈ t.verts, i ≠ vertItem v) →
+        (∀ e ∈ t.edges, i ≠ edgeItem s.g e) → Items.ch s'.items i = Items.ch s.items i) s := by
   sorry
 
 /-- Admitted (ear content; PROOF.md §4.2b correction). After `finishEdge` of a tree edge at depth
