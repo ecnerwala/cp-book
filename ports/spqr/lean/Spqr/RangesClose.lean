@@ -60,6 +60,98 @@ theorem parent_lt {items : Items} {p c : ItemId} (h : items.IsParent p c) : p < 
   by_contra hn
   simp [IsParent, ch_of_le _ _ (Nat.le_of_not_lt hn)] at h
 
+/-- The parts of an item and its children observable by its close record. -/
+structure CloseFrame (g : Graph) (items items' : Items) (i : ItemId) : Prop where
+  type : items'.type i = items.type i
+  vs : items'.vs i = items.vs i
+  ch : items'.ch i = items.ch i
+  child_type : ∀ c, items.IsParent i c → items'.type c = items.type c
+  child_vs : ∀ c, items.IsParent i c → items'.vs c = items.vs c
+  child_ch : ∀ c, items.IsParent i c → items'.ch c = items.ch c
+  edges : ∀ j, j = i ∨ items.IsParent i j → ∀ e,
+    items'.EdgeBelow g j e ↔ items.EdgeBelow g j e
+
+theorem CloseFrame.vchildren {g : Graph} {items items' : Items} {i : ItemId}
+    (h : CloseFrame g items items' i) :
+    (items'.ch i).filter (fun c => items'.type c = .V) =
+      (items.ch i).filter (fun c => items.type c = .V) := by
+  rw [h.ch]
+  apply List.filter_congr
+  intro c hc
+  rw [h.child_type c hc]
+
+theorem CloseFrame.virtualEdges {g : Graph} {items items' : Items} {i : ItemId}
+    (h : CloseFrame g items items' i) : items'.virtualEdges i = items.virtualEdges i := by
+  have hc : (items'.ch i).filter (fun c => items'.type c ≠ .V) =
+      (items.ch i).filter (fun c => items.type c ≠ .V) := by
+    rw [h.ch]
+    apply List.filter_congr
+    intro c hc
+    rw [h.child_type c hc]
+  unfold Items.virtualEdges
+  rw [hc]
+  apply List.map_congr_left
+  intro c hc
+  rw [h.child_vs c (List.mem_filter.mp hc).1]
+
+theorem CloseAt.frame {g : Graph} {items items' : Items} {i : ItemId}
+    (h : CloseAt g items i) (f : CloseFrame g items items' i) : CloseAt g items' i := by
+  have hp : ∀ c, items'.IsParent i c ↔ items.IsParent i c := fun c => by simp [IsParent, f.ch]
+  have hv : ∀ v, items'.IsVs i v ↔ items.IsVs i v := fun v => by simp [IsVs, f.vs]
+  have ha : ∀ v, items'.Att g i v ↔ items.Att g i v := fun v => by
+    simp only [Att, f.edges i (Or.inl rfl)]
+  have hn : ∀ v, items'.Inner g i v ↔ items.Inner g i v := fun v => by
+    simp only [Inner, f.edges i (Or.inl rfl)]
+  constructor
+  · intro ht v hav
+    exact (hv v).2 (h.att_vs (by rwa [f.type] at ht) v ((ha v).1 hav))
+  · intro ht v hvv
+    exact (ha v).2 (h.vs_att (by simpa only [f.type, f.ch] using ht) v ((hv v).1 hvv))
+  · simpa only [f.type, f.vs] using h.vs_ne
+  · intro ht v hvg
+    rw [hp, hn]
+    have hall : (∀ c, items'.IsParent i c → ¬ ∀ e, e < g.ne → g.Inc e v → items'.EdgeBelow g c e) ↔
+        (∀ c, items.IsParent i c → ¬ ∀ e, e < g.ne → g.Inc e v → items.EdgeBelow g c e) := by
+      simp only [hp]
+      apply forall_congr'; intro c
+      apply imp_congr_right; intro hc
+      simp only [f.edges c (Or.inr hc)]
+    rw [hall]
+    exact h.interior (by rwa [f.type] at ht) v hvg
+  · intro c hc ht hcv
+    have hc' := (hp c).1 hc
+    simpa only [f.child_vs c hc'] using
+      h.child_two c hc' (by rwa [f.type] at ht) (by rwa [f.child_type c hc'] at hcv)
+  · intro c hc ht
+    have hc' := (hp c).1 hc
+    rw [f.type]
+    exact h.io_parent c hc' (by rwa [f.child_type c hc'] at ht)
+  · simpa only [f.vs, f.ch] using h.q_leaf
+  · intro e hei he hch
+    obtain ⟨u, c, hu, heuv, hct, hcq, hloop, hnon⟩ := h.q_root e hei he (by rwa [f.ch] at hch)
+    have hc : items.IsParent i c := by
+      by_cases hl : (g.edges[e]!).1 = (g.edges[e]!).2
+      · simp [IsParent, (hloop hl).1]
+      · obtain ⟨w, -, -, hw, -⟩ := hnon hl
+        simp [IsParent, hw]
+    refine ⟨u, c, by rwa [f.vs], heuv, by rwa [f.child_type c hc], ?_, ?_, ?_⟩
+    · simpa only [f.child_type c hc, f.child_ch c hc] using hcq
+    · simpa only [f.ch, f.child_vs c hc] using hloop
+    · simpa only [f.ch, f.child_vs c hc] using hnon
+  · intro v hiv hvg c hc
+    have hc' := (hp c).1 hc
+    rw [f.child_ch c hc']
+    exact h.q_under_v v hiv hvg c hc'
+  · intro ht
+    obtain ⟨he, hcv, hvs⟩ := h.p_shape (by rwa [f.type] at ht)
+    rw [f.virtualEdges]
+    refine ⟨he, fun c hc => ?_, ?_⟩
+    · have hc' := (hp c).1 hc
+      rw [f.child_type c hc']; exact hcv c hc'
+    · simpa only [f.vs] using hvs
+  · simpa only [f.type, f.vs, f.vchildren, f.virtualEdges] using h.s_order
+  · simpa only [f.type, f.vs, f.vchildren, f.virtualEdges] using h.r_shape
+
 end Items
 
 namespace WalkState
@@ -84,6 +176,34 @@ theorem CloseInv.frame {s s' : WalkState} (h : s.CloseInv) (hg : s'.g = s.g)
   intro i hil hl
   rw [hg, hi]
   exact h.closed i (by rwa [hi] at hil) (hl.imp_right (hc i))
+
+theorem CloseInv.pop {s : WalkState} (h : s.CloseInv) :
+    ({ s with tstack := s.tstack.tail } : WalkState).CloseInv := by
+  apply h.frame (s' := { s with tstack := s.tstack.tail }) rfl rfl
+  intro i hi
+  have := spansCount_tail_le s.tstack i
+  dsimp [cnt] at hi ⊢; omega
+
+theorem CloseInv.mergeTop {s : WalkState} (h : s.CloseInv) :
+    ({ s with tstack := WalkM.mergeTop s.tstack } : WalkState).CloseInv := by
+  apply h.frame (s' := { s with tstack := WalkM.mergeTop s.tstack }) rfl rfl
+  intro i hi
+  have := spansCount_mergeTop_le s.tstack i
+  dsimp [cnt] at hi ⊢; omega
+
+theorem CloseInv.push {s : WalkState} (h : s.CloseInv) (v d i : Nat)
+    (hi : Items.CloseAt s.g s.items i) : (after (pushTstack v d i) s).CloseInv := by
+  constructor
+  intro j hj hl
+  by_cases hji : j = i
+  · subst hji; exact hi
+  · apply h.closed j hj
+    rcases hl with hr | hl
+    · exact Or.inl hr
+    · apply Or.inr
+      change 0 < spansCount (_ :: s.tstack) j + chCount s.items j at hl
+      rw [spansCount_cons, count_setSides] at hl
+      simpa [List.count_singleton, Ne.symm hji, cnt] using hl
 
 theorem CloseInv.of_tree {s : WalkState} (h : s.CloseInv) (ht : Items.Tree s.g s.items)
     (hty : WalkTyping s.g s.items) : Items.CloseFacts s.g s.items := by
