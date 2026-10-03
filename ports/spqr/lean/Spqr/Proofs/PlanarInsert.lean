@@ -618,6 +618,65 @@ theorem insert_oppositeDir : (ρ.insert x a0 a2).OppositeDir :=
   conj_oppositeDir _ _ _ H.U₁_total H.U₁_oppositeDir (by rw [U₁_size]; have := H.xle; omega)
     (by rw [U₁_size]; have := H.ha2; omega) (by have := H.h2; have := H.hx; omega)
 
+theorem a3_ne_a1 : ρ.rot a2 ≠ ρ.rot a0 := H.a1_ne_a3.symm
+theorem x_ne_x2 : x ≠ 2 - x := by have := H.hx; omega
+theorem x1_ne_x2 : x + 1 ≠ 2 - x := by have := H.hx; omega
+theorem x3_ne_x2 : 3 - x ≠ 2 - x := by have := H.hx; omega
+
+theorem insert_get_x : (ρ.insert x a0 a2).get x = some (4 + ρ.rot a0) := by
+  have hx := H.hx; have h12 := H.a1_ne_a2
+  rw [insert_get _ _ _ _ (by omega), Equiv.swap_apply_of_ne_of_ne H.x_ne_x2 (by omega),
+    H.U₁_get_x]
+  simp only [Option.map_some, Equiv.swap_apply_of_ne_of_ne (show 4 + ρ.rot a0 ≠ 2 - x by omega)
+    (show 4 + ρ.rot a0 ≠ 4 + a2 by omega)]
+theorem insert_get_x1 : (ρ.insert x a0 a2).get (x + 1) = some (4 + a0) := by
+  have hx := H.hx; have h02 := H.ha02
+  rw [insert_get _ _ _ _ (by omega), Equiv.swap_apply_of_ne_of_ne H.x1_ne_x2 (by omega),
+    H.U₁_get_x1]
+  simp only [Option.map_some, Equiv.swap_apply_of_ne_of_ne (show 4 + a0 ≠ 2 - x by omega)
+    (show 4 + a0 ≠ 4 + a2 by omega)]
+theorem insert_get_x2 : (ρ.insert x a0 a2).get (2 - x) = some (4 + ρ.rot a2) := by
+  have hx := H.hx; have h32 := H.a3_ne_a2
+  rw [insert_get _ _ _ _ (by omega), Equiv.swap_apply_left,
+    H.U₁_get_add H.ha2 H.ha02.symm H.a1_ne_a2.symm]
+  simp only [Option.map_some, Equiv.swap_apply_of_ne_of_ne (show 4 + ρ.rot a2 ≠ 2 - x by omega)
+    (show 4 + ρ.rot a2 ≠ 4 + a2 by omega)]
+theorem insert_get_x3 : (ρ.insert x a0 a2).get (3 - x) = some (4 + a2) := by
+  have hx := H.hx
+  rw [insert_get _ _ _ _ (by omega), Equiv.swap_apply_of_ne_of_ne H.x3_ne_x2 (by omega),
+    H.U₁_get_x3]
+  simp only [Option.map_some, Equiv.swap_apply_left]
+theorem insert_get_a0 : (ρ.insert x a0 a2).get (4 + a0) = some (x + 1) := by
+  have hx := H.hx; have h02 := H.ha02; have ha0 := H.ha0
+  rw [insert_get _ _ _ _ (by omega), Equiv.swap_apply_of_ne_of_ne (by omega) (by omega),
+    H.U₁_get_a0]
+  simp only [Option.map_some, Equiv.swap_apply_of_ne_of_ne H.x1_ne_x2
+    (show x + 1 ≠ 4 + a2 by omega)]
+theorem insert_get_a1 : (ρ.insert x a0 a2).get (4 + ρ.rot a0) = some x := by
+  have hx := H.hx; have h12 := H.a1_ne_a2; have ha1 := H.a1_lt
+  rw [insert_get _ _ _ _ (by omega), Equiv.swap_apply_of_ne_of_ne (by omega) (by omega),
+    H.U₁_get_a1]
+  simp only [Option.map_some, Equiv.swap_apply_of_ne_of_ne H.x_ne_x2 (show x ≠ 4 + a2 by omega)]
+theorem insert_get_a2 : (ρ.insert x a0 a2).get (4 + a2) = some (3 - x) := by
+  have hx := H.hx; have ha2 := H.ha2
+  rw [insert_get _ _ _ _ (by omega), Equiv.swap_apply_right, H.U₁_get_x2]
+  simp only [Option.map_some, Equiv.swap_apply_of_ne_of_ne H.x3_ne_x2
+    (show 3 - x ≠ 4 + a2 by omega)]
+theorem insert_get_a3 : (ρ.insert x a0 a2).get (4 + ρ.rot a2) = some (2 - x) := by
+  have hx := H.hx; have h32 := H.a3_ne_a2; have ha3 := H.a3_lt
+  rw [insert_get _ _ _ _ (by omega), Equiv.swap_apply_of_ne_of_ne (by omega) (by omega),
+    H.U₁_get_add H.a3_lt H.a3_ne_a0 H.a3_ne_a1, H.rot_a3]
+  simp only [Option.map_some, Equiv.swap_apply_right]
+theorem insert_get_add {y : Nat} (hy : y < ρ.size) (h0 : y ≠ a0) (h1 : y ≠ ρ.rot a0)
+    (h2 : y ≠ a2) (h3 : y ≠ ρ.rot a2) :
+    (ρ.insert x a0 a2).get (4 + y) = some (4 + ρ.rot y) := by
+  have hx := H.hx
+  have h3' : ρ.rot y ≠ a2 := fun e => h3 (by rw [← e, rot_rot H.total H.involution hy])
+  rw [insert_get _ _ _ _ (by omega), Equiv.swap_apply_of_ne_of_ne (by omega) (by omega),
+    H.U₁_get_add hy h0 h1]
+  simp only [Option.map_some, Equiv.swap_apply_of_ne_of_ne (show 4 + ρ.rot y ≠ 2 - x by omega)
+    (show 4 + ρ.rot y ≠ 4 + a2 by omega)]
+
 end InsertSetting
 
 end RotationSystem

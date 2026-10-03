@@ -17,6 +17,8 @@ structure PieceSep : Prop where
       ∀ w, t.Touches g a w → t.Touches g b w → w = v
   v_nonempty : ∀ i, i < t.size → t.type i = .V →
     ∀ c ∈ t.children i, ∃ e, t.EdgeIn c e
+  /-- Every cap edge has original endpoints. -/
+  cap_orig : ∀ c ne, c < t.size → t.capNe c = some ne → ∃ p, t.neOrig ne = some p
   /-- A capped item other than an `I` or `O` leaf has an edge below it. -/
   cap_nonempty : ∀ c, c < t.size → t.hasCap c = true → t.type c ≠ .I → t.type c ≠ .O →
     ∃ e, t.EdgeIn c e
@@ -31,6 +33,9 @@ structure PieceSep : Prop where
     t.children i = [] ∨ (∃ c, t.type c = .O ∧ t.children i = [c]) ∨
       ∃ c w, t.type c ≠ .V ∧ t.type c ≠ .O ∧ t.hasCap c = true ∧
         t.type w = .V ∧ t.children i = [c, w]
+  /-- A capped `Q` leaf hangs under a node (never directly under the root or a `V` item). -/
+  q_leaf_parent : ∀ i p, i < t.size → t.type i = .Q → t.children i = [] → t.parent i = some p →
+    t.type p ≠ .F ∧ t.type p ≠ .V
   /-- A `Q` edge is a loop exactly when it has an `O` child. -/
   q_loop : ∀ i e, i < t.size → t.type i = .Q → t.origId[i]! = some e →
     ((g.edges[e]!).1 = (g.edges[e]!).2 ↔ ∃ c ∈ t.children i, t.type c = .O)
