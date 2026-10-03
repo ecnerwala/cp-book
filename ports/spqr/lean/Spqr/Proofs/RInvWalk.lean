@@ -743,32 +743,6 @@ theorem ancChain_child {d c : Nat} (hsp : dfs.Spec s.g) (hsize : d + 1 < s.stack
     rw [hself]
     exact ⟨.refl _, by rw [hsp.depth_parent _ _ hp, (hchain d (le_refl _)).2]⟩
 
-/-- **Named admission** (R-4 statement correction, PROOF.md §4.5). Exact obligation: the side
-facts of the child-return induction at a block's non-root `walkTree` entry `(c, d + 1)`
-(`RSideTree`), given the ear bookkeeping `BookTree` of the entry and the parent's ancestor chain
-(`stackVerts[k]`, `k ≤ d`, is the depth-`k` ancestor of `stackVerts[d]`): the ancestor chain at
-`(c, d + 1)` (`ancChain_child` above, given `d + 1 < stackVerts.size`); `EntryR` is stable under
-`stackVerts.set! (d + 1) c` (`EntryR.set_stackVerts`, given `t.topDepth ≠ d + 1` for the settled
-entries — their tops are at depth `≤ d`); no entry starting at the parent tops out above `d`; every out-edge of
-a non-root vertex returns (`lowval < depth`: `DfsData.Spec.outs_lowval_lt` above, with
-`depth c = d + 1` from `hp`/`hchain`); no entry owns an
-edge below `vertItem v` before `v`'s vertex entry is pushed; and the R-maximality content
-`FinishRShape` at tree-edge sites (`pend` from `EarFinish`'s `q_root`/`q_free`, `ear` =
-`FinishBook.ear`; `settled`/`unwrap`/`vert_own` are R content). `BookTree` and the chain are
-root-threaded (`bTree`/`walkTree_book`, `DfsData.ofForest_depth_root`) and are supplied by the
-root glue (`rkRootOut`, `Proofs/RSkelRoot.lean`). Checked on seeds 0..300 and 6000 extra
-multigraphs, both ternarize modes (`checks/RFinishEdgeCheck.lean`: `anc`, `stab`, `entry`, `ret`,
-`vertown`, `FinishRShape` lines). -/
-theorem walkTree_rSide (s : WalkState) (d c : Nat) (outs : List DfsOut)
-    (hi : s.Inv' d) (hs : Shape s) (hg : GuardsTree (.node c outs) (d + 1) s)
-    (hf : FrontiersTree (.node c outs) (d + 1) s) (hb : BookTree (.node c outs) (d + 1) s)
-    (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g)
-    (hrt : dfs.Rooted s.g) (hp : dfs.IsParent s.stackVerts[d]! c) (ho : outs = dfs.outs c)
-    (hchain : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! s.stackVerts[d]! ∧ dfs.depth s.stackVerts[k]! = k)
-    (hR : s.RInvTop dfs s.stackVerts[d]! d) :
-    RSideTree dfs (.node c outs) (d + 1) s := by
-  sorry
-
 /-- **Named admission** — the standalone form `WalkTreeRReturnSpec` needs, kept only because that
 statement is fixed; nothing else consumes it (the root glue uses `walkTree_rSide`). It is
 under-hypothesized rather than false-by-counterexample: `BookTree` at a non-root entry is ear
