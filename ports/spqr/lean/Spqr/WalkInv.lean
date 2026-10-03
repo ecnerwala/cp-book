@@ -989,9 +989,7 @@ theorem ear_boundary {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : B
     (hD : D = if o.cls.isTree then d + 1 else d) : BoundaryOk D curV d o s := by
   obtain ⟨sub, base, hlen, hE⟩ := hb.ear
   have hts := hE.tstack
-  have hnd : o.cls.isTree = true → ∀ u ∈ base, ¬ s.g.Touches (u.edges s.g s.items) o.dest := by
-    intro ht u hu ⟨e, he, hue, hinc⟩
-    exact hE.base_disj u hu e he hue (hE.dest_edges ht e he hinc)
+  have hnd := hE.base_touch
   have hvf : ∀ t ∈ s.tstack, vertItem curV ∉ t.spans.1 ++ t.spans.2 := by
     intro t ht hmem
     have := (hE.vert_free t ht hmem).1

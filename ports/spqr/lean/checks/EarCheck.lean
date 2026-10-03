@@ -32,6 +32,24 @@ def subEdgesL (o : DfsOut) : List Nat :=
   | .back e _ _ => [e]
 def spanItems (t : TEntry) : List ItemId := t.spans.1 ++ t.spans.2
 def onSide (t : TEntry) (dir : Bool) : Bool := getSide t.spans (!dir) == []
+/-- `Graph.ConnEdges E` literally: every `.1` endpoint of `E` reaches every other through `E`. -/
+def connB (s : WalkState) (E : List Nat) : Bool := Id.run do
+  match E with
+  | [] => return true
+  | e₀ :: _ =>
+    let mut seen : List Nat := [s.g.edges[e₀]!.1]
+    let mut changed := true
+    while changed do
+      changed := false
+      for e in E do
+        let (a, b) := s.g.edges[e]!
+        if seen.contains a && !seen.contains b then seen := b :: seen; changed := true
+        if seen.contains b && !seen.contains a then seen := a :: seen; changed := true
+    return E.all fun e => seen.contains s.g.edges[e]!.1
+/-- `Graph.TwoAttached E a b` literally. -/
+def twoAttB (s : WalkState) (E : List Nat) (a b : Nat) : Bool :=
+  (List.range s.g.nv).all fun v =>
+    !(touches s E v && (List.range s.g.ne).any (fun e => !E.contains e && inc s e v)) || v == a || v == b
 def showT (t : TEntry) : String := s!"({t.vStart},{t.topDepth},{t.firstIdx},{t.spans})"
 def sameT (a b : TEntry) : Bool := showT a == showT b
 
@@ -117,6 +135,8 @@ def earCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : Walk
   if o.cls.isTree then
     for e in List.range s.g.ne do
       if inc s e o.dest && !SE.contains e then out := bad "dest_edges" s!"e={e}" :: out
+    for u in base do
+      if touches s (E u) o.dest then out := bad "base_touch" (showT u) :: out
     if d ≤ lowval then
       if lowval == d + 1 then
         match sub with
@@ -404,7 +424,7 @@ def ebCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (eb : EB) 
 start of `walkOuts` and after every `walkOut` return (`done` = finished outs, `rest` = the others;
 `base₀`/`bE₀`/`sv₀` = the tstack, its entries' edge sets and `stackVerts[0..d]` at entry to `v`). -/
 def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut) (hv : Bool) (base₀ : List TEntry)
-    (bE₀ : List (List Nat)) (sv₀ : List Nat) (s : WalkState) : List V := Id.run do
+    (bE₀ : List (List Nat)) (sv₀ : List Nat) (sd₀ : List Bool) (s : WalkState) : List V := Id.run do
   let n := s.tstack.length
   let top := s.tstack.take (n - base₀.length)
   let base := s.tstack.drop (n - base₀.length)
@@ -417,6 +437,7 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
   if base.length ≠ base₀.length || !(List.zip base base₀).all (fun (a, b) => sameT a b) then out := bad "base" "" :: out
   if !(List.zip base bE₀).all (fun (a, e₀) => sameEdges (E a) e₀) then out := bad "base_edges" "" :: out
   if s.stackVerts.toList.take (d+1) ≠ sv₀ then out := bad "sv" "" :: out
+  if s.stackDir.toList.take d ≠ sd₀ then out := bad "sd" "" :: out
   if s.stackVerts[d]! ≠ v then out := bad "sv_d" "" :: out
   for k in List.range (d+1) do
     for k' in List.range (d+1) do
@@ -439,6 +460,37 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
     if t.vStart == v then out := bad "open_bot" (showT t) :: out
   for t in base do
     if t.vStart == v then out := bad "base_bot" (showT t) :: out
+  -- (ii') the entry holding `V v`: if still started at `v` it is the untouched vertex entry
+  match vt with
+  | some t =>
+    if t.vStart == v && t.topDepth ≠ d then out := bad "vt_vstart" (showT t) :: out
+    if t.vStart == v && spanItems t ≠ [vertItem v] then out := bad "vt_single" (showT t) :: out
+  | none => pure ()
+  -- every open entry touches its bottom; every span item is a root; `hasVert` only after a return
+  for t in s.tstack do
+    if (E t) ≠ [] && !touches s (E t) t.vStart then out := bad "touch_bot" (showT t) :: out
+    for i in spanItems t do
+      if hasParent s i then out := bad "span_root" s!"{showT t} i={i}" :: out
+  if hv && rest ≠ [] && !done.any (fun o => o.1.cls.lowval d < d) then out := bad "hv_ret" "" :: out
+  if !hv && !(connB s (edgesBelow s (vertItem v)) && twoAttB s (edgesBelow s (vertItem v)) v v) then
+    out := bad "vert_book" "" :: out
+  if !hv then
+    for t in s.tstack do
+      if (E t).any (edgesBelow s (vertItem v)).contains then out := bad "vert_disj" (showT t) :: out
+  -- `top` was made by this vertex's outs: bottoms off the path above, `V`/`Q` items of the finished
+  -- subtrees only, edges exactly the finished outs' sub-ear edges (returning outs covered by `top`)
+  let doneVerts := done.flatMap fun o => match o.1 with | .tree _ _ c => c.verts | .back .. => []
+  let doneE := done.flatMap (subEdgesL ·.1)
+  for t in top do
+    if (List.range d).any (fun k => s.stackVerts[k]! == t.vStart) then out := bad "top_bot" (showT t) :: out
+    for i in spanItems t do
+      if 1 ≤ i && i < 1 + s.g.nv && i - 1 ≠ v && !doneVerts.contains (i - 1) then out := bad "top_vitems" s!"{showT t} i={i}" :: out
+      if 1 + s.g.nv ≤ i && i < 1 + s.g.nv + s.g.ne && !doneE.contains (i - 1 - s.g.nv) then out := bad "top_qitems" s!"{showT t} i={i}" :: out
+    if (E t).any (fun e => !doneE.contains e) then out := bad "top_edges" (showT t) :: out
+  for o in done do
+    if o.1.cls.lowval d < d then
+      for e in subEdgesL o.1 do
+        if !top.any (fun t => (E t).contains e) then out := bad "done_cover" s!"e={e}" :: out
   let bdDone := (done.map (·.1)).filter fun o => d ≤ o.cls.lowval d
   let afterV := (done.filter (·.2)).map (·.1)
   let lvs := afterV.map (·.cls.lowval d)
@@ -500,7 +552,23 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
         if (Items.ch s.items (vertItem y)) ≠ [] then out := bad "vy_ch" s!"y={y}" :: out
         if s.tstack.any (fun t => (spanItems t).contains (vertItem y)) then out := bad "vy_free" s!"y={y}" :: out
         if (List.range (d+1)).any (fun k => s.stackVerts[k]! == y) then out := bad "path_rest" s!"y={y}" :: out
+        if s.tstack.any (fun t => t.vStart == y) then out := bad "vy_bot" s!"y={y}" :: out
+        if s.tstack.any (fun t => touches s (E t) y) then out := bad "vy_touch" s!"y={y}" :: out
     | .back .. => pure ()
+  return out
+
+/-- Two-state facts of a finished subtree walk (`s₀` at entry to `walkTree y D`, `s` at its end):
+a fixed item that was a parentless non-span item and is not a `V`/`Q` item of the subtree is still
+parentless. -/
+def leftCheck (seed y D : Nat) (t : DfsTree) (s₀ s : WalkState) : List V := Id.run do
+  let mut out : List V := []
+  let bad (k : String) (info : String) : V :=
+    ⟨seed, y, D, "left", false, s!"left_{k}", s!"{info} | stack={s.tstack.map showT}"⟩
+  for i in List.range (1 + s₀.g.nv + s₀.g.ne) do
+    if 0 < i && !hasParent s₀ i &&
+        !t.verts.any (fun w => vertItem w == i) && !t.edges.any (fun e => edgeItem s₀.g e == i) &&
+        hasParent s i then
+      out := bad "fresh_root" s!"i={i}" :: out
   return out
 
 mutual
@@ -508,24 +576,31 @@ partial def iTree (seed : Nat) (t : DfsTree) (d : Nat) (eb : EB) (s : WalkState)
   match t with
   | .node v outs =>
     let orig := s.tstack.length
+    let s₀ := s
     let s := { s with stackVerts := s.stackVerts.set! d v }
-    let (hv, s, eb, vs) := iOuts seed v d outs false eb s [] s.tstack (s.tstack.map (entryEdges s)) (s.stackVerts.toList.take (d+1))
+    let base₀ := s.tstack
+    let bE₀ := s.tstack.map (entryEdges s)
+    let sv₀ := s.stackVerts.toList.take (d+1)
+    let sd₀ := s.stackDir.toList.take d
+    let (hv, s, eb, vs, done) := iOuts seed v d outs false eb s [] base₀ bE₀ sv₀ sd₀
     let s := if hv then s else ((setStackDir d true *> pushVertTstack v d).run s).2
+    let vs := vs ++ ctxCheck seed v d done [] true base₀ bE₀ sv₀ sd₀ s ++ leftCheck seed v d t s₀ s
     let subv := s.tstack.take (s.tstack.length - orig)
     let eb := match subv.reverse with
       | vy :: py :: _ => if spanItems vy == [vertItem v] then (v, py, vy) :: eb else eb
       | _ => eb
     (s, eb, vs)
 partial def iOuts (seed v d : Nat) (outs : List DfsOut) (hv : Bool) (eb : EB) (s : WalkState)
-    (done : List (DfsOut × Bool)) (base₀ : List TEntry) (bE₀ : List (List Nat)) (sv₀ : List Nat) : Bool × WalkState × EB × List V :=
-  let cvs := ctxCheck seed v d done outs hv base₀ bE₀ sv₀ s
+    (done : List (DfsOut × Bool)) (base₀ : List TEntry) (bE₀ : List (List Nat)) (sv₀ : List Nat) (sd₀ : List Bool) :
+    Bool × WalkState × EB × List V × List (DfsOut × Bool) :=
+  let cvs := ctxCheck seed v d done outs hv base₀ bE₀ sv₀ sd₀ s
   match outs with
-  | [] => (hv, s, eb, cvs)
+  | [] => (hv, s, eb, cvs, done)
   | o :: rest =>
     let hvF := hv || (o.cls.lowval d < d && o.cls.isType1)
     let (hv, s, eb, vs) := iOut seed v d o hv eb s
-    let (hv', s', eb, vs') := iOuts seed v d rest hv eb s (done ++ [(o, hvF)]) base₀ bE₀ sv₀
-    (hv', s', eb, cvs ++ vs ++ vs')
+    let (hv', s', eb, vs', done') := iOuts seed v d rest hv eb s (done ++ [(o, hvF)]) base₀ bE₀ sv₀ sd₀
+    (hv', s', eb, cvs ++ vs ++ vs', done')
 partial def iOut (seed v d : Nat) (o : DfsOut) (hv : Bool) (eb : EB) (s : WalkState) : Bool × WalkState × EB × List V :=
   let lowval := o.cls.lowval d
   let s := ((do let lowDir ← stackDir lowval; setStackDir d (if lowval ≥ d then false else !lowDir) : WalkM Unit).run s).2

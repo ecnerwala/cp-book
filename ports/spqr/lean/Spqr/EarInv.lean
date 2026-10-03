@@ -282,8 +282,10 @@ structure EarFinish (curV d : Nat) (o : DfsOut) (hasVert : Bool) (sub base : Lis
   /-- A block boundary: the child's block meets the rest only at the articulation vertex `curV`. -/
   boundary : d ≤ o.cls.lowval d → ∀ t ∈ sub, ∀ u ∈ base, ∀ v,
     s.g.Touches (t.edges s.g s.items) v → s.g.Touches (u.edges s.g s.items) v → v = curV
-  /-- Every edge at the child is a sub-ear edge. -/
-  dest_edges : o.cls.isTree = true → ∀ e, e < s.g.ne → s.g.Inc e o.dest → subEdges o e
+  /-- No enclosing entry touches the child (its edges were all unvisited; `dest_edges` — every edge
+  at `o.dest` is a `subEdges` edge — was the former form, true of DFS forests but not derivable from
+  `walkTree_ear`'s hypotheses, which allow edges outside the tree: `EarCtxAt.dest_edges_false`). -/
+  base_touch : o.cls.isTree = true → ∀ u ∈ base, ¬ s.g.Touches (u.edges s.g s.items) o.dest
   /-- A boundary edge (`d ≤ lowval`) comes before the vertex entry of `curV`; the child's entries are
   the block `(o.dest, d + 1)` (bridge) or `[(o.dest, lowval), (o.dest, d + 1)]` (component: the block
   on the child's vertex entry); an entry under the top one touching `curV` has it as a terminal. -/
