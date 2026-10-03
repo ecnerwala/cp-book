@@ -160,6 +160,7 @@ theorem walk_rootsCover (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
   obtain ⟨hvp, hep⟩ := dfsForest_spanning' hg hvo heo
   exact WalkState.walk_rootsCover' g tern _ (ForestOK.of_perm hvp hep)
     (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo)
+    (fun e he => hep.mem_iff.2 (List.mem_range.2 he))
 
 theorem walk_rangesInv (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :

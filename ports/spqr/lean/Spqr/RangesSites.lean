@@ -120,12 +120,14 @@ def CbForest (σ : List Nat) (n : Nat) : List DfsTree → WalkState → Prop
 
 theorem forest_closeBase {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < g.ne) :
     ∀ forest pre n s, RootState g pre s → s.RangesInv σ n 0 → ForestOK g (pre ++ forest) →
-      (∀ t ∈ forest, t.WF []) → (∀ t ∈ forest, t.Ends g) → RootsCover σ n forest s →
+      (∀ t ∈ forest, t.WF []) → (∀ t ∈ forest, t.Ends g) →
+      (∀ t ∈ forest, ∀ e, e < g.ne → ∀ x, g.Inc e x → x ∈ t.verts → e ∈ t.edges) →
+      RootsCover σ n forest s →
       PostAt σ n (edgePostorderForest forest) → s.CloseInv →
       CbForest σ n forest s
-  | [], _, _, _, _, _, _, _, _, _, _, _ => trivial
-  | t :: rest, pre, n, s, h, hr, hf, hwf, hends, hc, hat, hcl => by
-    have hb := h.book hf (hwf t (by simp)) (hends t (by simp))
+  | [], _, _, _, _, _, _, _, _, _, _, _, _ => trivial
+  | t :: rest, pre, n, s, h, hr, hf, hwf, hends, hcomp, hc, hat, hcl => by
+    have hb := h.book hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     have hg := gbTree t 0 s hb
     have hi : ∀ v outs, t = .node v outs →
         ({ s with stackVerts := s.stackVerts.set! 0 v } : WalkState).RangesInv σ n 0 :=
@@ -137,7 +139,7 @@ theorem forest_closeBase {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ : ∀
     have hrg := rgTree σ n t 0 s hi h.shape hnd hσ' hg hb hsched
     have hcs : CsTree σ n t 0 s :=
       csTree_of_dfs (anc := []) t 0 s h.place.types rfl (hwf t (by simp)) (hends t (by simp))
-        (by simpa using (RootState.hvn hf).1) (by simp) (RootState.hvlt hf) (RootState.helt hf)
+        (hcomp t (by simp)) (by simpa using (RootState.hvn hf).1) (by simp) (RootState.hvlt hf) (RootState.helt hf)
         (RootState.hen hf).1 h.sv (fun k hk => absurd hk (Nat.not_lt_zero _)) hnd hat'.left
         (fun v outs _ k hk => absurd hk (by simp))
     have hcc := ccTree σ n t 0 s hi h.shape hnd hσ' hg hb hfront hsched hcs hcl
@@ -151,7 +153,7 @@ theorem forest_closeBase {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ : ∀
       (by rw [h.sd, ← h.g_eq]; exact hnv)
     have hp := (walk_place_aux g).1 t 0 _ _ s h.place (RootState.hvlt hf) (RootState.helt hf)
       (RootState.hvn hf).1 (RootState.hen hf).1 (RootState.hPv hf) (RootState.hPe hf)
-    have hst := h.step hf (hwf t (by simp)) (hends t (by simp))
+    have hst := h.step hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     refine ⟨hcb, ?_⟩
     refine wp_mono _ (wp_and hrg (wp_and hk (wp_and hp (wp_and hst (wp_and hc.2 hcc)))))
       fun _ s₁ ⟨hrs, hk, hp, hst, hc, hcl⟩ => ?_
@@ -164,17 +166,21 @@ theorem forest_closeBase {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ : ∀
       (wp_and hrpop (wp_and hst (wp_and hc hclpop))) fun _ s₂ ⟨hr₂, hs₂, hc₂, hcl₂⟩ =>
       forest_closeBase hnd hσ rest (pre ++ [t]) (n + t.edgePostorder.length) s₂ hs₂ hr₂
         (by simpa using hf) (fun t' ht' => hwf t' (by simp [ht']))
-        (fun t' ht' => hends t' (by simp [ht'])) hc₂ hat'.right hcl₂
+        (fun t' ht' => hends t' (by simp [ht'])) (fun t' ht' => hcomp t' (by simp [ht']))
+        hc₂ hat'.right hcl₂
 
 /-- `CloseBase` at every `finishEdge` pre-state of the walk of a DFS forest from the initial state. -/
 theorem walk_closeBase (g : Graph) (tern : Bool) (forest : List DfsTree)
-    (hf : ForestOK g forest) (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g) :
+    (hf : ForestOK g forest) (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g)
+    (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
     CbForest (edgePostorderForest forest) 0 forest (WalkState.init g tern) := by
   have hnd := DfsData.edgePostorderForest_perm.nodup_iff.2 hf.edges_nodup
   have hσ : ∀ e ∈ edgePostorderForest forest, e < g.ne :=
     fun e he => hf.edges_lt e (DfsData.edgePostorderForest_perm.subset he)
   exact forest_closeBase hnd hσ forest [] 0 (WalkState.init g tern) (rootState_init g tern)
-    (init_rangesInv g tern hnd) (by simpa using hf) hwf hends (walk_rootsCover' g tern forest hf hwf hends)
+    (init_rangesInv g tern hnd) (by simpa using hf) hwf hends
+    (fun t ht => comp_of_forest hf hwf hends hecov ht)
+    (walk_rootsCover' g tern forest hf hwf hends hecov)
     ⟨[], [], rfl, by simp⟩ (init_closeInv g tern)
 
 /-! ### The range invariant inside `finishEdge`, from `CloseBase` -/
@@ -261,6 +267,6 @@ theorem walk_closeBase (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
       (WalkState.init g tern) := by
   obtain ⟨hvp, hep⟩ := dfsForest_spanning' hg hvo heo
   exact WalkState.walk_closeBase g tern _ (ForestOK.of_perm hvp hep) (dfsForest_wf hg hvo heo)
-    (dfsForest_ends g hg hvo heo)
+    (dfsForest_ends g hg hvo heo) (fun e he => hep.mem_iff.2 (List.mem_range.2 he))
 
 end Spqr
