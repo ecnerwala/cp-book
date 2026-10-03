@@ -297,6 +297,36 @@ def closeSites (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkSta
     sites := [("finishBack_closeAt", rest)]
   return sites ++ [("finishP_closeAt", after (finishP curV lv o.cls.isType1) rest), ("finishTail", fin)]
 
+/-- The boundary fields of `CloseCtx` that `finishBoundary_closeAt` consumes (`dest_lt`, `bd_loop`,
+`bd_vert`, `bd_node`), evaluated at the pre-state of every block-boundary `finishEdge`. -/
+def checkCtx (seed : Nat) (curV d : Nat) (o : DfsOut) (s : WalkState) : List V := Id.run do
+  let lv := o.cls.lowval d
+  if !(d ≤ lv) then return []
+  let ty : Nat → NodeType := fun i => s.items[i]!.type
+  let ch : Nat → List ItemId := fun i => s.items[i]!.ch
+  let vs : Nat → Option Nat × Option Nat := fun i => s.items[i]!.vs
+  let bad := fun k => (⟨seed, s.ternarize, curV, d, "finishBoundary_closeAt", "ctx_" ++ k,
+    s!"o.e={o.e} dest={o.dest} lv={lv} stack={s.tstack.map showT}"⟩ : V)
+  let mut out := []
+  if !(o.dest < s.g.nv) then out := bad "dest_lt" :: out
+  if !o.cls.isTree && o.dest != curV then out := bad "bd_loop" :: out
+  if o.cls.isTree then
+    match (if lv == d + 1 then s.tstack.head? else s.tstack.tail.head?) with
+    | some t => if t.spans.2 != [vertItem o.dest] then out := bad "bd_vert" :: out
+    | none => out := bad "bd_vert_none" :: out
+    if lv != d + 1 then
+      match s.tstack.head? with
+      | some b =>
+        let ok := match b.spans.1 with
+          | [c] => ty c != .F && ty c != .V && (ty c != .Q || (ch c).isEmpty) &&
+              (match vs c with
+                | (some a, some b') => (a, b') == (curV, o.dest) || (a, b') == (o.dest, curV)
+                | _ => false)
+          | _ => false
+        if !ok then out := bad "bd_node" :: out
+      | none => out := bad "bd_node_none" :: out
+  return out
+
 def checkClose (seed : Nat) (site : String) (s : WalkState) : List V := Id.run do
   let ty := fun i => s.items[i]!.type
   let ch := fun i => s.items[i]!.ch
@@ -389,7 +419,8 @@ partial def iOut (seed : Nat) (σ : List Nat) (v d : Nat) (o : DfsOut) (hv : Boo
   let (s, vs) := match o with
     | .tree _ _ child => iTree seed σ child (d+1) { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
     | .back .. => (s, [])
-  let vs := vp ++ vs ++ check seed σ v d o orig s ++ checkAdj seed σ v d o orig hv s ++ checkClose seed "pre" s
+  let vs := vp ++ vs ++ check seed σ v d o orig s ++ checkAdj seed σ v d o orig hv s ++ checkClose seed "pre" s ++
+    checkCtx seed v d o s
   let vs := vs ++ (closeSites v d o orig hv s).flatMap fun (site, st) => checkClose seed site st
   let vs := vs ++ if hv then [] else checkVertPast seed σ v (σ.idxOf o.e) s
   let (hv', s) := (finishEdge v d o orig hv).run s
