@@ -97,17 +97,17 @@ merged depth), for `ty ∈ {S, P, R}`: the merged top reads as `c :: t`, the ret
 theorem StSim.unwrapMerge {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEntry)
     (new base : List TEntry) (ps : List StPiece) (blocks : List StBlock)
     (hts : s.tstack = c :: t :: (new ++ base))
-    (hc : getSide c.spans (!s.stackDir[min t.topDepth c.topDepth]!) = [])
-    (ht : getSide t.spans (!s.stackDir[min t.topDepth c.topDepth]!) = [])
+    (hd : s.stackDir[t.topDepth]! = s.stackDir[min t.topDepth c.topDepth]!)
     (hty : ty = .S ∨ ty = .P ∨ ty = .R)
     (hU : ty ≠ .R → ∀ h, (getSide t.spans s.stackDir[t.topDepth]!).head! = h →
       Items.type s.items h = ty → getSide t.spans s.stackDir[t.topDepth]! = [h])
+    (hU' : ∀ h, (getSide t.spans s.stackDir[t.topDepth]!).head! = h →
+      Items.type s.items h = ty → getSide t.spans (!s.stackDir[t.topDepth]!) = [])
     (hR : StRead s.items (c :: t :: new) ps) (hI : StItems g s blocks) :
     let r := (maybeUnwrapNxt ty).run s
     let s' := (mergeTstackTops.run r.2).2
     ∃ m : TEntry, s'.tstack = m :: (new ++ base) ∧ m.vStart = t.vStart ∧
       m.topDepth = min t.topDepth c.topDepth ∧
-      getSide m.spans (!s.stackDir[min t.topDepth c.topDepth]!) = [] ∧
       s'.stackDir = s.stackDir ∧ s'.g = s.g ∧ s'.stackVerts = s.stackVerts ∧
       s.items.size ≤ s'.items.size ∧ Items.type s'.items r.1 = ty ∧
       StRead s'.items (m :: new) ps ∧ StItemsX g s' blocks r.1 := by
@@ -124,7 +124,6 @@ theorem StSim.unwrapMerge {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEn
       let s' := (mergeTstackTops.run r.2).2
       ∃ m : TEntry, s'.tstack = m :: (new ++ base) ∧ m.vStart = t.vStart ∧
         m.topDepth = min t.topDepth c.topDepth ∧
-        getSide m.spans (!s.stackDir[min t.topDepth c.topDepth]!) = [] ∧
         s'.stackDir = s.stackDir ∧ s'.g = s.g ∧ s'.stackVerts = s.stackVerts ∧
         s.items.size ≤ s'.items.size ∧ Items.type s'.items r.1 = ty ∧
         StRead s'.items (m :: new) ps ∧ StItemsX g s' blocks r.1 := by
@@ -157,7 +156,7 @@ theorem StSim.unwrapMerge {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEn
       exact h.push _ (hI.bounded x hx)
     have htype₂ : ∀ j, j ≠ s.items.size → Items.type s₂.items j = Items.type s.items j := by
       intro j hj; rw [hitems₂, Items.type_push, ite_eq_right_iff.2 (fun e => absurd e hj)]
-    refine ⟨TEntry.mergeInto c t, hts₂, rfl, rfl, TEntry.mergeInto_side_nil _ c t hc ht, by rw [hs₂],
+    refine ⟨TEntry.mergeInto c t, hts₂, rfl, rfl, by rw [hs₂],
       by rw [hs₂], by rw [hs₂], by rw [hsz]; exact Nat.le_succ _, by rw [hitems₂, Items.type_push_size], ?_, ?_⟩
     · unfold StRead at hR ⊢
       rw [readL_mergeInto_cons, readR_mergeInto_cons, hitems₂]
@@ -209,19 +208,11 @@ theorem StSim.unwrapMerge {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEn
       rcases hty with rfl | rfl | rfl <;> cases hT
     rw [Items.getElem!_type_of_lt hlth] at hT
     have hsingle := hU hne h hh hT
-    have hd : s.stackDir[t.topDepth]! = s.stackDir[min t.topDepth c.topDepth]! := by
-      by_contra hd
-      have hd' : s.stackDir[t.topDepth]! = !s.stackDir[min t.topDepth c.topDepth]! := by
-        revert hd
-        cases s.stackDir[t.topDepth]! <;> cases s.stackDir[min t.topDepth c.topDepth]! <;> simp
-      rw [hd', ht] at hsingle
-      exact List.cons_ne_nil _ _ hsingle.symm
     have htsp : t.spans = setSides s.stackDir[t.topDepth]! [h] [] :=
-      spans_eq_setSides_of_sides hsingle (by rw [hd]; exact ht)
+      spans_eq_setSides_of_sides hsingle (hU' h hh hT)
     rw [Items.getElem!_ch_of_lt hlth]
     dsimp only
     generalize hdir : s.stackDir[t.topDepth]! = dir at hd htsp ⊢
-    rw [← hd] at hc ht ⊢
     set t' : TEntry := { t with spans := setSides dir (Items.ch s.items h) [] } with ht'
     have hs₂ := run_mergeTstackTops_cons_cons { s with tstack := c :: t' :: (new ++ base) } c t' (new ++ base) rfl
     generalize (mergeTstackTops.run { s with tstack := c :: t' :: (new ++ base) }).2 = s₂ at hs₂ ⊢
@@ -261,9 +252,7 @@ theorem StSim.unwrapMerge {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEn
       · exact hhch e
     have htyh : ¬ (Items.type s.items h = .V ∨ Items.type s.items h = .Q) := by
       rw [hT]; exact fun e => e.elim hty'.1 hty'.2
-    refine ⟨TEntry.mergeInto c t', hts₂, rfl, rfl,
-      TEntry.mergeInto_side_nil _ c t' hc (by rw [ht']; exact getSide_setSides_other _ _ _),
-      by rw [hs₂], by rw [hs₂], by rw [hs₂], by rw [hitems₂], by rw [hitems₂, hT], ?_, ?_⟩
+    refine ⟨TEntry.mergeInto c t', hts₂, rfl, rfl, by rw [hs₂], by rw [hs₂], by rw [hs₂], by rw [hitems₂], by rw [hitems₂, hT], ?_, ?_⟩
     · unfold StRead at hR ⊢
       rw [hitems₂, readL_mergeInto_cons, readR_mergeInto_cons,
         readL_reopen c t new dir h _ htsp ha hnew, readR_reopen c t new dir h _ htsp ha hnew]
@@ -295,5 +284,168 @@ theorem StSim.unwrapMerge {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEn
       rw [hitems₂]
       exact Items.not_below_root_of_ne hroot fun e => hnotin₂ (e ▸ hx)
   · exact alloc
+
+theorem StItems.perm {g : Graph} {s s' : WalkState} {blocks : List StBlock} (h : StItems g s blocks)
+    (hread : (readStack s'.tstack).Perm (readStack s.tstack)) (hitems : s'.items = s.items) :
+    StItems g s' blocks := by
+  obtain ⟨roots, nodup, bounded, chLt, chNodup, closed⟩ := h
+  refine ⟨fun x hx => by rw [hitems]; exact roots x (hread.mem_iff.1 hx), hread.nodup_iff.2 nodup,
+    fun x hx => by rw [hitems]; exact bounded x (hread.mem_iff.1 hx), by rw [hitems]; exact chLt,
+    by rw [hitems]; exact chNodup, fun j hj hty => ?_⟩
+  rw [hitems] at hj hty ⊢
+  rcases closed j hj hty with ⟨x, hx, hxj⟩ | h
+  · exact Or.inl ⟨x, hread.mem_iff.2 hx, hxj⟩
+  · exact Or.inr h
+
+theorem loop3_state (o fuel : Nat) (st : WalkState) :
+    ∃ l, ((loop fuel (loop3Cond o) mergeTstackTops).run st).2 = { st with tstack := l } := by
+  obtain ⟨k, hk, -⟩ := loop_run_iter (loop3Cond o) mergeTstackTops (fun _ => rfl) fuel st
+  exact ⟨_, by rw [hk, iter_mergeTstackTops]⟩
+
+/-! ### `closeVert'` -/
+
+/-- The vertex close on `c :: mid ++ [py, vy] ++ base` reading as `ps` (the child's pieces and its
+tree edge): afterwards one entry reads as the single piece `⟨!edgeDir, stNest ps⟩`. For type 1,
+`mid = []` and `py` is the single-item entry at the lowpoint depth `lv`. -/
+theorem closeVert_st {g : Graph} {s st : WalkState} {d lv : Nat} {ps : List StPiece}
+    {blocks : List StBlock} {base : List TEntry} (curV origTstack : Nat) (edgeDir isType1 isSingle : Bool)
+    (c : TEntry) (mid : List TEntry) (py vy : TEntry)
+    (hJ : L1StInv g s d ps blocks base st)
+    (hts : st.tstack = c :: mid ++ [py, vy] ++ base)
+    (hlv : lv ≤ d) (horig : base.length = origTstack) (hsd : edgeDir = !s.stackDir[lv]!)
+    (hcl : lv ≤ c.topDepth) (hvyt : lv ≤ vy.topDepth)
+    (hmid : isType1 = true → mid = [])
+    (hpy : isType1 = true → py.topDepth = lv ∧ ∃ i, py.spans = setSides s.stackDir[lv]! [i] []) :
+    let s' := ((closeVert' curV edgeDir isType1 origTstack isSingle).run st).2
+    ∃ m : TEntry, s'.tstack = m :: base ∧ m.vStart = curV ∧ s'.stackDir = st.stackDir ∧ s'.g = st.g ∧
+      StRead s'.items [m] [⟨!edgeDir, stNest ps⟩] ∧ StItems g s' blocks := by
+  dsimp only
+  have hrun : ((closeVert' curV edgeDir isType1 origTstack isSingle).run st).2 =
+      ((vertFinish (result (vertUnwrap isType1 (cvB₁ isType1 origTstack isSingle st))
+        (cvS₁ isType1 origTstack isSingle st)) (cvB₁ isType1 origTstack isSingle st)).run
+        (cvS₅ curV edgeDir isType1 origTstack isSingle st)).2 := rfl
+  rw [hrun]
+  have hdirlv : st.stackDir[lv]! = s.stackDir[lv]! := hJ.dirs lv hlv
+  cases isType1
+  · -- type 2: loop 3, two merges, the fold
+    have hS₁ : cvS₁ false origTstack isSingle st =
+        ((loop st.tstack.length (loop3Cond origTstack) mergeTstackTops).run st).2 := by
+      simp only [cvS₁, after, vertPre, Bool.not_false, ↓reduceIte, WalkM.run_bind, run_tstackSize]
+      rfl
+    obtain ⟨l₁, hl₁⟩ := loop3_state origTstack st.tstack.length st
+    have hlen : (cvS₁ false origTstack isSingle st).tstack.length = origTstack + 3 := by
+      rw [hS₁]
+      refine loop3_length origTstack _ st ?_ (by omega)
+      rw [hts]; simp; omega
+    have hJ₁ : L1StInv g s d ps blocks base (cvS₁ false origTstack isSingle st) := by
+      rw [hS₁]
+      refine L1StInv.mergeLoop _ (fun _ => rfl) _ hJ ?_
+      rw [← hS₁, hlen]; omega
+    obtain ⟨new₁, hts₁, hR₁⟩ := hJ₁.read
+    have hlen₁ : new₁.length = 3 := by
+      rw [hts₁, List.length_append] at hlen; omega
+    obtain ⟨a, b, c', rfl⟩ := List.length_eq_three.1 hlen₁
+    generalize hS : cvS₁ false origTstack isSingle st = S₁ at hts₁ hR₁ hJ₁ hS₁
+    have hS₂ : cvS₂ false origTstack isSingle st = S₁ := by rw [← hS]; rfl
+    have hS₃ : cvS₃ false origTstack isSingle st = { S₁ with tstack := TEntry.mergeInto a b :: c' :: base } := by
+      show (mergeTstackTops.run (cvS₂ false origTstack isSingle st)).2 = _
+      rw [hS₂]; exact run_mergeTstackTops_cons_cons _ a b (c' :: base) hts₁
+    have hS₄ : cvS₄ false origTstack isSingle st =
+        { S₁ with tstack := TEntry.mergeInto (TEntry.mergeInto a b) c' :: base } := by
+      show (mergeTstackTops.run (cvS₃ false origTstack isSingle st)).2 = _
+      rw [hS₃]; exact run_mergeTstackTops_cons_cons _ (TEntry.mergeInto a b) c' base rfl
+    have hS₅ : cvS₅ curV edgeDir false origTstack isSingle st = ((retarget curV edgeDir).run (cvS₄ false origTstack isSingle st)).2 := rfl
+    rw [retarget_run_eq curV edgeDir _ _ base (show (cvS₄ false origTstack isSingle st).tstack = _ by rw [hS₄]), hS₄] at hS₅
+    have hfin : ((vertFinish (result (vertUnwrap false (cvB₁ false origTstack isSingle st)) S₁)
+        (cvB₁ false origTstack isSingle st)).run
+        (cvS₅ curV edgeDir false origTstack isSingle st)).2 = cvS₅ curV edgeDir false origTstack isSingle st := rfl
+    rw [hfin, hS₅]
+    dsimp only
+    have hsd₁ : S₁.stackDir = st.stackDir := by rw [hS₁, hl₁]
+    have hg₁ : S₁.g = st.g := by rw [hS₁, hl₁]
+    refine ⟨_, rfl, rfl, hsd₁, hg₁, ?_, ?_⟩
+    · refine StRead.fold _ _ _ _ ?_
+      unfold StRead at hR₁ ⊢
+      rw [readL_mergeInto_cons, readR_mergeInto_cons, readL_mergeInto_cons, readR_mergeInto_cons]
+      exact hR₁
+    · refine StItems.perm hJ₁.items ?_ rfl
+      dsimp only
+      refine (readStack_fold_perm _ _ _ _).trans ?_
+      rw [readStack_mergeInto_cons, readStack_mergeInto_cons, hts₁]
+      exact List.Perm.refl _
+  · -- type 1: the unwrap, two merges, the fold, the close
+    have hmid' := hmid rfl; subst hmid'
+    obtain ⟨hpyt, i, hpys⟩ := hpy rfl
+    have hts' : st.tstack = c :: py :: ([vy] ++ base) := by rw [hts]; rfl
+    have hmin : min py.topDepth c.topDepth = lv := by rw [hpyt]; exact Nat.min_eq_left hcl
+    have hd : st.stackDir[py.topDepth]! = st.stackDir[min py.topDepth c.topDepth]! := by rw [hmin, hpyt]
+    have hpys' : py.spans = setSides st.stackDir[py.topDepth]! [i] [] := by rw [hpyt, hdirlv]; exact hpys
+    have htyS : (if isSingle then NodeType.S else NodeType.R) = .S ∨
+        (if isSingle then NodeType.S else NodeType.R) = .P ∨
+        (if isSingle then NodeType.S else NodeType.R) = .R := by cases isSingle <;> simp
+    obtain ⟨new, hnew, hRn⟩ := hJ.read
+    have hnew' : new = [c, py, vy] := List.append_cancel_right (hnew.symm.trans hts')
+    subst hnew'
+    obtain ⟨m, hts₃, hmv, hmt, hsd₃, hg₃, hsv₃, hsz₃, hty₃, hR₃, hX₃⟩ :=
+      StSim.unwrapMerge st (if isSingle then NodeType.S else NodeType.R) c py [vy] base ps blocks hts' hd htyS
+        (fun _ h hh _ => by rw [hpys', getSide_setSides] at hh ⊢; rw [← hh]; rfl)
+        (fun h _ _ => by rw [hpys', getSide_setSides_other])
+        hRn hJ.items
+    have hS₃ : cvS₃ true origTstack isSingle st =
+        (mergeTstackTops.run ((maybeUnwrapNxt (if isSingle then NodeType.S else NodeType.R)).run st).2).2 := rfl
+    rw [← hS₃] at hts₃ hsd₃ hg₃ hsv₃ hsz₃ hty₃ hR₃ hX₃
+    generalize hS : cvS₃ true origTstack isSingle st = S₃ at hts₃ hsd₃ hg₃ hsv₃ hsz₃ hty₃ hR₃ hX₃
+    have hitem : result (vertUnwrap true (cvB₁ true origTstack isSingle st)) (cvS₁ true origTstack isSingle st) =
+        some ((maybeUnwrapNxt (if isSingle then NodeType.S else NodeType.R)).run st).1 := rfl
+    rw [hitem]
+    generalize hI : ((maybeUnwrapNxt (if isSingle then NodeType.S else NodeType.R)).run st).1 = item at hty₃ hX₃
+    have hS₄ : cvS₄ true origTstack isSingle st = { S₃ with tstack := TEntry.mergeInto m vy :: base } := by
+      show (mergeTstackTops.run (cvS₃ true origTstack isSingle st)).2 = _
+      rw [hS]; exact run_mergeTstackTops_cons_cons _ m vy base hts₃
+    have hS₅ : cvS₅ curV edgeDir true origTstack isSingle st = ((retarget curV edgeDir).run (cvS₄ true origTstack isSingle st)).2 := rfl
+    rw [retarget_run_eq curV edgeDir _ _ base (show (cvS₄ true origTstack isSingle st).tstack = _ by rw [hS₄]), hS₄] at hS₅
+    set M : TEntry := TEntry.mergeInto m vy with hM
+    generalize hF : ({ M with vStart := curV, spans := setSides (!edgeDir) (M.spans.1 ++ M.spans.2) [] } : TEntry) = F at hS₅
+    have hfin : ((vertFinish (some item) (cvB₁ true origTstack isSingle st)).run
+        (cvS₅ curV edgeDir true origTstack isSingle st)).2 =
+        ((finishTstackTop item).run (cvS₅ curV edgeDir true origTstack isSingle st)).2 := rfl
+    rw [hfin, hS₅]
+    generalize hS₅' : ({ S₃ with tstack := F :: base } : WalkState) = S₅
+    have hts₅ : S₅.tstack = F :: ([] ++ base) := by rw [← hS₅']; rfl
+    have hitems₅ : S₅.items = S₃.items := by rw [← hS₅']
+    have hsd₅ : S₅.stackDir = S₃.stackDir := by rw [← hS₅']
+    have hFt : F.topDepth = lv := by
+      rw [← hF]; show M.topDepth = lv
+      rw [hM]; show min vy.topDepth m.topDepth = lv
+      rw [hmt, hmin]; exact Nat.min_eq_right hvyt
+    have hside : getSide F.spans (!S₅.stackDir[F.topDepth]!) = [] := by
+      rw [hsd₅, hsd₃, hFt, hdirlv, ← hF]
+      show getSide (setSides (!edgeDir) _ []) (!s.stackDir[lv]!) = []
+      rw [hsd, Bool.not_not]; exact getSide_setSides_other _ _ _
+    have hX₅ : StItemsX g S₅ blocks item := by
+      refine hX₃.perm ?_ ?_ hitems₅
+      · rw [hts₅, hts₃, ← hF]
+        refine (readStack_fold_perm _ _ _ _).trans ?_
+        rw [hM, readStack_mergeInto_cons]; rfl
+      · intro x hx
+        rw [hts₅] at hx; rw [hts₃]
+        exact mem_readStack_cons.2 (Or.inr hx)
+    have hR₅ : StRead S₅.items [F] [⟨!edgeDir, stNest ps⟩] := by
+      rw [hitems₅, ← hF]
+      refine StRead.fold _ _ _ _ ?_
+      unfold StRead at hR₃ ⊢
+      rw [hM, readL_mergeInto_cons, readR_mergeInto_cons]
+      exact hR₃
+    have htyi : ¬ (Items.type S₅.items item = .V ∨ Items.type S₅.items item = .Q) := by
+      rw [hitems₅, hty₃]; cases isSingle <;> simp
+    obtain ⟨hts₆, hR₆⟩ := StRead.finishTstackTop S₅ item F [] base [⟨!edgeDir, stNest ps⟩] hts₅ hside hX₅.lt htyi
+      (fun x hx => hX₅.notBelow x (by rw [hts₅]; exact mem_readStack_append_left hx)) (by simp [readStack, readL, readR])
+      hR₅
+    obtain ⟨x', items', hrun₆, -⟩ := finishTstackTop_run item S₅ hts₅
+    refine ⟨_, hts₆, ?_, ?_, ?_, ?_, hX₅.close F base hts₅ hside⟩
+    · show F.vStart = curV; rw [← hF]
+    · rw [hrun₆]; show S₅.stackDir = st.stackDir; rw [hsd₅, hsd₃]
+    · rw [hrun₆]; show S₅.g = st.g; rw [← hS₅', hg₃]
+    · exact hR₆
 
 end Spqr
