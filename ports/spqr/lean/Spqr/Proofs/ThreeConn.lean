@@ -91,4 +91,26 @@ theorem SpqrTree.ThreeConnected.edgesConn_eraseIdx {n : Nat} {es : List (Nat × 
     exact hex ⟨w, hwu,
       hpath v z u w (Or.inr (Or.inl rfl)) hv hzn hu huv (Ne.symm hzu) hwn hwv hwz⟩
 
+/-- Every vertex of a 3-connected graph keeps an edge after deleting any one edge. -/
+theorem SpqrTree.ThreeConnected.hasEdge_eraseIdx {n : Nat} {es : List (Nat × Nat)}
+    (h3 : SpqrTree.ThreeConnected n es) (hbound : ∀ p ∈ es, p.1 < n ∧ p.2 < n) {e u v k : Nat}
+    (he : es[e]? = some (u, v)) (huv : u ≠ v) (hk : k < n) : HasEdge (es.eraseIdx e) k := by
+  obtain ⟨hn, hconn⟩ := h3
+  have hu : u < n := (hbound _ (List.mem_of_getElem? he)).1
+  have hv : v < n := (hbound _ (List.mem_of_getElem? he)).2
+  obtain ⟨a, ha, hka, hab⟩ : ∃ a, a < n ∧ k ≠ a ∧ (a = u ∨ a = v) := by
+    by_cases hku : k = u
+    · exact ⟨v, hv, hku ▸ huv, Or.inr rfl⟩
+    · exact ⟨u, hu, hku, Or.inl rfl⟩
+  obtain ⟨z, hzn, hza, hzk⟩ := exists_ne_two (n := n) (a := a) (b := k) (by omega)
+  obtain ⟨w, hwn, hwa, hwz, hwk⟩ := exists_ne_three (n := n) (a := a) (b := z) (c := k) hn
+  have hpath : EdgesConn (es.eraseIdx e) k w :=
+    edgesConn_eraseIdx_of_avoid he (by rcases hab with h | h <;> simp [h])
+      (hconn a z ha hzn k w ⟨hk, hka, Ne.symm hzk⟩ ⟨hwn, hwa, hwz⟩)
+  rcases Relation.ReflTransGen.cases_head hpath with h | ⟨y, hky, -⟩
+  · exact absurd h.symm hwk
+  · rcases hky with h | h
+    · exact ⟨_, h, Or.inl rfl⟩
+    · exact ⟨_, h, Or.inr rfl⟩
+
 end Spqr

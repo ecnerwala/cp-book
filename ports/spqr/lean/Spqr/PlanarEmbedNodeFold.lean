@@ -1,26 +1,23 @@
 import Spqr.PlanarEmbedNodePFold
+import Spqr.PlanarEmbedNodeRMain
 
 /-!
 # The node fold: `nodeFold_capped` and the `S`/`P`/`R` step
 
 `nodeFold_capped` dispatches on the node type: `S` is `nodeFold_capped_S` (proved,
-`PlanarEmbedNodeSMain.lean`), `P` is `nodeFold_capped_P` (proved, `PlanarEmbedNodePFold.lean`);
-`R` is the named admission `nodeFold_capped_R` below. `embedItem_step_node_faces` combines it with `embedItem_node` and
-`node_capped_glued`.
+`PlanarEmbedNodeSMain.lean`), `P` is `nodeFold_capped_P` (proved, `PlanarEmbedNodePFold.lean`),
+`R` is `nodeFold_capped_R` (proved, `main_R` in `PlanarEmbedNodeRMain.lean`).
+`embedItem_step_node_faces` combines it with `embedItem_node` and `node_capped_glued`.
 -/
 
 namespace Spqr.PlanarSpqrTree
 
 variable (t : PlanarSpqrTree)
 
-/-- `nodeFold_capped` for `R` nodes. Admitted: the 2-sum of `hloc` (the skeleton embedding
-`nodeRot i`, cap included) with each child's `Capped` certificate through its twin
-(`TwoSum.splice_isPlanarEmbedding`, `RotationSystem.insert`, `IsPlanarEmbedding.uninsert` and
-`cap_sides_distinct` are proved); missing are the executable correspondence of `nodeStep` over the
-`mapRot` segment with the splice's links (`treeQe`/`Piece.loc` bookkeeping, the corner `V` items,
-`NodeCorners`) and that the cap is not a bridge of the skeleton. The statement is the `R` case of the
-previously admitted `nodeFold_capped`; its executable consequences are checked by `check_piece_sep`
-(`checkOuter`/`checkCapFace`, seeds 0..300 + tiny cases) and `compare_planar_lean.sh`. -/
+/-- `nodeFold_capped` for `R` nodes: the skeleton embedding `hloc` with every virtual edge replaced by
+its child's `Capped` certificate (cap re-inserted, `RG.Hyp.glue`), corner `V` items attached, and the
+node's cap removed by `uninsert`; `main_R` identifies the resulting rotation with the `nodeStep` fold
+(`nodeFoldR`) slot by slot. `hlay` is not needed for `R` (the segment is `nodeRot i` shifted, `rotR`). -/
 theorem nodeFold_capped_R (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
     (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g) {i : Nat} (hi : i < t.size)
     (hR : t.toSpqrTree.type i = .R)
@@ -33,8 +30,8 @@ theorem nodeFold_capped_R (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTre
       (t.nodeStep i t.neBounds[i]!) s
     (∀ q, ¬(t.pieceBelow g i).Mem q → s'.rotAdj[q]? = s.rotAdj[q]?) ∧
     ∃ a0 a1 a2 a3 ρ, s'.outerE[i]? = some #[some a0, some a1, some a2, some a3] ∧
-      (t.pieceBelow g i).Capped s'.rotAdj ρ a0 a1 a2 a3 p.1 p.2 := by
-  sorry
+      (t.pieceBelow g i).Capped s'.rotAdj ρ a0 a1 a2 a3 p.1 p.2 :=
+  t.main_R hwf hsh hrep hsep hi hR hloc hclosed hcor s h hcne hp
 
 /-- Semantic content of the node fold: starting from `GluedFaces g (i + 1) s`, the fold of
 `nodeStep` over the node's quarter-edges leaves `rotAdj` unchanged outside the node's piece, fills
