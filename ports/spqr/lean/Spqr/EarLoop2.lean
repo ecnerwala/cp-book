@@ -804,4 +804,211 @@ theorem finishPOk_type1_of_close {curV d l : Nat} {o : DfsOut} {sub base : List 
       · exact .inr (.inr htc)
   exact ⟨hu₃, hmerge, hfin⟩
 
+
+/-- The pure state after the type-2 vertex close at `st = feS₂` (`EarClose` with the vertex entry):
+loop 3 merges `mid` into `c`, the two merges add `py` and `vy`, the retarget moves the result to
+`curV`; items are untouched. -/
+theorem closeVert'_type2_eq {curV d l : Nat} {o : DfsOut} {base : List TEntry} {s st : WalkState}
+    {c : TEntry} {mid : List TEntry} {py vy : TEntry} (isSingle edgeDir : Bool)
+    (hC : EarClose curV d l o true base s st c mid py vy) :
+    after (closeVert' curV edgeDir false base.length isSingle) st =
+      { st with
+        tstack := { l2Cur c (mid ++ [py, vy]) with
+          vStart := curV
+          spans := setSides (!edgeDir)
+            ((l2Cur c (mid ++ [py, vy])).spans.1 ++ (l2Cur c (mid ++ [py, vy])).spans.2) [] } :: base } := by
+  set R := mid ++ [py, vy] ++ base with hR
+  have hts : st.tstack = c :: R := hC.tstack
+  have hRl : R.length = mid.length + 2 + base.length := by simp [hR]; omega
+  have hiter : ∀ k, k ≤ R.length → (iter mergeTstackTops k st).tstack.length = R.length + 1 - k := fun k hk => by
+    rw [iter_merge_eq st c R hts k hk]; simp [List.length_drop]; omega
+  have hcond : ∀ k, result (loop3Cond base.length) (iter mergeTstackTops k st) = true ↔
+      base.length + 3 < (iter mergeTstackTops k st).tstack.length := fun k => by
+    unfold result; rw [run_loop3Cond]; simp
+  have hlt : ∀ k, result (loop3Cond base.length) (iter mergeTstackTops k st) = true → k < mid.length := fun k hk => by
+    rw [hcond] at hk
+    by_cases hkR : k ≤ R.length
+    · rw [hiter k hkR] at hk; omega
+    · have h1 : (iter mergeTstackTops R.length st).tstack.length ≤ 1 := by rw [hiter _ (Nat.le_refl _)]; omega
+      have h2 := iter_merge_short _ h1 (k - R.length)
+      rw [← iter_add, Nat.sub_add_cancel (by omega)] at h2
+      omega
+  have hs₁ : cvS₁ false base.length isSingle st = iter mergeTstackTops mid.length st := by
+    have : cvS₁ false base.length isSingle st =
+        ((loop st.tstack.length (loop3Cond base.length) mergeTstackTops).run st).2 := by
+      simp only [cvS₁, after, vertPre, Bool.not_false, ↓reduceIte, WalkM.run_bind, run_tstackSize, WalkM.pure_run]
+    rw [this]
+    obtain ⟨k, hk, heq, hall, hend⟩ :=
+      loop_run_iter st.tstack.length (loop3Cond base.length) mergeTstackTops st (fun _ => rfl)
+    rw [heq]
+    have hk1 : k ≤ mid.length := by
+      by_contra h
+      have := hlt mid.length (hall mid.length (by omega))
+      omega
+    have hk2 : mid.length ≤ k := by
+      rcases hend with h | h
+      · rw [hts] at h; simp at h; omega
+      · by_contra h'
+        have : result (loop3Cond base.length) (iter mergeTstackTops k st) = true := by
+          rw [hcond, hiter k (by omega)]; omega
+        have h' : result (loop3Cond base.length) (iter mergeTstackTops k st) = false := h
+        rw [this] at h'; cases h'
+    rw [Nat.le_antisymm hk1 hk2]
+  have hs₂ : cvS₂ false base.length isSingle st = { st with tstack := l2Cur c mid :: py :: vy :: base } := by
+    show cvS₁ false base.length isSingle st = _
+    rw [hs₁, iter_merge_eq st c R hts mid.length (by omega)]
+    simp only [hR, List.append_assoc]
+    rw [List.take_left, List.drop_left]; rfl
+  have hs₃ : cvS₃ false base.length isSingle st = { st with tstack := l2Cur c (mid ++ [py]) :: vy :: base } := by
+    show (mergeTstackTops.run (cvS₂ false base.length isSingle st)).2 = _
+    rw [hs₂, mergeTstackTops_run_eq _ _ _ _ rfl, l2Cur_concat]
+  have hs₄ : cvS₄ false base.length isSingle st = { st with tstack := l2Cur c (mid ++ [py, vy]) :: base } := by
+    show (mergeTstackTops.run (cvS₃ false base.length isSingle st)).2 = _
+    rw [hs₃, mergeTstackTops_run_eq _ _ _ _ rfl]
+    simp only [show mid ++ [py, vy] = (mid ++ [py]) ++ [vy] by simp, l2Cur_concat]
+  show ((retarget curV edgeDir).run (cvS₄ false base.length isSingle st)).2 = _
+  rw [hs₄, retarget_run_eq _ _ _ _ _ rfl]
+
+/-- The pure state after the type-1 vertex close at `st = feS₂` (`EarClose` with the vertex entry):
+`py`'s single item `i` is unwrapped into `py'` (or a fresh `S`/`R` item allocated), `py'` and `vy`
+are merged into `c`, the result `m` is retargeted to `curV` and closed into `item`: one entry
+`⟨curV, l, vy.firstIdx, [item]⟩` over `base`, with `item`'s children the merged spans. -/
+theorem closeVert'_type1_eq {curV d l : Nat} {o : DfsOut} {base : List TEntry} {s st : WalkState}
+    {c : TEntry} {mid : List TEntry} {py vy : TEntry} (isSingle : Bool)
+    (hC : EarClose curV d l o true base s st c mid py vy) (hi : st.Inv' (d + 1)) (hst : Shape st)
+    (ht1 : o.cls.isType1 = true) (hld : l < d)
+    (hpath : ∀ k k', k < k' → k' ≤ d → s.stackVerts[k]! ≠ s.stackVerts[k']!)
+    (hchild : ∀ k, k ≤ d → s.stackVerts[k]! ≠ s.stackVerts[d + 1]!)
+    (hdir : s.stackDir[d]! = !s.stackDir[l]!) :
+    ∃ (item i : ItemId) (s₂ : WalkState) (py' : TEntry) (f : Item → Item),
+      after (closeVert' curV s.stackDir[d]! true base.length isSingle) st =
+        { s₂ with
+          items := s₂.items.modify item f
+          tstack := { TEntry.mergeInto (TEntry.mergeInto c py') vy with
+            vStart := curV
+            spans := setSides s₂.stackDir[(TEntry.mergeInto (TEntry.mergeInto c py') vy).topDepth]! [item] [] } :: base } ∧
+      (∀ it, (f it).ch = (TEntry.mergeInto (TEntry.mergeInto c py') vy).spans.1 ++
+        (TEntry.mergeInto (TEntry.mergeInto c py') vy).spans.2) ∧
+      s₂.stackDir[(TEntry.mergeInto (TEntry.mergeInto c py') vy).topDepth]! = s.stackDir[l]! ∧
+      (TEntry.mergeInto (TEntry.mergeInto c py') vy).topDepth = l ∧
+      s₂.tstack = c :: py' :: vy :: base ∧ s₂.g = st.g ∧ s₂.stackVerts = st.stackVerts ∧
+      s₂.stackDir = st.stackDir ∧ s₂.nxtEdgeIdx = st.nxtEdgeIdx ∧ st.items.size ≤ s₂.items.size ∧
+      (∀ j, Items.ch s₂.items j = Items.ch st.items j) ∧ ItemFree s₂ item ∧
+      py.spans = setSides s.stackDir[l]! [i] [] ∧ (∀ p, ¬ Items.IsParent st.items p i) ∧
+      (item = i ∨ item = st.items.size) ∧
+      (∀ x ∈ py'.spans.1 ++ py'.spans.2, x ∈ py.spans.1 ++ py.spans.2 ∨ Items.IsParent st.items i x) ∧
+      (∀ t : TEntry, ∀ e, t.edges st.g s₂.items e ↔ t.edges st.g st.items e) ∧
+      (∀ e, e < st.g.ne → (py'.edges st.g s₂.items e ↔ py.edges st.g st.items e)) ∧
+      (∀ e, e < st.g.ne →
+        (TEntry.edges st.g (after (closeVert' curV s.stackDir[d]! true base.length isSingle) st).items
+          { TEntry.mergeInto (TEntry.mergeInto c py') vy with
+            vStart := curV
+            spans := setSides s₂.stackDir[(TEntry.mergeInto (TEntry.mergeInto c py') vy).topDepth]! [item] [] } e ↔
+          c.edges st.g st.items e ∨ py.edges st.g st.items e ∨ vy.edges st.g st.items e)) := by
+  have hok := closeVertOk_type1 isSingle hC hst ht1 hld hpath hchild hdir
+  obtain ⟨hmid, htouch⟩ := hC.type1 ht1
+  subst hmid
+  have hgs : st.g = s.g := hC.g
+  have hts : st.tstack = c :: py :: vy :: base := hC.tstack
+  obtain ⟨i, hpysp, hroot⟩ := hC.py_item
+  have hdl : st.stackDir[py.topDepth]! = s.stackDir[l]! := by rw [hC.py_top]; exact hC.dir_l
+  have hside : getSide py.spans (!st.stackDir[py.topDepth]!) = [] := by
+    rw [hdl, hpysp]; exact getSide_setSides_not _ _
+  have hsingle : getSide py.spans st.stackDir[py.topDepth]! = [i] := by
+    rw [hdl, hpysp]; cases s.stackDir[l]! <;> rfl
+  have htyn : (if isSingle then NodeType.S else NodeType.R) ∉ [NodeType.F, .V, .Q] := by
+    cases isSingle <;> decide
+  have hdisj : st.tstack.Pairwise fun t t' => ∀ e, e < st.g.ne → t.edges st.g st.items e → ¬ t'.edges st.g st.items e := by
+    rw [hC.g]; exact hC.disj
+  have hsplit : ∀ l₁ l₂, st.tstack = l₁ ++ l₂ → ∀ u ∈ l₁, ∀ t ∈ l₂, ∀ e, e < st.g.ne →
+      u.edges st.g st.items e → ¬ t.edges st.g st.items e :=
+    fun l₁ l₂ hl u hu t ht => List.pairwise_split hdisj hl u hu t ht
+  have hR₂ : st.tstack = [c, py, vy] ++ base := hts
+  have hu : UnwrapOk (if isSingle then .S else .R) st := hok.unwrap rfl
+  have hc₂ : cvS₂ true base.length isSingle st = after (maybeUnwrapNxt (if isSingle then .S else .R)) st := by
+    simp only [cvS₂, cvS₁, cvB₁, vertUnwrap, vertPre, Bool.not_true, Bool.false_eq_true, ↓reduceIte, after, result,
+      WalkM.map_run, WalkM.pure_run]
+  obtain ⟨py', hts₂, hg₂, hsv₂, hsd₂, hpv', hpt', hside', hpE', hallE, hpysp'⟩ :=
+    maybeUnwrapNxt_edges (s := st) (ty := if isSingle then .S else .R) hst htyn hts (i := i) hside hsingle
+  set s₂ := after (maybeUnwrapNxt (if isSingle then NodeType.S else NodeType.R)) st with hs₂def
+  set item := ((maybeUnwrapNxt (if isSingle then NodeType.S else NodeType.R)).run st).1 with hitem
+  have hres := maybeUnwrapNxt_spec (v := curV) hi hst htyn hu
+  have hf₂ : ItemFree (cvS₂ true base.length isSingle st) item := by rw [hc₂]; exact hres.free
+  have hf₅ : ItemFree (cvS₅ curV s.stackDir[d]! true base.length isSingle st) item :=
+    ((hf₂.merge).merge).retarget curV s.stackDir[d]!
+  have hc₃ : cvS₃ true base.length isSingle st = { s₂ with tstack := TEntry.mergeInto c py' :: vy :: base } := by
+    show (mergeTstackTops.run (cvS₂ true base.length isSingle st)).2 = _
+    rw [hc₂, mergeTstackTops_run_eq _ _ _ _ hts₂]
+  set m := TEntry.mergeInto (TEntry.mergeInto c py') vy with hm
+  have hc₄ : cvS₄ true base.length isSingle st = { s₂ with tstack := m :: base } := by
+    show (mergeTstackTops.run (cvS₃ true base.length isSingle st)).2 = _
+    rw [hc₃, mergeTstackTops_run_eq _ _ _ _ rfl]
+  have hmE : ∀ e, e < st.g.ne → (m.edges st.g s₂.items e ↔
+      c.edges st.g st.items e ∨ py.edges st.g st.items e ∨ vy.edges st.g st.items e) := fun e he => by
+    rw [hm, TEntry.edges_mergeInto, TEntry.edges_mergeInto, hallE c, hpE' e he, hallE vy, or_assoc]
+  have hmtop : m.topDepth = l := by
+    show min vy.topDepth (min py'.topDepth c.topDepth) = l
+    rw [hpt', hC.py_top]; have := hC.c_top; have := hC.vy_top; omega
+  have hc₅ : cvS₅ curV s.stackDir[d]! true base.length isSingle st =
+      { s₂ with tstack :=
+        { m with vStart := curV, spans := setSides (!s.stackDir[d]!) (m.spans.1 ++ m.spans.2) [] } :: base } := by
+    show ((retarget curV s.stackDir[d]!).run (cvS₄ true base.length isSingle st)).2 = _
+    rw [hc₄, retarget_run_eq _ _ _ _ _ rfl]
+  set r : TEntry := { m with vStart := curV, spans := setSides (!s.stackDir[d]!) (m.spans.1 ++ m.spans.2) [] }
+    with hr
+  have hrE : ∀ e, r.edges st.g s₂.items e ↔ m.edges st.g s₂.items e := fun e => by
+    simp only [TEntry.edges, hr, mem_setSides]
+  have hrtop : r.topDepth = l := hmtop
+  have hf₅' : ItemFree { s₂ with tstack := r :: base } item := by rw [← hc₅]; exact hf₅
+  have hroot₂ : ∀ p, ¬ Items.IsParent s₂.items p item := hf₅'.root
+  have hfree₂ : ∀ t ∈ r :: base, item ∉ t.spans.1 ++ t.spans.2 := hf₅'.free
+  have hlt : item < s₂.items.size := hf₅'.lt
+  have hnode : 1 + s₂.g.nv + s₂.g.ne ≤ item := hf₅'.node
+  rw [hg₂] at hnode
+  have hitem_ne : ∀ e, e < st.g.ne → edgeItem st.g e ≠ item := fun e he h => by
+    have h2 : 1 + st.g.nv + e < 1 + st.g.nv + st.g.ne := by omega
+    rw [← h] at hnode
+    exact absurd hnode (Nat.not_le.2 h2)
+  -- the close
+  set sdr := s₂.stackDir[r.topDepth]! with hsdr_def
+  have hsdr : sdr = s.stackDir[l]! := by rw [hsdr_def, hsd₂, hrtop, hC.dir_l]
+  have hsdr' : sdr = !s.stackDir[d]! := by rw [hsdr, hdir, Bool.not_not]
+  have hrside : getSide r.spans (!sdr) = [] := by rw [hsdr']; exact getSide_setSides_not _ _
+  set f : Item → Item := fun it =>
+    { it with vs := setSides sdr (some s₂.stackVerts[r.topDepth]!) (some r.vStart), ch := getSide r.spans sdr } with hf
+  set r' : TEntry := { r with spans := setSides sdr [item] [] } with hr'
+  set s₃ := after (closeVert' curV s.stackDir[d]! true base.length isSingle) st with hs₃def
+  have hrun : s₃ = { s₂ with items := s₂.items.modify item f, tstack := r' :: base } := by
+    show ((finishTstackTop item).run (cvS₅ curV s.stackDir[d]! true base.length isSingle st)).2 = _
+    rw [hc₅, finishTstackTop_run_eq _ item r base rfl]
+  have hts₃ : s₃.tstack = r' :: base := by rw [hrun]
+  have hit₃ : s₃.items = s₂.items.modify item f := by rw [hrun]
+  have hg₃ : s₃.g = st.g := by rw [hrun]; exact hg₂
+  have hsv₃ : s₃.stackVerts = st.stackVerts := by rw [hrun]; exact hsv₂
+  have hsd₃ : s₃.stackDir = st.stackDir := by rw [hrun]; exact hsd₂
+  have hE₂ : ∀ t ∈ r :: base, ∀ e, t.edges st.g s₃.items e ↔ t.edges st.g s₂.items e := fun t ht e => by
+    rw [hit₃]; exact TEntry.edges_modify_of_not_mem item f hroot₂ (hfree₂ t ht) e
+  have hch₃ : Items.ch s₃.items item = getSide r.spans sdr := by
+    rw [hit₃, Items.ch_modify_at item f hlt]
+  have hr'E : ∀ e, e < st.g.ne → (r'.edges st.g s₃.items e ↔ r.edges st.g s₂.items e) := fun e he => by
+    rw [TEntry.edges_single sdr item (getSide_setSides_not _ _) (getSide_setSides_self _ _ _),
+      ← TEntry.edges_unwrap sdr r.vStart r.topDepth r.firstIdx item hitem_ne he, hch₃, ← hE₂ r (by simp)]
+    simp only [TEntry.edges, mem_setSides, mem_of_getSide_nil sdr r.spans hrside]
+  have hr'E' : ∀ e, e < st.g.ne → (r'.edges st.g s₃.items e ↔
+      c.edges st.g st.items e ∨ py.edges st.g st.items e ∨ vy.edges st.g st.items e) :=
+    fun e he => (hr'E e he).trans ((hrE e).trans (hmE e he))
+  have hkey : s₂.nxtEdgeIdx = st.nxtEdgeIdx ∧ st.items.size ≤ s₂.items.size ∧ (item = i ∨ item = st.items.size) := by
+    have hh : i = (getSide py.spans st.stackDir[py.topDepth]!).head! := by rw [hsingle]; rfl
+    have hrun₂ := maybeUnwrapNxt_run_eq (if isSingle then NodeType.S else NodeType.R) st c py (vy :: base) hts _ rfl i hh
+    rw [hs₂def, hitem, after, hrun₂]
+    split_ifs <;> first | (rw [run_allocItem]; simp) | simp
+  have hsdr'' : s₂.stackDir[m.topDepth]! = s.stackDir[l]! := by rw [hsd₂, hmtop, hC.dir_l]
+  have hch₂ : ∀ j, Items.ch s₂.items j = Items.ch st.items j := fun j => maybeUnwrapNxt_ch _ st hts j
+  have hpysp'' : py.spans = setSides s.stackDir[l]! [i] [] := hpysp
+  refine ⟨item, i, s₂, py', _, hrun, fun it => ?_, hsdr'', hmtop, hts₂, hg₂, hsv₂, hsd₂, hkey.1, hkey.2.1,
+    hch₂, hres.free, hpysp'', hroot, hkey.2.2, hpysp', hallE, hpE', hr'E'⟩
+  show getSide r.spans sdr = _
+  rw [hsdr']
+  exact getSide_setSides_self _ _ _
+
 end Spqr

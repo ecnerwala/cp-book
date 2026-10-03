@@ -747,6 +747,14 @@ def retCheck (seed v d : Nat) (o : DfsOut) (hv : Bool) (s₂ s : WalkState) : Li
         if x.firstIdx < s₂.nxtEdgeIdx || sX.nxtEdgeIdx ≤ x.firstIdx then out := bad "x_first" (showT x) :: out
         if cls.isType1 && (spanItems x).length ≠ 1 then out := bad "x_single" (showT x) :: out
         if !touches sX ER sX.stackVerts[lowval]! then out := bad "x_touch_top" (showT x) :: out
+        let S₂ := WalkState.feS₂ d o s
+        let R₂ := S₂.tstack.take (S₂.tstack.length - orig)
+        match R₂.getLast? with
+        | some vy =>
+          if vy.firstIdx < s₂.nxtEdgeIdx || sX.nxtEdgeIdx ≤ vy.firstIdx then out := bad "x_first_pre" (showT vy) :: out
+        | none => out := bad "x_pre_empty" info :: out
+        if !touches S₂ (R₂.flatMap (entryEdges S₂)) s₂.stackVerts[lowval]! then out := bad "x_top_pre" info :: out
+        if R₂.any (fun t => t.topDepth < lowval) then out := bad "x_mid_top" info :: out
         for w in List.range s₂.g.nv do
           if touches sX ER w && w ≠ v && !interiorB sX ER w &&
               !(List.range (d+1)).any (fun k => lowval ≤ k && sX.stackVerts[k]! == w) then
