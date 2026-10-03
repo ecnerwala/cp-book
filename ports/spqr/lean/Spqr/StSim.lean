@@ -7,9 +7,10 @@ The walk's tstack above the base of the current frame reads (`readStack`) as `st
 reference's pieces for that frame, up to expanding the S / P / R items closed inside the ear back to
 their leaves (`Expands`); every S / P / R item is either live (below an item of the open stack) or
 finished, i.e. a contiguous segment of a reference block with the `VsOriented` clauses already
-satisfied; the blocks used are those of the *truncated* DFS tree (`truncTree`: along the open path
-every vertex keeps its finished out-edges and the current tree edge), whose st-orders only grow
-outwards as the walk proceeds. Checked at every `finishEdge` boundary by `check_stsim`.
+satisfied; the blocks used are the *completed* ones: those of the finished trees of the forest, of the
+finished out-edges along the open path (`frameBlocks`) and of the current subtree, so the list only
+grows as the walk proceeds (the open blocks are closed by `finishBoundary_st` / the root pop). Checked
+at every `finishEdge` boundary by `check_stsim`.
 -/
 
 namespace Spqr
@@ -300,12 +301,25 @@ def truncTree : List PathFrame → DfsTree → DfsTree
   | [], t => t
   | f :: fs, t => .node f.v (f.done ++ [.tree f.o.e f.o.cls (truncTree fs t)])
 
+/-- The blocks completed by the finished out-edges of the frames `fs` (frame `k` at depth `k`, with
+the directions `dirs.take k` chosen above it). -/
+def frameBlocks (g : Graph) (dirs : List Bool) : Nat → List PathFrame → List StBlock
+  | _, [] => []
+  | k, f :: fs => (refOuts g f.v k (dirs.take k) f.done false).2.1 ++ frameBlocks g dirs (k + 1) fs
+
+/-- The completed blocks outside the current subtree: those of the finished trees `prev` and of the
+finished out-edges along the open path `fs` (`dirs` the directions along `fs`). -/
+def simBlocks (g : Graph) (prev : List DfsTree) (fs : List PathFrame) (dirs : List Bool) :
+    List StBlock :=
+  refBlocks g prev ++ frameBlocks g dirs 0 fs
+
 /-- The relation at the end of `walkTree t d` (`d = fs.length`) under the path `fs`, with `prev`
 the finished trees of the forest and `base` the tstack when the walk of `t` started. -/
 structure StSim (g : Graph) (prev : List DfsTree) (fs : List PathFrame) (t : DfsTree)
     (base : List TEntry) (s : WalkState) : Prop where
   read : ∃ new, s.tstack = new ++ base ∧ StRead s.items new (refTree g t fs.length (DirsOf s fs.length)).1
-  items : StItems g s (refBlocks g (prev ++ [truncTree fs t]))
+  items : StItems g s (simBlocks g prev fs (DirsOf s fs.length) ++
+    (refTree g t fs.length (DirsOf s fs.length)).2)
 
 /-- The relation at the start of an out-edge of `v` (`d = fs.length`): the out-edges `done` are
 finished, `hasVert` is the walk's flag. -/
@@ -314,6 +328,7 @@ structure StSimOuts (g : Graph) (prev : List DfsTree) (fs : List PathFrame) (v :
   read : ∃ new, s.tstack = new ++ base ∧
     StRead s.items new (refOuts g v fs.length (DirsOf s fs.length) done false).1
   hasVert : (refOuts g v fs.length (DirsOf s fs.length) done false).2.2 = hasVert
-  items : StItems g s (refBlocks g (prev ++ [truncTree fs (.node v done)]))
+  items : StItems g s (simBlocks g prev fs (DirsOf s fs.length) ++
+    (refOuts g v fs.length (DirsOf s fs.length) done false).2.1)
 
 end Spqr
