@@ -608,6 +608,47 @@ def keptCheck (seed v d : Nat) (o : DfsOut) (hv : Bool) (s₂ s : WalkState) : L
         if parents s j ≠ parents s₂ j then out := bad "items_par" s!"j={j}" :: out
     return out
 
+/-- Freshness of the top entries (`EarCtx` over `base₀`, at every `walkOuts` step): every item in a
+top entry's spans is a `V`/`Q` item of the enclosing tree (`v`, its outs' vertices and edges) or was
+allocated after the enclosing `walkTree` entry (`sz₀` = items then). -/
+def freshCheck (seed v d : Nat) (outs₀ : List DfsOut) (sz₀ : Nat) (base₀ : List TEntry) (s : WalkState) :
+    List V := Id.run do
+  let mut out : List V := []
+  let top := s.tstack.take (s.tstack.length - base₀.length)
+  let treeItem (j : Nat) : Bool :=
+    (v :: DfsOut.vertsList outs₀).any (fun w => vertItem w == j) ||
+    (DfsOut.edgesList outs₀).any (fun e => edgeItem s.g e == j)
+  for t in top do
+    for i in spanItems t do
+      if !treeItem i && i < sz₀ then
+        out := ⟨seed, v, d, "", false, "fresh_span", s!"i={i} t={showT t}"⟩ :: out
+  return out
+
+/-- Per-site frame of `walkOut v d o` (from its entry state `sIn` to the state after `finishEdge`):
+every item allocated at entry other than `V v`, `Q o.e`, the out's subtree items and the items in
+the spans of the top entries (above `base₀`) keeps its children and its parents. -/
+def siteKeptCheck (seed v d : Nat) (o : DfsOut) (hv : Bool) (base₀ : List TEntry) (sIn s : WalkState) :
+    List V := Id.run do
+  let mut out : List V := []
+  let bad (k : String) (info : String) : V := ⟨seed, v, d, s!"e={o.e}", hv, s!"site_{k}", info⟩
+  let top := sIn.tstack.take (sIn.tstack.length - base₀.length)
+  let overts := match o with | .tree _ _ child => child.verts | .back .. => []
+  let excl (j : Nat) : Bool :=
+    j == vertItem v || j == edgeItem sIn.g o.e || overts.any (fun w => vertItem w == j) ||
+    (subEdgesL o).any (fun e' => edgeItem sIn.g e' == j) || top.any (fun t => (spanItems t).contains j)
+  let parents (s : WalkState) (j : Nat) : List Nat := (List.range s.items.size).filter (isParent s · j)
+  for j in List.range sIn.items.size do
+    if !excl j then
+      if s.items[j]!.ch ≠ sIn.items[j]!.ch then out := bad "ch" s!"j={j}" :: out
+      if parents s j ≠ parents sIn j then out := bad "par" s!"j={j}" :: out
+  if (s.tstack.drop (s.tstack.length - base₀.length)).map showT ≠ base₀.map showT then
+    out := bad "base" "" :: out
+  let top' := s.tstack.take (s.tstack.length - base₀.length)
+  for t in top' do
+    for i in spanItems t do
+      if !excl i && i < sIn.items.size then out := bad "span" s!"i={i} t={showT t}" :: out
+  return out
+
 /-- The returning tree-edge admissions (`TreeSite.tree_ret_vert`/`tree_ret_noVert`): relative to
 the pre-child state `s₂` (after the first-edge push), the state `sX` after loops 1–2 (and, with a
 vertex entry, after `closeVert'`) is `R ++ s₂.tstack` with `s₂.tstack` untouched; the items of `R`
@@ -722,7 +763,7 @@ partial def iTree (seed : Nat) (t : DfsTree) (d : Nat) (eb : EB) (s : WalkState)
     let bE₀ := s.tstack.map (entryEdges s)
     let sv₀ := s.stackVerts.toList.take (d+1)
     let sd₀ := s.stackDir.toList.take d
-    let (hv, s, eb, vs, done) := iOuts seed v d outs false eb s [] base₀ bE₀ sv₀ sd₀
+    let (hv, s, eb, vs, done) := iOuts seed v d outs false eb s [] base₀ bE₀ sv₀ sd₀ s₀.items.size
     let vs := vs ++ (match pcls with
       | some .component => compEndCheck seed v d hv (s.tstack.take (s.tstack.length - orig))
       | _ => [])
@@ -734,17 +775,22 @@ partial def iTree (seed : Nat) (t : DfsTree) (d : Nat) (eb : EB) (s : WalkState)
       | _ => eb
     (s, eb, vs)
 partial def iOuts (seed v d : Nat) (outs : List DfsOut) (hv : Bool) (eb : EB) (s : WalkState)
-    (done : List (DfsOut × Bool)) (base₀ : List TEntry) (bE₀ : List (List Nat)) (sv₀ : List Nat) (sd₀ : List Bool) :
+    (done : List (DfsOut × Bool)) (base₀ : List TEntry) (bE₀ : List (List Nat)) (sv₀ : List Nat) (sd₀ : List Bool)
+    (sz₀ : Nat) :
     Bool × WalkState × EB × List V × List (DfsOut × Bool) :=
-  let cvs := ctxCheck seed v d done outs hv base₀ bE₀ sv₀ sd₀ s
+  let cvs := ctxCheck seed v d done outs hv base₀ bE₀ sv₀ sd₀ s ++
+    freshCheck seed v d (done.map (·.1) ++ outs) sz₀ base₀ s
   match outs with
   | [] => (hv, s, eb, cvs, done)
   | o :: rest =>
     let hvF := hv || (o.cls.lowval d < d && o.cls.isType1)
-    let (hv, s, eb, vs) := iOut seed v d o hv eb s
-    let (hv', s', eb, vs', done') := iOuts seed v d rest hv eb s (done ++ [(o, hvF)]) base₀ bE₀ sv₀ sd₀
+    let (hv, s, eb, vs) := iOut seed v d o hv eb s base₀
+    let (hv', s', eb, vs', done') := iOuts seed v d rest hv eb s (done ++ [(o, hvF)]) base₀ bE₀ sv₀ sd₀ sz₀
     (hv', s', eb, cvs ++ vs ++ vs', done')
-partial def iOut (seed v d : Nat) (o : DfsOut) (hv : Bool) (eb : EB) (s : WalkState) : Bool × WalkState × EB × List V :=
+partial def iOut (seed v d : Nat) (o : DfsOut) (hv : Bool) (eb : EB) (s : WalkState) (base₀ : List TEntry) :
+    Bool × WalkState × EB × List V :=
+  let sIn := s
+  let hvIn := hv
   let lowval := o.cls.lowval d
   let s := ((do let lowDir ← stackDir lowval; setStackDir d (if lowval ≥ d then false else !lowDir) : WalkM Unit).run s).2
   let (hv, s) := if !hv && lowval < d && o.cls.isType1 then (true, ((pushVertTstack v d).run s).2) else (hv, s)
@@ -757,6 +803,7 @@ partial def iOut (seed v d : Nat) (o : DfsOut) (hv : Bool) (eb : EB) (s : WalkSt
   let vs := vs ++ retCheck seed v d o hv s₂ s
   let vs := vs ++ earCheck seed v d o orig hv s ++ ebCheck seed v d o orig hv eb s ++ specCheck seed v d o orig hv s ++ closeCheck seed v d o orig hv s
   let (hv', s) := (finishEdge v d o orig hv).run s
+  let vs := vs ++ siteKeptCheck seed v d o hvIn base₀ sIn s
   (hv', s, eb, vs)
 end
 

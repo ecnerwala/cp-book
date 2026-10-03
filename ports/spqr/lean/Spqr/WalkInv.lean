@@ -988,6 +988,292 @@ theorem ends_of_wf_boundary {g : Graph} {anc : List Nat} {v e : Nat} {cls : OutC
   · exact .inl h
   · exact .inr h
 
+/-! ### The item frame of one out (dump-checked `siteKeptCheck`/`freshCheck`) -/
+
+/-- The items allocated at `s₀` other than the `V`/`Q` items of `vs`/`es` keep their children and
+their parents in `s`. -/
+def KeptRel (g : Graph) (s₀ : WalkState) (vs es : List Nat) (s : WalkState) : Prop :=
+  ∀ j, j < s₀.items.size → (∀ x ∈ vs, j ≠ vertItem x) → (∀ e ∈ es, j ≠ edgeItem g e) →
+    Items.ch s.items j = Items.ch s₀.items j ∧
+    ∀ p, Items.IsParent s.items p j ↔ Items.IsParent s₀.items p j
+
+/-- Every item in the spans of the entries above `base` is a `V`/`Q` item of the tree
+(`v`, the vertices and edges of `outs₀`) or was allocated at or after index `sz₀`. -/
+def Fresh (g : Graph) (v : Nat) (outs₀ : List DfsOut) (sz₀ : Nat) (base : List TEntry)
+    (s : WalkState) : Prop :=
+  ∀ top, s.tstack = top ++ base → ∀ t ∈ top, ∀ i ∈ t.spans.1 ++ t.spans.2,
+    (∃ x ∈ v :: DfsOut.vertsList outs₀, i = vertItem x) ∨
+    (∃ e ∈ DfsOut.edgesList outs₀, i = edgeItem g e) ∨ sz₀ ≤ i
+
+/-- The items `j` an out `o` of `v` may not touch: allocated at `s`, not `V v`, not a `V`/`Q` item
+of `o`, not in the spans of the entries above `base`. -/
+def Untouched (v : Nat) (o : DfsOut) (base : List TEntry) (s : WalkState) (j : ItemId) : Prop :=
+  j < s.items.size ∧ j ≠ vertItem v ∧ (∀ x ∈ o.verts, j ≠ vertItem x) ∧
+  (∀ e' ∈ o.edges, j ≠ edgeItem s.g e') ∧
+  ∀ top, s.tstack = top ++ base → ∀ t ∈ top, j ∉ t.spans.1 ++ t.spans.2
+
+/-- Item frame of one out `o` of `v` from `s` to `s'` (over the base `base`): the `Untouched` items
+keep their children and parents, and every item in the spans of the entries above `base` at `s'` is
+`V v`, a `V`/`Q` item of `o`, allocated after `s`, or in the spans of an entry above `base` at
+`s`. -/
+def OutFrame (v : Nat) (o : DfsOut) (base : List TEntry) (s s' : WalkState) : Prop :=
+  s.items.size ≤ s'.items.size ∧ s'.g = s.g ∧
+  (∀ j, Untouched v o base s j →
+    Items.ch s'.items j = Items.ch s.items j ∧
+    ∀ p, Items.IsParent s'.items p j ↔ Items.IsParent s.items p j) ∧
+  (∀ top', s'.tstack = top' ++ base → ∀ t ∈ top', ∀ i ∈ t.spans.1 ++ t.spans.2,
+    i = vertItem v ∨ (∃ x ∈ o.verts, i = vertItem x) ∨ (∃ e' ∈ o.edges, i = edgeItem s.g e') ∨
+    s.items.size ≤ i ∨ ∃ top, s.tstack = top ++ base ∧ ∃ t ∈ top, i ∈ t.spans.1 ++ t.spans.2)
+
+theorem subEdges_of_mem_edges {o : DfsOut} {e' : Nat} (h : e' ∈ o.edges) : subEdges o e' := by
+  cases o with
+  | back e dest cls => simp [DfsOut.edges] at h; simp [subEdges, DfsOut.e, h]
+  | tree e cls child =>
+    simp only [DfsOut.edges, List.mem_cons] at h
+    rcases h with rfl | h
+    · exact Or.inl rfl
+    · exact Or.inr h
+
+/-- `OutFrame` from the items whose children changed (`Mod`): no `Untouched` item is in `Mod`, the
+`Mod` items did not gain or lose an `Untouched` child, and no entry above `base` is new. -/
+theorem outFrame_of_mod {v : Nat} {o : DfsOut} {base : List TEntry} {s s' : WalkState}
+    (Mod : ItemId → Prop) (hsz : s.items.size ≤ s'.items.size) (hg : s'.g = s.g)
+    (hmod : ∀ p, ¬ Mod p → Items.ch s'.items p = Items.ch s.items p)
+    (hnew : ∀ p j, Mod p → Untouched v o base s j →
+      (Items.IsParent s'.items p j ↔ Items.IsParent s.items p j))
+    (hPj : ∀ j, Untouched v o base s j → ¬ Mod j)
+    (hsub : ∀ top', s'.tstack = top' ++ base → ∀ t ∈ top',
+      ∃ top, s.tstack = top ++ base ∧ t ∈ top) :
+    OutFrame v o base s s' := by
+  refine ⟨hsz, hg, fun j hj => ⟨hmod j (hPj j hj), fun p => ?_⟩, fun top' htop' t ht i hi => ?_⟩
+  · by_cases hp : Mod p
+    · exact hnew p j hp hj
+    · rw [Items.IsParent, Items.IsParent, hmod p hp]
+  · obtain ⟨top, htop, ht'⟩ := hsub top' htop' t ht
+    exact Or.inr (Or.inr (Or.inr (Or.inr ⟨top, htop, t, ht', hi⟩)))
+
+theorem OutFrame.trans {v : Nat} {o : DfsOut} {base : List TEntry} {s s₁ s' : WalkState}
+    (h₁ : OutFrame v o base s s₁) (h₂ : OutFrame v o base s₁ s') : OutFrame v o base s s' := by
+  obtain ⟨hsz₁, hg₁, hk₁, hsp₁⟩ := h₁
+  obtain ⟨hsz₂, hg₂, hk₂, hsp₂⟩ := h₂
+  refine ⟨Nat.le_trans hsz₁ hsz₂, hg₂.trans hg₁, fun j hj => ?_, fun top' htop' t ht i hi => ?_⟩
+  · obtain ⟨hjlt, hjv, hxv, hje, htop⟩ := hj
+    have h1 := hk₁ j ⟨hjlt, hjv, hxv, hje, htop⟩
+    have h2 := hk₂ j ⟨Nat.lt_of_lt_of_le hjlt hsz₁, hjv, hxv, by rw [hg₁]; exact hje,
+      fun top₁ htop₁ t ht hi => by
+      rcases hsp₁ top₁ htop₁ t ht j hi with h | ⟨x, hx, h⟩ | ⟨e', he', h⟩ | h | ⟨top, htop₀, t', ht', hi'⟩
+      · exact hjv h
+      · exact hxv x hx h
+      · exact hje e' he' h
+      · exact absurd h (Nat.not_le.2 hjlt)
+      · exact htop top htop₀ t' ht' hi'⟩
+    rw [h2.1, h1.1]
+    exact ⟨rfl, fun p => (h2.2 p).trans (h1.2 p)⟩
+  · rcases hsp₂ top' htop' t ht i hi with h | h | ⟨e', he', h⟩ | h | ⟨top₁, htop₁, t', ht', hi'⟩
+    · exact Or.inl h
+    · exact Or.inr (Or.inl h)
+    · exact Or.inr (Or.inr (Or.inl ⟨e', he', by rw [← hg₁]; exact h⟩))
+    · exact Or.inr (Or.inr (Or.inr (Or.inl (Nat.le_trans hsz₁ h))))
+    · exact hsp₁ top₁ htop₁ t' ht' i hi'
+
+/-- Frame of the returning back-edge push (`Q e` entry on top of `L ++ s.tstack`, children
+unchanged). -/
+theorem outFrame_pushBack {s s' : WalkState} {v d lv e dest n n' : Nat} {cls : OutClass}
+    {base top L : List TEntry} {push dirD dir : Bool}
+    (htop : s.tstack = top ++ base)
+    (hL : L = if push then [⟨v, d, n, setSides dirD [vertItem v] []⟩] else [])
+    (hg : s'.g = s.g) (hsz' : s'.items.size = s.items.size)
+    (hch : ∀ j, Items.ch s'.items j = Items.ch s.items j)
+    (hts : s'.tstack = ⟨v, lv, n', setSides dir [edgeItem s.g e] []⟩ :: (L ++ s.tstack)) :
+    OutFrame v (.back e dest cls) base s s' := by
+  refine ⟨hsz'.ge, hg, fun j _ => ⟨hch j, fun p => by rw [Items.IsParent, Items.IsParent, hch p]⟩,
+    fun top' htop' t ht i hi => ?_⟩
+  rw [hts, htop, ← List.append_assoc, ← List.cons_append] at htop'
+  obtain rfl := List.append_cancel_right htop'
+  simp only [List.mem_cons, List.mem_append] at ht
+  rcases ht with rfl | ht | ht
+  · simp only [mem_setSides, List.mem_singleton] at hi
+    exact Or.inr (Or.inr (Or.inl ⟨e, by simp [DfsOut.edges], hi⟩))
+  · subst hL
+    cases push
+    · simp at ht
+    · simp only [↓reduceIte, List.mem_singleton] at ht
+      subst ht
+      simp only [mem_setSides, List.mem_singleton] at hi
+      exact Or.inl hi
+  · exact Or.inr (Or.inr (Or.inr (Or.inr ⟨top, htop, t, ht, hi⟩)))
+
+/-- Frame of a P-merge over the two top entries `c` (single item `q`) and `a` (holding `i`): only
+`p`'s children change, by items that are `q`, `i` or already below `p`. -/
+theorem outFrame_mergeP {s s' : WalkState} {v lv n : Nat} {o : DfsOut} {base tl' : List TEntry}
+    {c a : TEntry} {q i p : ItemId} {S : List ItemId} {dir : Bool}
+    (hts : s.tstack = c :: a :: (tl' ++ base))
+    (hcs : c.spans.1 ++ c.spans.2 = [q]) (hai : i ∈ a.spans.1 ++ a.spans.2)
+    (hpa : p = i ∨ s.items.size ≤ p)
+    (hS : ∀ r ∈ S, r = q ∨ (r = i ∧ i ≠ p) ∨ Items.IsParent s.items p r)
+    (hP : ∀ p' c', Items.IsParent s'.items p' c' ↔
+      Items.IsParent s.items p' c' ∨ (p' = p ∧ c' ∈ S))
+    (hch : ∀ j, j ≠ p → Items.ch s'.items j = Items.ch s.items j)
+    (hg : s'.g = s.g) (hsz : s.items.size ≤ s'.items.size)
+    (hts' : s'.tstack = ⟨v, lv, n, setSides dir [p] []⟩ :: (tl' ++ base)) :
+    OutFrame v o base s s' := by
+  have hstop : s.tstack = (c :: a :: tl') ++ base := hts
+  refine ⟨hsz, hg, fun j hj => ?_, fun top' htop' t ht i' hi' => ?_⟩
+  · obtain ⟨hjlt, -, -, -, hT⟩ := hj
+    have hjc : j ≠ q := fun h => hT _ hstop c (List.mem_cons_self ..) (by rw [hcs, h]; simp)
+    have hji : j ≠ i := fun h => hT _ hstop a (by simp) (h ▸ hai)
+    have hjp : j ≠ p := by
+      rcases hpa with rfl | hp
+      · exact hji
+      · exact fun h => absurd hp (Nat.not_le.2 (h ▸ hjlt))
+    refine ⟨hch j hjp, fun p' => ?_⟩
+    rw [hP]
+    constructor
+    · rintro (h | ⟨rfl, hjS⟩)
+      · exact h
+      · rcases hS j hjS with h | ⟨h, -⟩ | h
+        · exact absurd h hjc
+        · exact absurd h hji
+        · exact h
+    · exact Or.inl
+  · rw [hts', ← List.cons_append] at htop'
+    obtain rfl := List.append_cancel_right htop'
+    rcases List.mem_cons.1 ht with rfl | ht
+    · simp only [mem_setSides, List.mem_singleton] at hi'
+      subst hi'
+      rcases hpa with rfl | hp
+      · exact Or.inr (Or.inr (Or.inr (Or.inr ⟨_, hstop, a, by simp, hai⟩)))
+      · exact Or.inr (Or.inr (Or.inr (Or.inl hp)))
+    · exact Or.inr (Or.inr (Or.inr (Or.inr ⟨_, hstop, t, by simp [ht], hi'⟩)))
+
+/-- One out's frame composes with the kept/fresh invariants of the enclosing tree walk. -/
+theorem outFrame_step {g : Graph} {v : Nat} {o : DfsOut} {outs₀ : List DfsOut} {sz₀ : Nat}
+    {base : List TEntry} {s₀ s s' : WalkState} (ho : o ∈ outs₀) (hg : s.g = g)
+    (hsz₀ : sz₀ ≤ s.items.size) (hs₀ : s₀.items.size ≤ sz₀)
+    (hK : KeptRel g s₀ (v :: DfsOut.vertsList outs₀) (DfsOut.edgesList outs₀) s)
+    (hF : Fresh g v outs₀ sz₀ base s) (hO : OutFrame v o base s s') :
+    sz₀ ≤ s'.items.size ∧ s'.g = g ∧
+    KeptRel g s₀ (v :: DfsOut.vertsList outs₀) (DfsOut.edgesList outs₀) s' ∧
+    Fresh g v outs₀ sz₀ base s' := by
+  obtain ⟨hsz, hg', hk, hsp⟩ := hO
+  have hvs : ∀ x ∈ o.verts, x ∈ v :: DfsOut.vertsList outs₀ :=
+    fun x hx => List.mem_cons_of_mem _ (mem_vertsList_of_verts ho hx)
+  have hes : ∀ e' ∈ o.edges, e' ∈ DfsOut.edgesList outs₀ :=
+    fun e' he' => mem_subEdges_edgesList.2 ⟨o, ho, subEdges_of_mem_edges he'⟩
+  refine ⟨Nat.le_trans hsz₀ hsz, hg'.trans hg, fun j hj hjv hje => ?_, ?_⟩
+  · have hj' := hK j hj hjv hje
+    have hjlt : j < s.items.size := by omega
+    have h := hk j ⟨hjlt, hjv v (List.mem_cons_self ..), fun x hx => hjv x (hvs x hx),
+      fun e' he' => by rw [hg]; exact hje e' (hes e' he'),
+      fun top htop t ht hi => by
+        rcases hF top htop t ht j hi with ⟨x, hx, hjx⟩ | ⟨e', he', hje'⟩ | hle
+        · exact hjv x hx hjx
+        · exact hje e' he' hje'
+        · omega⟩
+    rw [h.1, hj'.1]
+    refine ⟨rfl, fun p => (h.2 p).trans (hj'.2 p)⟩
+  · intro top' htop' t ht i hi
+    rcases hsp top' htop' t ht i hi with h | ⟨x, hx, h⟩ | ⟨e', he', h⟩ | h | ⟨top, htop, t', ht', hi'⟩
+    · exact Or.inl ⟨v, List.mem_cons_self .., h⟩
+    · exact Or.inl ⟨x, hvs x hx, h⟩
+    · exact Or.inr (Or.inl ⟨e', hes e' he', by rw [← hg]; exact h⟩)
+    · exact Or.inr (Or.inr (Nat.le_trans hsz₀ h))
+    · exact hF top htop t' ht' i hi'
+
+
+/-- Frame of a returning tree out from `RetTop`: the items are `sX`'s, the stack is `T` (spans in
+`R`'s or `V v`) over `L ++ s.tstack`. -/
+theorem outFrame_retTop {v d e y : Nat} {cls : OutClass} {outs : List DfsOut}
+    {L T base top R : List TEntry} {hv₀ : Bool} {s sX s' : WalkState}
+    (HR : RetTop v d s e cls y outs L hv₀ sX R) (htop : s.tstack = top ++ base)
+    (hLv : ∀ t ∈ L, ∀ i ∈ t.spans.1 ++ t.spans.2, i = vertItem v)
+    (hTs : ∀ t ∈ T, ∀ i ∈ t.spans.1 ++ t.spans.2,
+      i = vertItem v ∨ ∃ t' ∈ R, i ∈ t'.spans.1 ++ t'.spans.2)
+    (hts : s'.tstack = T ++ (L ++ s.tstack)) (hg : s'.g = sX.g) (hit : s'.items = sX.items) :
+    OutFrame v (.tree e cls (.node y outs)) base s s' := by
+  refine ⟨by rw [hit]; exact HR.size, hg.trans HR.g, fun j hj => ?_, fun top' htop' t ht i hi => ?_⟩
+  · obtain ⟨hjlt, -, hxv, hje, -⟩ := hj
+    rw [hit]
+    exact HR.kept j hjlt hxv (fun e' he' => hje e' (List.mem_cons_of_mem _ he'))
+      (hje e (List.mem_cons_self ..))
+  · rw [hts, htop, ← List.append_assoc, ← List.append_assoc] at htop'
+    obtain rfl := List.append_cancel_right htop'
+    simp only [List.mem_append] at ht
+    rcases ht with (ht | ht) | ht
+    · rcases hTs t ht i hi with h | ⟨t', ht', hi'⟩
+      · exact Or.inl h
+      · by_cases hlt : i < s.items.size
+        · rcases (HR.span_new t' ht' i hi').2 hlt with ⟨x, hx, h⟩ | ⟨e', he', h⟩ | h
+          · exact Or.inr (Or.inl ⟨x, hx, h⟩)
+          · exact Or.inr (Or.inr (Or.inl ⟨e', List.mem_cons_of_mem _ he', h⟩))
+          · exact Or.inr (Or.inr (Or.inl ⟨e, List.mem_cons_self .., h⟩))
+        · exact Or.inr (Or.inr (Or.inr (Or.inl (Nat.le_of_not_lt hlt))))
+    · exact Or.inl (hLv t ht i hi)
+    · exact Or.inr (Or.inr (Or.inr (Or.inr ⟨top, htop, t, ht, hi⟩)))
+
+/-- Frame of the child's walk at a tree out, up to the end push: the child's kept items and the
+freshness of its top entries. -/
+theorem outFrame_child {v e y : Nat} {cls : OutClass} {outs : List DfsOut}
+    {L L' topc base top : List TEntry} {s sE : WalkState} {D₃ : Array Bool}
+    (htop : s.tstack = top ++ base) (htopE : sE.tstack = topc ++ (L ++ s.tstack))
+    (hsz : s.items.size ≤ sE.items.size) (hg : sE.g = s.g)
+    (hk : KeptRel s.g s (DfsTree.node y outs).verts (DfsTree.node y outs).edges sE)
+    (hfr : ∀ t ∈ topc, ∀ i ∈ t.spans.1 ++ t.spans.2,
+      (∃ x ∈ (DfsTree.node y outs).verts, i = vertItem x) ∨
+      (∃ e' ∈ (DfsTree.node y outs).edges, i = edgeItem s.g e') ∨ s.items.size ≤ i)
+    (hLv : ∀ t ∈ L, ∀ i ∈ t.spans.1 ++ t.spans.2, i = vertItem v)
+    (hL'v : ∀ t ∈ L', ∀ i ∈ t.spans.1 ++ t.spans.2, i = vertItem y) :
+    OutFrame v (.tree e cls (.node y outs)) base s (pushEnd sE D₃ L') := by
+  refine ⟨hsz, hg, fun j hj => ?_, fun top' htop' t ht i hi => ?_⟩
+  · obtain ⟨hjlt, -, hxv, hje, -⟩ := hj
+    exact hk j hjlt hxv (fun e' he' => hje e' (List.mem_cons_of_mem _ he'))
+  · simp only [pushEnd] at htop'
+    rw [htopE, htop, ← List.append_assoc, ← List.append_assoc, ← List.append_assoc] at htop'
+    obtain rfl := List.append_cancel_right htop'
+    simp only [List.mem_append] at ht
+    rcases ht with ((ht | ht) | ht) | ht
+    · exact Or.inr (Or.inl ⟨y, by simp [DfsOut.verts, DfsTree.verts], hL'v t ht i hi⟩)
+    · rcases hfr t ht i hi with ⟨x, hx, h⟩ | ⟨e', he', h⟩ | h
+      · exact Or.inr (Or.inl ⟨x, hx, h⟩)
+      · exact Or.inr (Or.inr (Or.inl ⟨e', List.mem_cons_of_mem _ he', h⟩))
+      · exact Or.inr (Or.inr (Or.inr (Or.inl h)))
+    · exact Or.inl (hLv t ht i hi)
+    · exact Or.inr (Or.inr (Or.inr (Or.inr ⟨top, htop, t, ht, hi⟩)))
+
+/-- Frame of `finishBoundary` at a self-loop: the items only gain `Q e` under `V v` and the fresh
+`O` item under `Q e`; the tstack is unchanged. -/
+theorem outFrame_selfLoop {s s' : WalkState} {v e dest : Nat} {cls : OutClass} {base : List TEntry}
+    (hv : v < s.g.nv) (he : e < s.g.ne) (hsz : 1 + s.g.nv + s.g.ne ≤ s.items.size)
+    (hq : Items.ch s.items (edgeItem s.g e) = [])
+    (hg : s'.g = s.g) (hts : s'.tstack = s.tstack) (hsz' : s'.items.size = s.items.size + 1)
+    (hch : ∀ j, Items.ch s'.items j =
+      if j = vertItem v then Items.ch s.items (vertItem v) ++ [edgeItem s.g e]
+      else if j = edgeItem s.g e then [s.items.size]
+      else if j = s.items.size then [] else Items.ch s.items j) :
+    OutFrame v (.back e dest cls) base s s' := by
+  refine outFrame_of_mod (fun p => p = vertItem v ∨ p = edgeItem s.g e ∨ p = s.items.size)
+    (by omega) hg ?_ ?_ ?_ (fun top' htop' t ht => ⟨top', hts ▸ htop', ht⟩)
+  · intro p hp
+    rw [hch p]
+    simp only [not_or] at hp
+    simp [hp.1, hp.2.1, hp.2.2]
+  · intro p j hp hj
+    obtain ⟨hjlt, hjv, -, hje, -⟩ := hj
+    have hjq : j ≠ edgeItem s.g e := hje e (by simp [DfsOut.edges])
+    have hvq := vertItem_ne_edgeItem' (g := s.g) (e := e) hv
+    have h1 : s.items.size ≠ vertItem v := by show _ ≠ 1 + v; omega
+    have h2 : s.items.size ≠ edgeItem s.g e := by show _ ≠ 1 + s.g.nv + e; omega
+    simp only [Items.IsParent]
+    rw [hch p]
+    rcases hp with rfl | rfl | rfl
+    · simp [hjq]
+    · simp [hq, Nat.ne_of_lt hjlt, hvq.symm]
+    · simp [Items.ch_of_le s.items _ (Nat.le_refl _), h1, h2]
+  · intro j hj
+    obtain ⟨hjlt, hjv, -, hje, -⟩ := hj
+    simp only [not_or]
+    exact ⟨hjv, hje e (by simp [DfsOut.edges]), Nat.ne_of_lt hjlt⟩
+
 /-- Named admission (dump-checked `kept_items_ch`/`kept_items_par`): a child walk touches only the
 items of its own vertices and edges and the items it allocates — every other allocated item keeps
 its children and its parents. -/
@@ -1560,7 +1846,8 @@ theorem ctx_step_back_boundary {v d : Nat} {done : List (DfsOut × Bool)} {rest 
         else !s.stackDir[cls.lowval d]!))[d]! [vertItem v] []⟩] else [])
     (hge : d ≤ cls.lowval d) :
     wp (finishEdge v d (.back e dest cls) (L ++ s.tstack).length (hasVert || push))
-      (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, hasVert || push)]) rest hv' base bE sv sd s')
+      (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, hasVert || push)]) rest hv' base bE sv sd s' ∧
+        OutFrame v (.back e dest cls) base s s')
       { s with stackDir := s.stackDir.set! d (if cls.lowval d ≥ d then false
                  else !s.stackDir[cls.lowval d]!),
                tstack := L ++ s.tstack } := by
@@ -1587,8 +1874,10 @@ theorem ctx_step_back_boundary {v d : Nat} {done : List (DfsOut × Bool)} {rest 
   unfold finishBoundary
   simp only [wp_bind, wp_modifyItem, wp_modify, wp_allocItem, wp_pure, DfsOut.cls, hb,
     Bool.false_eq_true, ↓reduceIte, DfsOut.e, Bool.or_self, List.nil_append]
-  refine earCtx_selfLoop hC hv he hge hsz hend' hinc hrest_e hrest_v rfl rfl rfl
-    (fun k hk => getElem!_set!_ne' _ _ _ _ (by omega)) (by simp) ?_
+  refine (fun hch => ⟨earCtx_selfLoop hC hv he hge hsz hend' hinc hrest_e hrest_v rfl rfl rfl
+    (fun k hk => getElem!_set!_ne' _ _ _ _ (by omega)) (by simp) hch,
+    outFrame_selfLoop hv he hsz (hC.q_fresh _ (List.mem_cons_self ..) e (subEdges_e _)).2.1
+      rfl rfl (by simp) hch⟩) ?_
   intro j
   have hqlt : edgeItem s.g e < s.items.size := by show 1 + s.g.nv + e < _; omega
   have hvlt : vertItem v < s.items.size := by show 1 + v < _; omega
@@ -2652,7 +2941,8 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
     (hc : result (condP v (cls.lowval d) cls.isType1) s₂ = true) :
     wp (finishRest v d (cls.lowval d) cls.isType1 true true)
       (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, true)]) rest true base bE sv sd s₂ →
-        EarCtx v d (done ++ [(.back e dest cls, true)]) rest hv' base bE sv sd s') s₂ := by
+        EarCtx v d (done ++ [(.back e dest cls, true)]) rest hv' base bE sv sd s' ∧
+        OutFrame v (.back e dest cls) base s₂ s') s₂ := by
   have hc' : (cls.isType1 && decide (s₂.tstack.length ≥ 2) && (s₂.tstack.tail.head!.vStart == v) &&
       (s₂.tstack.tail.head!.topDepth == cls.lowval d)) = true := by
     rw [result, run_condP] at hc; exact hc
@@ -2678,6 +2968,17 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
   rw [hst] at hts
   rw [hts] at hnv hnd
   simp only [List.tail_cons, List.head!_cons] at hnv hnd
+  obtain ⟨tl', rfl⟩ : ∃ tl', tl = tl' ++ base := by
+    obtain ⟨top, htop, -⟩ := hC.top
+    cases top with
+    | nil =>
+      exfalso
+      rw [hst] at htop
+      have hb : base = a :: tl := by simpa using htop.symm
+      exact hC.base_bot a (by rw [hb]; exact List.mem_cons_self ..) hnv
+    | cons a' tl' =>
+      rw [hst, List.cons_append, List.cons.injEq] at htop
+      exact ⟨tl', htop.2⟩
   set lv := cls.lowval d with hlv
   set q := edgeItem s.g e with hq
   set c : TEntry := ⟨v, lv, s.nxtEdgeIdx, setSides s.stackDir[lv]! [q] []⟩ with hcdef
@@ -2705,7 +3006,7 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
   simp only [wp_bind, wp_tstackSize, wp_nxt, wp_pure, wp_ite, hc', ↓reduceIte, Bool.not_true,
     Bool.false_eq_true, wp_get, wp_allocItem, wp_stackDir, wp_getItem, wp_modifyNxt,
     wp_mergeTstackTops, wp_cur, wp_makeVs, wp_modifyItem, wp_modifyCur]
-  have hts₂ : s₂.tstack = c :: a :: tl := hts
+  have hts₂ : s₂.tstack = c :: a :: (tl' ++ base) := hts
   have hcd : c.topDepth = lv := rfl
   rw [hts₂]
   simp only [mergeTop, List.tail_cons, List.head!_cons, hnd, hnv, hcd, Nat.min_self]
@@ -2737,10 +3038,12 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
     have hSmem : ∀ r, r ∈ S ↔ r = q ∨ r ∈ Items.ch s₂.items i := by
       intro r; rw [hSdef, hcsp]; unfold setSides getSide
       cases s₂.stackDir[lv]! <;> simp <;> tauto
-    refine earCtx_mergeP hC₂ hv₂ hlt hsz₂ hts₂ hcd hcs rfl hnv hnd hai hA1
-      hrest_e₂ hrest_v₂ (p := i) (S := S) (.inl rfl) ?_ ((hSmem q).2 (.inl rfl))
-      (fun h => absurd rfl h) ?_ (fun j hj => Items.ch_modify_of_ne _ _ hj)
-      (by simp) (by rw [Array.size_modify]; exact hilt) rfl rfl rfl rfl rfl
+    refine (fun hS hP => ⟨earCtx_mergeP hC₂ hv₂ hlt hsz₂ hts₂ hcd hcs rfl hnv hnd hai hA1
+      hrest_e₂ hrest_v₂ (p := i) (S := S) (.inl rfl) hS ((hSmem q).2 (.inl rfl))
+      (fun h => absurd rfl h) hP (fun j hj => Items.ch_modify_of_ne _ _ hj)
+      (by simp) (by rw [Array.size_modify]; exact hilt) rfl rfl rfl rfl rfl,
+      outFrame_mergeP hts₂ hcs (by rw [hai, mem_setSides]; exact List.mem_singleton_self _)
+        (.inl rfl) hS hP (fun j hj => Items.ch_modify_of_ne _ _ hj) rfl (by simp) rfl⟩) ?_ ?_
     · intro r hr
       rcases (hSmem r).1 hr with h | h
       · exact .inl h
@@ -2759,11 +3062,15 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
     have hSmem : ∀ r, r ∈ S ↔ r = q ∨ r = i := by
       intro r; rw [hSdef, hcsp, hai]; unfold setSides getSide
       cases s₂.stackDir[lv]! <;> simp <;> tauto
-    refine earCtx_mergeP hC₂ hv₂ hlt hsz₂ hts₂ hcd hcs rfl hnv hnd hai hA1
-      hrest_e₂ hrest_v₂ (p := s₂.items.size) (S := S) (.inr (Nat.le_refl _)) ?_
-      ((hSmem q).2 (.inl rfl)) (fun _ => (hSmem i).2 (.inr rfl)) ?_
+    refine (fun hS hP => ⟨earCtx_mergeP hC₂ hv₂ hlt hsz₂ hts₂ hcd hcs rfl hnv hnd hai hA1
+      hrest_e₂ hrest_v₂ (p := s₂.items.size) (S := S) (.inr (Nat.le_refl _)) hS
+      ((hSmem q).2 (.inl rfl)) (fun _ => (hSmem i).2 (.inr rfl)) hP
       (fun j hj => by rw [Items.ch_modify_of_ne _ _ hj, Items.ch_push, if_neg hj])
-      (by simp) (by simp) rfl rfl rfl rfl rfl
+      (by simp) (by simp) rfl rfl rfl rfl rfl,
+      outFrame_mergeP hts₂ hcs (by rw [hai, mem_setSides]; exact List.mem_singleton_self _)
+        (.inr (Nat.le_refl _)) hS hP
+        (fun j hj => by rw [Items.ch_modify_of_ne _ _ hj, Items.ch_push, if_neg hj])
+        rfl (by simp) rfl⟩) ?_ ?_
     · intro r hr
       rcases (hSmem r).1 hr with h | h
       · exact .inl h
@@ -2805,7 +3112,7 @@ theorem ctx_step_back_ret_rest {v d : Nat} {done : List (DfsOut × Bool)} {rest 
       setSides s.stackDir[cls.lowval d]! [edgeItem s.g e] []⟩ :: (L ++ s.tstack)) :
     wp (finishRest v d (cls.lowval d) cls.isType1 (hasVert || push) true)
       (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, hasVert || push)]) rest hv'
-        base bE sv sd s') s₂ := by
+        base bE sv sd s' ∧ OutFrame v (.back e dest cls) base s s') s₂ := by
   have hhv' : (hasVert || push) = true := by
     cases h : hasVert
     · rw [hpush.2 h]; rfl
@@ -2813,15 +3120,18 @@ theorem ctx_step_back_ret_rest {v d : Nat} {done : List (DfsOut × Bool)} {rest 
   rw [hhv']
   have hpb := earCtx_pushBack hC hv he hlt hsz hrank hinc hend hdest hrest_e hrest_v hnc L push dirD
     hpush hL hg hsv hsd hsz' hch hnx hts
+  have hPB : OutFrame v (.back e dest cls) base s s₂ := by
+    obtain ⟨top, htop, -⟩ := hC.top
+    exact outFrame_pushBack htop hL hg hsz' hch hts
   by_cases hc : result (condP v (cls.lowval d) cls.isType1) s₂ = true
   · exact wp_mono _ (ctx_step_back_ret_P hC hv he hlt hsz hrank hinc hend hdest hrest_e hrest_v hnc
-      L push dirD hpush hL hg hsv hsd hsz' hch hnx hts hc) fun _ _ h => h hpb
+      L push dirD hpush hL hg hsv hsd hsz' hch hnx hts hc) fun _ _ h => ⟨(h hpb).1, hPB.trans (h hpb).2⟩
   · have hc' : (cls.isType1 && decide (s₂.tstack.length ≥ 2) && (s₂.tstack.tail.head!.vStart == v) &&
         (s₂.tstack.tail.head!.topDepth == cls.lowval d)) = false := Bool.eq_false_iff.2 hc
     unfold finishRest finishP finishTail condP
     simp only [wp_bind, wp_tstackSize, wp_nxt, wp_pure, wp_ite, hc', Bool.false_eq_true,
       ↓reduceIte, Bool.not_true]
-    exact hpb
+    exact ⟨hpb, hPB⟩
 
 /-- After a returning back-edge out (`lowval < d`): `finishBack` (the `Q` push, the P-check, the
 first-edge vertex push) re-establishes the context. -/
@@ -2849,7 +3159,8 @@ theorem ctx_step_back_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
         else !s.stackDir[cls.lowval d]!))[d]! [vertItem v] []⟩] else [])
     (hlt : cls.lowval d < d) :
     wp (finishEdge v d (.back e dest cls) (L ++ s.tstack).length (hasVert || push))
-      (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, hasVert || push)]) rest hv' base bE sv sd s')
+      (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, hasVert || push)]) rest hv' base bE sv sd s' ∧
+        OutFrame v (.back e dest cls) base s s')
       { s with stackDir := s.stackDir.set! d (if cls.lowval d ≥ d then false
                  else !s.stackDir[cls.lowval d]!),
                tstack := L ++ s.tstack } := by
@@ -2881,6 +3192,41 @@ theorem ctx_step_back_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
 /-- `finishEdge` at a back-edge site re-establishes the context with the out appended to `done`
 (`ctxCheck` after a back-edge out): the boundary case is proved, the returning case is
 `ctx_step_back_ret`. -/
+theorem ctx_step_back_frame {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
+    {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
+    {s : WalkState} {e dest : Nat} {cls : OutClass}
+    (hC : EarCtx v d done (.back e dest cls :: rest) hasVert base bE sv sd s)
+    (hv : v < s.g.nv) (hsd : d < s.stackDir.size)
+    (hrank : ∀ o' ∈ done, o'.1.cls.rank ≤ cls.rank)
+    (hinc : ∀ o' ∈ done, o'.1.e < s.g.ne ∧ s.g.Inc o'.1.e v)
+    (hnd : ∀ o' ∈ done, ∀ e', subEdges o'.1 e' → e' ≠ e)
+    (hb : cls.isTree = false) (hcls : ∀ lv k, cls = .ret lv k → lv < d)
+    (he : e < s.g.ne) (hsz : 1 + s.g.nv + s.g.ne ≤ s.items.size)
+    (hend : Items.PairEq (v, dest) s.g.edges[e]!) (hself : d ≤ cls.lowval d → dest = v)
+    (hrest_e : ∀ o' ∈ rest, ∀ e', subEdges o' e' → e' ≠ e ∧ e' < s.g.ne)
+    (hrest_v : ∀ o' ∈ rest, ∀ e₁ cls₁ child, o' = .tree e₁ cls₁ child →
+      ∀ y ∈ child.verts, y < s.g.nv)
+    (hdest : cls.lowval d < d → s.stackVerts[cls.lowval d]! = dest)
+    (hnc : ∀ o' ∈ done, ∀ e', subEdges o'.1 e' → ∀ x, s.g.Inc e' x →
+      ∀ o'' ∈ rest, ∀ e₁ cls₁ child, o'' = .tree e₁ cls₁ child → x ∉ child.verts)
+    (L : List TEntry) (push : Bool)
+    (hpush : push = true ↔ hasVert = false ∧ cls.lowval d < d ∧ cls.isType1 = true)
+    (hL : L = if push then
+      [⟨v, d, s.nxtEdgeIdx, setSides (s.stackDir.set! d (if cls.lowval d ≥ d then false
+        else !s.stackDir[cls.lowval d]!))[d]! [vertItem v] []⟩] else []) :
+    wp (finishEdge v d (.back e dest cls) (L ++ s.tstack).length (hasVert || push))
+      (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, hasVert || push)]) rest hv' base bE sv sd s' ∧
+        OutFrame v (.back e dest cls) base s s')
+      { s with stackDir := s.stackDir.set! d (if cls.lowval d ≥ d then false
+                 else !s.stackDir[cls.lowval d]!),
+               tstack := L ++ s.tstack } := by
+  by_cases hge : d ≤ cls.lowval d
+  · exact ctx_step_back_boundary hC hv hsd hrank hinc hnd hb hcls he hsz hend hself hrest_e hrest_v
+      L push hpush hL hge
+  · exact ctx_step_back_ret hC hv hsd hrank hinc hnd hb hcls he hsz hend hself hrest_e hrest_v
+      (hdest (Nat.lt_of_not_le hge)) hnc L push hpush hL (Nat.lt_of_not_le hge)
+
+/-- `ctx_step_back_frame` without the item frame. -/
 theorem ctx_step_back {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
     {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
     {s : WalkState} {e dest : Nat} {cls : OutClass}
@@ -2907,13 +3253,9 @@ theorem ctx_step_back {v d : Nat} {done : List (DfsOut × Bool)} {rest : List Df
       (fun hv' s' => EarCtx v d (done ++ [(.back e dest cls, hasVert || push)]) rest hv' base bE sv sd s')
       { s with stackDir := s.stackDir.set! d (if cls.lowval d ≥ d then false
                  else !s.stackDir[cls.lowval d]!),
-               tstack := L ++ s.tstack } := by
-  by_cases hge : d ≤ cls.lowval d
-  · exact ctx_step_back_boundary hC hv hsd hrank hinc hnd hb hcls he hsz hend hself hrest_e hrest_v
-      L push hpush hL hge
-  · exact ctx_step_back_ret hC hv hsd hrank hinc hnd hb hcls he hsz hend hself hrest_e hrest_v
-      (hdest (Nat.lt_of_not_le hge)) hnc L push hpush hL (Nat.lt_of_not_le hge)
-
+               tstack := L ++ s.tstack } :=
+  wp_mono _ (ctx_step_back_frame hC hv hsd hrank hinc hnd hb hcls he hsz hend hself hrest_e hrest_v
+    hdest hnc L push hpush hL) fun _ _ h => h.1
 
 /-- `Items.Below` from an item of a set `Old` closed under parenthood in `I` is unchanged when the
 children of every `Old` item are unchanged. -/
