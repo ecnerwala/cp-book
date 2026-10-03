@@ -22,6 +22,12 @@ are provisional until the walk returns to their top (`checks/RFinishEdgeCounter.
 is unowned, after loop 1 every frontier entry below the top is settled, the type-1 `closeVert`
 unwraps an exempt entry, the first-edge vertex entry takes unowned edges; plus the admitted
 `finishEdge_tree_top_settled` (a): the top after the P-check is settled; `shape` lines) count.
+* `base` lines (`finishEdge_rInvG_base`, `Proofs/RInvBase.lean`): for every ancestor frame
+  `(p, dp, n₀)` of the site (`p = stackVerts[dp]`, `n₀` the stack size when `p`'s child subtree
+  was entered), the bottom `n₀` entries are unchanged by `finishEdge`, their non-exempt entries
+  (`dp ≤ topDepth`, `vStart ≠ p`) are `EntryR` before and after, and the positional side
+  conditions hold: `n₀ ≤ origTstack`, `hasVert → n₀ + 1 ≤ origTstack`, and for a tree edge
+  `origTstack + 3 ≤ length` after loop 2 (`hclose`).
 
 `dfs` is `DfsData.ofForest forest`; `Anc` is read off the parent map, `Type2Pair` is evaluated
 through `NoBothSides`/`BetweenStays`, `SepClass a b` through the components of `g − {a, b}`.
@@ -284,16 +290,17 @@ def isBlock (g : Graph) : Bool := (List.range g.nv).all fun v => Id.run do
   return seen.length == g.ne
 
 mutual
-partial def tree (D : Dfs) (t : DfsTree) (d : Nat) (s : WalkState) : WalkState × List String × Nat :=
+partial def tree (D : Dfs) (t : DfsTree) (d : Nat) (s : WalkState) (fr : List (Nat × Nat × Nat)) :
+    WalkState × List String × Nat :=
   match t with
   | .node v os =>
     let s := { s with stackVerts := s.stackVerts.set! d v }
-    let (hv, s, bad, n) := outs D v d os false s
+    let (hv, s, bad, n) := outs D v d os false s fr
     let s := if hv then s else (setStackDir d true *> pushVertTstack v d).run s |>.2
     (s, bad, n)
 
-partial def outs (D : Dfs) (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkState) :
-    Bool × WalkState × List String × Nat :=
+partial def outs (D : Dfs) (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkState)
+    (fr : List (Nat × Nat × Nat)) : Bool × WalkState × List String × Nat :=
   match os with
   | [] => (hv, s, [], 0)
   | o :: rest =>
@@ -302,6 +309,7 @@ partial def outs (D : Dfs) (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkS
     let (s, bad, n) := match o with
       | .back .. => (s, [], 0)
       | .tree _ _ child => tree D child (d + 1) { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
+        ((v, d, orig) :: fr)
     let site : Bool := match o.cls with | .ret lv _ => decide (lv < d) | _ => false
     let tag := s!"v={v} d={d} e={o.e} {if o.isTree then "tree" else "back"} orig={orig} hv={hv} t1={o.cls.isType1}: "
     let base := s.tstack.drop (s.tstack.length - orig)
@@ -316,14 +324,29 @@ partial def outs (D : Dfs) (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkS
         tagged "" (rbad.map fun b => if b.startsWith "stat:" then b else s!"{b} {tag}") else []
     let shp := if site && o.isTree then
       tagged s!"shape {tag}" ("stat:shape-site" :: shapeCheck D v d o orig hv s) else []
+    let sPre := s
+    let basePre := if site then fr.flatMap fun (p, dp, n0) =>
+      let tagB := s!"base p={p} dp={dp} n0={n0} {tag}"
+      let bot := s.tstack.drop (s.tstack.length - n0)
+      (if n0 > orig then [s!"{tagB}n0 > orig"] else []) ++
+      (if hv && n0 + 1 > orig then [s!"{tagB}hasVert but n0 + 1 > orig"] else []) ++
+      (if o.isTree && orig + 3 > (WalkState.feS₂ d o s).tstack.length then
+        [s!"{tagB}close: orig + 3 > len(feS₂)={(WalkState.feS₂ d o s).tstack.length}"] else []) ++
+      "stat:base-site" :: bot.flatMap (fun t => settledEntry D p dp s t s!"{tagB}pre") else []
     let (hv, s) := (finishEdge v d o orig hv).run s
+    let basePost := if site then fr.flatMap fun (p, dp, n0) =>
+      let tagB := s!"base p={p} dp={dp} n0={n0} {tag}"
+      let bot := sPre.tstack.drop (sPre.tstack.length - n0)
+      let bot' := s.tstack.drop (s.tstack.length - n0)
+      (if bot'.map showT != bot.map showT then [s!"{tagB}bottom {n0} changed: {bot.map showT} -> {bot'.map showT}"] else []) ++
+      bot'.flatMap (fun t => settledEntry D p dp s t s!"{tagB}post") else []
     let nB := (s.tstack.filter fun t => t.vStart != v && t.topDepth ≥ d).length
     let post := if site then
       tagged s!"postA {tag}" (checkEntries D d s.tstack s (fun t => t.vStart != v)) ++
       tagged s!"postB {tag}" ((List.replicate nB "stat:postB-entry") ++ checkEntries D d s.tstack s (fun t => t.vStart != v && t.topDepth ≥ d)) ++
       tagged s!"postD {tag}" (disjoint s) else []
-    let (hv, s, bad', n') := outs D v d rest hv s
-    (hv, s, bad ++ pre ++ rcl ++ shp ++ post ++ bad', n + n' + (if site then 1 else 0))
+    let (hv, s, bad', n') := outs D v d rest hv s fr
+    (hv, s, bad ++ pre ++ rcl ++ shp ++ basePre ++ post ++ basePost ++ bad', n + n' + (if site then 1 else 0))
 end
 
 def runGraph (g : Graph) (vo eo : List Nat) (tern : Bool) : List String × Nat := Id.run do
@@ -333,7 +356,7 @@ def runGraph (g : Graph) (vo eo : List Nat) (tern : Bool) : List String × Nat :
   let mut bad := []
   let mut n := 0
   for t in forest do
-    let (s', bs, n') := tree D t 0 s
+    let (s', bs, n') := tree D t 0 s []
     bad := bad ++ bs
     n := n + n'
     s := (do
@@ -411,5 +434,5 @@ def main : IO UInt32 := do
           IO.println s!"seed={seed} tern={tern}: nv={g.nv} edges={g.edges} vo={vo} eo={eo}"
           for b in bad do IO.println s!"  {b}"
   IO.println s!"stats={stats.toList}"
-  IO.println s!"cases={toks[0]!} + fixed + 6000 extra; block cases={blocks}; finishEdge sites checked (both ternarize)={sites}; old-contract-A runs failing (expected)={expectedA}; failures (contract B / disjointness / loop-1 emulation / R-branch RTop / FinishRShape)={fails}"
+  IO.println s!"cases={toks[0]!} + fixed + 6000 extra; block cases={blocks}; finishEdge sites checked (both ternarize)={sites}; old-contract-A runs failing (expected)={expectedA}; failures (contract B / disjointness / loop-1 emulation / R-branch RTop / FinishRShape / RInvG base frame)={fails}"
   return if fails == 0 then 0 else 1

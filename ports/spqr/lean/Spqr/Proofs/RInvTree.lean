@@ -366,17 +366,17 @@ theorem RInvG.retarget {v d n : Nat} (edgeDir : Bool) (t : TEntry) (rest : List 
 
 /-- One iteration of loop 1 above the settled bottom `n`: the three entries it touches lie in the
 frontier (`hlen`, from `Frontier.loop1`), so every entry it creates is in the frontier too. -/
-theorem RInvG.loop1Body {D v d n : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : Shape s)
+theorem RInvG.loop1Body {D v d d₀ n : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : Shape s)
     (hok : Loop1BodyOk D d edgeDir s) (hc : result (loop1Cond d) s = true)
     (hlen : n + (if d < (nxtE s).topDepth then 3 else 2) ≤ s.tstack.length)
-    (h : s.RInvG dfs v d n) :
-    (after (Spqr.loop1Body d edgeDir) s).RInvG dfs v d n ∧
+    (h : s.RInvG dfs v d₀ n) :
+    (after (Spqr.loop1Body d edgeDir) s).RInvG dfs v d₀ n ∧
       (after (Spqr.loop1Body d edgeDir) s).tstack.length + 1 ≤ s.tstack.length := by
   have hc' : 2 ≤ s.tstack.length := by
     have : (decide (s.tstack.length ≥ 2) && decide (s.tstack.tail.head!.topDepth ≥ d)) = true := hc
     simp only [Bool.and_eq_true, decide_eq_true_eq] at this; exact this.1
   have st₁ : Step D v s (l1S₁ d edgeDir s) := Step.loop1Type hi hs hok.mergeS
-  have key₁ : (l1S₁ d edgeDir s).RInvG dfs v d n ∧ n + 2 ≤ (l1S₁ d edgeDir s).tstack.length ∧
+  have key₁ : (l1S₁ d edgeDir s).RInvG dfs v d₀ n ∧ n + 2 ≤ (l1S₁ d edgeDir s).tstack.length ∧
       (l1S₁ d edgeDir s).tstack.length ≤ s.tstack.length := by
     unfold l1S₁ after; rw [loop1Type_run]
     by_cases hgt : (nxtE s).topDepth > d
@@ -385,7 +385,7 @@ theorem RInvG.loop1Body {D v d n : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : S
         match hts : s.tstack with
         | [] | [_] => rw [hts] at hc'; simp at hc'
         | a :: b :: rest => exact ⟨a, b, rest, rfl⟩
-      have h' : ({ s with stackDir := s.stackDir.set! (nxtE s).topDepth edgeDir } : WalkState).RInvG dfs v d n :=
+      have h' : ({ s with stackDir := s.stackDir.set! (nxtE s).topDepth edgeDir } : WalkState).RInvG dfs v d₀ n :=
         h.setStackDir
       have hl : s.tstack.length = rest.length + 2 := by rw [hts]; rfl
       refine ⟨h'.mergeTop a b rest hts (fun hl' => absurd hl' (by show ¬ s.tstack.length ≤ n + 1; omega)), ?_⟩
@@ -423,19 +423,19 @@ theorem RInvG.loop1Body {D v d n : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : S
 
 /-- Loop 1 above the settled bottom `n`, with its exit: the final state is some iterate at which
 the condition fails, and `Step` carries `Inv'`/`Shape`. -/
-theorem RInvG.loop1 {D v d n : Nat} {edgeDir : Bool} (fuel : Nat)
-    (hfuel : s.tstack.length ≤ fuel) (hv : v < s.g.nv) (hi : s.Inv' D) (hs : Shape s)
+theorem RInvG.loop1 {D v w d d₀ n : Nat} {edgeDir : Bool} (fuel : Nat)
+    (hfuel : s.tstack.length ≤ fuel) (hv : w < s.g.nv) (hi : s.Inv' D) (hs : Shape s)
     (hok : ∀ k, (∀ j, j ≤ k → result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) j s) = true) →
       Loop1BodyOk D d edgeDir (iter (Spqr.loop1Body d edgeDir) k s))
     (hlen : ∀ k, (∀ j, j < k → result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) j s) = true) →
       result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) k s) = true →
       n + (if d < (nxtE (iter (Spqr.loop1Body d edgeDir) k s)).topDepth then 3 else 2) ≤
         (iter (Spqr.loop1Body d edgeDir) k s).tstack.length)
-    (h : s.RInvG dfs v d n) :
+    (h : s.RInvG dfs v d₀ n) :
     ∃ k, after (loop fuel (loop1Cond d) (Spqr.loop1Body d edgeDir)) s = iter (Spqr.loop1Body d edgeDir) k s ∧
       (∀ j, j < k → result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) j s) = true) ∧
       result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) k s) = false ∧
-      (iter (Spqr.loop1Body d edgeDir) k s).RInvG dfs v d n ∧ Step D v s (iter (Spqr.loop1Body d edgeDir) k s) := by
+      (iter (Spqr.loop1Body d edgeDir) k s).RInvG dfs v d₀ n ∧ Step D w s (iter (Spqr.loop1Body d edgeDir) k s) := by
   induction fuel generalizing s with
   | zero =>
     refine ⟨0, rfl, fun j hj => absurd hj (Nat.not_lt_zero j), ?_, h, Step.refl hi hs⟩
@@ -469,21 +469,21 @@ theorem RInvG.loop1 {D v d n : Nat} {edgeDir : Bool} (fuel : Nat)
       exact ⟨0, rfl, fun j hj => absurd hj (Nat.not_lt_zero j), Bool.eq_false_iff.2 hc, h, Step.refl hi hs⟩
 
 /-- `closeEars` above the settled bottom `n`: the pushed tree edge and loop 1. -/
-theorem RInvG.closeEars {D v d n : Nat} {nxtV e : Nat} {edgeDir : Bool} (hi : s.Inv' D)
-    (hs : Shape s) (hv : v < s.g.nv) (hn : n ≤ s.tstack.length) (hok : CloseEarsOk D nxtV d e edgeDir s)
+theorem RInvG.closeEars {D v w d d₀ n : Nat} {nxtV e : Nat} {edgeDir : Bool} (hi : s.Inv' D)
+    (hs : Shape s) (hv : w < s.g.nv) (hn : n ≤ s.tstack.length) (hok : CloseEarsOk D nxtV d e edgeDir s)
     (hown : ∀ t ∈ s.tstack, ¬ t.edges s.g s.items e)
     (hlen : ∀ k, (∀ j, j < k → result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) j (ceS₁ nxtV d e s)) = true) →
       result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) k (ceS₁ nxtV d e s)) = true →
       n + (if d < (nxtE (iter (Spqr.loop1Body d edgeDir) k (ceS₁ nxtV d e s))).topDepth then 3 else 2) ≤
         (iter (Spqr.loop1Body d edgeDir) k (ceS₁ nxtV d e s)).tstack.length)
-    (h : s.RInvG dfs v d n) :
+    (h : s.RInvG dfs v d₀ n) :
     ∃ k, after (Spqr.closeEars nxtV d e edgeDir) s = iter (Spqr.loop1Body d edgeDir) k (ceS₁ nxtV d e s) ∧
       (∀ j, j < k → result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) j (ceS₁ nxtV d e s)) = true) ∧
       result (loop1Cond d) (iter (Spqr.loop1Body d edgeDir) k (ceS₁ nxtV d e s)) = false ∧
-      (iter (Spqr.loop1Body d edgeDir) k (ceS₁ nxtV d e s)).RInvG dfs v d n ∧
-      Step D v s (iter (Spqr.loop1Body d edgeDir) k (ceS₁ nxtV d e s)) := by
-  have st₁ : Step D v s (ceS₁ nxtV d e s) := Step.pushEdge hi hs nxtV d e hok.e_lt hok.q hok.ends hok.d_le
-  have R₁ : (ceS₁ nxtV d e s).RInvG dfs v d n := h.pushEdge nxtV d e hn hok.q hown
+      (iter (Spqr.loop1Body d edgeDir) k (ceS₁ nxtV d e s)).RInvG dfs v d₀ n ∧
+      Step D w s (iter (Spqr.loop1Body d edgeDir) k (ceS₁ nxtV d e s)) := by
+  have st₁ : Step D w s (ceS₁ nxtV d e s) := Step.pushEdge hi hs nxtV d e hok.e_lt hok.q hok.ends hok.d_le
+  have R₁ : (ceS₁ nxtV d e s).RInvG dfs v d₀ n := h.pushEdge nxtV d e hn hok.q hown
   obtain ⟨k, heq, hj, hexit, R, st⟩ := R₁.loop1 (ceS₁ nxtV d e s).tstack.length le_rfl
     (by rw [st₁.g]; exact hv) st₁.inv st₁.shape hok.body hlen
   exact ⟨k, heq, hj, hexit, R, st₁.trans st⟩

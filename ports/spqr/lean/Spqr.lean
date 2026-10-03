@@ -101,6 +101,7 @@ import Spqr.Proofs.RInv
 import Spqr.Proofs.RInvFrame
 import Spqr.Proofs.RInvBack
 import Spqr.Proofs.RInvTree
+import Spqr.Proofs.RInvBase
 import Spqr.EarFrontier
 import Spqr.EarSides
 import Spqr.EarRoot
