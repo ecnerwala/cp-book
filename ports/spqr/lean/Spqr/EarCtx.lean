@@ -99,6 +99,71 @@ def afterVert (done : List (DfsOut × Bool)) : List DfsOut := (done.filter (·.2
 def allType1 (d l : Nat) (done : List (DfsOut × Bool)) : Prop :=
   ∀ o ∈ afterVert done, o.cls.lowval d = l → o.cls.isType1 = true
 
+/-- `EarBottom` read between the edges of `walkOuts v d`: the vertex entry `vy` of the chain bottom
+(`d ≤ topDepth`; at the child's level this is the site's `d < vy.topDepth`) under the single-root-item
+piece `py = (vy.vStart, l)`. -/
+structure CtxBottom (d l : Nat) (s : WalkState) (py vy : TEntry) : Prop where
+  vy_top : d ≤ vy.topDepth
+  vy_spans : ∃ dir, vy.spans = setSides dir [vertItem vy.vStart] []
+  vy_bd : ∀ x, s.g.Touches (vy.edges s.g s.items) x →
+    x = vy.vStart ∨ s.g.Interior (vy.edges s.g s.items) x
+  py_bot : py.vStart = vy.vStart
+  py_top : py.topDepth = l
+  py_item : ∃ i, py.spans = setSides s.stackDir[l]! [i] [] ∧ ∀ p, ¬ Items.IsParent s.items p i
+  py_touch : s.g.Touches (py.edges s.g s.items) vy.vStart ∧
+    s.g.Touches (py.edges s.g s.items) s.stackVerts[l]!
+
+theorem CtxBottom.toEarBottom {d l : Nat} {s : WalkState} {py vy : TEntry}
+    (h : CtxBottom (d + 1) l s py vy) : EarBottom d l s py vy :=
+  ⟨h.vy_spans, h.vy_top, h.vy_bd, h.py_bot, h.py_top, h.py_item, h.py_touch⟩
+
+/-- `CtxBottom` is a frame property: it survives a step that keeps the two entries' edge sets, the
+roots of `py`'s item, `stackVerts[l]` and `stackDir[l]`. -/
+theorem CtxBottom.frame {d l : Nat} {s s' : WalkState} {py vy : TEntry}
+    (h : CtxBottom d l s py vy) (hg : s'.g = s.g)
+    (hsv : s'.stackVerts[l]! = s.stackVerts[l]!) (hsd : s'.stackDir[l]! = s.stackDir[l]!)
+    (hpy : py.edges s'.g s'.items = py.edges s.g s.items)
+    (hvy : vy.edges s'.g s'.items = vy.edges s.g s.items)
+    (hroot : ∀ i ∈ py.spans.1 ++ py.spans.2, (∀ p, ¬ Items.IsParent s.items p i) →
+      ∀ p, ¬ Items.IsParent s'.items p i) :
+    CtxBottom d l s' py vy := by
+  obtain ⟨i, hi, hr⟩ := h.py_item
+  have him : i ∈ py.spans.1 ++ py.spans.2 := by
+    rw [hi]; unfold setSides; split <;> exact List.mem_singleton_self _
+  refine ⟨h.vy_top, h.vy_spans, ?_, h.py_bot, h.py_top, ⟨i, by rw [hsd]; exact hi, hroot i him hr⟩, ?_⟩
+  · rw [hvy, hg]; exact h.vy_bd
+  · rw [hpy, hg, hsv]; exact h.py_touch
+
+/-- The least lowval of `done ++ [o₁]` is the least lowval of `done` when `o₁` returns no lower than
+the outs already returned (rank order) and some out already returned. -/
+theorem min_lowval_append {d l : Nat} {done : List (DfsOut × Bool)} {o₁ : DfsOut × Bool}
+    (hl : l < d) (hex : ∃ o ∈ done ++ [o₁], o.1.cls.lowval d = l)
+    (hle : ∀ o ∈ done ++ [o₁], l ≤ o.1.cls.lowval d)
+    (hmono : ∀ o ∈ done, o.1.cls.lowval d < d → o.1.cls.lowval d ≤ o₁.1.cls.lowval d)
+    (hret : o₁.1.cls.lowval d = l → ∃ o ∈ done, o.1.cls.lowval d < d) :
+    (∃ o ∈ done, o.1.cls.lowval d = l) ∧ (∀ o ∈ done, l ≤ o.1.cls.lowval d) := by
+  refine ⟨?_, fun o ho => hle o (List.mem_append_left _ ho)⟩
+  obtain ⟨o, ho, hlo⟩ := hex
+  rcases List.mem_append.1 ho with ho | ho
+  · exact ⟨o, ho, hlo⟩
+  · rw [List.mem_singleton] at ho; subst ho
+    obtain ⟨o₀, ho₀, hlt⟩ := hret hlo
+    exact ⟨o₀, ho₀, Nat.le_antisymm (hlo ▸ hmono o₀ ho₀ hlt) (hle o₀ (List.mem_append_left _ ho₀))⟩
+
+theorem cons_cons_eq_append_pair {α : Type} {c a : α} {rest mid : List α} {py vy : α}
+    (h : c :: a :: rest = mid ++ [py, vy]) (hne : rest ≠ []) :
+    (rest = [vy] ∧ a = py) ∨ ∃ mid', rest = mid' ++ [py, vy] := by
+  match mid, h with
+  | [], h =>
+    simp only [List.nil_append, List.cons.injEq] at h
+    exact absurd h.2.2 hne
+  | [m], h =>
+    simp only [List.cons_append, List.nil_append, List.cons.injEq] at h
+    exact .inl ⟨h.2.2, h.2.1⟩
+  | m₁ :: m₂ :: mid', h =>
+    simp only [List.cons_append, List.cons.injEq] at h
+    exact .inr ⟨mid', h.2.2⟩
+
 /-- The part of the stack above `base`: `above ++ vt :: below` once `hasVert`, else `below`. -/
 structure CtxTop (v d : Nat) (done : List (DfsOut × Bool)) (hasVert : Bool) (s : WalkState)
     (top : List TEntry) : Prop where
@@ -132,6 +197,11 @@ structure CtxTop (v d : Nat) (done : List (DfsOut × Bool)) (hasVert : Bool) (s 
   (`ctx_touch_k_*`). -/
   touch_k : ∀ t ∈ top, ∀ k, k ≤ d → s.g.Touches (t.edges s.g s.items) s.stackVerts[k]! →
     t.topDepth ≤ k
+  /-- Once an out returned (`l` the least lowval of `done`, `< d`), `top` ends with the ear's bottom
+  two entries: the vertex entry of the chain bottom (`d ≤ topDepth`, attached only at its vertex or
+  at interior vertices) under the single-root-item piece `(bottom, l)` (`ctx_bot_*`). -/
+  bottom : ∀ l, l < d → (∃ o ∈ done, o.1.cls.lowval d = l) → (∀ o ∈ done, l ≤ o.1.cls.lowval d) →
+    ∃ mid py vy, top = mid ++ [py, vy] ∧ CtxBottom d l s py vy
 
 /-- The between-edges invariant of `walkOuts v d` (see the module docstring). -/
 structure EarCtx (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut) (hasVert : Bool)
@@ -166,6 +236,9 @@ structure EarCtx (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut)
     ¬ s.g.Touches (Items.EdgeBelow s.g s.items (vertItem v)) s.stackVerts[k]!
   vert_disj : hasVert = false → ∀ t ∈ s.tstack, ∀ e, e < s.g.ne → t.edges s.g s.items e →
     ¬ Items.EdgeBelow s.g s.items (vertItem v) e
+  /-- Edges below the vertex item attach only at `v` or at interior vertices (`ctx_vert_bd`). -/
+  vert_bd : ∀ x, s.g.Touches (Items.EdgeBelow s.g s.items (vertItem v)) x →
+    x = v ∨ s.g.Interior (Items.EdgeBelow s.g s.items (vertItem v)) x
   vert_edges : ∀ e, e < s.g.ne →
     (Items.EdgeBelow s.g s.items (vertItem v) e ↔ ∃ o ∈ done, d ≤ o.1.cls.lowval d ∧ subEdges o.1 e)
   touch_bot : ∀ t ∈ s.tstack, (∃ e, e < s.g.ne ∧ t.edges s.g s.items e) →

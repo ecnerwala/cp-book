@@ -201,6 +201,9 @@ structure EarClose (curV d l : Nat) (o : DfsOut) (hasVert : Bool) (base : List T
     ¬ Items.EdgeBelow s.g st.items (vertItem curV) e
   vert_touch : hasVert = false → (∃ e, e < s.g.ne ∧ Items.EdgeBelow s.g st.items (vertItem curV) e) →
     s.g.Touches (Items.EdgeBelow s.g st.items (vertItem curV)) curV
+  /-- Loops 1–2 leave the bottom two entries' edge sets alone. -/
+  bot_edges : ∀ e, (py.edges s.g st.items e ↔ py.edges s.g s.items e) ∧
+    (vy.edges s.g st.items e ↔ vy.edges s.g s.items e)
 
 /-- Ear content of the tstack `sub ++ base` when `finishEdge curV d o _ hasVert` runs (`o` an
 out-edge of `curV` at depth `d`, `stackVerts[d] = curV`, and `stackVerts[d+1] = o.dest` for a tree

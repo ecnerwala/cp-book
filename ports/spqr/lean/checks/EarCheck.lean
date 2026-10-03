@@ -315,6 +315,8 @@ def closeCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : Wa
       | _ => out := bad₂ "close_py_single" (showT py) :: out
       if !onSide py s.stackDir[lowval]! then out := bad₂ "close_py_side" (showT py) :: out
       if py.vStart ≠ vy.vStart || py.topDepth ≠ lowval then out := bad₂ "close_py" (showT py) :: out
+      if !sameEdges (E₂ py) (entryEdges s py) || !sameEdges (E₂ vy) (entryEdges s vy) then
+        out := bad₂ "close_bot_edges" s!"{showT py} {showT vy}" :: out
       out := foldWalk s₂ (d+1) "fold" bad₂ c (mid ++ [py, vy]) ++ out
       if o.cls.isType1 then
         if mid ≠ [] then out := bad₂ "close_t1_mid" "" :: out
@@ -509,7 +511,7 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
   for (b, e₀) in List.zip base bE₀ do
     for x in v :: DfsOut.vertsList ((done.map (·.1)) ++ rest) do
       if touches s e₀ x then out := bad "base_touch" s!"{showT b} x={x}" :: out
-  if hv && retDone ≠ [] then
+  if retDone ≠ [] then
     let l := (retDone.map (fun o => o.1.cls.lowval d)).foldl min d
     match top.reverse with
     | vy :: py :: _ =>
@@ -548,6 +550,9 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
   if !hv then
     for t in s.tstack do
       if (E t).any (edgesBelow s (vertItem v)).contains then out := bad "vert_disj" (showT t) :: out
+  for x in List.range s.g.nv do
+    if touches s (edgesBelow s (vertItem v)) x && x ≠ v && !interiorB s (edgesBelow s (vertItem v)) x then
+      out := bad "vert_bd" s!"x={x}" :: out
   -- `top` was made by this vertex's outs: bottoms off the path above, `V`/`Q` items of the finished
   -- subtrees only, edges exactly the finished outs' sub-ear edges (returning outs covered by `top`)
   let doneVerts := done.flatMap fun o => match o.1 with | .tree _ _ c => c.verts | .back .. => []
