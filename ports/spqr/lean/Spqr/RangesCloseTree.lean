@@ -45,27 +45,248 @@ structure CloseBase (σ : List Nat) (n D curV d : Nat) (o : DfsOut) (origTstack 
   close : s.CloseInv
   site : DfsSite σ n curV d o s
 
+
+section Sites
+variable {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
+
+/-! ### The range invariant inside `finishEdge`, from `CloseBase` -/
+
+/-- `RgStep` to the `k`-th iterate of a loop whose first `k` conditions held. -/
+theorem RgStep.iter {v : Nat} (cond : WalkM Bool) (body : WalkM Unit) (Ok Adj : WalkState → Prop)
+    (hbody : ∀ s, v < s.g.nv → s.RangesInv σ n D → Shape s → (∀ e ∈ σ, e < s.g.ne) →
+      (cond.run s).1 = true → Ok s → Adj s → RgStep σ n D v s (body.run s).2)
+    (hv : v < s.g.nv) (h : s.RangesInv σ n D) (hs : Shape s) (hσ : ∀ e ∈ σ, e < s.g.ne)
+    (hok : ∀ k, (∀ j, j ≤ k → (cond.run (iter body j s)).1 = true) → Ok (iter body k s))
+    (hadj : ∀ k, (∀ j, j ≤ k → (cond.run (iter body j s)).1 = true) → Adj (iter body k s)) :
+    ∀ k, (∀ j, j < k → (cond.run (iter body j s)).1 = true) → RgStep σ n D v s (iter body k s)
+  | 0, _ => RgStep.refl h hs
+  | k + 1, hk => by
+    have st := RgStep.iter cond body Ok Adj hbody hv h hs hσ hok hadj k fun j hj => hk j (by omega)
+    rw [iter_succ']
+    exact st.trans (hbody _ (by rw [st.step.g]; exact hv) st.ranges st.step.shape (st.hσ hσ)
+      (hk k (Nat.lt_succ_self k)) (hok k fun j hj => hk j (by omega)) (hadj k fun j hj => hk j (by omega)))
+
+theorem CloseBase.finishOk (h : CloseBase σ n D curV d o origTstack hasVert s) {lv : Nat} {kind : RetKind}
+    (ho : o.cls = .ret lv kind) (hl : lv < d) : FinishOk D curV d lv o origTstack hasVert s := by
+  obtain ⟨sub, base, hlen, hE⟩ := h.book.ear
+  exact finishOk_of_guards ho hl h.guards hE hlen h.rgs.1.inv h.rgs.2.1 h.hD h.book.v_lt h.book.e_lt
+    h.book.q (h.book.ends lv kind ho) h.book.vert
+
+theorem CloseBase.step₀ (h : CloseBase σ n D curV d o origTstack hasVert s) :
+    RgStep σ n D curV s (feS₀ d o s) :=
+  have hj : edgeItem s.g o.e < 1 + s.g.nv + s.g.ne := by
+    show 1 + s.g.nv + o.e < _; have := h.book.e_lt; omega
+  ⟨Step.modifyVs h.rgs.1.inv h.rgs.2.1 (edgeItem s.g o.e) _ hj, h.rgs.1.modifyVs (edgeItem s.g o.e) _ hj⟩
+
+theorem CloseBase.etype₀ (h : CloseBase σ n D curV d o origTstack hasVert s) :
+    Items.type (feS₀ d o s).items (edgeItem (feS₀ d o s).g o.e) ≠ .V := by
+  rw [h.step₀.step.shape.edge o.e (by rw [h.step₀.step.g]; exact h.book.e_lt)]; decide
+
+/-- The range invariant (with `o.e` processed) at the `k`-th loop-1 iterate of `closeEars`
+(`l1Iter d o s k`), for a returning tree edge whose first `k` loop conditions held. -/
+theorem rangesInv_l1Iter (h : CloseBase σ n D curV d o origTstack hasVert s)
+    (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d) (k : Nat)
+    (hk : ∀ j, j < k → result (loop1Cond d) (l1Iter d o s j) = true) :
+    RgStep σ (n + 1) D curV s (l1Iter d o s k) := by
+  obtain ⟨lv, kind, ho, hl⟩ := ret_of_lowval_lt hlow
+  have hok := h.finishOk ho hl
+  have st₀ := h.step₀
+  have hσ₀ := st₀.hσ h.rgs.2.2
+  have hv₀ : curV < (feS₀ d o s).g.nv := by rw [st₀.step.g]; exact h.book.v_lt
+  have ha := closeEarsAdj_of_frontier h.frontier ht hlow st₀.ranges st₀.step.shape hv₀ h.nodup hσ₀
+    h.site.block h.site.pos h.etype₀ (hok.ears ht)
+  have st₁ : RgStep σ (n + 1) D curV (feS₀ d o s) (ceS₁ o.dest d o.e (feS₀ d o s)) :=
+    RgStep.pushEdge st₀.ranges st₀.step.shape h.nodup o.dest d o.e (hok.ears ht).e_lt (hok.ears ht).q
+      ha.etype (hok.ears ht).ends (hok.ears ht).d_le ha.pos
+  exact st₀.trans (st₁.trans (RgStep.iter (loop1Cond d) (Spqr.loop1Body d s.stackDir[d]!)
+    (Loop1BodyOk D d s.stackDir[d]!) (Loop1BodyAdj σ d s.stackDir[d]!)
+    (fun _ hv h' hs hσ _ hok hadj => RgStep.loop1Body h' hs h.nodup hσ hv hok hadj)
+    (by rw [st₁.step.g]; exact hv₀) st₁.ranges st₁.step.shape (st₁.hσ hσ₀) (hok.ears ht).body ha.body k hk))
+
+/-- The range invariant (with `o.e` processed) at `feS₂ d o s`, the state after `closeEars` and
+`mergeLate` of a returning tree edge, where a type-1 vertex close starts. -/
+theorem rangesInv_feS₂ (h : CloseBase σ n D curV d o origTstack hasVert s)
+    (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d) :
+    RgStep σ (n + 1) D curV s (feS₂ d o s) := by
+  obtain ⟨lv, kind, ho, hl⟩ := ret_of_lowval_lt hlow
+  have hok := h.finishOk ho hl
+  have st₀ := h.step₀
+  have hσ₀ := st₀.hσ h.rgs.2.2
+  have hv₀ : curV < (feS₀ d o s).g.nv := by rw [st₀.step.g]; exact h.book.v_lt
+  have ha₁ := closeEarsAdj_of_frontier h.frontier ht hlow st₀.ranges st₀.step.shape hv₀ h.nodup hσ₀
+    h.site.block h.site.pos h.etype₀ (hok.ears ht)
+  have st₁ : RgStep σ (n + 1) D curV s (feS₁ d o s) :=
+    st₀.trans (RgStep.closeEars st₀.ranges st₀.step.shape h.nodup hσ₀ hv₀ (hok.ears ht) ha₁)
+  have hσ₁ := st₁.hσ h.rgs.2.2
+  have ha₂ := mergeLateAdj_of_frontier h.frontier ht hlow st₁.ranges h.nodup hσ₁ h.site.block (hok.late ht)
+  exact st₁.trans (RgStep.mergeLate st₁.ranges st₁.step.shape h.nodup hσ₁
+    (by rw [st₁.step.g]; exact h.book.v_lt) (hok.late ht) ha₂)
+
+
+/-- The attachments of a top entry about to be closed (`FinishTopOk`): its bottom, the path vertex
+at its `topDepth`, or an interior vertex (`AttachedIn` + `FinishTopOk.mid`). -/
+theorem att_of_finishTop {r : WalkState} {t : TEntry} {rest : List TEntry} (hi : r.Inv' D)
+    (hts : r.tstack = t :: rest) (hok : FinishTopOk D r) :
+    ∀ w, r.g.Touches (t.edges r.g r.items) w →
+      w = t.vStart ∨ w = r.stackVerts[t.topDepth]! ∨ r.g.Interior (t.edges r.g r.items) w := by
+  intro w hw
+  by_cases hint : r.g.Interior (t.edges r.g r.items) w
+  · exact .inr (.inr hint)
+  have hcur : curE r = t := by simp [curE, hts]
+  obtain ⟨e, he, hte, hinc⟩ := hw
+  have hint' := hint
+  simp only [Graph.Interior, not_forall] at hint'
+  obtain ⟨e', he', hinc', hne⟩ := hint'
+  have hterm := (hi.entries [] t rest hts).attached w e e' he he' hte hne hinc hinc'
+  rw [TEntry.Term'_nil] at hterm
+  rcases hterm with h | ⟨k, hk1, hk2, hwk⟩
+  · exact .inl h
+  rcases Nat.eq_or_lt_of_le hk1 with h | h
+  · exact .inr (.inl (by rw [hwk, h]))
+  rcases hok.mid k (by rw [hcur]; exact h) hk2 with h1 | h1 | h1
+  · rw [hcur] at h1; exact .inl (hwk.trans h1)
+  · rw [hcur] at h1; exact absurd (by rw [hwk]; exact h1) hint
+  · rw [hcur] at h1; exact absurd (by rw [← hwk]; exact ⟨e, he, hte, hinc⟩) h1
+
+/-- The path edge `(stackVerts[k], stackVerts[k+1])`, `k < d`, is held by no entry of a state
+reached from a `finishEdge` pre-state with `o.e` processed. -/
+theorem CloseBase.path_pend (h : CloseBase σ n D curV d o origTstack hasVert s) {r : WalkState}
+    (st : RgStep σ (n + 1) D curV s r) {k : Nat} (hk : k < d) :
+    ∃ e, e < r.g.ne ∧ r.g.Inc e s.stackVerts[k]! ∧ r.g.Inc e s.stackVerts[k + 1]! ∧
+      ∀ t ∈ r.tstack, ¬ t.edges r.g r.items e := by
+  obtain ⟨e, he, hn, hpe⟩ := h.site.path k hk
+  have hg := st.step.g
+  refine ⟨e, by rw [hg]; exact he, ?_, ?_, fun t ht hte => ?_⟩
+  · rw [hg]; exact (Graph.inc_of_pairEq hpe).1
+  · rw [hg]; exact (Graph.inc_of_pairEq hpe).2
+  · have := st.ranges.processed t ht e (by rw [hg]; exact he) hte
+    omega
+
+/-- The range invariant (with `o.e` processed) at the state `finishP` runs from. -/
+theorem CloseBase.rgFeRest (h : CloseBase σ n D curV d o origTstack hasVert s) {lv : Nat} {kind : RetKind}
+    (ho : o.cls = .ret lv kind) (hl : lv < d) :
+    RgStep σ (n + 1) D curV s (feRest curV d o origTstack hasVert s) := by
+  have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
+  have hlow : o.cls.lowval d < d := by rwa [hlv]
+  have hok := h.finishOk ho hl
+  have hadj := h.finishR.1 lv kind ho hl
+  have hnd := h.nodup
+  by_cases ht : o.cls.isTree = true
+  · have st₂ := rangesInv_feS₂ h ht hlow
+    have hσ₂ := st₂.hσ h.rgs.2.2
+    have hv₂ : curV < (feS₂ d o s).g.nv := by rw [st₂.step.g]; exact h.book.v_lt
+    cases hasVert
+    · simpa [feRest, ht] using st₂
+    · have st₃ : RgStep σ (n + 1) D curV _ (feS₃ curV d o origTstack s) :=
+        RgStep.closeVert' st₂.ranges st₂.step.shape hnd hσ₂ hv₂ (hok.vert ht rfl) (hadj.vert ht rfl)
+      simpa [feRest, ht] using st₂.trans st₃
+  · have ht' : o.cls.isTree = false := Bool.eq_false_iff.2 ht
+    have st₀ := h.step₀
+    have hq : Items.ch (feS₀ d o s).items (edgeItem (feS₀ d o s).g o.e) = [] := by
+      show Items.ch (s.items.modify _ _) (edgeItem s.g o.e) = []
+      rw [Items.ch_modify_ch_eq (edgeItem s.g o.e)
+        (fun it => { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) }) (fun _ => rfl)]
+      exact hok.q ht'
+    have st₁ : RgStep σ (n + 1) D curV _ (after (pushEdgeTstack curV lv o.e) (feS₀ d o s)) :=
+      RgStep.pushEdge st₀.ranges st₀.step.shape hnd curV lv o.e hok.e_lt hq (hadj.etype ht') (hok.ends ht')
+        (hok.lv_le ht') (hadj.pos ht')
+    have st₂ : RgStep σ (n + 1) D curV _ (feBack curV lv d o s) :=
+      ⟨Step.frame st₁.step.inv st₁.step.shape rfl rfl rfl rfl, st₁.ranges.frame rfl rfl rfl rfl⟩
+    have hr : feRest curV d o origTstack hasVert s = feBack curV lv d o s := by simp [feRest, ht', hlv]
+    rw [hr]; exact st₀.trans (st₁.trans st₂)
+
+/-- The range invariant through the merges and the retarget of `closeVert'` (before the type-1
+`finishTstackTop`). -/
+theorem RgStep.cvS₅ {v : Nat} (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup)
+    (hσ : ∀ e ∈ σ, e < s.g.ne) (hv : v < s.g.nv) {curV : Nat} {edgeDir isType1 : Bool}
+    {origTstack : Nat} {isSingle : Bool}
+    (hok : CloseVertOk D curV edgeDir isType1 origTstack isSingle s)
+    (hadj : CloseVertAdj σ isType1 origTstack isSingle s) :
+    RgStep σ n D v s (cvS₅ curV edgeDir isType1 origTstack isSingle s) := by
+  have st₁ : RgStep σ n D v s (cvS₁ isType1 origTstack isSingle s) :=
+    RgStep.vertPre h hs hnd hσ hv hok.loop3 hadj.loop3
+  have hσ₁ := st₁.hσ hσ
+  obtain ⟨st₂, -⟩ := RgStep.vertUnwrap (v := v) st₁.ranges st₁.step.shape hσ₁ (isType1 := isType1)
+    (isSingle := cvB₁ isType1 origTstack isSingle s) (fun h => by subst h; exact hok.unwrap rfl)
+  have st₂ : RgStep σ n D v (cvS₁ isType1 origTstack isSingle s) (cvS₂ isType1 origTstack isSingle s) := st₂
+  have hσ₂ := st₂.hσ hσ₁
+  have st₃ : RgStep σ n D v _ (cvS₃ isType1 origTstack isSingle s) :=
+    RgStep.mergeTop st₂.ranges st₂.step.shape hnd hσ₂ hok.merge₁ hadj.merge₁
+  have hσ₃ := st₃.hσ hσ₂
+  have st₄ : RgStep σ n D v _ (cvS₄ isType1 origTstack isSingle s) :=
+    RgStep.mergeTop st₃.ranges st₃.step.shape hnd hσ₃ hok.merge₂ hadj.merge₂
+  exact st₁.trans (st₂.trans (st₃.trans (st₄.trans
+    (RgStep.retarget st₄.ranges st₄.step.shape (st₄.hσ hσ₃) curV edgeDir hok.retarget))))
+
+/-- `maybeUnwrapNxt` keeps the stack's entries and their `topDepth` (it only rewrites `nxt`'s spans). -/
+theorem unwrap_topDepth {ty : NodeType} {a b : TEntry} {rest : List TEntry} (hts : s.tstack = a :: b :: rest) :
+    ∃ b', (after (maybeUnwrapNxt ty) s).tstack = a :: b' :: rest ∧ b'.topDepth = b.topDepth := by
+  rw [show after (maybeUnwrapNxt ty) s = ((maybeUnwrapNxt ty).run s).2 from rfl,
+    maybeUnwrapNxt_run_eq ty s a b rest hts _ rfl _ rfl]
+  split_ifs
+  · exact ⟨b, by rw [run_allocItem]; exact hts, rfl⟩
+  · exact ⟨_, rfl, rfl⟩
+  · exact ⟨b, by rw [run_allocItem]; exact hts, rfl⟩
+
+/-- At a type-1 vertex close, the entry retargeted at `cvS₅` has `topDepth = lowval`: the unwrap
+keeps `py`'s depth, the two merges take the minimum with `c` (`≥ lowval`) and `vy` (`> d`). -/
+theorem cvS₅_topDepth (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d) (h1 : o.cls.isType1 = true)
+    {sub base : List TEntry} (hE : s.EarFinish curV d o hasVert sub base) {t : TEntry} {rest : List TEntry}
+    (hts : (cvS₅ curV s.stackDir[d]! true origTstack (feSingle d o s) (feS₂ d o s)).tstack = t :: rest) :
+    t.topDepth = o.cls.lowval d := by
+  obtain ⟨c, mid, py, vy, hcl⟩ := hE.close ht hlow
+  have hmid : mid = [] := (hcl.type1 h1).1
+  have hts₂ : (feS₂ d o s).tstack = c :: py :: vy :: base := by simp [hcl.tstack, hmid]
+  have hS₂ : cvS₂ true origTstack (feSingle d o s) (feS₂ d o s) =
+      after (maybeUnwrapNxt (if feSingle d o s then .S else .R)) (feS₂ d o s) := by
+    simp only [cvS₂, cvS₁, cvB₁, after, result, vertPre, vertUnwrap, Bool.not_true, Bool.false_eq_true,
+      ↓reduceIte, WalkM.pure_run, WalkM.map_run]
+  obtain ⟨py', hts₂', hpy'⟩ := unwrap_topDepth (ty := if feSingle d o s then .S else .R) hts₂
+  have hts₃ : (cvS₃ true origTstack (feSingle d o s) (feS₂ d o s)).tstack =
+      TEntry.mergeInto c py' :: vy :: base := by
+    simp only [cvS₃, hS₂]; rw [after_mergeTstackTops_eq hts₂']
+  have hts₄ : (cvS₄ true origTstack (feSingle d o s) (feS₂ d o s)).tstack =
+      TEntry.mergeInto (TEntry.mergeInto c py') vy :: base := by
+    simp only [cvS₄]; rw [after_mergeTstackTops_eq hts₃]
+  have hts₅ : (cvS₅ curV s.stackDir[d]! true origTstack (feSingle d o s) (feS₂ d o s)).tstack =
+      { TEntry.mergeInto (TEntry.mergeInto c py') vy with
+        vStart := curV,
+        spans := setSides (!s.stackDir[d]!)
+          ((TEntry.mergeInto (TEntry.mergeInto c py') vy).spans.1 ++
+            (TEntry.mergeInto (TEntry.mergeInto c py') vy).spans.2) [] } :: base := by
+    show ((WalkState.retarget _ _).run _).2.tstack = _
+    rw [retarget_run_eq _ _ _ _ _ hts₄]
+  rw [hts₅] at hts
+  obtain ⟨rfl, -⟩ := List.cons.inj hts
+  have h₁ := hcl.c_top.1
+  have h₂ := hcl.py_top
+  have h₃ := hcl.vy_top
+  simp only [TEntry.mergeInto, hpy', h₂]
+  omega
+
+end Sites
+
 section Admissions
 variable {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
 
 /-- Block entry of a boundary edge carries exactly `vertItem o.dest` on its active side
 (checker: `closeCtx_bd_vert`, kind `ctx_bd_vert`). -/
-theorem closeCtx_bd_vert (h : CloseBase σ n D curV d o origTstack hasVert s)
+theorem closeCtx_bd_vert (_h : CloseBase σ n D curV d o origTstack hasVert s)
     (hc : CloseContent curV d o origTstack hasVert s) :
     o.cls.isTree = true → d ≤ o.cls.lowval d →
     ∀ t ∈ (if o.cls.lowval d = d + 1 then s.tstack.head? else s.tstack.tail.head?),
-      t.spans.2 = [vertItem o.dest] := by
-  sorry
+      t.spans.2 = [vertItem o.dest] :=
+  hc.bd_vert
 
 /-- Completed block: the top entry's passive side is one non-`F`/`V` node (a leaf if `Q`) with
 terminals `{curV, o.dest}` (checker: `closeCtx_bd_node`, kind `ctx_bd_node`). -/
-theorem closeCtx_bd_node (h : CloseBase σ n D curV d o origTstack hasVert s)
+theorem closeCtx_bd_node (_h : CloseBase σ n D curV d o origTstack hasVert s)
     (hc : CloseContent curV d o origTstack hasVert s) :
     o.cls.isTree = true → d ≤ o.cls.lowval d → o.cls.lowval d ≠ d + 1 →
     ∀ b ∈ s.tstack.head?, ∃ c, b.spans.1 = [c] ∧ Items.type s.items c ∉ [NodeType.F, .V] ∧
       (Items.type s.items c = .Q → Items.ch s.items c = []) ∧
-      ∃ a b', Items.vs s.items c = (some a, some b') ∧ Items.PairEq (a, b') (curV, o.dest) := by
-  sorry
+      ∃ a b', Items.vs s.items c = (some a, some b') ∧ Items.PairEq (a, b') (curV, o.dest) :=
+  hc.bd_node
 
 /-- The P-merge site (checker: `closeCtx_p_site`, kinds `psite_*`). -/
 theorem closeCtx_p_site (h : CloseBase σ n D curV d o origTstack hasVert s)
@@ -73,7 +294,26 @@ theorem closeCtx_p_site (h : CloseBase σ n D curV d o origTstack hasVert s)
     o.cls.lowval d < d → o.cls.isType1 = true →
     result (condP curV (o.cls.lowval d) true) (feRest curV d o origTstack hasVert s) = true →
     PSite curV (o.cls.lowval d) (feRest curV d o origTstack hasVert s) := by
-  sorry
+  intro hlow h1 hp
+  obtain ⟨lv, kind, ho, hl⟩ := ret_of_lowval_lt hlow
+  have st := h.rgFeRest ho hl
+  obtain ⟨sub, base, hlen, hE⟩ := h.book.ear
+  have pc := hc.p_site hlow h1 hp
+  have hsv := st.step.sv
+  exact {
+    shape := st.step.shape, stack := pc.stack, single := pc.single, att := pc.att,
+    touch := pc.touch, kinds := pc.kinds, once := pc.once,
+    ne := by
+      rw [hsv]; intro heq
+      exact hE.path _ _ hlow le_rfl (hE.sv_d.trans heq).symm,
+    pend := by
+      intro w hw
+      rcases hw with rfl | rfl
+      · obtain ⟨e, he, -, hinc, hpend⟩ := h.path_pend st (k := d - 1) (by omega)
+        refine ⟨e, he, ?_, fun t ht => hpend t (List.mem_of_mem_take ht)⟩
+        rwa [show d - 1 + 1 = d by omega, hE.sv_d] at hinc
+      · obtain ⟨e, he, hinc, -, hpend⟩ := h.path_pend st hlow
+        exact ⟨e, he, by rw [hsv]; exact hinc, fun t ht => hpend t (List.mem_of_mem_take ht)⟩ }
 
 /-- The type-1 vertex-close site (checker: `closeCtx_v_site`, kinds `vsite_*`). -/
 theorem closeCtx_v_site (h : CloseBase σ n D curV d o origTstack hasVert s)
@@ -81,7 +321,38 @@ theorem closeCtx_v_site (h : CloseBase σ n D curV d o origTstack hasVert s)
     o.cls.isTree = true → o.cls.lowval d < d → hasVert = true → o.cls.isType1 = true →
     ∃ t, VSite curV ((maybeUnwrapNxt (if feSingle d o s then NodeType.S else .R)).run (feS₂ d o s)).1 t
       (cvS₅ curV s.stackDir[d]! true origTstack (feSingle d o s) (feS₂ d o s)) := by
-  sorry
+  intro ht hlow hv h1
+  obtain ⟨lv, kind, ho, hl⟩ := ret_of_lowval_lt hlow
+  obtain ⟨t, vc⟩ := hc.v_site ht hlow hv h1
+  obtain ⟨sub, base, hlen, hE⟩ := h.book.ear
+  have hok := (h.finishOk ho hl).vert ht hv
+  have hadj := (h.finishR.1 lv kind ho hl).vert ht hv
+  rw [h1] at hok hadj
+  have st₂ := rangesInv_feS₂ h ht hlow
+  have st₅ := RgStep.cvS₅ st₂.ranges st₂.step.shape h.nodup (st₂.hσ h.rgs.2.2)
+    (by rw [st₂.step.g]; exact h.book.v_lt) hok hadj
+  have st := st₂.trans st₅
+  obtain ⟨rest, hts⟩ := vc.stack
+  have htop := cvS₅_topDepth ht hlow h1 hE hts
+  have hsv := st.step.sv
+  refine ⟨t, {
+    shape := st₅.step.shape, stack := vc.stack, vstart := vc.vstart, side := vc.side,
+    free := vc.free, kinds := vc.kinds, two := vc.two, touch := vc.touch, inner := vc.inner,
+    s_order := vc.s_order, r_shape := vc.r_shape, p_shape := vc.p_shape,
+    ne := by
+      rw [htop, hsv]; intro heq
+      exact hE.path _ _ hlow le_rfl (hE.sv_d.trans heq).symm,
+    att := fun w hw => ?_,
+    pend := by
+      intro w hw
+      rcases hw with rfl | rfl
+      · obtain ⟨e, he, -, hinc, hpend⟩ := h.path_pend st (k := d - 1) (by omega)
+        refine ⟨e, he, ?_, hpend t (hts ▸ List.mem_cons_self ..)⟩
+        rwa [show d - 1 + 1 = d by omega, hE.sv_d] at hinc
+      · obtain ⟨e, he, hinc, -, hpend⟩ := h.path_pend st hlow
+        exact ⟨e, he, by rw [htop, hsv]; exact hinc, hpend t (hts ▸ List.mem_cons_self ..)⟩ }⟩
+  rcases att_of_finishTop st₅.ranges.inv hts (hok.finish rfl) w hw with h' | h' | h'
+  exacts [.inl (h'.trans vc.vstart), .inr (.inl h'), .inr (.inr h')]
 
 /-- The loop-1 iteration sites (checker: `closeCtx_l1_site`, kinds `l1site_*`). -/
 theorem closeCtx_l1_site (h : CloseBase σ n D curV d o origTstack hasVert s)
@@ -93,7 +364,32 @@ theorem closeCtx_l1_site (h : CloseBase σ n D curV d o origTstack hasVert s)
     ∃ t, VSite t.vStart
       (result (maybeUnwrapNxt (l1Ty d s.stackDir[d]! (l1Iter d o s k))) (l1S₁ d s.stackDir[d]! (l1Iter d o s k)))
       t (after mergeTstackTops (l1S₂ d s.stackDir[d]! (l1Iter d o s k))) := by
-  sorry
+  intro ht hlow k hk
+  obtain ⟨lv, kind, ho, hl⟩ := ret_of_lowval_lt hlow
+  have hok : Loop1BodyOk D d s.stackDir[d]! (l1Iter d o s k) := ((h.finishOk ho hl).ears ht).body k hk
+  have hadj : Loop1BodyAdj σ d s.stackDir[d]! (l1Iter d o s k) :=
+    ((h.finishR.1 lv kind ho hl).ears ht).body k hk
+  have st := rangesInv_l1Iter h ht hlow k (fun j hj => hk j hj.le)
+  have hσ := st.hσ h.rgs.2.2
+  have st₁ : RgStep σ (n + 1) D curV _ (l1S₁ d s.stackDir[d]! (l1Iter d o s k)) :=
+    RgStep.loop1Type st.ranges st.step.shape h.nodup hσ hok.mergeS hadj.mergeS
+  have hσ₁ := st₁.hσ hσ
+  have r := RgStep.unwrapRes (v := curV) st₁.ranges st₁.step.shape hσ₁ (loop1Type_result d _ _) hok.unwrap
+  have st₂ : RgStep σ (n + 1) D curV _ (l1S₂ d s.stackDir[d]! (l1Iter d o s k)) := r.step
+  have st₃ : RgStep σ (n + 1) D curV _ (l1Pre d o s k) :=
+    RgStep.mergeTop st₂.ranges st₂.step.shape h.nodup (st₂.hσ hσ₁) hok.close.merge hadj.close
+  obtain ⟨t, hne, hpend, vc⟩ := hc.l1_site ht hlow k hk
+  obtain ⟨rest, hts⟩ := vc.stack
+  refine ⟨st₁.step.shape, ?_, t, {
+    shape := st₃.step.shape, stack := vc.stack, vstart := vc.vstart,
+    side := vc.side, free := vc.free, ne := hne, kinds := vc.kinds, two := vc.two, touch := vc.touch,
+    pend := hpend, inner := vc.inner, s_order := vc.s_order, r_shape := vc.r_shape, p_shape := vc.p_shape,
+    att := att_of_finishTop st₃.ranges.inv hts hok.close.finish }⟩
+  have h2 := hok.unwrap.two
+  rcases hts₁ : (l1S₁ d s.stackDir[d]! (l1Iter d o s k)).tstack with _ | ⟨a, _ | ⟨b, rest⟩⟩
+  · rw [hts₁] at h2; simp at h2
+  · rw [hts₁] at h2; simp at h2
+  · exact ⟨a, b, rest, rfl⟩
 
 /-- `CloseCtx` from the exports and the block contents. -/
 theorem CloseCtx.of_exports (h : CloseBase σ n D curV d o origTstack hasVert s)

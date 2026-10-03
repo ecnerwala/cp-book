@@ -47,10 +47,6 @@ theorem edges_retargetEntry {g : Graph} {items : Items} (curV : Nat) (dir : Bool
       t.edges g items e := by
   simp only [TEntry.edges, mem_setSides]
 
-theorem after_mergeTstackTops_eq {a b : TEntry} {rest : List TEntry} (hts : s.tstack = a :: b :: rest) :
-    after mergeTstackTops s = { s with tstack := TEntry.mergeInto a b :: rest } := by
-  show (mergeTstackTops.run s).2 = _; rw [mergeTstackTops_run_eq s a b rest hts]
-
 /-- `maybeUnwrapNxt` keeps every entry's edge set (the unwrapped `nxt` included). -/
 theorem unwrap_edges (hs : Shape s) {ty : NodeType} (hty : ty ∉ [NodeType.F, .V, .Q])
     (hok : UnwrapOk ty s) {a b : TEntry} {rest : List TEntry} (hts : s.tstack = a :: b :: rest) :
