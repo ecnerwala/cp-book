@@ -327,6 +327,53 @@ def checkCtx (seed : Nat) (curV d : Nat) (o : DfsOut) (s : WalkState) : List V :
       | none => out := bad "bd_node_none" :: out
   return out
 
+/-- The `PSite` fields of `CloseCtx.p_site`, evaluated at the state `finishP` runs from whenever
+`condP` holds there. -/
+def checkP (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
+    List V := Id.run do
+  let lv := o.cls.lowval d
+  if !(lv < d) then return []
+  let r := if o.cls.isTree then (if hv then feS₃ curV d o orig s else feS₂ d o s)
+    else feBack curV lv d o s
+  if !(result (condP curV lv o.cls.isType1) r) then return []
+  let ty : Nat → NodeType := fun i => r.items[i]!.type
+  let ch : Nat → List ItemId := fun i => r.items[i]!.ch
+  let vs : Nat → Option Nat × Option Nat := fun i => r.items[i]!.vs
+  let u := r.stackVerts[lv]!
+  let dir := r.stackDir[lv]!
+  let top := r.tstack.take 2
+  let bad := fun k => (⟨seed, r.ternarize, curV, d, "finishP_closeAt", "psite_" ++ k,
+    s!"o.e={o.e} lv={lv} u={u} stack={r.tstack.map showT}"⟩ : V)
+  let mut out := []
+  match r.tstack with
+  | cur :: _ => if cur.vStart != curV || cur.topDepth != lv then out := bad "stack" :: out
+  | [] => out := bad "stack" :: out
+  if curV == u then out := bad "ne" :: out
+  let pair := fun (p q : Nat × Nat) => p == q || p == (q.2, q.1)
+  let kind := fun j => [NodeType.S, .P, .R, .Q].contains (ty j) && (ty j != .Q || (ch j).isEmpty)
+  let allE := List.range r.g.ne
+  for t in top do
+    let E := entryEdges r t
+    let interior := fun w => allE.all fun e => !inc r e w || E.contains e
+    match getSide t.spans dir, getSide t.spans (!dir) with
+    | [j], [] =>
+      match vs j with
+      | (some a, some b) => if !pair (a, b) (u, curV) then out := bad "single_vs" :: out
+      | _ => out := bad "single_vs" :: out
+    | _, _ => out := bad "single" :: out
+    for w in List.range r.g.nv do
+      if touches r E w && w != curV && w != u && !interior w then out := bad "att" :: out
+    if !(touches r E curV && touches r E u) then out := bad "touch" :: out
+    for j in spanItems t do
+      for j' in j :: (if ty j == .P then ch j else []) do
+        if !kind j' then out := bad "kinds" :: out
+      let cnt := (r.tstack.map fun t' => (spanItems t').count j).sum
+      if cnt != 1 || r.items.any (fun it => it.ch.contains j) then out := bad "once" :: out
+  let Eall := top.flatMap (entryEdges r)
+  for w in [curV, u] do
+    if !(allE.any fun e => inc r e w && !Eall.contains e) then out := bad "pend" :: out
+  return out
+
 def checkClose (seed : Nat) (site : String) (s : WalkState) : List V := Id.run do
   let ty := fun i => s.items[i]!.type
   let ch := fun i => s.items[i]!.ch
@@ -420,7 +467,7 @@ partial def iOut (seed : Nat) (σ : List Nat) (v d : Nat) (o : DfsOut) (hv : Boo
     | .tree _ _ child => iTree seed σ child (d+1) { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
     | .back .. => (s, [])
   let vs := vp ++ vs ++ check seed σ v d o orig s ++ checkAdj seed σ v d o orig hv s ++ checkClose seed "pre" s ++
-    checkCtx seed v d o s
+    checkCtx seed v d o s ++ checkP seed v d o orig hv s
   let vs := vs ++ (closeSites v d o orig hv s).flatMap fun (site, st) => checkClose seed site st
   let vs := vs ++ if hv then [] else checkVertPast seed σ v (σ.idxOf o.e) s
   let (hv', s) := (finishEdge v d o orig hv).run s
