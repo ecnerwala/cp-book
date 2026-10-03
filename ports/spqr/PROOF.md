@@ -1158,6 +1158,11 @@ actually executes. The empirical checker now also checks the unpushed vertex bou
 `CloseFacts` clause on live items (`cnt > 0`) before and after each edge finish. Seeds 0–400,
 both modes, and the tiny examples have no violations. Allocated but loose items are excluded:
 freshly allocated nodes and reopened nodes are not closed records until they are reattached.
+`RangesClose.CloseAt` records all the checked attachment, child, Q/I/O, and P/S/R shape
+clauses for one item. `CloseInv` requires this record for the root and for items with positive
+span/child occurrence count. Its initial-state proof is complete. `CloseInv.of_tree` recovers
+`Items.CloseFacts` when every non-root item has a parent; this uses the existing `Items.Tree`
+contract, not another reachability admission. Local close-site construction remains to prove.
 All twenty-two lemmas have only standard axioms. Full `FinishAdj` still needs the P merge
 into the base; the child's frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece

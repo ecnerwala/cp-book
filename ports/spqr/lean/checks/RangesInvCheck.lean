@@ -260,7 +260,7 @@ def checkClose (seed : Nat) (s : WalkState) : List V := Id.run do
   let ty := fun i => s.items[i]!.type
   let ch := fun i => s.items[i]!.ch
   let vs := fun i => s.items[i]!.vs
-  let live := fun i => s.tstack.any (fun t => (spanItems t).contains i) || s.items.any (fun it => it.ch.contains i)
+  let live := fun i => i == rootItem || s.tstack.any (fun t => (spanItems t).contains i) || s.items.any (fun it => it.ch.contains i)
   let spr := fun i => [NodeType.S, .P, .R].contains (ty i)
   let pair := fun (p q : Nat × Nat) => p == q || p == (q.2, q.1)
   let two := fun i => match vs i with | (some a, some b) => a != b | _ => false
@@ -325,10 +325,10 @@ mutual
 partial def iTree (seed : Nat) (σ : List Nat) (t : DfsTree) (d : Nat) (s : WalkState) : WalkState × List V :=
   match t with
   | .node v outs =>
-    let n := σ.idxOf t.edgePostorder.head!
+    let n := match t.edgePostorder.head? with | some e => σ.idxOf e | none => σ.length
     let s := { s with stackVerts := s.stackVerts.set! d v }
     let (hv, s, vs) := iOuts seed σ v d outs false s
-    let vs := vs ++ if hv then [] else checkVertPast seed σ v (if t.edgePostorder.isEmpty then σ.length else n + t.edgePostorder.length) s
+    let vs := vs ++ if hv then [] else checkVertPast seed σ v (n + t.edgePostorder.length) s
     let s := if hv then s else ((setStackDir d true *> pushVertTstack v d).run s).2
     (s, vs)
 partial def iOuts (seed : Nat) (σ : List Nat) (v d : Nat) (outs : List DfsOut) (hv : Bool) (s : WalkState) : Bool × WalkState × List V :=
