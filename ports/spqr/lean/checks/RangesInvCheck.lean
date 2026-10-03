@@ -89,6 +89,16 @@ def checkAdj (seed : Nat) (σ : List Nat) (curV d : Nat) (o : DfsOut) (orig : Na
   for (site, st) in adjacencySites curV d o orig hv s do
     let cur := st.tstack.head!
     let nxt := st.tstack.tail.head!
+    if site == "P" then
+      let hi := σ.idxOf o.e + 1
+      let lo := hi - o.block.length
+      for b in List.range' lo (hi - lo) do
+        if !st.tstack.any (fun t => (entryEdges st t).contains σ[b]!) then
+          out := ⟨seed, s.ternarize, curV, d, s!"e={o.e}", "p_child_cover", s!"lo={lo} hi={hi} b={b}"⟩ :: out
+      for a in (entryPiece st nxt).map σ.idxOf do
+        for b in List.range' a (lo - a) do
+          if !st.tstack.any (fun t => (entryEdges st t).contains σ[b]!) then
+            out := ⟨seed, s.ternarize, curV, d, s!"e={o.e}", "p_base_cover", s!"lo={lo} hi={hi} a={a} b={b}"⟩ :: out
     let low := ((entryPiece st nxt).map σ.idxOf).min?
     let high := ((entryPiece st cur).map σ.idxOf).max?
     match low, high with

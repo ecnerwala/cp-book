@@ -1129,6 +1129,11 @@ edges; the `PushVertR` processed-edge bound remains a separate obligation.
 frontier bound follows from `FinishBook.late_length`.
 `finishPAdj_of_frontier` handles the P unwrap/merge when an enclosing interval frontier owns
 both entries; supplying that enclosing frontier for the actual P merge remains open.
+`MergeBaseCover` instead splits ownership at the child's starting postorder position:
+the settled base covers the preceding suffix and the frontier covers the new child block.
+`RangesInv.mergeAdj_of_baseCover` and `finishPAdj_of_baseCover` derive adjacency from this
+explicit induction hypothesis (`FinishPCover`), with no new admission. Both ownership clauses
+at actual P sites pass seeds 0–400 × both modes in `RangesInvCheck`.
 All twenty-two lemmas have only standard axioms. Full `FinishAdj` still needs the P merge
 into the base; the child's frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece

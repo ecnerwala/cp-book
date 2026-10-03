@@ -464,4 +464,36 @@ theorem finishPAdj_of_frontier {curV lowval orig : Nat} {isType1 : Bool}
   dsimp only [after] at hf'
   exact hr.mergeAdj_of_frontier hnd (by rwa [hg]) hf'.1 (by rw [hf'.2]; exact (hf hc).2) hinterval
 
+/-- Ownership on the two sides of the child's postorder boundary. -/
+structure MergeBaseCover (σ : List Nat) (lo hi : Nat) (s : WalkState) : Prop where
+  base : ∀ cur nxt rest, s.tstack = cur :: nxt :: rest → ∀ a b, a ≤ b → b < lo →
+    nxt.piece s.g s.items σ[a]! → ∃ t ∈ s.tstack, t.edges s.g s.items σ[b]!
+  child : ∀ b, lo ≤ b → b < hi → ∃ t ∈ s.tstack, t.edges s.g s.items σ[b]!
+
+theorem RangesInv.mergeAdj_of_baseCover (h : s.RangesInv σ n D) (hnd : σ.Nodup)
+    (hσ : ∀ e ∈ σ, e < s.g.ne) {lo : Nat} (hc : MergeBaseCover σ lo n s) : MergeAdj σ s := by
+  apply h.mergeAdj_of_cover hnd hσ
+  intro cur nxt rest hts a b c hab hbc hcl ha hcc
+  by_cases hb : b < lo
+  · exact hc.base cur nxt rest hts a b hab hb ha
+  · have hcn := h.processed cur (by simp [hts]) _ (getElem!_lt hσ hcl) hcc.edges
+    rw [idxOf_getElem! hnd hcl] at hcn
+    exact hc.child b (by omega) (by omega)
+
+/-- The induction supplies the settled-base suffix as well as the new child interval. -/
+def FinishPCover (σ : List Nat) (n curV lowval : Nat) (isType1 : Bool) (s : WalkState) : Prop :=
+  result (condP curV lowval isType1) s = true →
+    ∃ lo, MergeBaseCover σ lo n (after (maybeUnwrapNxt .P) s)
+
+theorem finishPAdj_of_baseCover {curV lowval : Nat} {isType1 : Bool}
+    (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+    (hok : FinishPOk D curV lowval isType1 s) (hc : FinishPCover σ n curV lowval isType1 s) :
+    FinishPAdj σ curV lowval isType1 s := by
+  refine ⟨fun hp => ?_⟩
+  obtain ⟨lo, hc⟩ := hc hp
+  have hu := (hok.ok hp).1
+  have hr := h.unwrap' hσ hs (by decide) hu
+  have hg := (maybeUnwrapNxt_spec (v := curV) h.inv hs (by decide) hu).step.g
+  exact hr.mergeAdj_of_baseCover hnd (by rwa [hg]) hc
+
 end Spqr.WalkState
