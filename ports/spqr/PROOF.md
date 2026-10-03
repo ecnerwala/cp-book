@@ -649,6 +649,29 @@ check exactly these at the site, so the first step is to add `EarCtx` to `checks
 between the outs (one check per `walkOut` return) and run seeds 0..3000 before stating it in Lean.
 The leaf of the induction (back edge, `sub = []`) needs only (i)–(iii).
 
+**`EarCtx` checked (ear session 7, `EarCtx.lean`, `checks/EarCheck.lean` `ctxCheck`).** The
+between-edges invariant is now stated as `WalkState.EarCtx v d done rest hasVert base bE sv s`
+(statement only, no proof) and every clause is checked at the start of `walkOuts` and after every
+`walkOut` return: 0 violations on seeds 0..3000, `ternarize = false` and `true`. The dump corrected
+(ii) above in three ways. (a) The per-out entries are the entries *above* the one holding `V v`,
+not all of `top`: the first out of `v` is the chain child, whose pieces stay as separate open
+entries with `vStart ≠ v` (seed 1, `v = 5`, `d = 5`: `[V 5, (6,5), (6,3), (6,1), V 6] ++ base`).
+(b) `V v` is a single entry at depth `d` only until a type-2 out closes with the vertex entry; after
+that the entry holding `vertItem v` is the merged one with a chain vertex as `vStart` and
+`topDepth ≤ d` (seed 1, `v = 4`, `d = 3`: `(1,1,[29,7,15,23,30,5])` holds `V 4`), and `hasVert`
+can also be set by `finishEdge` itself (seed 1, `v = 5`: `V 5` pushed by a boundary finish), so
+`done` carries per out whether the vertex entry existed at its `finishEdge`. (c) Only type-1 outs
+P-merge: a type-2 out at the same lowval leaves a second, multi-item `(v, l)` entry (seed 1,
+`v = 1`, `d = 4`: `(1,1,[29,7,15,23])` above `(1,1,[16])`), so "one entry per lowval, single root
+item" holds only at lowvals all of whose post-push outs are type 1 (`allType1`/`CtxSingle`);
+in general the entries above `V v` have non-increasing `topDepth` and strictly decreasing
+`firstIdx` top-down, touch `v` and `stackVerts[topDepth]`, lie on side `stackDir[topDepth]`, are
+attached only at `v` and `stackVerts[k]`, `topDepth ≤ k ≤ d`, and hold exactly the post-push outs'
+`subEdges` (up to the `V v` entry). The header of `EarCtx.lean` lists which `EarFinish` field each
+clause is meant to re-establish; the fields it does not cover (`loop1*`, `late*`, `loops`, `close`,
+`bottom`, `boundary`/`bd_*`, `lower`, `dir_d`) need the child's end-of-outs `EarCtx` plus the chain
+anchor.
+
 **Acyclicity (`ItemAcyc.lean`, `WalkState.Full.acyc`).** Exact placement plus coverage say every
 non-root item has exactly one parent but not that `Items.IsParent` is well-founded, so `Full`
 also carries
@@ -1410,6 +1433,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | §4.2b walk invariant `Inv' D` (`EntryInv' D above`: connected + attached at `Term'`; closed items 2-attached): closure lemmas (`GraphLemmas.lean`: `AttachedIn`, `twoAttached_iff`), primitives `Inv'.alloc`/`modifyVs`/`pushVert`/`pushEdge`/`mergeTop`/`retarget`/`pop`/`finishTop`, `Shape`/`Step` infrastructure, per-block lemmas `Step.closeEars`/`mergeLate`/`closeVert'`/`finishRest` under `CloseEarsOk`/`MergeLateOk`/`CloseVertOk`/`FinishRestOk` (`MergeTopOk`/`RetargetOk.disj`: entries below edge-disjoint from the touched ones) | `GraphLemmas.lean`, `WalkSpec.lean` | proved (the depth-indexed `Inv D` versions `mergeTstackTops_sound`/`finishTstackTop_complete` are kept; `Inv D` itself is false mid-walk) |
 | §4.2b `finishEdge_inv` (type-1 ± vertex entry, type-2 three loops, back edge) under `FinishOk`; `finishEdge_back_inv` corollary | `WalkSpec.lean` | proved for `Inv' D`; `FinishOk ← FinishGuards`/`EarFinish` (`ear_*` sorries, `ear_finishP_back` derived); `WalkInv.walkTree_inv'` (`Inv' d ∧ Shape`) proved modulo them — the `Inv d` form was **false** (`ear_lower` false, `Inv D` fails for every `D` under a type-2 chain with a sibling subtree; §4.2b correction), `ear_lower'` (`Inv' (d+1) → Inv' d` after a tree edge) derived from `EarFinish.lower` in its place; `walk_nodes_partition` proved in `WalkPlace.lean` under `ForestOK` + coverage |
 | Invariant W, Lemma 4.3 (`earOut_one_entry`) | `EarShape.lean` | restated as `finishEdge_one_entry` (at the `finishEdge` site, from `EarAt`, type-1 edges; §4.2b) and proved (standard axioms); the type-2 form needs `lowval ≤ topDepth` of the child's entries, not in the contract |
+| between-edges invariant `EarCtx` of `walkOuts` (induction hypothesis for `walkTree_ear`; §4.2b) | `EarCtx.lean`, `checks/EarCheck.lean` (`ctxCheck`) | stated, dump-checked 0..3000 both modes (0 violations); not proved |
 | Lemma 4.4 (`ascend_frame_one_entry`: a finished frame's vertex owns one entry) | `EarSpec.lean` | **false** for chain frames (cycle `0..5` + chord `5-1`, frame `(4,4)`: five entries); removed, the collapse holds only at the ear's top (= `earOut_one_entry`) |
 | boundary branch of `finishEdge` keeps `Inv' D ∧ Shape` (`finishBoundary_inv`, via `BStep`, under `BoundaryOk`: popped entries exist, Q/V items are roots not on any span, popped blocks' terminals touched by no entry below) | `WalkInv.lean` | proved (`BoundaryOk ← ear_boundary`, derived from `dest_edges`/`bd_noVert`/`bd_bridge`/`bd_comp`/`bd_term`; `gone`/`gone₂` stated under `isTree`); the former `Step` form is false (the Q item goes under `vertItem curV`), as is `VertBook`'s `hasVert = false → ch (vertItem v) = []` (bridge `1-2` before back edge `1→0`) — replaced by connectivity + `TwoAttached v v` of the vertex item |
 | corrected attachment set `TEntry.Term'`, `EntryInv'`, `Stack`, `Inv'` (`Inv'.of_inv`, `Inv'.mono`, `Stack_iff`, `Inv'.setSv`); empirical check `checks/InvCheck.lean` | `WalkSpec.lean`, `WalkInv.lean` | def + proved; `Step`/`BStep`/`walkTree_inv'` stated through it |

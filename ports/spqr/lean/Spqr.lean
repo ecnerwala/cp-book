@@ -31,6 +31,7 @@ import Spqr.RangesInv
 import Spqr.Correctness
 import Spqr.EarSpec
 import Spqr.EarShape
+import Spqr.EarCtx
 import Spqr.EarInv
 import Spqr.SepPair
 import Spqr.Proofs.PlanarMap
