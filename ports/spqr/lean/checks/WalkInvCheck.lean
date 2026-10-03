@@ -4,6 +4,7 @@ import WalkInvCheck.R
 import WalkInvCheck.St
 import WalkInvCheck.Extra
 import WalkInvCheck.E3False
+import WalkInvCheck.Planar
 /-!
 # `WalkInvCheck`: the executable conjunction of the backbone invariant (PROOF.md §4.7)
 
@@ -327,6 +328,7 @@ def runGraph (seed : Nat) (g : Graph) (tern : Bool) : Bool × Bool × List Viol 
   let c : Ctx := ⟨seed, g, edgePostorderForest f, R.mkDfs g f, R.isBlock g && g.ne ≥ 2⟩
   let (s, vs) := iForest c f (WalkState.init g tern)
   let vs := vs ++ ofRanges (Ranges.checkFinal seed s)
+  let vs := vs ++ Planar.finishB seed g tern f
   let ref := g.walk tern f
   (s.items.toList.map (fun it => (it.type, it.vs, it.ch)) == ref.items.toList.map (fun it => (it.type, it.vs, it.ch)) &&
     s.tstack.length == ref.tstack.length, c.block, vs)

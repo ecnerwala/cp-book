@@ -135,3 +135,4 @@ import Spqr.RangesFinal
 import Spqr.WalkBackbone
 import Spqr.WalkBackboneStep
 import Spqr.PlanarEmbedNodeR
+import Spqr.Proofs.PlanarWalkFacts
