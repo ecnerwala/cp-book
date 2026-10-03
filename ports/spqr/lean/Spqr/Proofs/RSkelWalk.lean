@@ -89,13 +89,13 @@ theorem loop1_r_keepsR' {D v d : Nat} {o : DfsOut} {hi lo base : List TEntry}
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hchild : o.dest = s.stackVerts[d + 1]!) {origTstack : Nat}
     (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
-    (hk : ∀ j, j ≤ k → result (loop1Cond d) (l1Iter d o s j) = true)
-    (hty : l1Ty d s.stackDir[d]! (l1Iter d o s k) = .R) :
-    KeepsR (loop1Body d s.stackDir[d]!) (l1Iter d o s k) := by
+    (hk : ∀ j, j ≤ k → result (loop1Cond d) (rl1Iter d o s j) = true)
+    (hty : l1Ty d s.stackDir[d]! (rl1Iter d o s k) = .R) :
+    KeepsR (loop1Body d s.stackDir[d]!) (rl1Iter d o s k) := by
   subst hD
   obtain ⟨cur, nxt, rest, hb, hR'⟩ := loop1_rBranch_ctx hc h0 hv he hi₀ hs₀ hok h2 hsp hrt hchild hR k hk hty
   have st := closeEars_iter_step (v := v) hi₀ hs₀ hv hok k hk
-  set sk := l1Iter d o s k with hsk
+  set sk := rl1Iter d o s k with hsk
   have hg : sk.g = s.g := st.g
   have hside : getSide (TEntry.mergeInto cur nxt).spans (!sk.stackDir[d]!) = [] := by
     have h := (hok.body k hk).close.finish

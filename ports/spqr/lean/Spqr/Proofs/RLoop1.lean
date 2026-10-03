@@ -22,7 +22,7 @@ namespace WalkState
 variable {s : WalkState} {dfs : DfsData}
 
 /-- The `k`-th loop-1 iterate of the tree edge `o` finished at depth `d` from the site state `s`. -/
-abbrev l1Iter (d : Nat) (o : DfsOut) (s : WalkState) (k : Nat) : WalkState :=
+abbrev rl1Iter (d : Nat) (o : DfsOut) (s : WalkState) (k : Nat) : WalkState :=
   iter (loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s))
 
 /-- At an `.R` iterate under the ear context the head is the `L1Piece`: it tops out at `d` and
@@ -31,11 +31,11 @@ theorem loop1_r_shape_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TEntry} {v
     (hc : L1Ctx D d o s hi lo base)
     (h0 : L1Inv D d o s hi lo base (ceS₁ o.dest d o.e (feS₀ d o s)))
     (hv : v₀ < s.g.nv) (he : o.e < s.g.ne) (k : Nat)
-    (hk : ∀ j, j ≤ k → result (loop1Cond d) (l1Iter d o s j) = true)
-    (hty : l1Ty d s.stackDir[d]! (l1Iter d o s k) = .R) :
-    ∃ cur nxt rest, (l1Iter d o s k).tstack = cur :: nxt :: rest ∧
+    (hk : ∀ j, j ≤ k → result (loop1Cond d) (rl1Iter d o s j) = true)
+    (hty : l1Ty d s.stackDir[d]! (rl1Iter d o s k) = .R) :
+    ∃ cur nxt rest, (rl1Iter d o s k).tstack = cur :: nxt :: rest ∧
       cur.topDepth = d ∧ nxt.topDepth = d ∧ nxt.vStart ≠ cur.vStart ∧
-      (∃ e, e < s.g.ne ∧ cur.edges s.g (l1Iter d o s k).items e) := by
+      (∃ e, e < s.g.ne ∧ cur.edges s.g (rl1Iter d o s k).items e) := by
   obtain ⟨cur, nxt, rest, hts, hnt, hne⟩ := loop1_r_shape (hk k le_rfl) hty
   obtain ⟨done, rest', c, -, hP, -, -⟩ := l1_iter hc h0 hv k fun j hj => hk j (Nat.le_of_lt hj)
   have hcur : c = cur := by
@@ -66,13 +66,13 @@ theorem loop1_rBranch_content_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TE
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hchild : o.dest = s.stackVerts[d + 1]!) {origTstack : Nat}
     (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
-    (hk : ∀ j, j ≤ k → result (loop1Cond d) (l1Iter d o s j) = true)
-    (hty : l1Ty d s.stackDir[d]! (l1Iter d o s k) = .R)
+    (hk : ∀ j, j ≤ k → result (loop1Cond d) (rl1Iter d o s j) = true)
+    (hty : l1Ty d s.stackDir[d]! (rl1Iter d o s k) = .R)
     (cur nxt : TEntry) (rest : List TEntry)
-    (hts : (l1Iter d o s k).tstack = cur :: nxt :: rest)
+    (hts : (rl1Iter d o s k).tstack = cur :: nxt :: rest)
     (hct : cur.topDepth = d) (hnt : nxt.topDepth = d) (hne : nxt.vStart ≠ cur.vStart)
-    (hce : ∃ e, e < s.g.ne ∧ cur.edges s.g (l1Iter d o s k).items e) :
-    (l1Iter d o s k).RBranch d cur nxt rest ∧ (l1Iter d o s k).RTop dfs cur nxt := by
+    (hce : ∃ e, e < s.g.ne ∧ cur.edges s.g (rl1Iter d o s k).items e) :
+    (rl1Iter d o s k).RBranch d cur nxt rest ∧ (rl1Iter d o s k).RTop dfs cur nxt := by
   sorry
 
 /-- `loop1_rBranch` under the ear context: shape from `loop1_r_shape_ctx`, content from
@@ -86,9 +86,9 @@ theorem loop1_rBranch_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TEntry} {v
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hchild : o.dest = s.stackVerts[d + 1]!) {origTstack : Nat}
     (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
-    (hk : ∀ j, j ≤ k → result (loop1Cond d) (l1Iter d o s j) = true)
-    (hty : l1Ty d s.stackDir[d]! (l1Iter d o s k) = .R) :
-    ∃ cur nxt rest, (l1Iter d o s k).RBranch d cur nxt rest ∧ (l1Iter d o s k).RTop dfs cur nxt := by
+    (hk : ∀ j, j ≤ k → result (loop1Cond d) (rl1Iter d o s j) = true)
+    (hty : l1Ty d s.stackDir[d]! (rl1Iter d o s k) = .R) :
+    ∃ cur nxt rest, (rl1Iter d o s k).RBranch d cur nxt rest ∧ (rl1Iter d o s k).RTop dfs cur nxt := by
   obtain ⟨cur, nxt, rest, hts, hct, hnt, hne, hce⟩ := loop1_r_shape_ctx hc h0 hv he k hk hty
   exact ⟨cur, nxt, rest, loop1_rBranch_content_ctx hc h0 hi₀ hs₀ hok h2 hsp hrt hchild hR k hk hty
     cur nxt rest hts hct hnt hne hce⟩
