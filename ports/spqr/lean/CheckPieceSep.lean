@@ -4,6 +4,29 @@ import Spqr.PlanarEmbedSteps
 
 open Spqr
 
+def checkCapFace (g : Graph) (t : PlanarSpqrTree) (j : Nat)
+    (s : PlanarSpqrTree.EmbedState) : Bool := Id.run do
+  let p := t.pieceBelow g j
+  let o := s.outerE[j]!
+  let mut adj := #[]
+  for l in [0:4 * p.ves.length] do
+    let q := 4 * p.ves[l / 4]! + l % 4
+    let r := if o[0]! == some q then o[1]!
+      else if o[1]! == some q then o[0]!
+      else if o[2]! == some q then o[3]!
+      else if o[3]! == some q then o[2]!
+      else s.rotAdj[q]!
+    adj := adj.push (r.bind p.loc)
+  match o[0]!.bind p.loc, o[2]!.bind p.loc with
+  | some a, some b =>
+    let ρ : RotationSystem := ⟨adj⟩
+    let mut q := a
+    for _ in [0:ρ.size] do
+      if q == b then return true
+      q := (ρ.faceStep q).getD q
+    return false
+  | _, _ => return p.ves.isEmpty
+
 def edgeIn (t : SpqrTree) (i e : Nat) : Bool :=
   match t.edgeIndex[e]! with
   | none => false
@@ -20,6 +43,9 @@ def checkOuter (g : Graph) (t : PlanarSpqrTree) (i : Nat)
   let mut bad := 0
   for j in [0:t.size] do
     if let some ne := t.toSpqrTree.capNe j then
+      if i <= j && ((t.toSpqrTree.parent j).all (· < i)) && !checkCapFace g t j s then
+        bad := bad + 1
+        IO.println s!"cap_cofacial: i={i} j={j}"
       if let some (u, v) := t.toSpqrTree.neOrig ne then
         for k in [0:4] do
           if let some q := s.outerE[j]![k]! then
