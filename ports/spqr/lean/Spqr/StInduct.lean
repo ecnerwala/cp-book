@@ -256,7 +256,8 @@ theorem stRet_finish {g : Graph} {D d : Nat} {o : DfsOut} {s : WalkState} {v : N
           else [⟨!s.stackDir[d]!, [edgeItem s.g o.e]⟩]) ++
           (if hv₁ then [] else [⟨s.stackDir[d]!, [vertItem v]⟩]))) ∧
     StItems g r.2 blocks ∧ SegRead r.2.items segs ∧
-    ∀ t ∈ r.2.tstack, t.vStart = v ∨ ∃ t₀ ∈ s.tstack, t.vStart = t₀.vStart := by
+    ∀ t ∈ r.2.tstack, t.vStart = v ∨ (o.cls.isTree = true ∧ o.cls.lowval d < d ∧ t.vStart = o.dest) ∨
+      ∃ t₀ ∈ s.tstack, t.vStart = t₀.vStart := by
   intro r
   obtain ⟨lv, kind, ho, hlow⟩ := WalkState.ret_of_lowval_lt hlt
   have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
@@ -402,8 +403,10 @@ theorem stOut_step (g : Graph) (v d : Nat) (o : DfsOut) (hasVert : Bool)
       · rw [hdr', refOuts_snoc, hh.pre.hv, refOut_ret_back' hlt', hr1]
       · intro t ht
         rw [hvl]
-        exact (hvs' t ht).elim (fun h => Or.inl (h ▸ List.mem_cons_self)) fun ⟨t₀, ht₀, h⟩ =>
-          (hvs₁ t₀ ht₀).imp (h ▸ id) fun ⟨t₁, ht₁, h₁⟩ => ⟨t₁, ht₁, h.trans h₁⟩
+        rcases hvs' t ht with h | ⟨hT, -, -⟩ | ⟨t₀, ht₀, h⟩
+        · exact Or.inl (h ▸ List.mem_cons_self)
+        · exact Bool.noConfusion ((show cls.isTree = true from hT).symm.trans (show cls.isTree = false from hnt))
+        · exact (hvs₁ t₀ ht₀).imp (h ▸ id) fun ⟨t₁, ht₁, h₁⟩ => ⟨t₁, ht₁, h.trans h₁⟩
       · rw [hdr', refOuts_snoc, hh.pre.hv, refOut_ret_back' hlt']
         simpa only [List.append_nil] using hrI
   | tree e cls child =>
@@ -538,8 +541,12 @@ theorem stOut_step (g : Graph) (v d : Nat) (o : DfsOut) (hasVert : Bool)
         simpa only [List.append_assoc, DfsOut.e] using hR'
       · rw [hdr', refOuts_snoc, hh.pre.hv, refOut_ret_tree' hlt', hr1]
       · intro t ht
-        exact (hvs' t ht).elim (fun h => Or.inl (h ▸ List.mem_cons_self)) fun ⟨t₀, ht₀, h⟩ =>
-          (hvs₃' t₀ ht₀).imp (h ▸ id) fun ⟨t₁, ht₁, h₁⟩ => ⟨t₁, ht₁, h.trans h₁⟩
+        rcases hvs' t ht with h | ⟨-, -, h⟩ | ⟨t₀, ht₀, h⟩
+        · exact Or.inl (h ▸ List.mem_cons_self)
+        · refine Or.inl (List.mem_cons_of_mem _ ?_)
+          rw [h, DfsOut.vertsList_append]
+          exact List.mem_append_right _ (by cases child; simp [DfsOut.dest, DfsTree.verts, DfsTree.v])
+        · exact (hvs₃' t₀ ht₀).imp (h ▸ id) fun ⟨t₁, ht₁, h₁⟩ => ⟨t₁, ht₁, h.trans h₁⟩
       · rw [hdr', refOuts_snoc, hh.pre.hv, refOut_ret_tree' hlt', DirsOf_getD s hlt']
         simpa only [List.append_assoc, List.append_nil] using hrI
 

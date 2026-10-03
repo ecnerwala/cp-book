@@ -1,4 +1,5 @@
 import Spqr.StTree
+import Spqr.StVStart
 import Spqr.WalkCover
 import Spqr.WalkInv
 
@@ -70,14 +71,6 @@ theorem finishRet_frame_st {D d lv : Nat} {kind : RetKind} {o : DfsOut} {s : Wal
     ∀ x ∈ readStack B, ∀ y, Items.Below s.items x y →
       Items.type ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.type s.items y ∧
       Items.ch ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.ch s.items y := by
-  sorry
-
-/-- Admitted: every entry on the stack after `finishEdge` starts at `curV` or at the start of an entry
-already on the stack (the merges keep the lower entry's `vStart`, the pushes use `curV`). -/
-theorem finishEdge_vStart (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool)
-    (s : WalkState) :
-    ∀ t ∈ ((finishEdge curV d o origTstack hasVert).run s).2.tstack,
-      t.vStart = curV ∨ ∃ t₀ ∈ s.tstack, t.vStart = t₀.vStart := by
   sorry
 
 /-- Admitted: popping the root entry of a tree of the forest onto `rootItem` closes the root block
