@@ -79,6 +79,6 @@ theorem spqrTree_represents (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List 
 theorem spqrTree_canonical (g : Graph) (hg : g.WF) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
     (heo : OrderOK g.ne eo) : (g.spqrTree false vo eo).Canonical := by
   rw [spqrTree_eq]
-  exact relabelTree_canonical g _ (walk_items_wf g hg false vo eo hvo heo) (walk_canonical g vo eo)
+  exact relabelTree_canonical g _ (walk_items_wf g hg false vo eo hvo heo) (walk_canonical g hg vo eo hvo heo)
 
 end Spqr

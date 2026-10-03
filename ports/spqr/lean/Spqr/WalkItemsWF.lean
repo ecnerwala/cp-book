@@ -7,6 +7,7 @@ import Spqr.RangesCloseTree
 import Spqr.RangesOwned
 import Spqr.RangesCoverTree
 import Spqr.RangesSites
+import Spqr.RangesCanon
 
 /-! # `Items.WF` for the walk on a DFS forest
 
@@ -248,5 +249,35 @@ theorem walk_items_wf (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
       fun e he => by simpa [List.mem_flatMap] using hecov e he
     have hty := walk_typing g tern _ hnv hb hcov
     exact Items.wf_of_ranges ht.toTree hty.toTypingFacts (walk_ranges g tern vo eo hg hvo heo hnv hb hcov)
+
+/-- Admitted (frame fact for the walk induction): the walk never writes `ternarize`. -/
+theorem walk_ternarize (g : Graph) (tern : Bool) (forest : List DfsTree) :
+    (g.walk tern forest).ternarize = tern := by
+  sorry
+
+/-- Admitted (named hypothesis for the walk induction): `CanonInv` at the final walk state. -/
+theorem walk_canonInv (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
+    (g.walk tern (g.dfsForest vo eo)).CanonInv := by
+  sorry
+
+/-- Canonicity of the unternarized walk (`PROOF.md` §4.6; for `tern = true` P under P / S under S
+do occur, `check_ranges` seeds 0 and 386). -/
+theorem walk_canonical (g : Graph) (hg : g.WF) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
+    (heo : OrderOK g.ne eo) :
+    Items.Canonical (g.walk false (g.dfsForest vo eo)).items :=
+  walk_canonInv g hg false vo eo hvo heo (walk_ternarize g false _)
+
+/-- `Items.Shapes.q_children` for the walk: a `Q` item's children are `[]`, `[c]` or `[c, vertItem v]`
+with `c` a non-F/V node, a leaf if `Q`. -/
+theorem walk_q_children (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
+    ∀ e, e < g.ne → Items.ch (g.walk tern (g.dfsForest vo eo)).items (edgeItem g e) = [] ∨
+      ∃ c, Items.type (g.walk tern (g.dfsForest vo eo)).items c ∉ [NodeType.F, .V] ∧
+        (Items.type (g.walk tern (g.dfsForest vo eo)).items c = .Q →
+          Items.ch (g.walk tern (g.dfsForest vo eo)).items c = []) ∧
+        (Items.ch (g.walk tern (g.dfsForest vo eo)).items (edgeItem g e) = [c] ∨
+          ∃ v, v < g.nv ∧ Items.ch (g.walk tern (g.dfsForest vo eo)).items (edgeItem g e) = [c, vertItem v]) :=
+  (walk_items_wf g hg tern vo eo hvo heo).shapes.q_children
 
 end Spqr

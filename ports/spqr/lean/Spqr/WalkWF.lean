@@ -16,11 +16,10 @@ this module stays below the st-order layer (`StSpec`/`StWalk`/`StOriented`), whi
 
 namespace Spqr
 
-/-- Admitted: canonicity of the unternarized walk (`PROOF.md` §4.6; for `tern = true` P under P /
-S under S do occur, `check_ranges` seeds 0 and 386). -/
-theorem walk_canonical (g : Graph) (vo eo : List Nat) :
-    Items.Canonical (g.walk false (g.dfsForest vo eo)).items := by
-  sorry
+/-- Canonicity of the current items when not ternarizing. Kept by every walk primitive
+(`Spqr.RangesCanon`: `finishEdge_canon` under `CloseBase` and the checked site record `CloseCanon`);
+threaded to the final state by the walk induction (`WalkBackbone.lean`). -/
+def WalkState.CanonInv (s : WalkState) : Prop := s.ternarize = false → Items.Canonical s.items
 
 /-- `Graph.spqrTree` (the fast pipeline) is the reference walk followed by `relabelTree`. -/
 theorem spqrTree_eq (g : Graph) (tern : Bool) (vo eo : List Nat) :

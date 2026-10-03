@@ -726,4 +726,42 @@ def checkVCover (seed : Nat) (v : Nat) (site : String) (s : WalkState) : List V 
       out := (⟨seed, s.ternarize, v, 0, site, "own_vcover", s!"e={e} stack={s.tstack.map showT}"⟩ : V) :: out
   return out
 
+/-- `FinishCanon x r` (`RangesCanon.lean`): not ternarizing and `x` of type S/P ⇒ no item on the closing
+side of the top entry has `x`'s type. -/
+def checkFinishCanon (bad : String → V) (x : ItemId) (r : WalkState) : List V := Id.run do
+  let ty : Nat → NodeType := fun i => r.items[i]!.type
+  if r.ternarize || (ty x != .S && ty x != .P) then return []
+  match r.tstack with
+  | [] => return [bad "_stack"]
+  | t :: _ =>
+    let cs := getSide t.spans r.stackDir[t.topDepth]!
+    return if cs.any (fun c => ty c == ty x) then [bad ""] else []
+
+/-- Every field of `CloseCanon curV d o orig hv s` (`RangesCanon.lean`), evaluated at its site state
+and reported separately (`canon_p`/`canon_v`/`canon_l1`). -/
+def checkCanon (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
+    List V := Id.run do
+  if s.ternarize then return []
+  let lv := o.cls.lowval d
+  let bad := fun (r : WalkState) (x : ItemId) k => (⟨seed, s.ternarize, curV, d, "CloseCanon", "canon_" ++ k,
+    s!"o.e={o.e} dest={o.dest} lv={lv} x={x} type={repr r.items[x]!.type} ch={r.items[x]!.ch} stack={r.tstack.map showT}"⟩ : V)
+  let mut out := []
+  if lv < d && o.cls.isType1 then
+    let r := feRest curV d o orig hv s
+    if result (condP curV lv true) r then
+      let (x, r₁) := (maybeUnwrapNxt .P).run r
+      let r₂ := after mergeTstackTops r₁
+      out := checkFinishCanon (fun k => bad r₂ x ("p" ++ k)) x r₂ ++ out
+  if o.cls.isTree && lv < d && hv && o.cls.isType1 then
+    let x := ((maybeUnwrapNxt (if feSingle d o s then NodeType.S else .R)).run (feS₂ d o s)).1
+    let r := cvS₅ curV s.stackDir[d]! true orig (feSingle d o s) (feS₂ d o s)
+    out := checkFinishCanon (fun k => bad r x ("v" ++ k)) x r ++ out
+  if o.cls.isTree && lv < d then
+    let dir := s.stackDir[d]!
+    for st in mergeSites (loop1Cond d) (loop1Body d dir) (ceS₁ o.dest d o.e (feS₀ d o s)) do
+      let x := result (maybeUnwrapNxt (l1Ty d dir st)) (l1S₁ d dir st)
+      let r := after mergeTstackTops (l1S₂ d dir st)
+      out := checkFinishCanon (fun k => bad r x ("l1" ++ k)) x r ++ out
+  return out
+
 end WalkInvCheck.Ranges
