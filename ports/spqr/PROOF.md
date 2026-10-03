@@ -1352,6 +1352,28 @@ the 6414 finishEdge sites of `checks/RFinishEdgeCheck.lean` (`shape` lines, 0 fa
 `finishEdge_tree_rInvTop` and the dispatcher depend on `sorryAx` only through
 `finishEdge_tree_top_settled`.
 
+**`WalkTreeRReturnSpec`: induction design (not proved).** The walk induction (`rgTree`/`rgOuts`/
+`rgOut` style, `RangesTree.lean`) must carry two facts through the child's walk from `s` with
+`n₀ = s.tstack.length` and parent `p = stackVerts[d]`: the parent's base positionally settled,
+`RInvG s' dfs p d n₀` (bottom `n₀` entries unchanged as `TEntry`s and `EntryR` at `(p, d)`,
+whole stack disjoint), and the child's own `RInvTop s' dfs c (d+1)` (vacuous on the base, whose
+entries top out at depth `≤ d`). At the child's `finishEdge` sites the second fact is
+`finishEdge_rInvTop` (with `RReturn` of the grandchild giving `RInvFront`); the first is a frame
+statement still to be proved, `finishEdge_rInvG_base`: a `finishEdge` at `(c, d+1)` with
+`n₀ ≤ origTstack` preserves `RInvG dfs p d n₀`. Its content is purely positional — the
+`RInvG.*` primitive lemmas of `Proofs/RInvTree.lean` take their exemption hypotheses only when
+the touched entry lies in the bottom `n₀`, so what is needed per primitive is a stack-length
+bound (`n₀ + 2 ≤ length` for merges, `n₀ + 1` for top-only steps): loops 1–3 from
+`Frontier.loop1/2/3` (`origTstack ≥ n₀`), the `closeVert` merges/unwrap and the P-check from
+`FinishGuards` (`3 ≤ length` after loop 2 when `hasVert`, `origTstack + 3` when type 2) together
+with `hasVert = true → n₀ + 1 ≤ origTstack` (the vertex entry `(c, d+1)` was pushed after the
+descent). `Sim.walkTree` cannot be used for the base directly: its precondition `GuardsTree` is
+on the unlifted run. Two side facts enter as hypotheses, not admissions: every out-edge inside a
+non-root subtree of a block returns (`∀ u ≠ dfs.root, ∀ o ∈ dfs.outs u, o.cls.lowval (dfs.depth u)
+< dfs.depth u`; `finishEdge_rInvTop` covers returning edges only, the boundary branch
+`finishBoundary` runs at the root), and the ancestor chain `hanc` is re-established at each
+`walkTree` entry from `stackVerts.set! (d+1) c` and `dfs.Spec.depth_parent`.
+
 Two facts about the inputs that `Items.WF` does *not* give, found while stating this:
 
 * **Orientation of R children (`Items.ROriented`).** `layoutNode .R` counts an edge child
