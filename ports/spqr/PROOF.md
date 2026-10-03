@@ -2538,8 +2538,9 @@ unchanged, so `badFaceState_*` remain theorems about the insufficient preconditi
 
 **Q step (proved).** `PieceSep` gained `q_shape` (a `Q` item's children are `[]`, `[O]`,
 or `[c, V w]` with `c` a capped non-`V`/non-`O` item — the earlier `I/S/P/R` form was false:
-random trees have capped `Q` children), `cap_orig` (cap edges have original endpoints) and
-`cap_nonempty`; all checked on seeds 0..300 and the tiny cases with zero violations.
+random trees have capped `Q` children), `cap_orig` (cap edges have original endpoints),
+`cap_nonempty` and (for the node step) `twin_orient` (twin node-edges list their original
+endpoints in the same order); all checked on seeds 0..300 and the tiny cases with zero violations.
 `Proofs/OrbitSplit.lean` proves `conj_numFaceOrbits_split`: conjugating by two cofacial
 pairs adds exactly two face orbits. `Proofs/PlanarInsert.lean` defines
 `RotationSystem.insert ρ x a0 a2` (`single.union ρ` followed by the two `conj`s the
@@ -2573,9 +2574,10 @@ the `link`s `nodeStep` performs and planar: this is `TwoSum.splice_isPlanarEmbed
 re-inserting the cap with `IsPlanarEmbedding.insert`, or a direct Euler count as in
 `Proofs/PlanarGlue.lean`; (N2) iterating (N1) over the node's non-cap edges in `nodeRot` order
 with the `Piece.loc` bookkeeping (`ves` of the node = concatenation of the children's `edgesBelow`),
-where the twin ↔ exposed-slot correspondence (`outerE[c][2·side+dir]` is the corner `(side, dir)`
-of the twin of `c`'s cap, oriented as `q_cap_orient` does for `Q`) must first be checked
-empirically in `CheckPieceSep.lean` and added to `PieceSep`; (N3) the inner `V` items at
+where the twin ↔ exposed-slot correspondence is `Twins.noncap_children` (the twin of a non-cap
+node-edge is the cap of the corresponding child) plus `PieceSep.twin_orient` (`neOrig ne = neOrig
+tw`: the node's quarter-edge `(side, dir)` of `ne` meets the child's exposed slot `2·side+dir`,
+checked in `CheckPieceSep.lean` on seeds 0..300 and the tiny cases); (N3) the inner `V` items at
 corners (1-sum through `OpenEmbedding`, as in `Open2.splice`), then the cap's four neighbours
 become the node's exposed slots and are cofacial because the cap edge's two sides were distinct
 faces of `nodeRot` (2-connected skeleton) — the `CapFace` certificate of the node. The local embedding is the hypothesis `hloc` of the node

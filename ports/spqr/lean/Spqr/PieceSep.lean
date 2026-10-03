@@ -19,6 +19,9 @@ structure PieceSep : Prop where
     ∀ c ∈ t.children i, ∃ e, t.EdgeIn c e
   /-- Every cap edge has original endpoints. -/
   cap_orig : ∀ c ne, c < t.size → t.capNe c = some ne → ∃ p, t.neOrig ne = some p
+  /-- Twin node-edges list their original endpoints in the same order (the node step reads the
+  child's exposed slot `2 * side + dir` for its own quarter-edge `(side, dir)`). -/
+  twin_orient : ∀ ne tw, t.twin ne = some tw → t.neOrig ne = t.neOrig tw
   /-- A capped item other than an `I` or `O` leaf has an edge below it. -/
   cap_nonempty : ∀ c, c < t.size → t.hasCap c = true → t.type c ≠ .I → t.type c ≠ .O →
     ∃ e, t.EdgeIn c e
