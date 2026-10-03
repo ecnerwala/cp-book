@@ -1,5 +1,6 @@
 import Spqr.RangesFinal
 import Spqr.WalkPlace
+import Spqr.ItemAcyc
 
 namespace Spqr
 namespace Items
@@ -55,6 +56,100 @@ theorem CloseAt.root {g : Graph} {items : Items} (ht : items.type rootItem = .F)
   · simp [ht]
   · simp [ht]
   · simp [ht]
+
+theorem CloseAt.root_of_children {g : Graph} {items : Items} (ht : items.type rootItem = .F)
+    (hc : ∀ c, items.IsParent rootItem c → items.type c ≠ .I ∧ items.type c ≠ .O) :
+    CloseAt g items rootItem := by
+  constructor
+  · simp [ht]
+  · simp [ht]
+  · simp [ht]
+  · simp [ht]
+  · simp [ht]
+  · intro c h hio; exact (hio.elim (hc c h).1 (hc c h).2).elim
+  · intro e he; have he' : 0 = 1 + g.nv + e := he; omega
+  · intro e he; have he' : 0 = 1 + g.nv + e := he; omega
+  · intro v hv; have hv' : 0 = 1 + v := hv; omega
+  · simp [ht]
+  · simp [ht]
+  · simp [ht]
+
+theorem CloseAt.vertex {g : Graph} {items : Items} {v : Nat} (hv : v < g.nv)
+    (ht : items.type (vertItem v) = .V)
+    (hc : ∀ c, items.IsParent (vertItem v) c → items.type c = .Q ∧ items.ch c ≠ []) :
+    CloseAt g items (vertItem v) := by
+  constructor
+  · simp [ht]
+  · simp [ht]
+  · simp [ht]
+  · simp [ht]
+  · simp [ht]
+  · intro c h hio; simp [(hc c h).1] at hio
+  · intro e he; have he' : 1 + v = 1 + g.nv + e := he; omega
+  · intro e he; have he' : 1 + v = 1 + g.nv + e := he; omega
+  · intro w hw _ c h; exact (hc c h).2
+  · simp [ht]
+  · simp [ht]
+  · simp [ht]
+
+theorem CloseAt.leafQ {g : Graph} {items : Items} {e a b : Nat}
+    (ht : items.type (edgeItem g e) = .Q) (hc : items.ch (edgeItem g e) = [])
+    (hvs : items.vs (edgeItem g e) = (some a, some b)) (hne : a ≠ b)
+    (hpair : PairEq (a, b) g.edges[e]!)
+    (ha : items.Att g (edgeItem g e) a) (hb : items.Att g (edgeItem g e) b) :
+    CloseAt g items (edgeItem g e) := by
+  constructor
+  · intro _ v hv
+    obtain ⟨e', _, _, _, hinc, _, hbelow, _⟩ := hv
+    have heq := below_eq_of_ch_nil hc hbelow
+    have heq' : e' = e := by have : 1 + g.nv + e' = 1 + g.nv + e := heq; omega
+    subst e'
+    have hinc' : v = a ∨ v = b := by
+      rcases hpair with h | h <;> rcases hinc with h' | h'
+      · exact Or.inl (h'.symm.trans (congrArg Prod.fst h).symm)
+      · exact Or.inr (h'.symm.trans (congrArg Prod.snd h).symm)
+      · exact Or.inr (h'.symm.trans (congrArg Prod.snd h).symm)
+      · exact Or.inl (h'.symm.trans (congrArg Prod.fst h).symm)
+    simpa [IsVs, hvs, eq_comm] using hinc'
+  · intro _ v hv
+    have hv' : a = v ∨ b = v := by simpa [IsVs, hvs] using hv
+    exact hv'.elim (fun h => h ▸ ha) (fun h => h ▸ hb)
+  · simp [ht]
+  · simp [ht]
+  · simp [ht]
+  · simp [IsParent, hc]
+  · intro e' heq _ _
+    have heq' : e = e' := by have : 1 + g.nv + e = 1 + g.nv + e' := heq; omega
+    subst e'
+    exact ⟨a, b, hvs, hne, hpair⟩
+  · simp [hc]
+  · intro v h hv; have h' : 1 + g.nv + e = 1 + v := h; omega
+  · simp [ht]
+  · simp [ht]
+  · simp [ht]
+
+theorem CloseAt.leafIO {g : Graph} {items : Items} {i : ItemId}
+    (hi : 1 + g.nv + g.ne ≤ i) (ht : items.type i = .I ∨ items.type i = .O)
+    (hc : items.ch i = []) : CloseAt g items i := by
+  constructor
+  · rcases ht with ht | ht <;> simp [ht]
+  · rcases ht with ht | ht <;> simp [ht]
+  · rcases ht with ht | ht <;> simp [ht]
+  · rcases ht with ht | ht <;> simp [ht]
+  · rcases ht with ht | ht <;> simp [ht]
+  · simp [IsParent, hc]
+  · intro e he hel
+    have he' : i = 1 + g.nv + e := he
+    rw [he'] at hi
+    omega
+  · simp [hc]
+  · intro v he hvl
+    have he' : i = 1 + v := he
+    rw [he'] at hi
+    omega
+  · rcases ht with ht | ht <;> simp [ht]
+  · rcases ht with ht | ht <;> simp [ht]
+  · rcases ht with ht | ht <;> simp [ht]
 
 theorem parent_lt {items : Items} {p c : ItemId} (h : items.IsParent p c) : p < items.size := by
   by_contra hn
