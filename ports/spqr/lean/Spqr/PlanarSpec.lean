@@ -7,6 +7,7 @@ import Spqr.PlanarInv
 import Spqr.PlanarEmbedSteps
 import Spqr.PlanarEmbedFold
 import Spqr.PlanarEmbedFacesFold
+import Spqr.PlanarNodeSpec
 import Spqr.PlanarEmbedRoot
 import Spqr.WalkPieceSep
 import Spqr.RelabelChildShape
@@ -26,17 +27,6 @@ namespace Spqr
 namespace PlanarSpqrTree
 
 variable (t : PlanarSpqrTree)
-
-/-- The skeleton of node `i` with node-vertices renumbered from `0`. -/
-def localSkeleton (i : Nat) : List (Nat × Nat) :=
-  (t.toSpqrTree.skeleton i).map fun p => (p.1 - (t.toSpqrTree.nvRange i).1, p.2 - (t.toSpqrTree.nvRange i).1)
-
-/-- The local rotation system of node `i`, on the quarter-edges of its own node-edges. -/
-def nodeRot (i : Nat) : RotationSystem :=
-  let (neSt, neEn) := t.toSpqrTree.neRange i
-  ⟨(t.neRotAdj.extract (4 * neSt) (4 * neEn)).map (·.map (· - 4 * neSt))⟩
-
-def isPlanar (i : Nat) : Bool := t.nodePlanar[i]?.getD false
 
 /-- `planarEmbed` is defined exactly when every item is flagged planar. -/
 theorem planarEmbed_isSome_iff :
@@ -211,6 +201,16 @@ theorem nodePlanar_complete (g : Graph) (ternarize : Bool) (vertOrder edgeOrder 
       ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i) := by
   sorry
 
+/-- `planarRelabel` pushes one `nodePlanar` flag per item (next to the `types` push), so the flag
+array has one entry per item. Admitted: the fact is the analogue of `RotInv.ne_size` and needs a
+field `nodePlanar.size = types.size` added to `RotInv` (`PlanarRotInv.lean`) and threaded through
+`RotInv.step` / the `Frame` lemmas of `PlanarRotFold.lean`. Without it `hall` could be vacuous, so
+`planarEmbed_sound` genuinely depends on it. -/
+theorem planarTree_nodePlanar_size (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) :
+    (g.planarTree ternarize vertOrder edgeOrder).nodePlanar.size =
+      (g.planarTree ternarize vertOrder edgeOrder).size := by
+  sorry
+
 /-- The root piece contains every edge, and its local quarter-edge numbering permutes the
 original quarter-edges. Its closed planar embedding transports to the glued rotation. -/
 theorem glued_root (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
@@ -246,9 +246,21 @@ theorem planarEmbed_sound (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder 
       rw [planarRelabel_proj]; exact spqrTree_represents g hg ternarize vertOrder edgeOrder hvo heo
     have hsep : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.PieceSep g := by
       rw [planarRelabel_proj]; exact spqrTree_pieceSep g hg ternarize vertOrder edgeOrder hvo heo
+    have hloc : ∀ i, i < (g.planarTree ternarize vertOrder edgeOrder).size →
+        (g.planarTree ternarize vertOrder edgeOrder).types[i]! = .S ∨
+          (g.planarTree ternarize vertOrder edgeOrder).types[i]! = .P ∨
+          (g.planarTree ternarize vertOrder edgeOrder).types[i]! = .R →
+        IsPlanarEmbedding ((g.planarTree ternarize vertOrder edgeOrder).localSkeleton i)
+          ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i)
+          ((g.planarTree ternarize vertOrder edgeOrder).nodeRot i) := by
+      intro i hi hty
+      refine nodePlanar_sound g ternarize vertOrder edgeOrder i ?_
+        (PlanarSpqrTree.isPlanar_of_all hall ?_)
+      · rw [(g.planarTree ternarize vertOrder edgeOrder).type_eq_of_lt i hi]; exact hty
+      · rw [planarTree_nodePlanar_size]; exact hi
     exact glued_root g hg ternarize vertOrder edgeOrder hvo heo hwf _
       ((g.planarTree ternarize vertOrder edgeOrder).gluedFaces_planarEmbed g hg hwf hsh hrep hsep
-        hall).toGluedUpTo
+        hloc).toGluedUpTo
   · cases h
 
 /-- The eventual target: the planar SPQR tree yields an embedding iff `g` is planar. `→` is

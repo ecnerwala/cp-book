@@ -2562,13 +2562,18 @@ proved) and folds `gluedFaces_planarEmbed`; `planarEmbed_sound` now uses it (thr
 `embedItem_step_node_faces` (S/P/R): it needs unfolding lemmas for the executable node
 branch (`neRotAdj` traversal, twin lookup, inner `V` items), `twoSum_planar` per non-cap
 node-edge, cofaciality of the cap's two exposed pairs in the resulting witness (they are the
-two sides of the removed cap edge), and `nodePlanar_sound`, which is stated for
-`g.planarTree …` while the step is stated for an arbitrary `t` with
-`t.nodePlanar.all id = true` — either the step is specialized to `g.planarTree …`, or
-`planarEmbed_sound` passes down an explicit local-embedding hypothesis.
+two sides of the removed cap edge). The local embedding is the hypothesis `hloc` of the node
+step/dispatcher/fold (`IsPlanarEmbedding (localSkeleton i) (nVerts i) (nodeRot i)`, defs moved
+to `PlanarNodeSpec.lean`); `planarEmbed_sound` discharges it with `nodePlanar_sound` and
+`isPlanar_of_all` from `t.nodePlanar.all id = true`. That needs `i < nodePlanar.size`, i.e.
+`nodePlanar.size = size` for `g.planarTree …` — a fact `planarEmbed_sound` genuinely depends on
+(with a short flag array `hall` would be vacuous), now the named admission
+`planarTree_nodePlanar_size` (the analogue of `RotInv.ne_size`: `planarRelabel` pushes one flag
+per item next to the `types` push; add the field to `RotInv` and thread it through
+`RotInv.step` and the `Frame` lemmas).
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through `walk_items_wf`,
-`spqrTree_r_three_connected`, `spqrTree_pieceSep`, `nodePlanar_sound_R` and
-`embedItem_step_node_faces`.
+`spqrTree_r_three_connected`, `spqrTree_pieceSep`, `nodePlanar_sound_R`,
+`embedItem_step_node_faces` and `planarTree_nodePlanar_size`.
 
 `glued_root` is proved. `edgesBelow 0` is a permutation of `range t.ne`, rather
 than the identity enumeration claimed by its old docstring. Each item's piece is
@@ -2646,13 +2651,14 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `embedItem_Q_nil`, `embedItem_Q_O`, `embedItem_Q_cons`, `qUpper`, `qLower`, `setOuter4` | `PlanarEmbedQExec.lean` | **proved** (exact unfolding of the executable `Q` branch) |
 | `q_edge_not_below`, `q_fresh`, `q_lower_boundary`, `q_capped_child`, `q_open_glued`, `q_leaf_glued`, `q_loop_glued`, `q_block_glued`, `embedItem_step_Q_faces` | `PlanarEmbedQ.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `embedItem_step_node_faces`, `embedItem_step_faces`, `gluedFaces_planarEmbed` | `PlanarEmbedFacesFold.lean` | sorry (node step) / proved modulo it |
+| `localSkeleton`, `nodeRot`, `isPlanar`, `isPlanar_of_all`; `planarTree_nodePlanar_size` | `PlanarNodeSpec.lean`, `PlanarSpec.lean` | def / **proved** / sorry (flag array has one entry per item) |
 | `planarEmbed_sound` | `PlanarSpec.lean` | proved from `gluedFaces_planarEmbed` (with `WF`/`ChildShape` of `g.planarTree …` from `spqrTree_wf'`/`spqrTree_childShape` via `planarRelabel_proj`, hence the `g.WF`/`OrderOK` hypotheses) + `glued_root` |
 | `spqrTree_planar` (`→` from `planarEmbed_sound`; `←` needs completeness + skeletons are minors of `g`) | `PlanarSpec.lean` | sorry |
 
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): `spqrTree_wf` (inherited by `planarRelabel_rot_spec`, `neRotAdj_segment`);
 `nodePlanar_sound_R`; the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
 `planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`,
-`embedItem_step_node_faces` (hence `planarEmbed_sound`; the old `GluedUpTo`-level
+`embedItem_step_node_faces`, `planarTree_nodePlanar_size` (hence `planarEmbed_sound`; the old `GluedUpTo`-level
 `embedItem_step_Q`/`embedItem_step_node` are no longer reached by it — the former is
 refuted by `badFaceState_*`); `spqrTree_planar`. The S and P
 cases of `nodePlanar_sound` are proved except for the `Shape` of the
