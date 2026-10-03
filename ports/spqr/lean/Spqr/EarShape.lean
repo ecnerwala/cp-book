@@ -212,4 +212,117 @@ theorem walkTree_guards (t : DfsTree) (s : WalkState) (hwf : t.WF []) (hends : t
   WalkState.walkTree_guards' t 0 s
     (WalkState.walkTree_book t s hwf hends hvlt helt hvn hen hsv hsd hfo hts hi hs hvfresh hefresh)
 
+
+section OneEntry
+open WalkState
+
+/-! ### The one-entry collapse at the ear's top -/
+
+theorem merge_run_shape (s : WalkState) {x y : TEntry} {rest : List TEntry}
+    (h : s.tstack = x :: y :: rest) :
+    ∃ y', mergeTstackTops.run s = ((), { s with tstack := y' :: rest }) ∧
+      y'.vStart = y.vStart ∧ y'.topDepth = min y.topDepth x.topDepth := by
+  rw [run_mergeTstackTops, h]
+  exact ⟨_, rfl, rfl, rfl⟩
+
+/-- The tail of `finishEdge` with the vertex entry already pushed (`finishRest … true _`): the top
+entry keeps its `vStart`/`topDepth`, and is merged into the entry below exactly when that is the
+P-ear `(curV, lowval)`. -/
+theorem finishRest_one_entry (curV d lv : Nat) (isType1 isSingle : Bool) {x : TEntry}
+    {base : List TEntry} {st : WalkState} (hst : st.tstack = x :: base)
+    (hx : x.vStart = curV) (hxt : x.topDepth = lv) :
+    ∃ e rest, ((finishRest curV d lv isType1 true isSingle).run st).2.tstack = e :: rest ∧
+      e.vStart = curV ∧ e.topDepth = lv ∧
+      (rest = base ∨ ∃ e₀, base = e₀ :: rest ∧ e₀.vStart = curV ∧ e₀.topDepth = lv) := by
+  simp only [finishRest, finishTail, finishP, Bool.not_true, Bool.false_eq_true, ↓reduceIte,
+    WalkM.run_bind, WalkM.pure_run]
+  rw [run_condP]
+  by_cases hc : (isType1 && decide (st.tstack.length ≥ 2) && st.tstack.tail.head!.vStart == curV &&
+      st.tstack.tail.head!.topDepth == lv) = true
+  · simp only [hc, ↓reduceIte]
+    simp only [Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq, hst] at hc
+    obtain ⟨⟨⟨-, hlen⟩, hv⟩, ht⟩ := hc
+    obtain ⟨e₀, rest, rfl⟩ : ∃ e₀ rest, base = e₀ :: rest := by
+      cases base with
+      | nil => simp at hlen
+      | cons e₀ rest => exact ⟨e₀, rest, rfl⟩
+    simp only [List.tail_cons, List.head!_cons] at hv ht
+    obtain ⟨e₀', it₁, hU, hUv, hUt, -⟩ := maybeUnwrapNxt_run .P st hst
+    rw [WalkM.run_bind, hU, WalkM.run_bind]
+    obtain ⟨e₁, hM, hMv, hMt⟩ := merge_run_shape { st with tstack := x :: e₀' :: rest, items := it₁ } rfl
+    rw [hM]
+    obtain ⟨e₂, it₂, hF, hFv, hFt, -⟩ := finishTstackTop_run _ { st with tstack := e₁ :: rest, items := it₁ } rfl
+    rw [hF]
+    exact ⟨e₂, rest, rfl, by rw [hFv, hMv, hUv, hv], by rw [hFt, hMt, hUt, ht, hxt]; simp, Or.inr ⟨e₀, rfl, hv, ht⟩⟩
+  · simp only [hc]
+    exact ⟨x, base, hst, hx, hxt, Or.inl rfl⟩
+
+/-- The one-entry collapse at the ear's top (PROOF.md §4.3): a returning type-1 edge
+(`lowval < d`, a tree edge closing the chain or a back edge) whose vertex entry is already on the
+stack leaves exactly one entry `(curV, lowval)` above the untouched `base`, merged into the entry
+below exactly when that is the P-ear of a parallel edge. The hypotheses are the ear contract at the
+`finishEdge` site (`EarAt`, supplied by `EarTree` at every site). -/
+theorem finishEdge_one_entry {curV d origTstack : Nat} {o : DfsOut} {s : WalkState}
+    (hb : s.EarAt curV d o origTstack true) (hlow : o.cls.lowval d < d)
+    (h1 : o.cls.isType1 = true) :
+    ∃ e rest, ((finishEdge curV d o origTstack true).run s).2.tstack = e :: rest ∧
+      e.vStart = curV ∧ e.topDepth = o.cls.lowval d ∧
+      (rest = s.tstack.drop (s.tstack.length - origTstack) ∨
+       ∃ e₀, s.tstack.drop (s.tstack.length - origTstack) = e₀ :: rest ∧
+         e₀.vStart = curV ∧ e₀.topDepth = o.cls.lowval d) := by
+  obtain ⟨sub, base, hlen, hE⟩ := hb
+  have hdrop : s.tstack.drop (s.tstack.length - origTstack) = base := by
+    rw [hE.tstack, List.length_append, hlen, Nat.add_sub_cancel, List.drop_left]
+  rw [hdrop]
+  have hge : ¬ (o.cls.lowval d ≥ d) := by omega
+  rw [finishEdge_eq]
+  simp only [finishEdge', finishTree, finishBack, hge, ↓reduceIte, WalkM.run_bind, WalkM.get_run,
+    run_stackDir, run_makeVs, run_modifyItem]
+  by_cases ht : o.cls.isTree = true
+  · obtain ⟨c, mid, py, vy, hcl⟩ := hE.close ht hlow
+    obtain ⟨hmid, -⟩ := hcl.type1 h1
+    subst hmid
+    simp only [ht, ↓reduceIte, closeVert_eq, WalkM.run_bind]
+    show ∃ e rest, ((finishRest curV d (o.cls.lowval d) o.cls.isType1 true
+      (result (closeVert' curV s.stackDir[d]! o.cls.isType1 origTstack (feSingle d o s)) (feS₂ d o s))).run
+        (after (closeVert' curV s.stackDir[d]! o.cls.isType1 origTstack (feSingle d o s)) (feS₂ d o s))).2.tstack
+          = e :: rest ∧ _
+    have h2 : (feS₂ d o s).tstack = c :: py :: vy :: base := by simpa using hcl.tstack
+    rw [h1]
+    generalize result (closeVert' curV s.stackDir[d]! true origTstack (feSingle d o s)) (feS₂ d o s) = b
+    show ∃ e rest, ((finishRest curV d (o.cls.lowval d) true true b).run
+      (after (finishTstackTop ((maybeUnwrapNxt (if feSingle d o s then .S else .R)).run (feS₂ d o s)).1)
+        (after (retarget curV s.stackDir[d]!) (after mergeTstackTops (after mergeTstackTops
+          (after (maybeUnwrapNxt (if feSingle d o s then .S else .R)) (feS₂ d o s))))))).2.tstack
+            = e :: rest ∧ _
+    generalize hS₂ : feS₂ d o s = S₂ at h2 ⊢
+    generalize (if feSingle d o s then NodeType.S else NodeType.R) = ty
+    simp only [after]
+    obtain ⟨py', it₁, hU, hUv, hUt, -⟩ := maybeUnwrapNxt_run ty S₂ h2
+    rw [hU]
+    obtain ⟨e₁, hM, hMv, hMt⟩ := merge_run_shape { S₂ with tstack := c :: py' :: vy :: base, items := it₁ } rfl
+    rw [hM]
+    obtain ⟨e₂, hM₂, hMv₂, hMt₂⟩ := merge_run_shape { S₂ with tstack := e₁ :: vy :: base, items := it₁ } rfl
+    rw [hM₂, retarget_run_eq _ _ { S₂ with tstack := e₂ :: base, items := it₁ } e₂ base rfl]
+    obtain ⟨e₃, it₂, hF, hFv, hFt, -⟩ := finishTstackTop_run _
+      { S₂ with tstack := { e₂ with vStart := curV, spans := setSides (!s.stackDir[d]!) (e₂.spans.1 ++ e₂.spans.2) [] } :: base, items := it₁ } rfl
+    rw [hF]
+    have hvy : d < vy.topDepth := hcl.vy_top
+    have hc : o.cls.lowval d ≤ c.topDepth := hcl.c_top.1
+    have hpy : py.topDepth = o.cls.lowval d := hcl.py_top
+    refine finishRest_one_entry curV d (o.cls.lowval d) true b rfl (by rw [hFv]) ?_
+    rw [hFt]; show e₂.topDepth = _; rw [hMt₂, hMt, hUt, hpy]; omega
+  · have ht' : o.cls.isTree = false := Bool.eq_false_iff.2 ht
+    have hsub : sub = [] := hE.back_nil ht'
+    subst hsub
+    simp only [ht', Bool.false_eq_true, ↓reduceIte, WalkM.run_bind, pushEdgeTstack, pushTstack,
+      WalkM.get_run, WalkM.modify_run]
+    refine finishRest_one_entry curV d (o.cls.lowval d) o.cls.isType1 true
+      (x := ⟨curV, o.cls.lowval d, s.nxtEdgeIdx, setSides s.stackDir[o.cls.lowval d]! [edgeItem s.g o.e] []⟩)
+      ?_ rfl rfl
+    show _ :: s.tstack = _ :: base
+    rw [hE.tstack]; rfl
+
+end OneEntry
+
 end Spqr
