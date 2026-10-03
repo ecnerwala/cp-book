@@ -550,6 +550,13 @@ theorem cvOut : ∀ (g : Graph) (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasV
         have hfo : wp (finishEdge v d (.back e dest cls) s₁.tstack.length hv₁)
             (fun _ s' => OwnedD σ sts origs P d (n + 1) s') s₁ :=
           finishEdge_ownedD hbase ho₁ hsts hn horigs (ho₁.len d (Nat.le_refl _)) hpath
+            (fun k hk => by
+              rw [hpl₁.types.g_eq, hK₁.svlo k (by omega)]
+              rcases Nat.lt_or_ge k d with hk' | hk'
+              · exact hanc _ (List.mem_of_getElem? (hsvk k hk'))
+              · obtain rfl : k = d := by omega
+                rw [hsvd]; exact hv)
+            (fun h => by obtain ⟨_, _, _, h⟩ := hb₁.tree.1 h; cases h)
         refine wp_mono _ (wp_and (finishEdge_place v d (.back e dest cls) _ hv₁ hpl₁ hv he
             (fun h => ?_) (fun h₀ h => ?_)) (wp_and hfo (wp_and
             (keep_finishEdge (D := d + 1) hpl₁.types (by omega) v d (.back e dest cls) _ hv₁ (vertItem_ne_zero v)
@@ -625,6 +632,7 @@ theorem cvOut : ∀ (g : Graph) (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasV
               (DfsTree.node w outs).verts (DfsTree.node w outs).edges) d
               (n + (DfsTree.node w outs).edgePostorder.length) s₃ ∧
             s₃.stackVerts[d]! = v ∧ (∀ k, k < d → s₃.stackVerts[k]! ≠ v) ∧
+            (∀ k, k < d → s₃.stackVerts[k]! < g.nv) ∧
             ((DfsOut.tree e cls (.node w outs)).cls.lowval d < d →
               (DfsOut.tree e cls (.node w outs)).cls.isType1 = true → hv₁ = true) ∧
             origs[d]! ≤ s₁.tstack.length)
@@ -688,21 +696,24 @@ theorem cvOut : ∀ (g : Graph) (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasV
         have hpath₃ : ∀ k, k < d → s₃.stackVerts[k]! ≠ v := fun k hk heq => by
           rw [hK₃.svlo k (by omega)] at heq
           exact hvanc (heq ▸ List.mem_of_getElem? (hsvk₁ k hk))
+        have hsvlt₃ : ∀ k, k < d → s₃.stackVerts[k]! < g.nv := fun k hk => by
+          rw [hK₃.svlo k (by omega)]
+          exact hanc _ (List.mem_of_getElem? (hsvk₁ k hk))
         refine ⟨⟨by rw [if_pos (hb₃.tree.2 ⟨_, _, _, rfl⟩)], hnd, ⟨hi₃, hs₃, hσ₃⟩, hg₃, hb₃, hc₃.pos⟩,
-          hpl₃, ?_, hsv₃, hpath₃, hhv₁', ho₁.len d (Nat.le_refl _)⟩
+          hpl₃, ?_, hsv₃, hpath₃, hsvlt₃, hhv₁', ho₁.len d (Nat.le_refl _)⟩
         refine ho₃.exit hls hlo (Nat.le_add_right _ _) hσ₃ hnσ ?_ ?_
         · rw [hsvw]; exact hvcw
         · rw [hsvw]; exact Or.inr (Or.inl ⟨w, hwc, rfl⟩)
       refine ⟨coverOut_tree v d e cls (.node w outs) hasVert hpl hv hPf hw he.2 hcv.2 hce.2 hcv.1 hPv hPe.2 hP
         hat.left hnd (wp_mono _ hchild fun hv₁ s₁ ⟨_, hcovc, hwpc⟩ => ?_), ?_⟩
       · simp only [wp_modify]
-        exact ⟨hcovc, wp_mono _ hwpc fun _ s₃ ⟨hbase, _, ho₂, hsv₃, _, hhv₁', _⟩ =>
+        exact ⟨hcovc, wp_mono _ hwpc fun _ s₃ ⟨hbase, _, ho₂, hsv₃, _, _, hhv₁', _⟩ =>
           finishP_ownership hbase (ho₂.toOwned hsv₃) (hsts 0 (Nat.zero_le _)) hsts hhv₁'⟩
       · refine wp_mono _ hchild fun hv₁ s₁ ⟨hhv₁, _, hwpc⟩ => ?_
         unfold walkOutRest
         rw [wp_bind, wp_tstackSize]
         simp only [wp_bind, wp_modify]
-        refine wp_mono _ hwpc fun _ s₃ ⟨hbase, hpl₃, ho₂, hsv₃, hpath₃, _, horig₁⟩ => ?_
+        refine wp_mono _ hwpc fun _ s₃ ⟨hbase, hpl₃, ho₂, hsv₃, hpath₃, hsvlt₃, _, horig₁⟩ => ?_
         have hhf : hv₁ = false → hasVert = false := fun h => by cases hasVert <;> simp_all
         have hfo : wp (finishEdge v d (.tree e cls (.node w outs)) s₁.tstack.length hv₁)
             (fun _ s' => OwnedD σ sts origs (Pushed g (fun i => P i ∨ (hv₁ = true ∧ i = vertItem v))
@@ -710,6 +721,13 @@ theorem cvOut : ∀ (g : Graph) (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasV
               (n + (DfsTree.node w outs).edgePostorder.length + 1) s') s₃ :=
           finishEdge_ownedD hbase ho₂ hsts (Nat.le_trans hn (Nat.le_add_right _ _)) horigs
             horig₁ hpath₃
+            (fun k hk => by
+              rw [hpl₃.types.g_eq]
+              rcases Nat.lt_or_ge k d with hk' | hk'
+              · exact hsvlt₃ k hk'
+              · obtain rfl : k = d := by omega
+                rw [hsv₃]; exact hv)
+            (fun _ => Or.inr (Or.inl ⟨w, hwc, rfl⟩))
         refine wp_mono _ (wp_and (finishEdge_place v d (.tree e cls (.node w outs)) _ hv₁ hpl₃ hv he.1
             (fun h => ?_) (fun h₀ h => ?_)) (wp_and hfo (wp_and
             (keep_finishEdge (D := d + 1) hpl₃.types (by omega) v d (.tree e cls (.node w outs)) _ hv₁
