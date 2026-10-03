@@ -11,8 +11,6 @@ structure FinishCover (σ : List Nat) (n curV d : Nat) (o : DfsOut) (orig : Nat)
   vert : hasVert = false → PushVertR σ n curV s
   p_vert : o.cls.lowval d < d → o.cls.isTree = true → hasVert = true →
     FinishPCover σ (n + 1) curV (o.cls.lowval d) o.cls.isType1 (feS₃ curV d o orig s)
-  p_tree : o.cls.lowval d < d → o.cls.isTree = true → hasVert = false →
-    FinishPCover σ (n + 1) curV (o.cls.lowval d) o.cls.isType1 (feS₂ d o s)
   p_back : o.cls.lowval d < d → o.cls.isTree = false →
     FinishPCover σ (n + 1) curV (o.cls.lowval d) o.cls.isType1 (feBack curV (o.cls.lowval d) d o s)
 
@@ -35,6 +33,7 @@ theorem finishRestAdj_of_cover {curV d lv : Nat} {isType1 hasVert isSingle : Boo
 theorem finishAdj_of_cover {curV d lv orig : Nat} {kind : RetKind} {o : DfsOut} {hasVert : Bool}
     (he : o.cls = .ret lv kind) (hl : lv < d)
     (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+    (hg : FinishGuards d o orig hasVert s)
     (hb : FinishBook curV d o orig hasVert s) (hf : Frontier (o := o) d orig s)
     (hok : FinishOk D curV d lv o orig hasVert s)
     (hpos : σ[n]? = some o.e) (hblock : o.block <:+: σ) (hc : FinishCover σ n curV d o orig hasVert s) :
@@ -71,7 +70,11 @@ theorem finishAdj_of_cover {curV d lv orig : Nat} {kind : RetKind} {o : DfsOut} 
   · intro ht hv
     exact finishRestAdj_of_cover (st₂ ht).ranges (st₂ ht).step.shape
       (by rw [(st₂ ht).step.g]; exact hb.v_lt) hnd ((st₂ ht).hσ hσ) (hok.rest_tree ht hv)
-      (by simpa only [hlv] using hc.p_tree hlow ht hv)
+      (by
+        intro hp
+        obtain ⟨sub, base, _, hE⟩ := hb.ear
+        rw [ear_condP_tree he hl ht hg hE h.inv hs hv] at hp
+        cases hp)
       (fun hh => (st₂ ht).step.pushVertR hb.v_lt (hc.vert hh) (by omega))
   · intro ht
     have hq : Items.ch (feS₀ d o s).items (edgeItem (feS₀ d o s).g o.e) = [] := by
@@ -98,6 +101,6 @@ theorem finishR_of_cover {curV d orig : Nat} {o : DfsOut} {hasVert : Bool}
   intro lv kind he hl
   obtain ⟨sub, base, hlen, hE⟩ := hb.ear
   have hok := finishOk_of_guards he hl hg hE hlen h.inv hs hD hb.v_lt hb.e_lt hb.q (hb.ends lv kind he) hb.vert
-  exact finishAdj_of_cover he hl h hs hnd hσ hb hf hok hpos hblock hc
+  exact finishAdj_of_cover he hl h hs hnd hσ hg hb hf hok hpos hblock hc
 
 end Spqr.WalkState

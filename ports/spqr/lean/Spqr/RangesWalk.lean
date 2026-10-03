@@ -37,7 +37,76 @@ theorem singleton {e : Nat} (h : PostAt σ n [e]) : σ[n]? = some e := by
   obtain ⟨pre, post, rfl, rfl⟩ := h
   simp [List.append_assoc]
 
+theorem idx_bounds {e : Nat} (h : PostAt σ n xs) (hnd : σ.Nodup) (he : e ∈ xs) :
+    n ≤ σ.idxOf e ∧ σ.idxOf e < n + xs.length := by
+  obtain ⟨pre, post, rfl, rfl⟩ := h
+  have hdisj := (List.nodup_append.mp (List.nodup_append.mp hnd).1).2.2
+  have hpre : e ∉ pre := fun hp => hdisj e hp e he rfl
+  simp only [List.idxOf_append, hpre, ite_false, List.mem_append, he, false_or, ite_true]
+  have := List.idxOf_lt_length_iff.mpr he
+  omega
+
 end PostAt
+
+theorem pushed_past {g : Graph} {σ : List Nat} {n : Nat} {P : ItemId → Prop}
+    {vs es block : List Nat} (hP : ∀ e, e < g.ne → P (edgeItem g e) → σ.idxOf e < n)
+    (hv : ∀ v ∈ vs, v < g.nv) (he : ∀ e ∈ es, e ∈ block)
+    (hp : PostAt σ n block) (hnd : σ.Nodup) :
+    ∀ e, e < g.ne → Pushed g P vs es (edgeItem g e) → σ.idxOf e < n + block.length := by
+  rintro e helt (h | ⟨v, hv', hve⟩ | ⟨e', he', hee⟩)
+  · exact Nat.lt_of_lt_of_le (hP e helt h) (Nat.le_add_right _ _)
+  · exact (edgeItem_ne_vertItem (hv v hv') e hve).elim
+  · have heq := edgeItem_inj hee
+    exact (hp.idx_bounds hnd (heq ▸ he e' he')).2
+
+theorem walkTree_past {g : Graph} {σ : List Nat} {n : Nat} {P X : ItemId → Prop}
+    {s : WalkState} (t : DfsTree) (d : Nat) (h : s.Place g P X)
+    (hv : ∀ v ∈ t.verts, v < g.nv) (he : ∀ e ∈ t.edges, e < g.ne)
+    (hvn : t.verts.Nodup) (hen : t.edges.Nodup)
+    (hPv : ∀ v ∈ t.verts, ¬ P (vertItem v)) (hPe : ∀ e ∈ t.edges, ¬ P (edgeItem g e))
+    (hP : ∀ e, e < g.ne → P (edgeItem g e) → σ.idxOf e < n)
+    (hp : PostAt σ n t.edgePostorder) (hnd : σ.Nodup) :
+    wp (walkTree t d) (fun _ s' => ∀ v, v < g.nv → PushVertR σ (n + t.edgePostorder.length) v s') s := by
+  apply wp_mono _ ((walk_place_aux g).1 t d P X s h hv he hvn hen hPv hPe)
+  intro _ s' h' v hvg
+  exact h'.pushVertR hvg (pushed_past hP hv
+    (fun e he' => t.edgePostorder_perm_edges.symm.subset he') hp hnd)
+
+theorem walkOutPre_place {g : Graph} {P X : ItemId → Prop} {s : WalkState}
+    {v d : Nat} {o : DfsOut} {hasVert : Bool} (h : s.Place g P X) (hv : v < g.nv)
+    (hf : hasVert = false → ¬ P (vertItem v)) :
+    wp (walkOutPre v d o hasVert) (fun hv' s' =>
+      s'.Place g (fun i => P i ∨ (hv' = true ∧ i = vertItem v)) X ∧
+      (hasVert = true → hv' = true)) s := by
+  unfold walkOutPre
+  dsimp only
+  rw [bind_stackDir]
+  refine bind_spec (setStackDir_spec _ _) ?_
+  rintro _ _ rfl
+  split
+  · next hc =>
+    have hh : hasVert = false := by revert hc; cases hasVert <;> simp
+    refine bind_spec (pushVertTstack_spec v d) ?_
+    rintro _ _ rfl
+    rw [wp_pure]
+    refine ⟨((h.set_stackDir _).cons_fixed (by show 0 < 1 + v; omega)
+      (by show 1 + v < _; omega) (hf hh) v d _ _).mono ?_ (fun _ hi => hi), ?_⟩
+    · intro i hi; simpa using hi
+    · intro _; rfl
+  · rw [wp_pure]
+    exact ⟨(h.set_stackDir _).mono (fun _ hi => Or.inl hi) (fun _ hi => hi), fun hi => hi⟩
+
+theorem walkOutPre_past {g : Graph} {P X : ItemId → Prop} {s : WalkState} {σ : List Nat} {n : Nat}
+    {v d : Nat} {o : DfsOut} {hasVert : Bool} (h : s.Place g P X) (hv : v < g.nv)
+    (hf : hasVert = false → ¬ P (vertItem v))
+    (hP : ∀ e, e < g.ne → P (edgeItem g e) → σ.idxOf e < n) :
+    wp (walkOutPre v d o hasVert) (fun _ s' => ∀ w, w < g.nv → PushVertR σ n w s') s := by
+  apply wp_mono _ (walkOutPre_place h hv hf)
+  rintro hv' s' ⟨h', _⟩ w hw
+  apply h'.pushVertR hw
+  rintro e he (hp | ⟨_, hve⟩)
+  · exact hP e he hp
+  · exact (edgeItem_ne_vertItem hv e hve).elim
 
 mutual
 def CoverTree (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
