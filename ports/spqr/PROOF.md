@@ -1166,16 +1166,26 @@ actually executes. The empirical checker now also checks the unpushed vertex bou
 both modes, and the tiny examples have no violations. Allocated but loose items are excluded:
 freshly allocated nodes and reopened nodes are not closed records until they are reattached.
 `RangesClose.CloseAt` records all the checked attachment, child, Q/I/O, and P/S/R shape
-clauses for one item. `CloseInv` requires this record for the root and for items with positive
-span/child occurrence count. Its initial-state proof is complete. `CloseInv.of_tree` recovers
+clauses for one item. `CloseInv` requires this record for the root, every vertex item (even
+before it is pushed), and items with positive span/child occurrence count. The stronger
+all-vertices clause has zero required failures on seeds 0–400 × both modes; it is checked
+by `checkClose`. Its initial-state proof is complete. `CloseInv.of_tree` recovers
 `Items.CloseFacts` when every non-root item has a parent; this uses the existing `Items.Tree`
 contract, not another reachability admission. `CloseAt.frame` transports a record from its
 own type/terminals/children, its children's fields, and their edge-below predicates.
 `CloseInv.alloc`, `pop`, `mergeTop`, `unwrap`, `modifyLoose`, and conditional `push`/`finishTop`
 are proved; closing a
 zero-count item preserves every other record via `CloseAt.modify_of_not_below`.
-The new record at each close/push, boundary attachment, and the walk-level reuse induction remain
-unproved, explicitly named by `walk_closeInv` in `WalkItemsWF`. `walk_closeFacts` is the proved
+`CloseAt.root_of_children`, `vertex`, `leafQ`, and `leafIO` construct complete per-type records.
+`CloseInv.pushVert` now preserves the invariant without a new-record hypothesis. `pushEdge`
+constructs a leaf-Q record from its distinct endpoints, graph-edge equality, and both terminal
+attachments; those actual-site attachment hypotheses still need the ear/DFS context.
+`CloseInv.writeChildren` preserves all other records when writing a no-parent item, and
+`CloseInv.root_append` constructs the root record and preserves all records when appending
+vertex items. These constructors and the strengthened preservation lemmas have only standard
+axioms. `modifyLoose` now requires the modified item to lie beyond the fixed vertex interval.
+Node-finish and boundary new records, edge terminal attachments, and the walk-level reuse
+induction remain unproved, explicitly named by `walk_closeInv` in `WalkItemsWF`. `walk_closeFacts` is the proved
 tree/typing assembly from that admission, not an independent close-facts admission.
 
 The former unrestricted `walk_closeFacts` statement is false for malformed graphs:

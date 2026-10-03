@@ -273,7 +273,8 @@ def checkClose (seed : Nat) (s : WalkState) : List V := Id.run do
   let ty := fun i => s.items[i]!.type
   let ch := fun i => s.items[i]!.ch
   let vs := fun i => s.items[i]!.vs
-  let live := fun i => i == rootItem || s.tstack.any (fun t => (spanItems t).contains i) || s.items.any (fun it => it.ch.contains i)
+  let live := fun i => i == rootItem || (1 ≤ i && i ≤ s.g.nv) ||
+    s.tstack.any (fun t => (spanItems t).contains i) || s.items.any (fun it => it.ch.contains i)
   let spr := fun i => [NodeType.S, .P, .R].contains (ty i)
   let pair := fun (p q : Nat × Nat) => p == q || p == (q.2, q.1)
   let two := fun i => match vs i with | (some a, some b) => a != b | _ => false
