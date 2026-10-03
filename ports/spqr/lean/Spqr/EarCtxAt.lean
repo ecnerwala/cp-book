@@ -384,6 +384,12 @@ structure TreeSite (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOu
     (∀ e' ∈ (DfsTree.node y outs).edges, j ≠ edgeItem s.g e') →
     Items.ch sE.items j = Items.ch s.items j ∧
     ∀ p, Items.IsParent sE.items p j ↔ Items.IsParent s.items p j
+  /-- The items spanned by the entries the child's walk left above the pushed stack are the
+  child's `V`/`Q` items or allocated during it (`freshCheck`). -/
+  child_fresh : ∀ top, sE.tstack = top ++ (L ++ s.tstack) → ∀ t ∈ top,
+    ∀ i ∈ t.spans.1 ++ t.spans.2,
+    (∃ x ∈ (DfsTree.node y outs).verts, i = vertItem x) ∨
+    (∃ e' ∈ (DfsTree.node y outs).edges, i = edgeItem s.g e') ∨ s.items.size ≤ i
   bridge_bd : cls = .bridge → ∀ o' ∈ done', d + 1 ≤ o'.1.cls.lowval (d + 1)
   comp_ret : cls = .component → ∀ o' ∈ done', o'.1.cls.lowval (d + 1) < d + 1 →
     o'.1.cls.lowval (d + 1) = d
