@@ -1,4 +1,5 @@
 import Spqr.Proofs.RInvBase
+import Spqr.Proofs.Blocks
 import Spqr.EarFrontier
 import Spqr.EarFrame
 
@@ -685,13 +686,55 @@ theorem walkTree_rReturn (s : WalkState) (d c : Nat) (outs : List DfsOut)
   refine ⟨hK.1, ?_, hfr.entries, hW.top.disj⟩
   have := hK.2; rwa [Nat.sub_self, List.drop_zero] at this
 
+/-- The DFS-layer part of `RSideOut` (`ret`): every out-edge of a non-root vertex `c` returns,
+`o.cls.lowval (depth c) < depth c`. Tree edges: `bridge`/`component` children contradict
+`child_returns_above`; `ret` children by `ret_lowpt`. Back edges: a self-loop at `c` is not
+`EdgeConn (· ≠ c)` to the parent edge; a `ret _ .backEdge` lands at a proper ancestor. -/
+theorem _root_.Spqr.DfsData.Spec.outs_lowval_lt {g : Graph} {dfs : DfsData} (hs : dfs.Spec g)
+    (h2 : g.TwoConnected) {p c : Nat} (hp : dfs.IsParent p c) {o : DfsOut} (ho : o ∈ dfs.outs c) :
+    o.cls.lowval (dfs.depth c) < dfs.depth c := by
+  have hdc := hs.depth_parent _ _ hp
+  cases ht : o.isTree with
+  | true =>
+    rcases DfsData.tree_cls hs ho ht with h | h | ⟨l, k, h⟩
+    · obtain ⟨l, hl, hr⟩ := DfsData.child_returns_above hs h2 hp (DfsData.isParent_of_tree ho ht)
+      exact absurd hr (((hs.cls_bridge c o ho).mp h).2 l (Nat.le_of_lt hl))
+    · obtain ⟨l, hl, hr⟩ := DfsData.child_returns_above hs h2 hp (DfsData.isParent_of_tree ho ht)
+      exact absurd hr (((hs.cls_component c o ho).mp h).2.2 l hl)
+    · rw [h]; exact (DfsData.ret_lowpt hs ho ht h).1
+  | false =>
+    cases hc : o.cls with
+    | bridge => have := ((hs.cls_bridge c o ho).mp hc).1; rw [ht] at this; cases this
+    | component => have := ((hs.cls_component c o ho).mp hc).1; rw [ht] at this; cases this
+    | selfLoop =>
+      exfalso
+      have hdest := ((hs.cls_selfLoop c o ho).mp hc).2
+      have hj := hs.joins c o ho
+      rw [hdest] at hj
+      obtain ⟨e', he'⟩ := hp.joins hs
+      rcases h2 c o.e e' hj.lt he'.lt with h | ⟨x, y, hx, hy, hr⟩
+      · subst h
+        rcases hj.eq_or he' with ⟨h1, -⟩ | ⟨-, h1⟩ <;> (subst h1; omega)
+      · obtain ⟨z, hz⟩ := hx
+        rcases hj.eq_or hz with ⟨h1, -⟩ | ⟨-, h1⟩ <;> exact hr.ok_left h1.symm
+    | ret l k =>
+      cases k with
+      | type1Child => have := ((hs.cls_type1 c o ho l).mp hc).1; rw [ht] at this; cases this
+      | type2Child => have := ((hs.cls_type2 c o ho l).mp hc).1; rw [ht] at this; cases this
+      | backEdge =>
+        obtain ⟨-, hne, hl⟩ := (hs.cls_backEdge c o ho l).mp hc
+        have hanc := hs.back_anc c o ho ht
+        show l < dfs.depth c
+        rw [← hl]; exact hanc.depth_lt hs hne
+
 /-- **Named admission** (R-4 statement correction, PROOF.md §4.5). Exact obligation: the side
 facts of the child-return induction at a block's non-root `walkTree` entry `(c, d + 1)`
 (`RSideTree`), given the ear bookkeeping `BookTree` of the entry and the parent's ancestor chain
 (`stackVerts[k]`, `k ≤ d`, is the depth-`k` ancestor of `stackVerts[d]`): the ancestor chain at
 `(c, d + 1)` (from `hchain`, `hp` and `dfs.Spec.depth_parent`); `EntryR` is stable under
 `stackVerts.set! (d + 1) c`; no entry starting at the parent tops out above `d`; every out-edge of
-a non-root vertex returns (`lowval < depth`; `dfs.Spec.cls_*` + 2-connectivity); no entry owns an
+a non-root vertex returns (`lowval < depth`: `DfsData.Spec.outs_lowval_lt` above, with
+`depth c = d + 1` from `hp`/`hchain`); no entry owns an
 edge below `vertItem v` before `v`'s vertex entry is pushed; and the R-maximality content
 `FinishRShape` at tree-edge sites (`pend` from `EarFinish`'s `q_root`/`q_free`, `ear` =
 `FinishBook.ear`; `settled`/`unwrap`/`vert_own` are R content). `BookTree` and the chain are

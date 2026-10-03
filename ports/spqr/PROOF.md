@@ -1589,7 +1589,8 @@ side fact) and transported across `stackVerts.set! (d+1) c` (a second side fact)
 `finishEdge_tree_top_settled`). The side facts are bundled as `RSideTree`/`RSideOuts`/`RSideOut`
 (hypotheses of the induction, threaded like `GuardsTree`): the ancestor chain `AncChain` at every
 entry, `EntryR` stability under `stackVerts.set! d v`, no entry starting at the parent above
-`d - 1`, every out-edge of a non-root vertex returns (`lowval d < d`), `VertFree` (no entry owns an
+`d - 1`, every out-edge of a non-root vertex returns (`lowval d < d`; its DFS-layer content is
+proved as `DfsData.Spec.outs_lowval_lt`, R-5, standard axioms), `VertFree` (no entry owns an
 edge below `vertItem v`) before a vertex push, and `FinishRShape` at tree-edge sites. They are the
 named admission `walkTree_rSide`. All six are dump-checked at every entry/site of seeds 0..300 ×
 both modes + 6000 random multigraphs (`checks/RFinishEdgeCheck.lean`: `anc`, `stab`, `entry`,
