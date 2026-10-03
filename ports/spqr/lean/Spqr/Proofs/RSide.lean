@@ -9,9 +9,10 @@ ancestor chain `ancChain_child` with `d + 1 < stackVerts.size` from `ancChain_lt
 DFS-layer `ret` from `DfsData.Spec.outs_lowval_lt`, the children's `dfs.outs` from `DfsTree.Sub`),
 and the R content is isolated at its three sites as the named admissions `rSide_entry_site`
 (`EntryR` stability and the parent-start bound at a child entry), `rSide_vertFree_site`
-(`VertFree` where a vertex entry may be pushed) and `rSide_finish_site` (`FinishRShape` at a
-tree-edge `finishEdge` site, with the child's `RWalk`, `FinishGuards`/`FinishBook`/`Frontier` and
-the parent's chain in hand).
+(`VertFree` where a vertex entry may be pushed) and `rSide_finish_content_site`
+(`FinishRShape`'s `settled`/`unwrap`/`vert_own` at a tree-edge `finishEdge` site, with the child's
+`RWalk`, `FinishGuards`/`FinishBook`/`Frontier` and the parent's chain in hand; `pend`/`ear` are
+`rSide_finish_site`'s bookkeeping).
 -/
 
 namespace Spqr
@@ -94,15 +95,32 @@ theorem rSide_vertFree_site {F : List RFrame} {v d : Nat} (hi : s.Inv' d) (hs : 
     (hanc : AncChain dfs v d s) (hW : RWalk dfs F v d s) : VertFree v s := by
   sorry
 
-/-- **Named admission** (R content, PROOF.md §4.5). Exact obligation: `FinishRShape` at a
-tree-edge `finishEdge` site of a non-root vertex `v = stackVerts[d]` (`o` the tree edge to the
-child `c`, `B` the stack size before the child, the child walked: `RWalk` with the parent frame
-`(v, d, B)` and the child's settled top `RInvTop c (d + 1)`, `FinishGuards`/`FinishBook`/
-`Frontier` of the site): `pend` (no entry holds `o.e`: `EarFinish`'s `q_root`/`q_free`), `settled`
-(the entries loop 1 leaves above the base are `EntryR` at `feS₁`), `unwrap` (type 1 with a vertex
-entry: `Exempt` of `feS₂`'s next entry), `vert_own` (`VertFree` at `feP`), `ear` (=
-`FinishBook.ear`). Checked at every site of seeds 0..400 × both modes + 6000 random multigraphs
-(`FinishRShape` lines, 0 failures). -/
+/-- **Named admission** (R content, PROOF.md §4.5). Exact obligation: the content fields of
+`FinishRShape` at a tree-edge `finishEdge` site of a non-root vertex `v = stackVerts[d]` (`o` the
+tree edge to the child `c`, `B` the stack size before the child, the child walked: `RWalk` with
+the parent frame `(v, d, B)` and the child's settled top `RInvTop c (d + 1)`, `FinishGuards`/
+`FinishBook`/`Frontier` of the site): `settled` (the entries loop 1 leaves above the base are
+`EntryR` at `feS₁`), `unwrap` (type 1 with a vertex entry: `Exempt` of `feS₂`'s next entry),
+`vert_own` (`VertFree` at `feP`). Checked at every site of seeds 0..400 × both modes + 6000
+random multigraphs (`FinishRShape` lines, 0 failures). -/
+theorem rSide_finish_content_site {F : List RFrame} {v d B e c : Nat} {cls : OutClass}
+    {couts : List DfsOut} {o : DfsOut} {hasVert : Bool} (ho : o = .tree e cls (.node c couts))
+    (hlow : o.cls.lowval d < d) (hmem : o ∈ dfs.outs v)
+    (hi : s.Inv' (d + 1)) (hs : Shape s) (hg : FinishGuards d o B hasVert s)
+    (hb : FinishBook v d o B hasVert s) (hfr : Frontier (o := o) d B s)
+    (hW : RWalk dfs ((v, d, B) :: F) c (d + 1) s) (hanc : AncChain dfs v d s)
+    (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g) :
+    (∀ t ∈ (feS₁ d o s).tstack.tail.take ((feS₁ d o s).tstack.length - 1 - B),
+      d ≤ t.topDepth → t.vStart ≠ v → (feS₁ d o s).EntryR dfs t) ∧
+    (hasVert = true → o.cls.isType1 = true → Exempt v d (nxtE (feS₂ d o s))) ∧
+    (hasVert = false → ∀ t ∈ (feP v d o s).tstack, ∀ e,
+      t.edges (feP v d o s).g (feP v d o s).items e →
+      ¬ Items.EdgeBelow (feP v d o s).g (feP v d o s).items (vertItem v) e) := by
+  sorry
+
+/-- `FinishRShape` at a tree-edge site: `pend` (no entry holds `o.e`) from `EarFinish`'s
+`q_root`/`q_free`, `ear` from `FinishBook.ear`, the content fields from
+`rSide_finish_content_site`. -/
 theorem rSide_finish_site {F : List RFrame} {v d B e c : Nat} {cls : OutClass}
     {couts : List DfsOut} {o : DfsOut} {hasVert : Bool} (ho : o = .tree e cls (.node c couts))
     (hlow : o.cls.lowval d < d) (hmem : o ∈ dfs.outs v)
@@ -111,7 +129,12 @@ theorem rSide_finish_site {F : List RFrame} {v d B e c : Nat} {cls : OutClass}
     (hW : RWalk dfs ((v, d, B) :: F) c (d + 1) s) (hanc : AncChain dfs v d s)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g) :
     FinishRShape dfs v d o B hasVert s := by
-  sorry
+  obtain ⟨hsettled, hunwrap, hvert⟩ :=
+    rSide_finish_content_site ho hlow hmem hi hs hg hb hfr hW hanc h2 hsp hrt
+  refine ⟨?_, hsettled, hunwrap, hvert, hb.ear⟩
+  intro t ht ⟨i, hi', hbel⟩
+  obtain ⟨sub, base, -, hE⟩ := hb.ear
+  exact hE.q_free t ht (Items.Below.eq_of_no_parent hE.q_root hbel ▸ hi')
 
 /-- The parent of a non-root walked vertex `v = stackVerts[d]`, `d = dp + 1`, from its chain. -/
 theorem AncChain.parent {v dp : Nat} (hanc : AncChain dfs v (dp + 1) s) :
