@@ -1689,15 +1689,33 @@ S-merge writes `stackDir[t.topDepth]` with `t.topDepth > d`), so the reference's
 not, the side is empty and `L1Unwrap` (hence the head is no S / P item) forces the allocation path.
 `StEars.lean` composes it into `closeEars_st`: the whole of `feS₁` (the tree edge's `vs`, the
 pushed `Q` piece, loop 1) under exactly `l1_init`'s hypotheses.
-What remains is threading the relation through the rest of `finishEdge` (`mergeLate`, `closeVert`,
-`finishP`, `finishTail`, `finishBoundary`, `finishBack`) and
-`walkTree`/`walkEarTree` under the ear-shape hypotheses — which entries loop 1 / the `firstIdx`
-loop / the `origTstack + 3` loop pop are the `EarFinish.loops`/`EarShape` facts; the new closes'
-`vs` (`makeVs` at `stackDir[topDepth]`) are oriented in the truncated reference because the closed
-entry's leaves are the sub-ear spliced at `topDepth` — and, for `walk_st'`, turning the final
-`InBlock` into `ch i = restrictCh … (refOrder …) i`: `Expands i L` with `L` a segment of the
-`Nodup` `refOrder` and the children's expansions nonempty gives `restrictCh` = `ch` once
-`Items.leaves items items.size` is shown to agree with `Expands` (height < size in a tree).
+`StMerge.lean` (`L1StInv.mergeLate`), `StVert.lean` (`closeVert_st`: the `closeVert` unwrap /
+reopen / merge / fold of the type-1 close, carrying the lower entries `pre` reading as `qs`;
+`finishP_st`: the P merge when a `(curV, lowval)` single-piece entry is on the stack, its side
+conditions only under `isType1 = true`; `finishTail_st`: the vertex push, needing `vertItem curV`
+root, typed `V`, off the stack only under `hasVert = false`) and `StTree.lean` compose the whole of
+`finishTree` (`finishTree_st`, tree edge with `lowval < d`, `hasVert` either way: result pieces
+`qs ++ [⟨!stackDir[d], stNest (ps ++ [Q e])⟩]` resp. `qs ++ ps ++ [Q e, V curV]`, the lower
+stack `B` untouched, `stackDir[k]` for `k ≤ d` kept) and `finishBack` (`finishBack_st`, back edge
+with `lowval < d`: `qs ++ [⟨stackDir[lv], [Q e]⟩]` then the optional `V curV`). Both take the
+ear facts as `EarFinish`/`FinishOk` (`loops`, `bottom`, `p_entry`, `q_root`/`q_free`, `rest_*`) and
+one extra named hypothesis `hvf`: for `hasVert = false`, `vertItem curV` is a root and off the stack
+*after* `finishP` (it is so before `finishEdge` by `EarFinish.v_root`/`vert_free`; carrying it
+through `closeEars`/`mergeLate`/`closeVert`/`finishP` is a `Fresh`-style frame lemma per primitive,
+not yet written).
+What remains: (1) `finishBoundary` — the only place a block completes: popping the child's ear
+(`sub = [t]`, or `[b, t]` for `lowval = d`; this shape is not an existing `EarFinish` field and must
+be taken as a named hypothesis) must give `InBlock ⟨some (v, o.dest), stNest ps⟩` for every S/P/R
+item below the popped entries, i.e. the segment clause from `StRead sub ps` *and* the
+`VsOrientedAt` clauses (`Oriented (b.seq g) (vs i)`, V children between the endpoints, …) — these
+need an invariant on the `vs` of every stack span item relative to the entry's `vStart`/`topDepth`
+and the st-order, which `StRead` does not carry (the vs-orientation core of `walk_vsOriented`);
+(2) `walkOutPre` (`setStackDir d` leaves `DirsOf s d` fixed; the `pre` vertex push is
+`StRead.pushEntry`); (3) the `walkOuts`/`walkTree` induction (`StSimOuts` → `StSim`, consuming
+`walkOut_eq`, `finishOk_of_guards`, `finishEdge_step`); (4) `walk_st'` from the final
+`InBlock`: `Expands i L` with `L` a segment of the `Nodup` `refOrder` and the children's expansions
+nonempty gives `restrictCh` = `ch` once `Items.leaves items items.size` is shown to agree with
+`Expands` (height < size in a tree).
 `walk_vsOriented` is `InBlock.oriented` at the end of the walk (everything is finished once the
 stack is empty) transported from the truncated to the final blocks (monotone clauses, plus the
 block-edge clause from disjointness of the blocks' items).
@@ -1757,7 +1775,9 @@ Classical.choice, Quot.sound.
 | `StLoop1.lean`: `L1StInv` (the st-side loop-1 invariant: the entries above a fixed suffix `B` read as fixed pieces `ps`, `StItems` for fixed `blocks`, `stackDir[k]` for `k ≤ d` kept), `L1Unwrap.transport` (`L1Unwrap` read before `finishEdge` holds at an iteration state whose kept entries are `L1Keep` and whose top items are roots or on the original stack), `loop_run_iter` (`loop fuel cond body` is `iter body k` with the condition true before each iteration), `l1St_step` (one `loop1Body` iteration under `L1Ctx`/`L1Inv` of `EarLoop1.lean`: the type-2 S-merge sets `stackDir` above `d` only, then `StSim.unwrapMergeClose`), `l1St_iter`, `l1St_loop` (the whole loop 1, with `l1_iter` supplying `L1Inv` at every iteration) | `StLoop1.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | `StEars.lean`: `ExpandsList.leaves`, `mem_readStack_exists`, `mem_readStack_push`, `nodup_readStack_push`, `StRead.pushEntry` (pushing the one-item entry `⟨dir, [q]⟩`, `q` a leaf, appends the piece), `StItems.modify_root` (a `vs`-only change of a root non-S/P/R item keeps `StItems`), `StItems.pushEntry` (pushing a root childless item absent from the stack keeps `StItems`), `closeEars_st` (`feS₁ d o s` for a tree edge with `lowval < d`: `feS₀` sets `vs` of `Q e`, `pushEdgeTstack` pushes `⟨stackDir[d], [Q e]⟩`, then `l1St_loop` via `L1Ctx.ofEar`/`l1_init`; result `L1StInv` with pieces `ps ++ [⟨stackDir[d], [Q e]⟩]` above `base`) | `StEars.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | `StMerge.lean`: `mergeTopsN`, `iter_mergeTstackTops`, `mergeTopsN_length`, `mergeTopsN_above` (`k` merges above a suffix `B` keep `readL`/`readR` of the part above `B`), `L1StInv.mergeTopsN`, `L1StInv.mergeLoop` (any `loop _ cond mergeTstackTops` that ends with an entry above `B` keeps `L1StInv`: merges only shorten the stack, so all of them happened above `B`), `L1StInv.mergeLate` (loop 2) | `StMerge.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
-| per-primitive preservation of `StSim` through `finishEdge` (back-edge P merge, loop 1 type-2 merges, loop 2 type-1 closes, loop 3 / `maybeUnwrapNxt`, `finishTstackTop`, `closeVert`, block boundary), `walkTree` induction | — | open |
+| `StVert.lean`: `ExpandsList.{unique, split}`, `StRead.{append, split, fold}`, `StItems.perm`, `closeVert_st` (the type-1 `closeVert` unwrap/reopen/merge/fold, lower entries `pre`/`qs` carried), `finishP_st` (P merge; `hP` side conditions only for `isType1 = true`; result `new' ≠ []`), `finishTail_st` (vertex push / merge; vertex-item conditions only for `hasVert = false`) | `StVert.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
+| `StTree.lean`: `mem_readStack_of_mem`, `mem_spans_setSides_single`, `finishTree_st` (`finishTree` for a tree edge with `lowval < d`: `closeEars_st`, `L1StInv.mergeLate`, `closeVert_st`, `finishP_st`, `finishTail_st` composed; `hvf` named hypothesis), `finishBack_st` (`finishBack` for a back edge with `lowval < d`) | `StTree.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
+| `finishBoundary_st` (block completion: `InBlock` incl. `VsOrientedAt` for the popped ear — needs a `vs`-position invariant on stack span items), `Fresh` frame lemmas discharging `hvf`, `walkOutPre_st`, `walkOuts`/`walkTree` induction (`StSimOuts` → `StSim`), final step (`InBlock` ⇒ `walk_st'`/`walk_vsOriented`) | — | open |
 | reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop`, `readStack_reopen`/`readStack_modifyNxt_reopen` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes and reopens) | `StRef.lean` | proved |
 
 ## 8. Planarity
