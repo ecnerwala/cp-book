@@ -48,3 +48,13 @@ root = "CheckPieceSep"
 [[lean_exe]]
 name = "check_stsim"
 root = "CheckStSim"
+
+[[lean_lib]]
+name = "WalkInvCheck"
+srcDir = "checks"
+roots = ["WalkInvCheck"]
+
+[[lean_exe]]
+name = "check_walkinv"
+root = "WalkInvCheck"
+srcDir = "checks"

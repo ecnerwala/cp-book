@@ -1280,16 +1280,24 @@ Ear (ear-5) — as a `BookTree`-style predicate (`CtxTree`) carried by `walkTree
   (the blocks already closed at `v` are owned by no open entry; with `vert_edges` this is
   `∀ t ∈ s.tstack, ∀ e < ne, t.edges e → ∀ o ∈ done, d ≤ o.1.cls.lowval d → ¬ subEdges o.1 e`).
   The `e ≥ s.g.ne` residue of `VertFree` (item ids aliasing `edgeItem e`) is E4.
-- E3 (new field candidate `buried_vacuous`; for `rSide_entry_site`'s `stab`): at a child-entry
-  site, every open `t` with `d < t.topDepth` satisfies
-  `(∀ e e', e < s.g.ne → e' < s.g.ne → t.edges s.g s.items e → t.edges s.g s.items e' → e = e') ∨ s.g.TwoAttached (t.edges s.g s.items) t.vStart t.vStart`
-  (buried entries are a single `Q`, seed 390, or a `V y` entry holding the closed blocks of a
-  finished deeper `y`, the `base_top` counterexample of §4.2b). `EntryR.single` is the only
-  `EntryR` field reading `stackVerts[t.topDepth]` (`EntryR.congr_top`) and is vacuous under
-  either disjunct, so `EntryR` survives `stackVerts.set! (d + 1) c` for `topDepth = d + 1`.
-  Checked (`buried` lines of `checks/RFinishEdgeCheck.lean`): seeds 0..400 × both modes + 6000
-  random, 2616 child-entry sites, 70 buried entries, all of them single-edge (the second
-  disjunct was never needed), 0 failures.
+- E3 (field `stab_single`; for `rSide_entry_site`'s `stab`): at the child-entry site
+  `walkTree c (d + 1)`, every open `t` with `t.topDepth = d + 1` (the only entries whose
+  `EntryR.single` reads the updated `stackVerts[d + 1]`, `EntryR.congr_top`) satisfies
+  `s.g.TwoAttached (t.edges s.g s.items) t.vStart c ∨ ∀ e e', e < s.g.ne → e' < s.g.ne → t.edges s.g s.items e → t.edges s.g s.items e' → s.g.SepClass t.vStart c e e'`,
+  i.e. `EntryR.single` holds in the updated state outright. *Refuted original* (`buried_vacuous`):
+  "every open `t` with `d < t.topDepth` is a single edge or `TwoAttached … vStart vStart`" (so that
+  `single` is vacuous). `checks/WalkInvCheck.lean` (seeds 0..3000 × both modes) found 6 violations
+  (seeds 666, 989, 1966), all buried P-bonds attached at `{vStart, stackVerts[topDepth]}` — two
+  stale vertices of a finished sibling subtree (`RFinishEdgeCheck`'s 70 buried entries on seeds
+  0..400 + 6000 random were all single-edge by luck). Kernel-checked counterexample
+  `WalkInvCheck.E3False.e3_buried_vacuous_false` (`checks/WalkInvCheck/E3False.lean`, axioms
+  `[propext, Quot.sound]`): the edge-minimal block of seed 1966 (8 vertices, 11 edges), the walk run
+  by `decide +kernel` to the child-entry site of `7` under `1` (depth 2) after the subtree
+  `1 → 4 → 6`; the open entry `⟨6, 3, 2, ([], [21])⟩` (`topDepth = 3 = d + 1`) owns the P item of the
+  two parallel edges `4 – 6`, attached at `4 = stackVerts[3]` (stale) and `6 = vStart`. The restated
+  field holds there because both edges share `4 ∉ {6, 7}`; it is what `stab` actually consumes
+  (`EntryR.set_stackVerts` for `topDepth ≠ d + 1`, `stab_single` for `topDepth = d + 1`). Checked:
+  `e3.stab_single` in `checks/WalkInvCheck.lean`, 0 violations on all graphs (not only blocks).
 - E4 (item-forest facts at every site; ear or Ranges, whichever carries them — `ItemFree`/`cnt`
   are Ranges-3's): `∀ t ∈ s.tstack, ∀ i ∈ t.spans.1 ++ t.spans.2, ∀ p, ¬ Items.IsParent s.items p i`
   (span items are roots) and `∀ c p p', Items.IsParent s.items p c → Items.IsParent s.items p' c → p = p'`
@@ -1380,9 +1388,9 @@ dump-checked on seeds 0..400 × both modes + 6000 random multigraphs (`checks/RF
    `stackVerts.set! (d + 1) c`; (b) `∀ t ∈ tstack, t.vStart = v → t.topDepth ≤ d`. (b) =
    `EarCtx.split` at the call state (`CtxEntry.depth` for `above`, `vt.topDepth ≤ d`, `below` has
    `vStart ≠ v`) + `EarCtx.base_bot`. (a) = `EntryR.set_stackVerts` for `topDepth ≠ d + 1`, and
-   for `topDepth = d + 1` the buried-entry field E3 (`buried_vacuous`: single edge or
-   `TwoAttached … vStart vStart`, which makes `EntryR.single` — the only field reading
-   `stackVerts[topDepth]` — vacuous).
+   for `topDepth = d + 1` the field E3 (`stab_single`: `EntryR.single` in the updated state — the
+   only field reading `stackVerts[topDepth]`; the original `buried_vacuous` candidate is refuted,
+   see E3 above).
 6. `rSide_vertFree_site` (`Proofs/RSide.lean`): `VertFree v s` at a vertex site with `VertBook v
    false`, `RWalk`. `e < ne`: `EarCtx.vert_edges` (edges under `vertItem v` = `subEdges` of the
    `done` outs with `d ≤ lowval`) + field E2 `bd_free` (no open entry owns one). `e ≥ ne`: E4
@@ -1862,6 +1870,39 @@ returning tree edge (`isTree`, `lowval d < d`), the range invariant is carried i
 evaluates the `RangesInv` clauses at exactly these states (`checkRI`, labels `rangesInv_l1Iter`/
 `rangesInv_feS₂`, 0..400 × both modes, 0 failures). `CloseBase`/`CloseCtx`/`OwnedD` are unchanged.
 No new admission was added to the completed local lemmas.
+
+### 4.7 Backbone: one invariant, one induction (`checks/WalkInvCheck.lean`)
+
+The per-layer inductions (ear `cTree`/`cOuts`/`cOut`, Ranges `dsTree`/`cvTree`/`cbTree`, R
+`rrTree`/`rkTree`, ST `stWalk`/`stForest`) are to be replaced by ONE conjunction `WalkInv` carried
+by ONE induction over `walkTree`/`walkOuts`/`walkOut`/`finishEdge`, every component lemma's
+hypothesis taken from the conjunction at the same site. Before stating it, the conjunction is
+checked executably: `lake build check_walkinv && ./.lake/build/bin/check_walkinv [lo hi]`
+(default seeds 0..3000, both `ternarize` modes, `randGraph` of `checks/EarCheck.lean`) re-runs the
+walk by one instrumented traversal around the library `finishEdge` (checked equal to `Graph.walk` on
+every run: items and tstack length) and evaluates, per field with the smallest violating seed:
+
+* `inv.*` (`Inv' d`, `WalkSpec.lean`) at every between-edge site;
+* `ear.*` (`EarCtx.check` of `checks/EarCheck.lean`: `EarCtx` between edges, `EarFinish`/
+  `Loop1Spec`/`EarLate`/`EarClose`/bottoms/`Frontier` at `finishEdge`, `compEnd`/`left` at the end
+  of `walkTree`);
+* `ranges.*` (`checks/RangesInvCheck.lean`'s `RangesInv`/`FinishAdj`/`CloseInv`/`CloseCtx` and the
+  P / vertex / loop-1 sub-sites, `OwnedD`/vertex coverage; its `cand_*` observations excluded);
+* `r.*`/`pieces.*`/`rskel.*` (`checks/RFinishEdgeCheck.lean`'s contract-B `EntryR` lines `preB`/
+  `postB`/`stab`/`anc`/`disj`, the loop-1 emulation `RTop`/`RBranch`/`rclose`, `FinishRShape`,
+  `RInvG` base frames, on blocks; `RSkel3` of every R item at every site);
+* `st.*` (`CheckStSim.lean`'s m8–m11 reads/items/truncations at every site, m13–m17 contexts, the
+  base/root frames, `finishBoundary`, and the per-segment `StLive ↔ openBlock` pairing §7 listed as
+  unchecked: `st.live_cur`/`st.live_pre`/`st.live_end`/`st.live_lower`, `st.seg_lower`);
+* the handoff candidates E1–E5 of §4.5 (`e1.entry`, `e2.bd_free`, `e3.stab_single`, `e4.span_root`/
+  `e4.unique_parent`, `e5.*`).
+
+Result (seeds 0..3000 × both modes, 6002 runs, 166 block runs): instrumentation matches, 0
+violations in every field — after one correction: the original E3 `buried_vacuous` is false (6
+violations, kernel counterexample `checks/WalkInvCheck/E3False.lean`), restated as `stab_single`
+(§4.5 E3). `check_walkinv minimize <field> <seed>` edge-minimises a violating graph and
+`check_walkinv small <field> <n>` searches small random graphs; both were used for the E3
+counterexample.
 
 ## 5. Phase 3: relabel
 
