@@ -1134,6 +1134,10 @@ the settled base covers the preceding suffix and the frontier covers the new chi
 `RangesInv.mergeAdj_of_baseCover` and `finishPAdj_of_baseCover` derive adjacency from this
 explicit induction hypothesis (`FinishPCover`), with no new admission. Both ownership clauses
 at actual P sites pass seeds 0–400 × both modes in `RangesInvCheck`.
+`RangesSchedule.finishR_of_cover` assembles the entire `FinishR` bundle from the ear guards,
+book and frontier, the postorder position, and `FinishCover`. The latter retains only the
+P-site ownership and the unpushed vertex's processed-edge bound; all other adjacency is derived.
+`Step.pushVertR` transports that bound through the returning-edge primitives.
 All twenty-two lemmas have only standard axioms. Full `FinishAdj` still needs the P merge
 into the base; the child's frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece
