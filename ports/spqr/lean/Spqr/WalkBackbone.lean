@@ -221,8 +221,9 @@ theorem qch (h : WalkInv G t d s) : ∀ e ∈ t.edges, Items.ch s.items (edgeIte
 
 theorem earTree (h : WalkInv G t d s) :
     EarTree t d s ∧ wp (walkTree t d) (fun _ s' => TreeEnd t.v d t.outs G.base G.bE G.sv G.sd s') s :=
-  cTree t d s G.g G.anc G.base G.bE G.sv G.sd G.pe h.types h.d_anc h.wf h.ends h.nodup h.anc_lt
-    h.v_lt h.e_lt h.enodup h.comp h.pe_anc h.sv_size h.sd_size h.anc_sv h.ear
+  have h := cTree t d s G.g G.anc G.base G.bE G.sv G.sd G.pe h.types h.d_anc h.wf h.ends h.nodup
+    h.anc_lt h.v_lt h.e_lt h.enodup h.comp h.pe_anc h.sv_size h.sd_size h.anc_sv h.ear
+  ⟨h.1, h.2.1⟩
 
 theorem coverTree (h : WalkInv G t d s) (hg : GuardsTree t d s) (hb : BookTree t d s)
     (hf : FrontiersTree t d s) (hc : CsTree G.σ G.n t d s) :
@@ -451,9 +452,10 @@ theorem comp_out : ∀ e', e' < G.g.ne → ∀ x, G.g.Inc e' x → x ∈ o.verts
 
 theorem earOut : EarOut v d o hasVert s ∧ wp (walkOut v d o hasVert)
     (fun hv' s' => ∃ hvF, EarCtx v d (done ++ [(o, hvF)]) rest hv' G.base G.bE G.sv G.sd s') s :=
-  cOut v d o hasVert s G.g G.anc outs₀ rest done G.base G.bE G.sv G.sd G.pe h.types h.d_anc h.split
-    h.sorted h.wf h.ends h.nodup h.anc_lt h.v_lt h.w_lt h.e_lt h.enodup h.comp h.pe_anc h.sv_size
-    h.sd_size h.anc_sv h.ear
+  have h := cOut v d o hasVert s G.g G.anc outs₀ rest done G.base G.bE G.sv G.sd G.pe h.types
+    h.d_anc h.split h.sorted h.wf h.ends h.nodup h.anc_lt h.v_lt h.w_lt h.e_lt h.enodup h.comp
+    h.pe_anc h.sv_size h.sd_size h.anc_sv h.ear
+  ⟨h.1, h.2.1⟩
 
 theorem coverOut (hg : GuardsOut v d o hasVert s) (hb : BookOut v d o hasVert s)
     (hf : FrontiersOut v d o hasVert s) (hc : CsOut G.σ n v d o hasVert s) :
