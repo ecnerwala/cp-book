@@ -569,13 +569,13 @@ one P item; otherwise nothing happens. -/
 theorem finishP_st {g : Graph} (s : WalkState) (curV lowval : Nat) (isType1 : Bool) (c : TEntry)
     (new base : List TEntry) (ps : List StPiece) (blocks : List StBlock)
     (hts : s.tstack = c :: (new ++ base))
-    (hc : getSide c.spans (!s.stackDir[lowval]!) = []) (hct : lowval ≤ c.topDepth)
     (hB : ∀ t ∈ base, t.vStart ≠ curV)
     (hP : isType1 = true → ∀ t ∈ new, t.vStart = curV → t.topDepth = lowval →
+      getSide c.spans (!s.stackDir[lowval]!) = [] ∧ lowval ≤ c.topDepth ∧
       getSide t.spans (!s.stackDir[lowval]!) = [] ∧ L1Unwrap s .P t)
     (hR : StRead s.items (c :: new) ps) (hI : StItems g s blocks) :
     let s' := ((finishP curV lowval isType1).run s).2
-    ∃ new', s'.tstack = new' ++ base ∧ s'.stackDir = s.stackDir ∧ s'.g = s.g ∧
+    ∃ new', new' ≠ [] ∧ s'.tstack = new' ++ base ∧ s'.stackDir = s.stackDir ∧ s'.g = s.g ∧
       s.items.size ≤ s'.items.size ∧ StRead s'.items new' ps ∧ StItems g s' blocks := by
   dsimp only
   simp only [Spqr.finishP, WalkM.run_bind, run_condP]
@@ -596,18 +596,18 @@ theorem finishP_st {g : Graph} (s : WalkState) (curV lowval : Nat) (isType1 : Bo
         | cons b bs => exact hB b List.mem_cons_self (by simpa using hvs)
       | cons t new' => exact ⟨t, new', rfl⟩
     simp only [List.cons_append, List.head!_cons] at hvs htd
-    obtain ⟨ht, hU⟩ := hP h1 t List.mem_cons_self hvs htd
+    obtain ⟨hc, hct, ht, hU⟩ := hP h1 t List.mem_cons_self hvs htd
     have hmin : min t.topDepth c.topDepth = lowval := by rw [htd]; exact Nat.min_eq_left hct
     have res := StSim.unwrapMergeClose s .P c t new' base ps blocks hts (by rw [hmin]; exact hc)
       (by rw [hmin]; exact ht) (Or.inr (Or.inl rfl)) (fun _ => hU) hR hI
     dsimp only at res
     obtain ⟨hts', hsd', hsz', -, -, hR', hI'⟩ := res
-    refine ⟨_, hts', hsd', ?_, hsz', hR', hI'⟩
+    refine ⟨_, List.cons_ne_nil _ _, hts', hsd', ?_, hsz', hR', hI'⟩
     rw [finishTstackTop_g, mergeTstackTops_g, maybeUnwrapNxt_g]
   · have h' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == curV) &&
         (s.tstack.tail.head!.topDepth == lowval)) = false := Bool.eq_false_iff.2 h
     simp only [h', Bool.false_eq_true, ↓reduceIte, WalkM.pure_run]
-    refine ⟨c :: new, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> trivial
+    refine ⟨c :: new, List.cons_ne_nil _ _, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> trivial
 
 /-- The first-edge vertex push on `new ++ base`: the piece `⟨stackDir[d], [V curV]⟩` is appended
 (merged into the top entry unless `isSingle`). -/
@@ -615,10 +615,8 @@ theorem finishTail_st {g : Graph} (s : WalkState) (curV d : Nat) (hasVert isSing
     (new base : List TEntry) (ps : List StPiece) (blocks : List StBlock)
     (hts : s.tstack = new ++ base)
     (hne : hasVert = false → isSingle = false → new ≠ [])
-    (hv : vertItem curV < s.items.size) (hvty : Items.type s.items (vertItem curV) = .V)
-    (hvroot : ∀ p, ¬ Items.IsParent s.items p (vertItem curV))
-    (hvch : Items.ch s.items (vertItem curV) = [])
-    (hvfree : vertItem curV ∉ readStack s.tstack)
+    (hvert : hasVert = false → vertItem curV < s.items.size ∧ Items.type s.items (vertItem curV) = .V ∧
+      (∀ p, ¬ Items.IsParent s.items p (vertItem curV)) ∧ vertItem curV ∉ readStack s.tstack)
     (hR : StRead s.items new ps) (hI : StItems g s blocks) :
     let r := (finishTail curV d hasVert isSingle).run s
     r.1 = true ∧ r.2.stackDir = s.stackDir ∧ r.2.g = s.g ∧ r.2.items = s.items ∧
@@ -627,11 +625,12 @@ theorem finishTail_st {g : Graph} (s : WalkState) (curV d : Nat) (hasVert isSing
       StItems g r.2 blocks := by
   dsimp only
   cases hasVert
-  · set E : TEntry := ⟨curV, d, s.nxtEdgeIdx, setSides s.stackDir[d]! [vertItem curV] []⟩ with hE
+  · obtain ⟨hv, hvty, hvroot, hvfree⟩ := hvert rfl
+    set E : TEntry := ⟨curV, d, s.nxtEdgeIdx, setSides s.stackDir[d]! [vertItem curV] []⟩ with hE
     have hR₁ : StRead s.items (E :: new) (ps ++ [⟨s.stackDir[d]!, [vertItem curV]⟩]) :=
       StRead.pushEntry curV d s.nxtEdgeIdx s.stackDir[d]! (vertItem curV) (Or.inl hvty) hR
     have hI₁ : StItems g { s with tstack := E :: s.tstack } blocks :=
-      StItems.pushEntry curV d s.nxtEdgeIdx s.stackDir[d]! (vertItem curV) hv hvroot hvch hvfree hI
+      StItems.pushEntry curV d s.nxtEdgeIdx s.stackDir[d]! (vertItem curV) hv hvroot hvfree hI
     cases isSingle
     · have hr : (finishTail curV d false false).run s =
           (true, (mergeTstackTops.run { s with tstack := E :: s.tstack }).2) := rfl
