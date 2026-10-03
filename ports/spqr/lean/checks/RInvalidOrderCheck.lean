@@ -1,4 +1,5 @@
 import Spqr.Proofs.RItems
+import Spqr.Spec
 
 namespace Spqr.RInvalidOrderCheck
 
@@ -44,5 +45,19 @@ theorem not_threeConnected :
 #print axioms bad_order
 #print axioms r_item
 #print axioms not_rSkel3
+
+/-- The one-vertex R node violates `Shape` (an R node needs at least four vertices), so the output
+is not `WF`: `spqrTree_wf` needs `g.WF` and `OrderOK`. -/
+theorem not_wf : ¬output.WF := by
+  intro h
+  have hs := h.shape 3 r_node.1
+  unfold SpqrTree.Shape at hs
+  rw [r_node.2.1] at hs
+  have := r_node.2.2
+  unfold SpqrTree.nVerts at this
+  simp only at hs
+  omega
+
+#print axioms not_wf
 
 end Spqr.RInvalidOrderCheck

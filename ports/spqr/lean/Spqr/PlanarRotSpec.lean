@@ -212,7 +212,8 @@ local notation "PT" => g.planarSpqrTree ternarize vertOrder edgeOrder
 per node-edge, and node `n`'s entries `4 neSt + j`, `j < 4 nEdges n`, are those of `layoutRot` with
 the `edgeVes`/`mapRot` computed when `n` was laid out (`mapRot` always yields four entries; for an R
 node `edgeVes` lists its `nEdges n - 1` non-cap edges). -/
-theorem planarRelabel_rot_spec :
+theorem planarRelabel_rot_spec (hg : g.WF) (hvo : OrderOK g.nv vertOrder)
+    (heo : OrderOK g.ne edgeOrder) :
     (PT).neRotAdj.size = 4 * (PT).toSpqrTree.nodeEdges.size ∧
     ∀ n, n < (PT).toSpqrTree.size →
       ∃ (edgeVes : List Nat) (mapRot : Nat → Array (Option Nat)),
@@ -223,19 +224,20 @@ theorem planarRelabel_rot_spec :
             (layoutRot ((PT).toSpqrTree.type n) ((PT).toSpqrTree.nVerts n) ((PT).toSpqrTree.neRange n).1
               ((PT).toSpqrTree.neRange n).2 edgeVes mapRot (2 * g.ne))[j]! := by
   have hwf : (PT).toSpqrTree.WF := by
-    rw [planarRelabel_proj]; exact spqrTree_wf g ternarize vertOrder edgeOrder
+    rw [planarRelabel_proj]; exact spqrTree_wf g hg ternarize vertOrder edgeOrder hvo heo
   exact planarRelabelTree_rot_spec g _ hwf
 
 /-- `PlanarSpec.neRotAdj_segment` from `planarRelabel_rot_spec`. -/
-theorem neRotAdj_segment' (i : Nat) (hi : i < (PT).toSpqrTree.size) :
+theorem neRotAdj_segment' (hg : g.WF) (hvo : OrderOK g.nv vertOrder)
+    (heo : OrderOK g.ne edgeOrder) (i : Nat) (hi : i < (PT).toSpqrTree.size) :
     ∃ (edgeVes : List Nat) (mapRot : Nat → Array (Option Nat)) (capVe : Nat),
       (PT).neRotAdj.extract (4 * ((PT).toSpqrTree.neRange i).1) (4 * ((PT).toSpqrTree.neRange i).2) =
         layoutRot ((PT).toSpqrTree.type i) ((PT).toSpqrTree.nVerts i) ((PT).toSpqrTree.neRange i).1
           ((PT).toSpqrTree.neRange i).2 edgeVes mapRot capVe := by
-  obtain ⟨hsz, hnode⟩ := planarRelabel_rot_spec g ternarize vertOrder edgeOrder
+  obtain ⟨hsz, hnode⟩ := planarRelabel_rot_spec g ternarize vertOrder edgeOrder hg hvo heo
   obtain ⟨ev, mr, hmr, hR, hget⟩ := hnode i hi
   have hwf : (PT).toSpqrTree.WF := by
-    rw [planarRelabel_proj]; exact spqrTree_wf g ternarize vertOrder edgeOrder
+    rw [planarRelabel_proj]; exact spqrTree_wf g hg ternarize vertOrder edgeOrder hvo heo
   refine ⟨ev, mr, 2 * g.ne, ?_⟩
   have hrs := layoutRot_size (PT).toSpqrTree hwf i hi ev mr (2 * g.ne) hmr hR
   have hle := neRange_le_size (PT).toSpqrTree hwf i hi

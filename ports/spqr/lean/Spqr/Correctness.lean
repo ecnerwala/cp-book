@@ -62,12 +62,14 @@ theorem spqrTree_wf' (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat) (h
   exact relabelTree_wf g _ (walk_items_wf g hg tern vo eo hvo heo)
     (walk_items_rOriented' g hg tern vo eo hvo heo)
 
-/-- Hypothesis-free form, used as such by the planar layer (`PlanarSpec.planarTree_shape`,
-`PlanarRotSpec.planarRelabel_rot_spec`/`neRotAdj_segment'`). Under `g.WF` and `OrderOK` it is
-`spqrTree_wf'`; its `ROriented` part comes from `walk_st`, whose `refBlocks_st` input is false for
-malformed graphs (`PROOF.md` §7.6), so the hypothesis-free statement is open. -/
-theorem spqrTree_wf (g : Graph) (tern : Bool) (vo eo : List Nat) : (g.spqrTree tern vo eo).WF := by
-  sorry
+/-- `WF` of the output needs the input hypotheses: on the valid K4 with the invalid edge order
+`eo = [6]` the output has an R node with one vertex (`checks/RInvalidOrderCheck.lean`, `r_node`,
+`not_wf`: `¬ (k4.spqrTree false [] [6]).WF`, kernel-checked), so the former hypothesis-free
+statement was false. The planar layer (`PlanarSpec.planarTree_shape`,
+`PlanarRotSpec.planarRelabel_rot_spec`/`neRotAdj_segment'`) takes the same hypotheses. -/
+theorem spqrTree_wf (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
+    (heo : OrderOK g.ne eo) : (g.spqrTree tern vo eo).WF :=
+  spqrTree_wf' g hg tern vo eo hvo heo
 
 theorem spqrTree_represents (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
