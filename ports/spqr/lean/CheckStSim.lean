@@ -151,6 +151,75 @@ def truncItemsB (g : Graph) (s : WalkState) (tblocks : List StBlock) : List Stri
       else some s!"trunc: V item {c} under entry (vStart {t.vStart}, topDepth {t.topDepth}, sv {a}, dir {σ}) (span item) not strictly between; seqs {tblocks.map (·.seq g)} stack {s.tstack.map fun t => (t.vStart, t.topDepth, t.spans)} sv {s.stackVerts.toList.take 6}"
   m8 ++ m10 ++ m11 ++ (if truncEntryChecks then m9 ++ m12 else [])
 
+def betweenAny (xs : List Nat) (x y z : Nat) : Bool :=
+  (decide (Precedes xs x z) && decide (Precedes xs z y)) ||
+  (decide (Precedes xs y z) && decide (Precedes xs z x))
+
+/-- `some false`: `(a, b)` oriented in a block; `some true`: `(b, a)`; `none`: neither. -/
+def orientedDir (tblocks : List StBlock) (g : Graph) (a b : Nat) : Option Bool :=
+  if tblocks.any (fun b' => decide (Oriented (b'.seq g) (some a, some b))) then some false
+  else if tblocks.any (fun b' => decide (Oriented (b'.seq g) (some b, some a))) then some true
+  else none
+
+def vSpans (items : Items) (t : TEntry) : List ItemId :=
+  (t.spans.1 ++ t.spans.2).filter (Items.type items · == .V)
+
+def showStack (ts : List TEntry) : String := s!"{ts.map fun t => (t.vStart, t.topDepth, t.spans)}"
+
+/-- Entry-level candidate (sim-5), only for the entries `(v, l)`, `l < d`, started at the current
+vertex `v` (`EarCtx.above`, whose `stackVerts[l]` is current): `(stackVerts[l], v)` is oriented by
+`stackDir[l]` (m16) and the V span items are strictly between (m17). -/
+def truncCtxB (g : Graph) (s : WalkState) (tblocks : List StBlock) (v d : Nat) : List String :=
+  s.tstack.flatMap fun t =>
+    if t.vStart != v || d ≤ t.topDepth then [] else
+    let a := s.stackVerts[t.topDepth]!
+    let dir := s.stackDir[t.topDepth]!
+    let m16 := match orientedDir tblocks g a v with
+      | none => [s!"ctx: entry (v {v}, l {t.topDepth}, sv {a}) unoriented; stack {showStack s.tstack}"]
+      | some flip => if flip != dir then
+          [s!"ctx: entry (v {v}, l {t.topDepth}, sv {a}) oriented against stackDir {dir}; stack {showStack s.tstack}"]
+        else []
+    let m17 := (vSpans s.items t).filterMap fun c =>
+      if tblocks.any (fun b' => betweenAny (b'.seq g) a v (c - 1)) then none
+      else some s!"ctx: V item {c} of entry (v {v}, l {t.topDepth}, sv {a}) not strictly between; stack {showStack s.tstack}"
+    m16 ++ m17
+
+/-- Site-level candidate (sim-5), before `finishEdge o` of `v` at depth `d` with the child's leftover
+`sub`: for a returning edge the ear's terminals `(stackVerts[lowval], v)` are oriented by
+`stackDir[lowval]` and every V span item of `sub` is strictly between (m13/m14); for every loop-1
+entry `t'` of depth `d` the close `(v, t'.vStart)` is oriented by `stackDir[d]` and the V span items
+of the range down to `t'` are strictly between (m15). (m18, `topDepth ≤ d + 1` for loop-1 entries,
+is FALSE: seeds 154, 195, 442 — buried chain entries keep a deeper `topDepth`; off.) -/
+def truncSiteB (g : Graph) (s : WalkState) (tblocks : List StBlock) (v d : Nat) (o : DfsOut)
+    (sub : List TEntry) : List String :=
+  let lowval := o.cls.lowval d
+  let m13 := if d ≤ lowval then [] else
+    let a := s.stackVerts[lowval]!
+    let dir := s.stackDir[lowval]!
+    (match orientedDir tblocks g a v with
+      | none => [s!"ret: ({a}, {v}) lowval {lowval} unoriented; sub {showStack sub}"]
+      | some flip => if flip != dir then
+          [s!"ret: ({a}, {v}) lowval {lowval} oriented against stackDir {dir}; sub {showStack sub}"] else []) ++
+    ((sub.flatMap (vSpans s.items)).filter (· != vertItem v)).filterMap fun c =>
+      if tblocks.any (fun b' => betweenAny (b'.seq g) a v (c - 1)) then none
+      else some s!"ret: V item {c} not strictly between ({a}, {v}) lowval {lowval}; sub {showStack sub}"
+  let hi := sub.takeWhile (fun t => d ≤ t.topDepth)
+  let m15 := (List.range hi.length).flatMap fun j =>
+    let t' := hi[j]!
+    if t'.topDepth != d then [] else
+    let bottom := t'.vStart
+    let dir := s.stackDir[d]!
+    (match orientedDir tblocks g v bottom with
+      | none => [s!"l1: ({v}, {bottom}) unoriented; hi {showStack hi}"]
+      | some flip => if flip != dir then
+          [s!"l1: ({v}, {bottom}) oriented against stackDir {dir}; hi {showStack hi}"] else []) ++
+    (((hi.take (j + 1)).flatMap (vSpans s.items)).filter (· != vertItem v)).filterMap fun c =>
+      if tblocks.any (fun b' => betweenAny (b'.seq g) v bottom (c - 1)) then none
+      else some s!"l1: V item {c} not strictly between ({v}, {bottom}); hi {showStack hi}"
+  let m18 := hi.filterMap fun t =>
+    if d + 1 < t.topDepth then some s!"l1: entry topDepth {t.topDepth} > d+1; hi {showStack hi}" else none
+  m13 ++ m15 ++ (if truncEntryChecks then m18 else [])
+
 def baseOk (s : WalkState) (base : List TEntry) : Bool :=
   base.length ≤ s.tstack.length && s.tstack.drop (s.tstack.length - base.length) == base
 
@@ -171,6 +240,8 @@ partial def chkTree (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : 
       report st false s!"items at end of walkTree {v} d={d}: {m}"
     for m in truncItemsB g s (refBlocks g (prev ++ [truncTree fs t])) do
       report st false s!"trunc items at end of walkTree {v} d={d}: {m}"
+    for m in truncCtxB g s (refBlocks g (prev ++ [truncTree fs t])) v d do
+      report st false s!"trunc ctx at end of walkTree {v} d={d}: {m}"
     return s
 
 partial def chkOuts (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : List PathFrame)
@@ -185,6 +256,8 @@ partial def chkOuts (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : 
     report st false s!"items at out-edge {done.length} of {v} d={d}: {m}"
   for m in truncItemsB g s (refBlocks g (prev ++ [truncTree fs (.node v done)])) do
     report st false s!"trunc items at out-edge {done.length} of {v} d={d}: {m}"
+  for m in truncCtxB g s (refBlocks g (prev ++ [truncTree fs (.node v done)])) v d do
+    report st false s!"trunc ctx at out-edge {done.length} of {v} d={d}: {m}"
   match outs with
   | [] => return (hasVert, s)
   | o :: rest =>
@@ -215,6 +288,10 @@ partial def chkOut (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : L
     report st false s!"items before finishEdge {o.e} of {v} d={d}: {m}"
   for m in truncItemsB g s (refBlocks g (prev ++ [truncTree fs (.node v (done ++ [o]))])) do
     report st false s!"trunc items before finishEdge {o.e} of {v} d={d}: {m}"
+  for m in truncCtxB g s (refBlocks g (prev ++ [truncTree fs (.node v (done ++ [o]))])) v d do
+    report st false s!"trunc ctx before finishEdge {o.e} of {v} d={d}: {m}"
+  for m in truncSiteB g s (refBlocks g (prev ++ [truncTree fs (.node v (done ++ [o]))])) v d o (above s orig) do
+    report st false s!"trunc site before finishEdge {o.e} of {v} d={d}: {m}"
   let (hv', s') := (finishEdge v d o orig.length hasVert).run s
   if d ≤ lowval then
     report st (s'.tstack == orig && hv' == hasVert && s'.stackDir == s.stackDir)
