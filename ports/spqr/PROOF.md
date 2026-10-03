@@ -2636,6 +2636,17 @@ capped piece with pairs `c0 d1` at `u` and `d2 c3` at `v`; `c0` and `d2` stay co
 the face walk from `l0` reaches `l3 ^^^ 3` before any point moved by either conjugation
 (`exists_first_hit` + `iterate_eq_of_eqOn`), and the second conjugation sends `l3 ^^^ 3` to
 `d2`'s slot.
+Route for `nodeFold_capped` (not yet formalised): the fold's links on the children's exposed
+slots are the local rotation `nodeRot` transported along `treeQe` (the skeleton's quarter-edges
+never enter `rotAdj`). S nodes iterate `Capped.join`/`attachOpen` along the cycle, P nodes
+iterate `Capped.parJoin`; the cap edge is never inserted, its two corners become the node's four
+exposed slots. For R nodes the general step is `TwoSum.splice_isPlanarEmbedding` with `es₁` the
+hybrid skeleton (processed children substituted for their virtual edges), `es₂` the child's piece
+with its cap re-inserted by `RotationSystem.insert` between its two cofacial exposed slots
+(`WF.face` from `insert_not_sameFaceOrbit`, `WF.conn` from `edgesConn_of_sameOrbit`); the final
+`Capped` certificate then needs the inverse of `insert` (delete the cap edge, pair its four
+neighbours, the two sides merge into one face) — a dual lemma `IsPlanarEmbedding.uninsert` still
+to be written.
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through `walk_items_wf`,
 `spqrTree_r_three_connected`, `spqrTree_pieceSep`, `nodePlanar_sound_R` and
 `nodeFold_capped`.
