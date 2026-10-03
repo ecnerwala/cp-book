@@ -2,6 +2,7 @@ import Spqr.StBoundary
 import Spqr.StSimLemmas
 import Spqr.StFrame
 import Spqr.EarSides
+import Spqr.EarWalk
 
 /-!
 # The st-simulation by the walk induction
@@ -746,5 +747,94 @@ theorem stWalk (g : Graph) :
     (∀ (v d : Nat) (o : DfsOut) (hasVert : Bool), StOutP g v d o hasVert) :=
   walkTree.mutual_induct _ _ _ (stTree_node g) (fun o v d hasVert ih => stOut_step g v d o hasVert ih)
     (stOuts_nil g) (fun v d hasVert o rest ih₁ ih₂ => stOuts_cons g v d hasVert o rest ih₁ ih₂)
+
+
+/-! ## The forest -/
+
+theorem refBlocks_snoc (g : Graph) (pre : List DfsTree) (t : DfsTree) :
+    refBlocks g (pre ++ [t]) =
+      refBlocks g pre ++ ((refTree g t 0 []).2 ++ [⟨none, stNest (refTree g t 0 []).1⟩]) := by
+  simp [refBlocks, List.flatMap_append]
+
+theorem DirsOf_zero (s : WalkState) : DirsOf s 0 = [] := by simp [DirsOf]
+
+/-- The forest walk root by root: after the roots `pre`, every finished S / P / R item is in a block
+of `refBlocks g pre` (modulo `rootPop_st` and the admissions of `stWalk`). -/
+theorem stForest (g : Graph) : ∀ (forest pre : List DfsTree) (s : WalkState) (P X : ItemId → Prop),
+    RootState g pre s → s.Full g P X →
+    (∀ v ∈ forest.flatMap DfsTree.verts, ¬ P (vertItem v)) →
+    (∀ e ∈ forest.flatMap DfsTree.edges, ¬ P (edgeItem g e)) →
+    ForestOK g (pre ++ forest) → (∀ t ∈ forest, t.WF []) → (∀ t ∈ forest, t.Ends g) →
+    (∀ t ∈ forest, t.height ≤ g.nv) →
+    StItems g s (refBlocks g pre) →
+    wp (walkForest forest) (fun _ s' => StItems g s' (refBlocks g (pre ++ forest))) s
+  | [], pre, s, P, X, _, _, _, _, _, _, _, _, hI => by
+    show StItems g s (refBlocks g (pre ++ []))
+    simpa using hI
+  | t :: rest, pre, s, P, X, h, hfull, hPv, hPe, hf, hwf, hends, hht, hI => by
+    rw [List.flatMap_cons] at hPv hPe
+    obtain ⟨hPv₁, hPv₂⟩ := List.forall_mem_append.1 hPv
+    obtain ⟨hPe₁, hPe₂⟩ := List.forall_mem_append.1 hPe
+    have hb := h.book hf (hwf t (by simp)) (hends t (by simp))
+    have hg := gbTree t 0 s hb
+    have hi' : ∀ v outs, t = .node v outs →
+        ({ s with stackVerts := s.stackVerts.set! 0 v } : WalkState).Inv' 0 :=
+      fun _ _ _ => h.inv.stackVerts_of_nil h.tstack _
+    have hnv : 0 < g.nv := by
+      obtain ⟨v, outs⟩ := t
+      exact Nat.lt_of_le_of_lt (Nat.zero_le _) (RootState.hvlt hf v (by simp [DfsTree.verts]))
+    have hstep := h.step hf (hwf t (by simp)) (hends t (by simp))
+    have hfull₁ := (walk_full_aux g).1 t 0 P X s hfull (RootState.hvlt hf) (RootState.helt hf)
+      (RootState.hvn hf).1 (RootState.hen hf).1 hPv₁ hPe₁ (sdTree t 0 s hi' h.shape hg hb)
+    have hinv := invTree t 0 s hi' h.shape hg hb
+    have hrk : wp (walkTree t 0) (fun _ s' => RootOK s') s :=
+      walkTree_rootOK t s hi' h.shape hg hb h.tstack (by rw [h.sd]; exact hnv)
+    have hst := (stWalk g).1 t 0 s pre [] [] P X rfl hi' h.shape hg hb hfull (RootState.hvlt hf)
+      (RootState.helt hf) (RootState.hvn hf).1 (RootState.hen hf).1 hPv₁ hPe₁
+      (by rw [h.sd, Nat.zero_add]; exact hht t (by simp)) (by rw [h.tstack]; rfl) (fun _ h => by cases h)
+      (fun _ h => by simp [segsStack] at h) (by simpa [simBlocks, frameBlocks] using hI)
+    show wp ((walkTree t 0 >>= fun _ => popTstack >>= fun top =>
+      modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }) >>= fun _ => walkForest rest) _ s
+    rw [wp_bind, wp_bind]
+    refine wp_mono _ (wp_and hstep (wp_and hfull₁ (wp_and hinv (wp_and hrk hst))))
+      fun _ s₁ ⟨hstep₁, hfull₁, ⟨hi₁, hs₁⟩, hrk₁, hg₁, hsd₁, _, _, ⟨new, hts₁, hR₁⟩, hI₁⟩ => ?_
+    obtain ⟨tt, htt, hside, hroot⟩ := hrk₁
+    simp only [htt, segsStack, List.map_nil, List.flatten_nil, List.append_nil] at hts₁
+    subst hts₁
+    simp only [wp_bind, wp_popTstack, wp_modifyItem] at hstep₁ ⊢
+    simp only [htt, List.head!_cons, List.tail_cons] at hstep₁ ⊢
+    have hroot' : ∀ p, ¬ Items.IsParent s₁.items p rootItem := noParent_of_cnt_eq_zero hfull₁.place.root
+    have hgeq₁ : s₁.g = g := hg₁.trans h.g_eq
+    simp only [List.length_nil, DirsOf_zero] at hR₁ hI₁
+    simp only [simBlocks, frameBlocks, List.append_nil] at hI₁
+    have hI₂ := rootPop_st htt hgeq₁ hi₁ hs₁ ⟨tt, htt, hside, hroot⟩ hroot' hR₁ hI₁
+    have hfull₂ := hfull₁.root_append (by simp [htt, hside]) (by
+      simp only [htt, List.head!_cons]
+      intro c hc
+      obtain ⟨v, hv, rfl⟩ := hroot c hc
+      exact ⟨v, by rwa [hgeq₁] at hv, rfl⟩)
+    simp only [htt, List.head!_cons, List.tail_cons] at hfull₂
+    rw [List.append_cons]
+    refine stForest g rest (pre ++ [t]) _ _ X hstep₁ hfull₂ ?_ ?_ (by simpa using hf)
+      (fun t' ht' => hwf t' (by simp [ht'])) (fun t' ht' => hends t' (by simp [ht']))
+      (fun t' ht' => hht t' (by simp [ht'])) ?_
+    · have hdv : ∀ w ∈ t.verts, w ∉ rest.flatMap DfsTree.verts := by
+        have h := hf.verts_nodup
+        rw [List.flatMap_append, List.flatMap_cons, List.nodup_append, List.nodup_append] at h
+        exact fun w hw hw' => h.2.1.2.2 w hw w hw' rfl
+      rintro v hv (hh | ⟨w, hw, hvw⟩ | ⟨e, _, hve⟩)
+      · exact hPv₂ v hv hh
+      · exact hdv w hw (WalkM.vertItem_inj hvw ▸ hv)
+      · exact vertItem_ne_edgeItem (hf.verts_lt v (by simp [hv])) e hve
+    · have hde : ∀ e ∈ t.edges, e ∉ rest.flatMap DfsTree.edges := by
+        have h := hf.edges_nodup
+        rw [List.flatMap_append, List.flatMap_cons, List.nodup_append, List.nodup_append] at h
+        exact fun e he he' => h.2.1.2.2 e he e he' rfl
+      rintro e he (hh | ⟨w, hw, hew⟩ | ⟨e', he', hee⟩)
+      · exact hPe₂ e he hh
+      · exact vertItem_ne_edgeItem (hf.verts_lt w (by simp [hw])) e hew.symm
+      · exact hde e' he' (edgeItem_inj hee ▸ he)
+    · rw [refBlocks_snoc]
+      rw [← List.append_assoc]; exact hI₂.congr rfl rfl
 
 end Spqr
