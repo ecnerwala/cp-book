@@ -1445,13 +1445,6 @@ theorem planar : Planar T.edges T.nVerts := ⟨_, T.splice_isPlanarEmbedding W�
 
 end Final
 
-/-- Converse (not attempted): a planar embedding of the 2-sum yields one of `G₁` by contracting
-the `G₂` side onto `e₁`. -/
-theorem planar_left (he₁ : T.es₁[T.e₁]? = some (T.u₁, T.v₁))
-    (he₂ : T.es₂[T.e₂]? = some (T.u₂, T.v₂)) (h : Planar T.edges T.nVerts) :
-    Planar T.es₁ T.n₁ := by
-  sorry
-
 end TwoSum
 
 end Spqr

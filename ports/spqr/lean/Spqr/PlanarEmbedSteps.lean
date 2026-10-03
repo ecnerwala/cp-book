@@ -10,7 +10,7 @@ import Spqr.PieceSep
 invariant after the items `≥ i` have been processed; the per-item steps are stated separately
 (`embedItem_step_*`, under `SpqrTree.WF` and `SpqrTree.ChildShape` of the tree — they are false
 for an arbitrary `PlanarSpqrTree`), the fold is proved (`forM_reverse_range_inv`), and the steps
-are assembled in `PlanarEmbedFold.lean`.
+are assembled in `PlanarEmbedFacesSteps.lean`.
 -/
 
 namespace Spqr
@@ -148,27 +148,6 @@ theorem gluedUpTo_init (g : Graph) : t.GluedUpTo g t.size t.initState where
     · intro k q hk
       by_cases hk' : k < 4 <;> simp [initState, hj, hk'] at hk
     · intro hge; omega
-
-/-- `Q` step: the real edge `origId i` is added with its four quarter-edges; the two `I`/`O`
-children (the loops / blocks at its endpoints) are 1-summed at the endpoints. Admitted. -/
-theorem embedItem_step_Q (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
-    (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g)
-    (i : Nat) (hi : i < t.size) (hty : t.types[i]! = .Q)
-    (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
-    t.GluedUpTo g i ((t.embedItem i).run s).2 := by
-  sorry
-
-/-- `S`/`P`/`R` step: the node's local rotation (`nodePlanar_sound`) is 2-summed with each
-child's piece through the twin virtual edge (`twoSum_planar`), and the cap's quarter-edges become
-the exposed ends. Admitted. -/
-theorem embedItem_step_node (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
-    (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g)
-    (i : Nat) (hi : i < t.size)
-    (hty : t.types[i]! = .S ∨ t.types[i]! = .P ∨ t.types[i]! = .R)
-    (hall : t.nodePlanar.all id = true)
-    (s : EmbedState) (h : t.GluedUpTo g (i + 1) s) :
-    t.GluedUpTo g i ((t.embedItem i).run s).2 := by
-  sorry
 
 /-- The reverse-preorder fold of `embedItem` preserves any step-invariant. -/
 theorem forM_reverse_range_inv (P : Nat → EmbedState → Prop) (n : Nat)
