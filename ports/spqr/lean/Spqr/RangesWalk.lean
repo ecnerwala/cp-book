@@ -193,6 +193,80 @@ def CoverOut (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (s : Wa
     | .back .. => FinishCover σ n v d o s₁.tstack.length hasVert' s₁) s
 end
 
+theorem walkOut_past {g : Graph} {P X : ItemId → Prop} {s : WalkState} {σ : List Nat} {n : Nat}
+    (v d : Nat) (o : DfsOut) (hasVert : Bool) (h : s.Place g P X) (hv : v < g.nv)
+    (hvs : ∀ w ∈ DfsOut.vertsList [o], w < g.nv) (hes : ∀ e ∈ DfsOut.edgesList [o], e < g.ne)
+    (hvn : (DfsOut.vertsList [o]).Nodup) (hen : (DfsOut.edgesList [o]).Nodup)
+    (hvc : v ∉ DfsOut.vertsList [o])
+    (hPv : ∀ w ∈ DfsOut.vertsList [o], ¬ P (vertItem w))
+    (hPe : ∀ e ∈ DfsOut.edgesList [o], ¬ P (edgeItem g e))
+    (hf : hasVert = false → ¬ P (vertItem v))
+    (hP : ∀ e, e < g.ne → P (edgeItem g e) → σ.idxOf e < n)
+    (hat : PostAt σ n o.block) (hnd : σ.Nodup) :
+    wp (walkOut v d o hasVert) (fun _ s' => ∀ w, w < g.nv → PushVertR σ (n + o.block.length) w s') s := by
+  apply wp_mono _ ((walk_place_aux g).2.2 v d o hasVert P X s h hv hvs hes hvn hen hvc hPv hPe hf)
+  rintro hv' s' ⟨h', _⟩ w hw
+  apply h'.pushVertR hw
+  apply pushed_past (vs := DfsOut.vertsList [o]) (es := DfsOut.edgesList [o]) _ hvs _ hat hnd
+  · rintro e he (hh | ⟨_, heq⟩)
+    · exact hP e he hh
+    · exact (edgeItem_ne_vertItem hv e heq).elim
+  · intro e he
+    have hm := (DfsOut.edgePostorderList_perm_edgesList [o]).symm.subset he
+    simpa only [DfsOut.edgePostorderList_cons, DfsOut.edgePostorderList, List.append_nil] using hm
+
+theorem coverOut_back {g : Graph} {P X : ItemId → Prop} {s : WalkState} {σ : List Nat} {n : Nat}
+    (v d e dest : Nat) (cls : OutClass) (hasVert : Bool) (h : s.Place g P X)
+    (hv : v < g.nv) (hf : hasVert = false → ¬ P (vertItem v))
+    (hP : ∀ e, e < g.ne → P (edgeItem g e) → σ.idxOf e < n)
+    (hc : wp (walkOutPre v d (.back e dest cls) hasVert) (fun hv' s' =>
+      FinishPOwnership σ n v d (.back e dest cls) s'.tstack.length hv' s') s) :
+    CoverOut σ n v d (.back e dest cls) hasVert s := by
+  refine ⟨fun _ => h.pushVertR hv hP, ?_⟩
+  refine wp_imp (wp_imp (wp_of_forall fun hv' s' hp hc' => ?_)
+    (walkOutPre_past h hv hf hP)) hc
+  exact { hc' with vert := fun _ => hp v hv }
+
+theorem coverOut_tree {g : Graph} {P X : ItemId → Prop} {s : WalkState} {σ : List Nat} {n : Nat}
+    (v d e : Nat) (cls : OutClass) (child : DfsTree) (hasVert : Bool) (h : s.Place g P X)
+    (hv : v < g.nv) (hf : hasVert = false → ¬ P (vertItem v))
+    (hvs : ∀ w ∈ child.verts, w < g.nv) (hes : ∀ e ∈ child.edges, e < g.ne)
+    (hvn : child.verts.Nodup) (hen : child.edges.Nodup) (hvc : v ∉ child.verts)
+    (hPv : ∀ w ∈ child.verts, ¬ P (vertItem w)) (hPe : ∀ e ∈ child.edges, ¬ P (edgeItem g e))
+    (hP : ∀ e, e < g.ne → P (edgeItem g e) → σ.idxOf e < n)
+    (hat : PostAt σ n child.edgePostorder) (hnd : σ.Nodup)
+    (hc : wp (walkOutPre v d (.tree e cls child) hasVert) (fun hv' s₁ =>
+      wp (modify fun s => { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }) (fun _ s₂ =>
+        CoverTree σ n child (d + 1) s₂ ∧ wp (walkTree child (d + 1)) (fun _ s₃ =>
+          FinishPOwnership σ (n + child.edgePostorder.length) v d (.tree e cls child)
+            s₁.tstack.length hv' s₃) s₂) s₁) s) :
+    CoverOut σ n v d (.tree e cls child) hasVert s := by
+  refine ⟨fun _ => h.pushVertR hv hP, ?_⟩
+  refine wp_imp (wp_imp (wp_of_forall fun hv' s₁ hp hc' => ?_)
+    (walkOutPre_place h hv hf)) hc
+  simp only [wp_modify] at hc' ⊢
+  refine ⟨hc'.1, ?_⟩
+  have hp' : ({ s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } : WalkState).Place
+      g (fun i => P i ∨ (hv' = true ∧ i = vertItem v)) X :=
+    hp.1.of_le rfl (Nat.le_refl _) (fun _ _ => rfl) (fun _ => Nat.le_refl _)
+  have hpv : ∀ w ∈ child.verts, ¬ (P (vertItem w) ∨ (hv' = true ∧ vertItem w = vertItem v)) := by
+    rintro w hw (h | ⟨_, heq⟩)
+    · exact hPv w hw h
+    · have hwv : w = v := by have hh : 1 + w = 1 + v := heq; omega
+      exact hvc (hwv ▸ hw)
+  have hpe : ∀ e ∈ child.edges, ¬ (P (edgeItem g e) ∨ (hv' = true ∧ edgeItem g e = vertItem v)) := by
+    rintro e he (h | ⟨_, heq⟩)
+    · exact hPe e he h
+    · exact edgeItem_ne_vertItem hv e heq
+  have hpast : ∀ e, e < g.ne → (P (edgeItem g e) ∨ (hv' = true ∧ edgeItem g e = vertItem v)) →
+      σ.idxOf e < n := by
+    rintro e he (h | ⟨_, heq⟩)
+    · exact hP e he h
+    · exact (edgeItem_ne_vertItem hv e heq).elim
+  refine wp_imp (wp_imp (wp_of_forall fun _ s₃ hr hc₃ => ?_)
+    (walkTree_past child (d + 1) hp' hvs hes hvn hen hpv hpe hpast hat hnd)) hc'.2
+  exact { hc₃ with vert := fun _ => hr v hv }
+
 abbrev ScheduleTree (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
   (∀ v outs, t = .node v outs → ({ s with stackVerts := s.stackVerts.set! d v } : WalkState).RangesInv σ n d) →
   Shape s → σ.Nodup → (∀ e ∈ σ, e < s.g.ne) → GuardsTree t d s → BookTree t d s →

@@ -6,13 +6,16 @@ open WalkM
 variable {σ : List Nat} {n D : Nat} {s : WalkState}
 
 /-- Range ownership still supplied by the walk induction, not by the ear frontier. -/
-structure FinishCover (σ : List Nat) (n curV d : Nat) (o : DfsOut) (orig : Nat)
+structure FinishPOwnership (σ : List Nat) (n curV d : Nat) (o : DfsOut) (orig : Nat)
     (hasVert : Bool) (s : WalkState) : Prop where
-  vert : hasVert = false → PushVertR σ n curV s
   p_vert : o.cls.lowval d < d → o.cls.isTree = true → hasVert = true →
     FinishPCover σ (n + 1) curV (o.cls.lowval d) o.cls.isType1 (feS₃ curV d o orig s)
   p_back : o.cls.lowval d < d → o.cls.isTree = false →
     FinishPCover σ (n + 1) curV (o.cls.lowval d) o.cls.isType1 (feBack curV (o.cls.lowval d) d o s)
+
+structure FinishCover (σ : List Nat) (n curV d : Nat) (o : DfsOut) (orig : Nat)
+    (hasVert : Bool) (s : WalkState) : Prop extends FinishPOwnership σ n curV d o orig hasVert s where
+  vert : hasVert = false → PushVertR σ n curV s
 
 theorem Step.pushVertR {v m : Nat} {s' : WalkState} (st : Step D v s s')
     (hv : v < s.g.nv) (h : PushVertR σ n v s) (hn : n ≤ m) : PushVertR σ m v s' := by

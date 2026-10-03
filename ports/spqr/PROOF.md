@@ -1156,8 +1156,12 @@ the existing placement invariant once its pushed-edge predicate is bounded by th
 `PostAt.idx_bounds` and `pushed_past` prove the prefix arithmetic; `walkTree_past`,
 `walkOutPre_place` / `walkOutPre_past`, and `finishEdge_past` transport it through the child,
 pre-push, and edge finish. `RootState.pushVertR` supplies it at each root from the already
-processed forest prefix. All these lemmas use only standard axioms. Threading them through
-`CoverTree` / `CoverOuts` / `CoverOut` remains unfinished. The first-tree-edge P check with
+processed forest prefix. `walkOut_past` carries the bound through a complete out-edge call.
+`FinishPOwnership` isolates the two P-site fields from the vertex bound, and
+`coverOut_back` / `coverOut_tree` construct `CoverOut` using placement and postorder bounds,
+with only that P ownership and the recursive child's `CoverTree` left as hypotheses.
+All these lemmas use only standard axioms. The enclosing `CoverOuts` / `CoverTree` mutual
+induction and forest assembly of `RootsCover` remain unfinished. The first-tree-edge P check with
 `hasVert = false` is false by `ear_condP_tree`; `FinishCover` therefore requires P ownership
 only for the `p_vert` and `p_back` sites, not `p_tree`.
 `FinishCover` asks for P coverage only on the return branch (`lowval < d`), where P finishing
