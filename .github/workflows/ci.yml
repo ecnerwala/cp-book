@@ -11,8 +11,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -615,8 +613,6 @@ jobs:
     needs: [verify-merge, coverage-verify-merge, coverage-unit-tests]
     permissions:
       contents: read
-      pages: write
-      id-token: write
       pull-requests: write
     outputs:
       upload-pages: ${{ steps.upload-pages.outcome == 'success' }}
@@ -774,6 +770,9 @@ jobs:
   deploy-docs:
     if: (success() || failure()) && github.ref == 'refs/heads/master' && needs.docs.outputs.upload-pages == 'true'
     needs: docs
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
