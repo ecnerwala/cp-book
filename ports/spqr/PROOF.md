@@ -814,8 +814,8 @@ them across the bookkeeping steps of `finishEdge` (`modifyItem` of a free item, 
 combines the last with `RBranch.threeConnected`
 (`closeEars_iter_step` gives `Inv (d+1)` at the iterate via `Step`; to be restated for `Inv'`).
 `loop1_rBranch`'s hypotheses (`Inv D`, `Shape`, `CloseEarsOk`, `RInvAt`) say nothing about which
-edges the Loop-1 entries hold, so `interior`, `proper`, `nxt_ne` and `cur_c` (after an S merge the
-head's `vStart` is the S entry's) are not derivable from them: its proof needs the Loop-1 ear
+edges the Loop-1 entries hold, so `interior`, `proper`, `nxt_ne` and `mid` (after an S merge the
+head's `vStart` is the S entry's, so the child is only interior to the head) are not derivable from them: its proof needs the Loop-1 ear
 content (entries with `topDepth > d` at `closeEars` have `vStart = nxtV`; the entries with
 `topDepth ≥ d` hold exactly the tree edge and the child's subtree edges) as an extra hypothesis
 or from `EarShape`. The shape fields (`tstack`, `cur_top`, `nxt_top`, `ne`) follow from
@@ -826,14 +826,30 @@ context. At the `finishEdge` site `FinishRShape.ear` (= `FinishBook.ear`) gives 
 the `L1Piece` to every iterate `l1Iter d o s k`: `loop1_r_shape_ctx` (proved, standard axioms)
 yields the shape `cur :: nxt :: rest` with `cur.topDepth = d` (`L1Piece.top` — the head-`topDepth`
 induction is the ear layer's), `nxt.topDepth = d`, `nxt.vStart ≠ cur.vStart` and `cur` holding the
-tree edge (`L1Piece.edges`, `l1Edges`). R-5: `interior` is proved from the ear context too
-(`loop1_r_interior_ctx`, standard axioms): `Loop1Spec` gives `L1Close.mid` for `nxt` (the next
-entry of `hi`, at depth `d`; `rest = []` is excluded by `lo_top`/`lo_ne`), whose first disjunct is
-`nxt.vStart = cur.vStart` and whose third is refuted by the tree edge `o.e ∈ cur`, incident to the
-child — given `cur_c`. `loop1_rBranch_content_ctx` is now proved from three narrower named
-admissions: `loop1_rBranch_cur_c_ctx` (`cur.vStart = stackVerts[d+1]`: the consumed `hi` entries
-all start at the child or are S-merged — an ear-layer fact about `hi`, not in `Loop1Spec`),
-`loop1_rBranch_fields_ctx` (`RBranchFields`: `cur_piece`, `cur_vs`, `nxt_ne`, `proper`,
+tree edge (`L1Piece.edges`, `l1Edges`). R-5: **`RBranch.cur_c` (`cur.vStart = stackVerts[d+1]`,
+the piece bottom is the child) was false.** Kernel-checked counterexample
+`checks/RBranchCounter.lean` (gen.py seed 2895, `ternarize = false`, the walk's own prefix as in
+`RFinishEdgeCounter`): finishing the tree edge `13 : 4 → 0` at depth `1`, iterate 0 of Loop 1
+S-merges the piece `{13}` with the child's `(0, 2)` entry, moving the bottom to `5 =
+stackVerts[3]`, and iterate 1 is `.R` with head `(5, 1)` while `stackVerts[2] = 0`
+(`counter : ¬ it.RBranch 1 cur nxt rest`, standard axioms). Restated minimally as the
+`FinishTopOk.mid`/`TwoAttached.of_term` shape `mid : stackVerts[d+1] = cur.vStart ∨ Interior
+(cur.edges) stackVerts[d+1]` (the child's edges are all in the piece once the bottom has moved);
+`RBranch.hmid` and the `hmid` hypotheses of `RStep.cur_attached`/`union_attached`/`rCloseShape'`/
+`threeConnected'` take the disjunctive form (an interior intermediate vertex cannot be an
+attachment of `cur` or of `rU cur nxt`), nothing else consumed `cur_c`. Checked as `rbranch mid`
+on seeds 0..400 × both modes + 6000 random multigraphs, 0 failures (the union form and `interior`
+too). `interior` is proved from the ear context (`loop1_r_interior_ctx`, standard axioms):
+`Loop1Spec` gives `L1Close` for `nxt` (the next entry of `hi`, at depth `d`; `rest = []` is
+excluded by `lo_top`/`lo_ne`); its `bottom` puts the piece bottom `l1Bot o done` at `nxt.vStart`
+(excluded by `ne`), at `stackVerts[d]` (excluded: `hi` entries and the child do not start at
+`curV` — `EarFinish.sub_bot`/`path_child`, passed down as the hypotheses `hhb`/`hdb` of
+`loop1_r_interior_ctx`/`loop1_rBranch_content_ctx`/`loop1_rBranch_ctx`/`loop1_r_keepsR'`), at the
+child (then `L1Close.mid`, whose first disjunct is `nxt.vStart = cur.vStart` and whose third is
+refuted by the tree edge `o.e ∈ cur`) or interior to the union. `loop1_rBranch_content_ctx` is
+proved from three narrower named admissions: `loop1_rBranch_mid_ctx` (`mid`: `L1Close.mid` gives
+the child's interiority only for `rU cur nxt`; the `cur`-alone form is R content — the child's
+back edges to `stackVerts[d]` are P-merged into the piece), `loop1_rBranch_fields_ctx` (`RBranchFields`: `cur_piece`, `cur_vs`, `nxt_ne`, `proper`,
 `nxt_touch_*`, `nxt_no_cu` — `RangesInv`/`RunSaturation` content at the iterate) and
 `loop1_rTop_ctx` (`RTop`: the settled-frontier/saturation content). `loop1_rBranch_content_ctx`
 also gained the hypothesis `hv : v₀ < s.g.nv` (needed by `l1_iter`; available at its only call
@@ -887,7 +903,7 @@ edge `0` by a walk). `walk_rSkelInv` runs the `rk*` induction on the re-rooted d
 R completeness must come from postorder interval ownership and saturation, not `EarFinish`
 or Loop-1 ear content. The pending `RangesInv` interface must connect entries to the actual
 processed prefix, DFS path, and completed vertices. At the `ceS₁` boundary it must account
-for `cur_c`, interior ownership of the returned child, disjointness, nonemptiness, and a
+for `mid` (the returned child is the bottom or interior to the piece), interior ownership of the returned child, disjointness, nonemptiness, and a
 block-local complement. An additional saturation argument must derive `EntryR`'s `single`,
 `maximal`, `bond`, `type1`, and `type2` fields; these are consumed by `RBranch.rContent`,
 not consequences of edge-disjointness alone. Closed-piece maximality must survive later writes.
@@ -1802,7 +1818,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | corrected attachment set `TEntry.Term'`, `EntryInv'`, `Stack`, `Inv'` (`Inv'.of_inv`, `Inv'.mono`, `Stack_iff`, `Inv'.setSv`); empirical check `checks/InvCheck.lean` | `WalkSpec.lean`, `WalkInv.lean` | def + proved; `Step`/`BStep`/`walkTree_inv'` stated through it |
 | 4.1–4.3 ear content at a `finishEdge` (`WalkState.EarFinish`/`EarAt`/`EarBottom`: `sub ++ base` split, pairwise edge/span disjointness, span ownership `subEdges`, distinct path vertices, loop-1 range side `stackDir[d]` and touching, P-merge target `p_entry`, ear-bottom anchor `bottom`, post-loop shape `loops`, V/Q item freshness, block-boundary separation) | `EarInv.lean` | **stated**, every field 0 violations on 3000 random multigraphs (`checks/EarCheck.lean`); `FinishBook.ear` carries it, `finishOk_of_guards`/`ear_*` take it as hypothesis; false first versions (`base_top`, `loop1_bot`, `touch_top`, `vert.vStart`) dropped with counterexamples (§4.2b); not yet carried by the walk (`walkTree_ear` = `EarTree`, the ear/vert fields of `BookTree`, admitted; `walkTree_book` proved from it, `bTree`; `EarShape.finishGuards` was false, see §4.2b, replaced by `finishGuards_of_ear`); derived so far: `ear_finishP_back` (the back-edge P merge, from `p_entry`/`touch_bot`/`path`/`disj`/`span_disj`/`q_free`/`q_root`, via `maybeUnwrapNxt_edges`: the unwrap of a one-sided single-item `nxt` keeps every entry's edge set), `ear_loop1` (`Loop1BodyOk` at every loop-1 iterate, `EarLoop1.lean`: invariant `L1Inv` = reached split `L1Reach` of the range + top piece `L1Piece` (bottom `l1Bot`, edges `l1Edges`, one-sided, fresh) + untouched rest `L1Keep` + frame `L1Frame`; `l1_step` discharges `MergeTopOk`/`UnwrapOk`/`CloseTwoOk` from `EarFinish.loop1` (`Loop1Spec`: `L1Merge`/`L1Close`/`L1Unwrap` per reached split) + `loop1_side`/`disj`/`span_disj`/`q_root`/`q_free`, `L1Ctx.ofEar` takes the range as the longest `≥ d` prefix of `sub`, proper by `bottom`), `ear_finishP_tree` (no vertex entry: after loops 1–2 `nxt` is the `(y, lowval)` piece `py` (`loops`, type 1 ⇒ `mid = []`), whose bottom is not `curV` (`sub_bot`), so `condP` is false); loop-2/close contract stated and checked (`late`: `EarLate` at `feS₁`, `close`: `EarClose`/`FoldSpec` at `feS₂`, path fields `sv_d`/`sv_child`/`path_child`/`dir_d`; 0 violations); `ear_mergeLate` derived from `late` (`EarLoop2.lean`: `mergeLateOk_of_late`, standard axioms), `ear_closeVert` derived from `close` (`closeVertOk_of_close`: loop 3 via `loop_run_iter`/`mergeTopOk_iter_fold`, type-1 unwrap via `MergeOk.congr_entry`; standard axioms), `ear_finishP_vert` derived from `close` + `p_entry`/`base_root` (`finishPOk_type1_of_close`; standard axioms); `ear_tail_tree` derived from `close` (`ear_condP_tree`, `vert_touch`/`vert_disj`/`c_edge`; standard axioms); `ear_lower'` derived from `lower`/`sv_child`, `ear_boundary` from `dest_edges`/`bd_*`/`sv_d`/`sv_child` (standard axioms); every `ear_*` of `finishEdge_step` is now derived from `EarFinish`; `Frontier d o origTstack s` (standalone frontier/ownership fact for the range layer) derived by `finishEdge_frontier`; `bd_side` (boundary orientation, 0 violations) added for `BoundaryOK`; `finishEdge_sides`/`walkTree_sides` (`EarSides.lean`) derive `FinishSides`/`SidesTree` (standard axioms) |
 | 4.5 maximality: `RCloseShape` ⇒ no skeleton pair separates (`RCloseShape.not_sepPair`), R skeleton 3-connected (`RCloseShape.threeConnected`) | `RMax.lean`, `Proofs/RMax.lean` | proved; `RStep.rCloseShape'`/`RStep.threeConnected'` (`Proofs/RClose.lean`) give it for Loop 1's R step from `Inv' D` + `stackVerts[d+1..D] = cur.vStart` + `RStep` + `RContent` (`Inv d` is contradictory there) |
-| 4.5 walk side: `EntryR`/`RTop`/`RBranch`/`RInvAt`; `RBranch.rStep`, `RBranch.rContent` (all five content fields), `RBranch.threeConnected` (from `Inv' (d+1)`); `EntryR.congr`/`RInvAt.congr` + bookkeeping frames; `Items.RSkel3`, `RBranch.rSkel3` | `RInv.lean`, `Proofs/RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RItems.lean` | proved; admitted: `finishEdge_rInvAt`, `walkTree_rInvAt`, `loop1_rBranch_cur_c_ctx`/`loop1_rBranch_fields_ctx`/`loop1_rTop_ctx` (`Proofs/RLoop1.lean`, the ear-context form on the pipeline; shape + `cur_top` + `cur_ne` proved as `loop1_r_shape_ctx` from `L1Piece`, `interior` as `loop1_r_interior_ctx` from `L1Close.mid`, `loop1_rBranch_content_ctx` proved from these; the ear-context-free `loop1_rBranch_content` kept for `loop1_rBranch`'s fixed statement, shape part `loop1_r_shape` proved); `items_r_three_connected` and `spqrTree_r_three_connected` proved modulo the named admissions of §4.5 (`walk_rSkelInv` threading, R-4); `closeVert_type1_rSkel3` proved from `vClose_rSkel3` (`Proofs/RVert.lean`, R-5), admitted: `closeVert_type1_rCloseShape` (the `RCloseShape` of the type-1 vertex close); `dfsForest_rooted` restated (re-rooted `ofForest`, `checks/RRootedCounter.lean` refutes the first form) and proved, standard axioms |
+| 4.5 walk side: `EntryR`/`RTop`/`RBranch`/`RInvAt`; `RBranch.rStep`, `RBranch.rContent` (all five content fields), `RBranch.threeConnected` (from `Inv' (d+1)`); `EntryR.congr`/`RInvAt.congr` + bookkeeping frames; `Items.RSkel3`, `RBranch.rSkel3` | `RInv.lean`, `Proofs/RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RItems.lean`, `checks/RBranchCounter.lean` | proved; admitted: `finishEdge_rInvAt`, `walkTree_rInvAt`, `loop1_rBranch_mid_ctx`/`loop1_rBranch_fields_ctx`/`loop1_rTop_ctx` (`Proofs/RLoop1.lean`, the ear-context form on the pipeline; `RBranch.cur_c` refuted by `checks/RBranchCounter.lean` (kernel-checked, R-5) and restated as `mid`; shape + `cur_top` + `cur_ne` proved as `loop1_r_shape_ctx` from `L1Piece`, `interior` as `loop1_r_interior_ctx` from `L1Close.bottom`/`mid`, `loop1_rBranch_content_ctx` proved from these; the ear-context-free `loop1_rBranch_content` kept for `loop1_rBranch`'s fixed statement, shape part `loop1_r_shape` proved); `items_r_three_connected` and `spqrTree_r_three_connected` proved modulo the named admissions of §4.5 (`walk_rSkelInv` threading, R-4); `closeVert_type1_rSkel3` proved from `vClose_rSkel3` (`Proofs/RVert.lean`, R-5), admitted: `closeVert_type1_rCloseShape` (the `RCloseShape` of the type-1 vertex close); `dfsForest_rooted` restated (re-rooted `ofForest`, `checks/RRootedCounter.lean` refutes the first form) and proved, standard axioms |
 | 4.5 R skeleton persistence: `Pieces.contract_congr`, `Items.RSkel3.congr`, `.modify_of_not_below`, `.push_nil` | `Proofs/RItems.lean` | proved (standard axioms); walk-level ownership of later writes remains open |
 | 4.5 HT-to-cut transport: `Graph.ThreeConnected.relabel` | `Proofs/ThreeConnected.lean` | proved (standard axioms), assuming a block and its active vertex list; item-level hypotheses remain open |
 | 4.5 Item/contract edge correspondence: `Pieces.ofItems_addParent_edges`, `Items.rSkeleton_perm_contract` | `Proofs/RItems.lean` | proved (standard axioms), under non-V-child edge coverage; deriving coverage for completed R items remains open |
