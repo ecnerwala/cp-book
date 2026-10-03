@@ -45,19 +45,4 @@ def RelabelNodeR (g : Graph) (w : PlanarWalkState) (T : PlanarSpqrTree) (n : Nat
         T.neRotAdj[4 * neSt + l]! =
           some (4 * (neSt + ves.idxOf (QE.edge o)) + (o &&& 2) + (1 - l % 2))
 
-/-- `planarRelabel` leaves `RelabelNodeR` at every planar R node. Admitted; the bridge
-`mapRot`/`setupNode → nodeRot` of PROOF.md §8.4. Plan: the ghost relabel (`relabel_node_spec`)
-gives `it`, `children = items.ordered`, `PosOK` and the ranges; `Entry.edge_nvs` with
-`layoutNode_edges` (`layoutNvs .R`) gives the skeleton; the rows are `layoutRot .R … mapRot` by
-`planarRelabelTree_rot_spec`, where `mapRot` reads `aux.qem` after `setupNode` (= `capLinked`,
-by `nodePlanarity` being final) and `applyFlips` (= `flipped`) and `rotEdgeNe[ve] = neSt + idxOf`
-for the node's own edges (written just before, and the recursion below only writes other nodes'
-edges). -/
-theorem planarRelabelTree_relabelNodeR (g : Graph) (w : PlanarWalkState)
-    (hwf : Items.WF g w.base.items) (n : Nat) (hn : n < (planarRelabelTree g w).size)
-    (hR : (planarRelabelTree g w).toSpqrTree.type n = .R)
-    (hpl : (planarRelabelTree g w).isPlanar n = true) :
-    RelabelNodeR g w (planarRelabelTree g w) n := by
-  sorry
-
 end Spqr

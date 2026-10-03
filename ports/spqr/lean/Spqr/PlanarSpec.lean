@@ -11,6 +11,7 @@ import Spqr.PlanarNodeSpec
 import Spqr.PlanarEmbedRoot
 import Spqr.WalkPieceSep
 import Spqr.PlanarSoundR
+import Spqr.PlanarRelabelBridge
 import Spqr.RelabelChildShape
 import Spqr.Spec
 
@@ -169,7 +170,7 @@ theorem nodePlanar_sound_R (g : Graph) (ternarize : Bool) (vertOrder edgeOrder :
   simp only [Graph.planarTree, Graph.planarSpqrTree] at hi hR h ⊢
   have hwf := planarWalk_items_wf g ternarize vertOrder edgeOrder
   exact nodePlanar_sound_R_of g _ _ hwf (planarWalk_planarFinish g ternarize _) i
-    (planarRelabelTree_relabelNodeR g _ hwf i hi hR h)
+    (planarRelabelTree_relabelNodeR g _ hwf (planarWalk_planarFinish g ternarize _) i hi hR h)
 
 /-- Soundness of the per-node flag: a planar S/P/R node's local rotation system is a planar
 embedding of its skeleton. S and P are `nodePlanar_sound_S` / `nodePlanar_sound_P` (proved modulo

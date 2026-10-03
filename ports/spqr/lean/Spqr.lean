@@ -138,3 +138,7 @@ import Spqr.PlanarEmbedNodeR
 import Spqr.Proofs.PlanarWalkFacts
 import Spqr.PlanarRelabelNodeR
 import Spqr.PlanarSoundR
+import Spqr.PlanarRelabelQem
+import Spqr.PlanarRelabelRows
+import Spqr.PlanarRelabelRowsFold
+import Spqr.PlanarRelabelBridge
