@@ -44,6 +44,11 @@ theorem walk_p_child_vs (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
 theorem spqrTree_pieceSep (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
     (g.spqrTree tern vo eo).PieceSep g := by
-  sorry
+  rw [spqrTree_eq]
+  obtain ⟨idx, hok⟩ := relabelOK_of_wf g _ (walk_items_wf g hg tern vo eo hvo heo)
+  obtain ⟨σ, hr⟩ := walk_ranges' g hg tern vo eo hvo heo
+  exact hok.pieceSep hg hr (walk_q_upper g hg tern vo eo hvo heo)
+    (walk_root_sep g hg tern vo eo hvo heo) (walk_root_v g hg tern vo eo hvo heo)
+    (walk_q_child_vs g hg tern vo eo hvo heo) (walk_p_child_vs g hg tern vo eo hvo heo)
 
 end Spqr

@@ -97,6 +97,34 @@ theorem initialItems_facts (g : Graph) (hnv : g.nv = 0) (hne : g.ne = 0) (i : It
   rw [this]
   rcases i with _ | i <;> simp [Items.type, Items.ch, Items.vs]
 
+theorem ranges_initialItems (g : Graph) (hnv : g.nv = 0) (hne : g.ne = 0) :
+    Items.Ranges g (initialItems g) [] := by
+  have hit := initialItems_facts g hnv hne
+  have hnp : ∀ p c, ¬ Items.IsParent (initialItems g) p c := fun p c hc => by
+    simp [Items.IsParent, (hit p).2.1] at hc
+  have hsz : (initialItems g).size = 1 := by simp [initialItems, hnv, hne]
+  have hF : ∀ i, Items.type (initialItems g) i ∉ [NodeType.F, .V] → False := fun i h => by
+    simp [(hit i).1] at h
+  have hSPR : ∀ i, Items.type (initialItems g) i ∈ [NodeType.S, .P, .R] → False := fun i h => by
+    simp [(hit i).1] at h
+  exact {
+      convex := fun i _ h => (hF i h).elim
+      att_vs := fun i _ h => (hF i h).elim
+      vs_att := fun i _ h => by
+        rcases h with h | ⟨h, -⟩
+        · exact (hSPR i h).elim
+        · simp [(hit i).1] at h
+      vs_ne := fun i _ h => (hSPR i h).elim
+      interior := fun i v _ hv => absurd hv (by omega)
+      child_two := fun p c h => (hnp p c h).elim
+      io_parent := fun p c h => (hnp p c h).elim
+      q_leaf := fun e he => absurd he (by omega)
+      q_root := fun e he => absurd he (by omega)
+      q_under_v := fun v c hv => absurd hv (by omega)
+      p_shape := fun i _ h => by simp [(hit i).1] at h
+      s_order := fun i _ h => by simp [(hit i).1] at h
+      r_shape := fun i _ h => by simp [(hit i).1] at h }
+
 theorem wf_initialItems (g : Graph) (hnv : g.nv = 0) (hne : g.ne = 0) :
     Items.WF g (initialItems g) := by
   have hit := initialItems_facts g hnv hne
@@ -128,23 +156,7 @@ theorem wf_initialItems (g : Graph) (hnv : g.nv = 0) (hne : g.ne = 0) :
       i_o_leaf := fun i _ h => by simp [(hit i).1] at h
       vs_shape := fun i _ => by rw [(hit i).1]; exact (hit i).2.2
       vs_lt := fun i u h => by simp [(hit i).2.2] at h }
-  · exact {
-      convex := fun i _ h => (hF i h).elim
-      att_vs := fun i _ h => (hF i h).elim
-      vs_att := fun i _ h => by
-        rcases h with h | ⟨h, -⟩
-        · exact (hSPR i h).elim
-        · simp [(hit i).1] at h
-      vs_ne := fun i _ h => (hSPR i h).elim
-      interior := fun i v _ hv => absurd hv (by omega)
-      child_two := fun p c h => (hnp p c h).elim
-      io_parent := fun p c h => (hnp p c h).elim
-      q_leaf := fun e he => absurd he (by omega)
-      q_root := fun e he => absurd he (by omega)
-      q_under_v := fun v c hv => absurd hv (by omega)
-      p_shape := fun i _ h => by simp [(hit i).1] at h
-      s_order := fun i _ h => by simp [(hit i).1] at h
-      r_shape := fun i _ h => by simp [(hit i).1] at h }
+  · exact ranges_initialItems g hnv hne
 
 /-! ### `Items.Ranges` -/
 
@@ -249,6 +261,26 @@ theorem walk_items_wf (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
       fun e he => by simpa [List.mem_flatMap] using hecov e he
     have hty := walk_typing g tern _ hnv hb hcov
     exact Items.wf_of_ranges ht.toTree hty.toTypingFacts (walk_ranges g tern vo eo hg hvo heo hnv hb hcov)
+
+/-- `walk_ranges` for every graph: the empty graph (`g.nv = 0`) has the initial items. -/
+theorem walk_ranges' (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
+    ∃ σ, Items.Ranges g (g.walk tern (g.dfsForest vo eo)).items σ := by
+  obtain ⟨-, hep⟩ := dfsForest_spanning' hg hvo heo
+  have hb := dfsForest_bounded g hg hvo heo
+  have hecov : ∀ e, e < g.ne → e ∈ (g.dfsForest vo eo).flatMap DfsTree.edges :=
+    fun e he => hep.mem_iff.2 (List.mem_range.2 he)
+  rcases Nat.eq_zero_or_pos g.nv with hnv | hnv
+  · have hne : g.ne = 0 := by
+      by_contra hne
+      have hpos : 0 < g.edges.size := Nat.pos_of_ne_zero hne
+      have := (hg _ (Array.getElem_mem hpos)).1
+      omega
+    rw [dfsForest_nil_of_nv_zero g hnv hvo]
+    exact ⟨[], ranges_initialItems g hnv hne⟩
+  · have hcov : ∀ e, e < g.ne → ∃ t ∈ g.dfsForest vo eo, e ∈ t.edges :=
+      fun e he => by simpa [List.mem_flatMap] using hecov e he
+    exact ⟨_, walk_ranges g tern vo eo hg hvo heo hnv hb hcov⟩
 
 /-- Admitted (frame fact for the walk induction): the walk never writes `ternarize`. -/
 theorem walk_ternarize (g : Graph) (tern : Bool) (forest : List DfsTree) :

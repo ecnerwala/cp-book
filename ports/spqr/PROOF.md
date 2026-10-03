@@ -2124,7 +2124,8 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   finish_content}_site`, `loop1_rBranch_fields_ctx`, `loop1_rBranch_mid_ctx`, `loop1_rTop_ctx`,
   `feS₂_top_entryR`, `closeVert_type1_rCloseShape`; ST `finishBoundary_stLive`. Not reachable:
   `loop1_rBranch_content`, `walkTree_rSide_spec`, `walk_items_rThreeConnected` (R-layer glue
-  outside the tree theorems), `spqrTree_wf`, `spqrTree_pieceSep`, `walk_canonInv`/`walk_ternarize`
+  outside the tree theorems), `spqrTree_wf`, the final-items hypotheses of `spqrTree_pieceSep`
+  (`walk_q_upper`/`walk_root_sep`/`walk_root_v`/`walk_q_child_vs`/`walk_p_child_vs`, §4.6), `walk_canonInv`/`walk_ternarize`
   (canonicity, §4.6), the planarity admissions.
 
 ## 5. Phase 3: relabel
@@ -3419,8 +3420,10 @@ The second gluing pass adds `SpqrTree.PieceSep` (`PieceSep.lean`): `Touches i v`
 original edge below `i` is incident to `v`; distinct root children have disjoint `Touches`,
 distinct children of `V(v)` touch only at `v`, and a block-root `Q(e)` with children `[c,w]`
 (`w` of type V) touches an outside edge only at an endpoint of `e`.
-`spqrTree_pieceSep` (`WalkPieceSep.lean`) is the explicit walk-side admission, under graph
-well-formedness and valid vertex/edge orders, threaded through the gluing steps and fold.
+`spqrTree_pieceSep` (`WalkPieceSep.lean`), under graph well-formedness and valid vertex/edge
+orders, is threaded through the gluing steps and fold; it is now an assembly
+(`RelabelOK.pieceSep`, `RelabelPieceSep.lean`) over the item-level facts plus five named
+final-items hypotheses (below).
 `lake build check_piece_sep` builds the executable checker. Seeds 0..300 from `gen.py`,
 plus a single edge, a three-leaf star, a self-loop and four isolated vertices, give zero
 violations of all three fields. These checks are empirical evidence, not a proof of the admission.
@@ -3480,13 +3483,24 @@ every child of V contains an original edge; together with `outer_present`, the
 paired-end invariant, and slot support this supplies slots 0/1 for each child.
 The new structural clause and both boundary conditions were checked before use,
 on seeds 0..300 and the single-edge/star/self-loop/isolated-vertices cases, with
-zero violations. `spqrTree_pieceSep` remains the one named admission for this
-structural predicate; no additional admission was introduced. It is being discharged
-(`RelabelPieceSep.lean`) from `Items.WF` + `Items.Ranges` through `RelabelOK`, plus two walk-side
-facts about the final items stated as named hypotheses in `WalkPieceSep.lean`: `walk_q_upper`
-(`Items.QUpper`: a child of `vertItem v` has `(vs).1 = some v`; `finishBoundary` writes it) and
-`walk_root_sep` (`Items.RootSep`: distinct root children share no vertex); `check_walkinv` fields
-`ranges.q_upper`/`ranges.root_sep` on the final items, 0 violations 0..3000 × both modes.
+zero violations. `spqrTree_pieceSep` is discharged (`RelabelPieceSep.lean`) from `Items.WF` +
+`Items.Ranges` through `RelabelOK` — every field as a theorem `RelabelOK.pieceSep_<field>`
+(standard axioms), assembled by `RelabelOK.pieceSep`; `walk_ranges'` (`WalkItemsWF.lean`) supplies
+`Items.Ranges` on the final items for every graph (`ranges_initialItems` for `g.nv = 0`). Node-side
+transport: `nvOf_iff`/`nodeVerts_get'`/`nvList_mid_iff`/`mem_nvList_iff` (node-verts are the
+`nvList` positions, V children its interior), `capEnd_iff`, `virt_edge` (exact `nvs`/`neOrig` of
+each virtual edge from `LayoutFacts.s_edge`/`p_edge`/`r_edge`), `nodeEdge_node`
+(`RelabelAll.nodeEdge_at`), `v_touch_eq`/`sep_vs`/`node_vertex_outside` (`Endpoints.separation`,
+`interior`, `Ranges.vs_att`), `below_antisymm`/`not_below_parent` (`Tree.acyclic`). Five walk-side
+facts about the final items remain named hypotheses in `WalkPieceSep.lean`, each a
+`check_walkinv` field (`Ranges.checkFinal`) with 0 violations on seeds 0..3000 × both modes:
+`walk_q_upper` (`Items.QUpper`: a child of `vertItem v` has `(vs).1 = some v`; field
+`ranges.q_upper`), `walk_root_sep` (`Items.RootSep`: distinct root children share no vertex;
+`ranges.root_sep`), `walk_root_v` (`Items.RootV`: root children are V items; `ranges.root_v`),
+`walk_q_child_vs` (`Items.QChildVs`: a block-root Q's non-V child has `vs = (vs_Q.1, some w)`, or
+`(vs_Q.1, none)` for a loop; `ranges.q_child_vs`), `walk_p_child_vs` (`Items.PChildVs`: a P's
+non-V children carry its `vs`; `ranges.p_child_vs`). `#print axioms spqrTree_pieceSep` reaches
+`sorryAx` only through these five and `walk_items_wf`/`walk_ranges`' existing admissions.
 
 `embedItem_step_F` is proved in `PlanarEmbedF.lean` with the strengthened invariant.
 `only_root_F` reduces the item to index 0; `closeList_get` identifies each
@@ -3772,7 +3786,8 @@ permutation is needed. `nodeFold_capped` (`PlanarEmbedNodeFold.lean`) dispatches
 `R` case is `nodeFold_capped_R` (proved below via `main_R`; it takes the extra hypotheses
 `hclosed : NodeRotClosed` and `hcor : NodeCorners`).
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through the walk/R-side admissions,
-`spqrTree_pieceSep`, `nodePlanar_sound_R`, `planarTree_nodeRotClosed` and
+`spqrTree_pieceSep`'s final-items hypotheses (`walk_q_upper`/`walk_root_sep`/`walk_root_v`/
+`walk_q_child_vs`/`walk_p_child_vs`), `nodePlanar_sound_R`, `planarTree_nodeRotClosed` and
 `planarTree_nodeCorners`.
 
 **R node.** Route: the hybrid system. `hloc` is the local skeleton `localSkeleton i` with rotation
@@ -3829,7 +3844,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | statement | file | status |
 |---|---|---|
 | quarter-edges, `RotationSystem`, `IsEmbedding`, `IsPlanarEmbedding`, `Planar` | `Planar.lean` | def |
-| `SpqrTree.PieceSep`, `spqrTree_pieceSep` | `PieceSep.lean`, `WalkPieceSep.lean`, `RelabelPieceSep.lean` | def / named walk admission, being reduced to `Items.WF`+`Items.Ranges` through `RelabelOK` and the two final-items hypotheses `walk_q_upper`/`walk_root_sep` (`Items.QUpper`/`RootSep`; `check_walkinv` `ranges.q_upper`/`ranges.root_sep`, 0 violations 0..3000 × both modes); empirical checks above |
+| `SpqrTree.PieceSep`, `spqrTree_pieceSep` | `PieceSep.lean`, `WalkPieceSep.lean`, `RelabelPieceSep.lean` | def / **assembled** (`RelabelOK.pieceSep`, every field `RelabelOK.pieceSep_<field>` standard-axiom) over the five final-items hypotheses `walk_q_upper`/`walk_root_sep`/`walk_root_v`/`walk_q_child_vs`/`walk_p_child_vs` (`Items.QUpper`/`RootSep`/`RootV`/`QChildVs`/`PChildVs`; `check_walkinv` `ranges.q_upper`/`root_sep`/`root_v`/`q_child_vs`/`p_child_vs`, 0 violations 0..3000 × both modes); `sorryAx` only through those and `walk_items_wf`'s admissions |
 | `IsPlanarEmbedding.append` (vertex-disjoint edge lists in the same vertex numbering) | `Proofs/PlanarAppend.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `IsPlanarEmbedding.oneSum_conj`, `IsPlanarEmbedding.splice` | `Proofs/PlanarOneSum.lean`, `Proofs/PlanarSplice.lean` | **proved** (standard axioms); the specified transposition gives the 1-sum rotation, and `splice` keeps the original vertex numbering when the pieces meet only at the attachment vertex |
 | `Piece.OpenEmbedding.splice`, `OpenEmbedding.frame`, `v_child_boundary` | `Proofs/PieceSplice.lean`, `PlanarEmbedVBoundary.lean` | **proved** (standard axioms); linking the inner ends of two open pieces agrees with the specified conjugated rotation and leaves exactly the two outer ends open; V children supply these open pieces |
@@ -3915,7 +3930,8 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): `spqrTree_wf` (inherited by `planarRelabel_rot_spec`, `neRotAdj_segment`);
 `nodePlanar_sound_R`; the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
-`planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`,
+`planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`'s final-items hypotheses
+(`walk_q_upper`/`walk_root_sep`/`walk_root_v`/`walk_q_child_vs`/`walk_p_child_vs`),
 `planarTree_nodeRotClosed`, `planarTree_nodeCorners` (hence `planarEmbed_sound`; the old `GluedUpTo`-level
 `embedItem_step_Q`/`embedItem_step_node` and the unattempted `TwoSum.planar_left` converse have
 been removed); `spqrTree_planar`. The S and P
