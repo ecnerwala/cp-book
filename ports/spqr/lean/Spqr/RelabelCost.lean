@@ -388,6 +388,6 @@ theorem relabel_ticks_le' (g : Graph) (hg : g.WF) (tern : Bool) (vertOrder edgeO
     (relabelRun g ((g.walkFast tern (g.dfsForest vertOrder edgeOrder)).items.map Item.toSlow)).ticks ≤
       relabelC * (g.nv + g.ne) + 6 :=
   relabel_ticks_le g hg tern vertOrder edgeOrder hvo heo
-    (by rw [Graph.walkFast_items]; exact (walk_items_wf g tern vertOrder edgeOrder).tree)
+    (by rw [Graph.walkFast_items]; exact (walk_items_wf g hg tern vertOrder edgeOrder hvo heo).tree)
 
 end Spqr.Fast

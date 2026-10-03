@@ -4,6 +4,7 @@ import Spqr.ItemSpec
 import Spqr.Proofs.Dfs
 import Spqr.RelabelRep
 import Spqr.WalkWF
+import Spqr.WalkItemsWF
 import Spqr.RelabelWF
 import Spqr.StOriented
 
@@ -55,7 +56,8 @@ theorem spqrTree_r_three_connected (g : Graph) (hg : g.WF) (tern : Bool) (vo eo 
 theorem spqrTree_wf' (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
     (heo : OrderOK g.ne eo) : (g.spqrTree tern vo eo).WF := by
   rw [spqrTree_eq]
-  exact relabelTree_wf g _ (walk_items_wf g tern vo eo) (walk_items_rOriented' g hg tern vo eo hvo heo)
+  exact relabelTree_wf g _ (walk_items_wf g hg tern vo eo hvo heo)
+    (walk_items_rOriented' g hg tern vo eo hvo heo)
 
 /-- Hypothesis-free form, used as such by the planar layer (`PlanarSpec.planarTree_shape`,
 `PlanarRotSpec.planarRelabel_rot_spec`/`neRotAdj_segment'`). Under `g.WF` and `OrderOK` it is
@@ -69,10 +71,11 @@ theorem spqrTree_represents (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List 
     (g.spqrTree tern vo eo).Represents g := by
   have h := spqrTree_r_three_connected g hg tern vo eo hvo heo
   rw [spqrTree_eq] at h ⊢
-  exact relabelTree_represents_of_r g _ (walk_items_wf g tern vo eo) h
+  exact relabelTree_represents_of_r g _ (walk_items_wf g hg tern vo eo hvo heo) h
 
-theorem spqrTree_canonical (g : Graph) (vo eo : List Nat) : (g.spqrTree false vo eo).Canonical := by
+theorem spqrTree_canonical (g : Graph) (hg : g.WF) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
+    (heo : OrderOK g.ne eo) : (g.spqrTree false vo eo).Canonical := by
   rw [spqrTree_eq]
-  exact relabelTree_canonical g _ (walk_items_wf g false vo eo) (walk_canonical g vo eo)
+  exact relabelTree_canonical g _ (walk_items_wf g hg false vo eo hvo heo) (walk_canonical g vo eo)
 
 end Spqr

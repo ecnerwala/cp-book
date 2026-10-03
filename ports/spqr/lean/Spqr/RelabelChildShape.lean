@@ -1,6 +1,6 @@
 import Spqr.PlanarShape
 import Spqr.RelabelRep
-import Spqr.WalkWF
+import Spqr.WalkItemsWF
 import Spqr.RelabelWF
 
 /-!
@@ -56,8 +56,8 @@ theorem relabelTree_childShape (g : Graph) (items : Items) (h : items.WF g) :
   obtain ⟨idx, hok⟩ := relabelOK_of_wf g items h
   exact hok.childShape
 
-theorem spqrTree_childShape (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    (g.spqrTree tern vo eo).ChildShape := by
-  rw [spqrTree_eq]; exact relabelTree_childShape g _ (walk_items_wf g tern vo eo)
+theorem spqrTree_childShape (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) : (g.spqrTree tern vo eo).ChildShape := by
+  rw [spqrTree_eq]; exact relabelTree_childShape g _ (walk_items_wf g hg tern vo eo hvo heo)
 
 end Spqr
