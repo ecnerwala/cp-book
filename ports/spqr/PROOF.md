@@ -3481,7 +3481,12 @@ paired-end invariant, and slot support this supplies slots 0/1 for each child.
 The new structural clause and both boundary conditions were checked before use,
 on seeds 0..300 and the single-edge/star/self-loop/isolated-vertices cases, with
 zero violations. `spqrTree_pieceSep` remains the one named admission for this
-structural predicate; no additional admission was introduced.
+structural predicate; no additional admission was introduced. It is being discharged
+(`RelabelPieceSep.lean`) from `Items.WF` + `Items.Ranges` through `RelabelOK`, plus two walk-side
+facts about the final items stated as named hypotheses in `WalkPieceSep.lean`: `walk_q_upper`
+(`Items.QUpper`: a child of `vertItem v` has `(vs).1 = some v`; `finishBoundary` writes it) and
+`walk_root_sep` (`Items.RootSep`: distinct root children share no vertex); `check_walkinv` fields
+`ranges.q_upper`/`ranges.root_sep` on the final items, 0 violations 0..3000 × both modes.
 
 `embedItem_step_F` is proved in `PlanarEmbedF.lean` with the strengthened invariant.
 `only_root_F` reduces the item to index 0; `closeList_get` identifies each
@@ -3824,7 +3829,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | statement | file | status |
 |---|---|---|
 | quarter-edges, `RotationSystem`, `IsEmbedding`, `IsPlanarEmbedding`, `Planar` | `Planar.lean` | def |
-| `SpqrTree.PieceSep`, `spqrTree_pieceSep` | `PieceSep.lean`, `WalkPieceSep.lean` | def / named walk admission; empirical checks above |
+| `SpqrTree.PieceSep`, `spqrTree_pieceSep` | `PieceSep.lean`, `WalkPieceSep.lean`, `RelabelPieceSep.lean` | def / named walk admission, being reduced to `Items.WF`+`Items.Ranges` through `RelabelOK` and the two final-items hypotheses `walk_q_upper`/`walk_root_sep` (`Items.QUpper`/`RootSep`; `check_walkinv` `ranges.q_upper`/`ranges.root_sep`, 0 violations 0..3000 × both modes); empirical checks above |
 | `IsPlanarEmbedding.append` (vertex-disjoint edge lists in the same vertex numbering) | `Proofs/PlanarAppend.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `IsPlanarEmbedding.oneSum_conj`, `IsPlanarEmbedding.splice` | `Proofs/PlanarOneSum.lean`, `Proofs/PlanarSplice.lean` | **proved** (standard axioms); the specified transposition gives the 1-sum rotation, and `splice` keeps the original vertex numbering when the pieces meet only at the attachment vertex |
 | `Piece.OpenEmbedding.splice`, `OpenEmbedding.frame`, `v_child_boundary` | `Proofs/PieceSplice.lean`, `PlanarEmbedVBoundary.lean` | **proved** (standard axioms); linking the inner ends of two open pieces agrees with the specified conjugated rotation and leaves exactly the two outer ends open; V children supply these open pieces |

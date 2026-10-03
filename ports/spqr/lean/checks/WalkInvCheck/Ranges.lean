@@ -764,4 +764,24 @@ def checkCanon (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool)
       out := checkFinishCanon (fun k => bad r x ("l1" ++ k)) x r ++ out
   return out
 
+/-- Final-items facts behind `spqrTree_pieceSep` (`walk_q_upper`/`walk_root_sep`, `WalkPieceSep.lean`):
+every child of a V item records that vertex as its first endpoint; distinct root children share no
+vertex. -/
+def checkFinal (seed : Nat) (s : WalkState) : List V := Id.run do
+  let g := s.g
+  let bad := fun (k info : String) => (⟨seed, s.ternarize, 0, 0, "final", k, info⟩ : V)
+  let mut out := []
+  for v in List.range g.nv do
+    for c in s.items[vertItem v]!.ch do
+      if (s.items[c]!.vs).1 != some v then
+        out := bad "q_upper" s!"v={v} c={c} type={repr s.items[c]!.type} vs={s.items[c]!.vs}" :: out
+  let roots := s.items[rootItem]!.ch
+  let verts := fun (i : ItemId) => (edgesBelow s i).flatMap fun e => [(g.edges[e]!).1, (g.edges[e]!).2]
+  for a in roots do
+    for b in roots do
+      if a < b then
+        for v in verts a do
+          if (verts b).contains v then out := bad "root_sep" s!"a={a} b={b} v={v} roots={roots}" :: out
+  return out
+
 end WalkInvCheck.Ranges
