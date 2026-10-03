@@ -354,6 +354,13 @@ partial def tree (D : Dfs) (t : DfsTree) (d : Nat) (s : WalkState) (fr : List (N
       "stat:stab-site" :: s.tstack.flatMap fun t =>
         if (entryR D s t).isEmpty && !(entryR D s' t).isEmpty then
           [s!"stab v={v} d={d}: {showT t} loses EntryR under stackVerts.set! d v"] else []
+    let buried := if d = 0 then [] else
+      "stat:buried-site" :: s.tstack.flatMap fun t =>
+        if t.topDepth ≤ d - 1 then [] else
+          let es := (t.spans.1 ++ t.spans.2).flatMap (belowList s)
+          if es.length ≤ 1 || twoAttached s.g (fun e => es.contains e) t.vStart t.vStart then
+            [s!"stat:buried-{if es.length ≤ 1 then "single" else "block"}"] else
+            [s!"buried v={v} d={d}: {showT t} edges={es} tops out above d-1 with several edges not attached only at vStart"]
     let anc := if d = 0 then [] else
       "stat:anc-site" :: (List.range (d + 1)).flatMap fun k =>
         let a := s'.stackVerts[k]!
@@ -363,7 +370,7 @@ partial def tree (D : Dfs) (t : DfsTree) (d : Nat) (s : WalkState) (fr : List (N
     let (hv, s, bad, n) := outs D v d os false s fr
     let tail := if hv then [] else vertOwn v s s!"tail v={v} d={d}"
     let s := if hv then s else (setStackDir d true *> pushVertTstack v d).run s |>.2
-    (s, entry ++ stab ++ anc ++ tail ++ bad, n)
+    (s, entry ++ stab ++ buried ++ anc ++ tail ++ bad, n)
 
 partial def outs (D : Dfs) (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkState)
     (fr : List (Nat × Nat × Nat)) : Bool × WalkState × List String × Nat :=

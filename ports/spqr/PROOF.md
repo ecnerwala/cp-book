@@ -1120,7 +1120,9 @@ Ear (ear-5) — as a `BookTree`-style predicate (`CtxTree`) carried by `walkTree
   finished deeper `y`, the `base_top` counterexample of §4.2b). `EntryR.single` is the only
   `EntryR` field reading `stackVerts[t.topDepth]` (`EntryR.congr_top`) and is vacuous under
   either disjunct, so `EntryR` survives `stackVerts.set! (d + 1) c` for `topDepth = d + 1`.
-  R-5 checks this on seeds 0..400 × both modes + 6000 random before it is taken as a field.
+  Checked (`buried` lines of `checks/RFinishEdgeCheck.lean`): seeds 0..400 × both modes + 6000
+  random, 2616 child-entry sites, 70 buried entries, all of them single-edge (the second
+  disjunct was never needed), 0 failures.
 - E4 (item-forest facts at every site; ear or Ranges, whichever carries them — `ItemFree`/`cnt`
   are Ranges-3's): `∀ t ∈ s.tstack, ∀ i ∈ t.spans.1 ++ t.spans.2, ∀ p, ¬ Items.IsParent s.items p i`
   (span items are roots) and `∀ c p p', Items.IsParent s.items p c → Items.IsParent s.items p' c → p = p'`
