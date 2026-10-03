@@ -269,7 +269,35 @@ def checkVertPast (seed : Nat) (σ : List Nat) (v n : Nat) (s : WalkState) : Lis
   if (edgesBelow s (vertItem v)).all (fun e => σ.idxOf e < n) then []
   else [⟨seed, s.ternarize, v, 0, "vertex", "vertex_past", s!"n={n} edges={edgesBelow s (vertItem v)} σ={σ}"⟩]
 
-def checkClose (seed : Nat) (s : WalkState) : List V := Id.run do
+/-- The block boundaries of one `finishEdge` at which `RangesCloseSites.lean` asserts `CloseInv`,
+labelled by the theorem (`closeEars_closeAt`, `loop1Body_closeAt`, `closeVertTail_closeAt`,
+`finishP_closeAt`, `finishBack_closeAt`, `finishBoundary_closeAt`) or frame block responsible. -/
+def closeSites (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
+    List (String × WalkState) := Id.run do
+  let lv := o.cls.lowval d
+  let fin := after (finishEdge curV d o orig hv) s
+  if d ≤ lv then return [("finishBoundary_closeAt", fin)]
+  let mut sites := []
+  let mut rest := feBack curV lv d o s
+  if o.cls.isTree then
+    let edgeDir := s.stackDir[d]!
+    let s₁ := ceS₁ o.dest d o.e (feS₀ d o s)
+    sites := [("feS₀", feS₀ d o s), ("closeEars_closeAt", s₁)]
+    for st in mergeSites (loop1Cond d) (loop1Body d edgeDir) s₁ do
+      sites := sites ++ [("loop1Body_closeAt", after (loop1Body d edgeDir) st)]
+    sites := sites ++ [("mergeLate", feS₂ d o s)]
+    if hv then
+      sites := sites ++
+        [("closeVert'.pre", cvS₅ curV edgeDir o.cls.isType1 orig (feSingle d o s) (feS₂ d o s)),
+         ("closeVertTail_closeAt", feS₃ curV d o orig s)]
+      rest := feS₃ curV d o orig s
+    else
+      rest := feS₂ d o s
+  else
+    sites := [("finishBack_closeAt", rest)]
+  return sites ++ [("finishP_closeAt", after (finishP curV lv o.cls.isType1) rest), ("finishTail", fin)]
+
+def checkClose (seed : Nat) (site : String) (s : WalkState) : List V := Id.run do
   let ty := fun i => s.items[i]!.type
   let ch := fun i => s.items[i]!.ch
   let vs := fun i => s.items[i]!.vs
@@ -287,7 +315,7 @@ def checkClose (seed : Nat) (s : WalkState) : List V := Id.run do
   let mut out := []
   for i in List.range s.items.size do
     if live i then
-      let bad := fun k => (⟨seed, s.ternarize, 0, 0, "close", "close_" ++ k,
+      let bad := fun k => (⟨seed, s.ternarize, 0, 0, site, "close_" ++ k,
         s!"i={i} type={repr (ty i)} vs={vs i} ch={ch i} stack={s.tstack.map showT}"⟩ : V)
       if spr i then
         if !two i then out := bad "vs_ne" :: out
@@ -361,10 +389,11 @@ partial def iOut (seed : Nat) (σ : List Nat) (v d : Nat) (o : DfsOut) (hv : Boo
   let (s, vs) := match o with
     | .tree _ _ child => iTree seed σ child (d+1) { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
     | .back .. => (s, [])
-  let vs := vp ++ vs ++ check seed σ v d o orig s ++ checkAdj seed σ v d o orig hv s ++ checkClose seed s
+  let vs := vp ++ vs ++ check seed σ v d o orig s ++ checkAdj seed σ v d o orig hv s ++ checkClose seed "pre" s
+  let vs := vs ++ (closeSites v d o orig hv s).flatMap fun (site, st) => checkClose seed site st
   let vs := vs ++ if hv then [] else checkVertPast seed σ v (σ.idxOf o.e) s
   let (hv', s) := (finishEdge v d o orig hv).run s
-  (hv', s, vs ++ checkClose seed s)
+  (hv', s, vs)
 end
 
 def iForest (seed : Nat) (σ : List Nat) (forest : List DfsTree) (s : WalkState) : WalkState × List V :=

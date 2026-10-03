@@ -2,6 +2,7 @@ import Spqr.EarWalk
 import Spqr.WalkWF
 import Spqr.RangesWalk
 import Spqr.RangesClose
+import Spqr.RangesCloseSites
 
 /-! # `Items.WF` for the walk on a DFS forest
 
@@ -167,12 +168,10 @@ theorem walk_g (g : Graph) (tern : Bool) (forest : List DfsTree) (hnv : 0 < g.nv
     (hb : ∀ t ∈ forest, t.Bounded g.nv g.ne) : (g.walk tern forest).g = g :=
   (WalkM.walkForest_typing forest (WalkState.init_typing g tern hnv) hb).g_eq
 
-/-- Admitted: instantiate the leaf-Q record at returning tree/back edge pushes; construct
-new records in `loop1Body`, `closeVertTail`, `finishP`, and all three `finishBoundary` branches;
-then thread the mutual walk induction. Vertex pushes, root attachment, and conditional
-boundary vertex attachment are proved in `RangesClose` / `RangesWalk`. `CloseInv.finishTop`
-preserves other records; its new record still needs attachment/interior/child-terminal
-facts and the P/S/R shape clauses from the close site's ear and side information. -/
+/-- Admitted: the assembly of the per-site close records (`RangesCloseSites.lean`:
+`closeEars_closeAt`, `finishBack_closeAt`, `loop1Body_closeAt`, `closeVertTail_closeAt`,
+`finishP_closeAt`, `finishBoundary_closeAt`) with the proved frame/vertex/root steps
+(`RangesClose` / `RangesWalk`) through the mutual walk/forest induction. -/
 theorem walk_closeInv (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
     (g.walk tern (g.dfsForest vo eo)).CloseInv := by
