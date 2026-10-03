@@ -516,7 +516,7 @@ def checkClose (seed : Nat) (site : String) (s : WalkState) : List V := Id.run d
 /-- Depth-indexed ownership invariant `OwnedD` (`RangesOwned.lean`) at the path vertex of depth `d`
 (`c.sts[k]`/`c.origs[k]` = schedule start / stack length at the entry of the path vertex of depth
 `k`, `c.visited` = placed vertices); `n` = number of processed edges. Checked at every vertex entry
-(`entry`), `finishEdge` pre-/post-state (`pre`/`post`, the latter with `n + 1`), P site (`P`) and
+(`entry`), `finishEdge` pre/post state (`pre`/`post`, the latter with `n + 1`), P site (`P`) and
 vertex end (`end`); `finishEdge_ownedD` is `pre` → `post`. -/
 structure OwnCtx where
   sts : List Nat

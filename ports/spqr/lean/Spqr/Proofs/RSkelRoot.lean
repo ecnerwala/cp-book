@@ -177,14 +177,16 @@ theorem rkRootTree (dfs : DfsData) (t : DfsTree) (s : WalkState) (hi : s.Inv' 0)
 
 theorem rkForest (g : Graph) (dfs : DfsData) : ∀ (forest pre : List DfsTree) (s : WalkState),
     RootState g pre s → ForestOK g (pre ++ forest) → (∀ t ∈ forest, t.WF []) →
-    (∀ t ∈ forest, t.Ends g) → g.TwoConnected → g.WF → dfs.Spec g → dfs.Rooted g →
+    (∀ t ∈ forest, t.Ends g) →
+    (∀ t ∈ forest, ∀ e, e < g.ne → ∀ x, g.Inc e x → x ∈ t.verts → e ∈ t.edges) →
+    g.TwoConnected → g.WF → dfs.Spec g → dfs.Rooted g →
     (∀ t ∈ forest, ∀ v outs, t = .node v outs → ∀ o ∈ outs, ∀ e cls c couts,
       o = .tree e cls (.node c couts) → dfs.IsParent v c ∧ ∀ t : DfsTree, t.Sub (.node c couts) → dfs.outs t.v = t.outs) →
     (∀ t ∈ forest, dfs.depth t.v = 0) →
     Items.RSkelInv g s.items → wp (walkForest forest) (fun _ s' => Items.RSkelInv g s'.items) s
-  | [], _, _, _, _, _, _, _, _, _, _, _, _, hinv => hinv
-  | t :: rest, pre, s, h, hf, hwf, hends, h2, hgw, hsp, hrt, hp, hd0, hinv => by
-    have hb := h.book hf (hwf t (by simp)) (hends t (by simp))
+  | [], _, _, _, _, _, _, _, _, _, _, _, _, _, hinv => hinv
+  | t :: rest, pre, s, h, hf, hwf, hends, hcomp, h2, hgw, hsp, hrt, hp, hd0, hinv => by
+    have hb := h.book hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     have hg := gbTree t 0 s hb
     have hi' : ∀ v outs, t = .node v outs →
         ({ s with stackVerts := s.stackVerts.set! 0 v } : WalkState).Inv' 0 :=
@@ -192,7 +194,7 @@ theorem rkForest (g : Graph) (dfs : DfsData) : ∀ (forest pre : List DfsTree) (
     have hnv : 0 < g.nv := by
       obtain ⟨v, outs⟩ := t
       exact Nat.lt_of_le_of_lt (Nat.zero_le _) (RootState.hvlt hf v (by simp [DfsTree.verts]))
-    have hstep := h.step hf (hwf t (by simp)) (hends t (by simp))
+    have hstep := h.step hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     have hplace := (walk_place_aux g).1 t 0 _ _ s h.place (RootState.hvlt hf) (RootState.helt hf)
       (RootState.hvn hf).1 (RootState.hen hf).1 (RootState.hPv hf) (RootState.hPe hf)
     have hinv₁ := rkRootTree dfs t s h.inv h.shape hb h.tstack (by rw [h.sv]; exact hnv)
@@ -217,7 +219,8 @@ theorem rkForest (g : Graph) (dfs : DfsData) : ∀ (forest pre : List DfsTree) (
         { it with ch := it.ch ++ s₁.tstack.head!.spans.2 }) :=
       hinv₁.modify_root_of_ne hroot _ (fun _ => rfl) hrootT
     exact rkForest g dfs rest (pre ++ [t]) _ hst₁ (by simpa using hf)
-      (fun t' ht' => hwf t' (by simp [ht'])) (fun t' ht' => hends t' (by simp [ht'])) h2 hgw hsp hrt
+      (fun t' ht' => hwf t' (by simp [ht'])) (fun t' ht' => hends t' (by simp [ht']))
+      (fun t' ht' => hcomp t' (by simp [ht'])) h2 hgw hsp hrt
       (fun t' ht' => hp t' (by simp [ht'])) (fun t' ht' => hd0 t' (by simp [ht'])) hinv₂
 
 end WalkState
@@ -329,7 +332,9 @@ theorem walk_rSkelInv (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     exact ⟨⟨_, by rw [h1]; exact ho, rfl, rfl⟩,
       fun t' hsub => DfsData.ofForest_outs hnd ht (DfsTree.Sub.step hsub ho)⟩
   exact rkForest g _ (g.dfsForest vo eo) [] (WalkState.init g tern) (rootState_init g tern) hf
-    (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo) h2 hg hsp' hrt hp
+    (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo)
+    (fun t ht => comp_of_forest hf (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo)
+      (fun e he => hep.mem_iff.2 (List.mem_range.2 he)) ht) h2 hg hsp' hrt hp
     (fun t ht => DfsData.ofForest_depth_root hnd ht) (init_rSkelInv g tern)
 
 end Spqr

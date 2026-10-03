@@ -778,17 +778,18 @@ theorem stForest (g : Graph) : ∀ (forest pre : List DfsTree) (s : WalkState) (
     (∀ v ∈ forest.flatMap DfsTree.verts, ¬ P (vertItem v)) →
     (∀ e ∈ forest.flatMap DfsTree.edges, ¬ P (edgeItem g e)) →
     ForestOK g (pre ++ forest) → (∀ t ∈ forest, t.WF []) → (∀ t ∈ forest, t.Ends g) →
+    (∀ t ∈ forest, ∀ e, e < g.ne → ∀ x, g.Inc e x → x ∈ t.verts → e ∈ t.edges) →
     (∀ t ∈ forest, t.height ≤ g.nv) →
     StItems g s (refBlocks g pre) →
     wp (walkForest forest) (fun _ s' => StItems g s' (refBlocks g (pre ++ forest))) s
-  | [], pre, s, P, X, _, _, _, _, _, _, _, _, hI => by
+  | [], pre, s, P, X, _, _, _, _, _, _, _, _, _, hI => by
     show StItems g s (refBlocks g (pre ++ []))
     simpa using hI
-  | t :: rest, pre, s, P, X, h, hfull, hPv, hPe, hf, hwf, hends, hht, hI => by
+  | t :: rest, pre, s, P, X, h, hfull, hPv, hPe, hf, hwf, hends, hcomp, hht, hI => by
     rw [List.flatMap_cons] at hPv hPe
     obtain ⟨hPv₁, hPv₂⟩ := List.forall_mem_append.1 hPv
     obtain ⟨hPe₁, hPe₂⟩ := List.forall_mem_append.1 hPe
-    have hb := h.book hf (hwf t (by simp)) (hends t (by simp))
+    have hb := h.book hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     have hg := gbTree t 0 s hb
     have hi' : ∀ v outs, t = .node v outs →
         ({ s with stackVerts := s.stackVerts.set! 0 v } : WalkState).Inv' 0 :=
@@ -796,7 +797,7 @@ theorem stForest (g : Graph) : ∀ (forest pre : List DfsTree) (s : WalkState) (
     have hnv : 0 < g.nv := by
       obtain ⟨v, outs⟩ := t
       exact Nat.lt_of_le_of_lt (Nat.zero_le _) (RootState.hvlt hf v (by simp [DfsTree.verts]))
-    have hstep := h.step hf (hwf t (by simp)) (hends t (by simp))
+    have hstep := h.step hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     have hfull₁ := (walk_full_aux g).1 t 0 P X s hfull (RootState.hvlt hf) (RootState.helt hf)
       (RootState.hvn hf).1 (RootState.hen hf).1 hPv₁ hPe₁ (sdTree t 0 s hi' h.shape hg hb)
     have hinv := invTree t 0 s hi' h.shape hg hb
@@ -830,7 +831,7 @@ theorem stForest (g : Graph) : ∀ (forest pre : List DfsTree) (s : WalkState) (
     rw [List.append_cons]
     refine stForest g rest (pre ++ [t]) _ _ X hstep₁ hfull₂ ?_ ?_ (by simpa using hf)
       (fun t' ht' => hwf t' (by simp [ht'])) (fun t' ht' => hends t' (by simp [ht']))
-      (fun t' ht' => hht t' (by simp [ht'])) ?_
+      (fun t' ht' => hcomp t' (by simp [ht'])) (fun t' ht' => hht t' (by simp [ht'])) ?_
     · have hdv : ∀ w ∈ t.verts, w ∉ rest.flatMap DfsTree.verts := by
         have h := hf.verts_nodup
         rw [List.flatMap_append, List.flatMap_cons, List.nodup_append, List.nodup_append] at h

@@ -180,7 +180,8 @@ theorem walk_closeInv (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
     (g.walk tern (g.dfsForest vo eo)).CloseInv := by
   obtain ⟨hvp, hep⟩ := dfsForest_spanning' hg hvo heo
   exact WalkState.walk_closeInv' g tern _ (ForestOK.of_perm hvp hep)
-    (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo) (walk_rootsCover g tern vo eo hg hvo heo)
+    (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo)
+    (fun e he => hep.mem_iff.2 (List.mem_range.2 he)) (walk_rootsCover g tern vo eo hg hvo heo)
 
 theorem walk_closeFacts (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) (hnv : 0 < g.nv) :

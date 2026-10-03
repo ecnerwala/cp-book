@@ -329,7 +329,8 @@ theorem stItems_init (g : Graph) (tern : Bool) :
     · simp [Items.IsParent, WalkState.init, Items.initialItems_ch] at hp
 
 theorem walk_sim (g : Graph) (tern : Bool) (forest : List DfsTree) (hf : ForestOK g forest)
-    (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g) :
+    (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g)
+    (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
     StItems g (g.walk tern forest) (refBlocks g forest) := by
   have hht : ∀ t ∈ forest, t.height ≤ g.nv := by
     intro t ht
@@ -345,7 +346,8 @@ theorem walk_sim (g : Graph) (tern : Bool) (forest : List DfsTree) (hf : ForestO
     exact (DfsTree.height_le_verts_length t).trans this
   have h := stForest g forest [] (WalkState.init g tern) (fun _ => False) (fun _ => False)
     (WalkState.rootState_init g tern) (WalkState.init_full g tern) (fun _ _ h => h) (fun _ _ h => h)
-    (by simpa using hf) hwf hends hht (stItems_init g tern)
+    (by simpa using hf) hwf hends (fun t ht => WalkState.comp_of_forest hf hwf hends hecov ht) hht
+    (stItems_init g tern)
   simpa [WalkM.wp, Graph.walk] using h
 
 theorem walk_inBlock (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
@@ -357,8 +359,10 @@ theorem walk_inBlock (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     ∃ b ∈ refBlocks g (g.dfsForest vo eo), InBlock g (g.walk tern (g.dfsForest vo eo)).items b i := by
   obtain ⟨hvp, hep⟩ := dfsForest_spanning' hg hvo heo
   have hf : ForestOK g (g.dfsForest vo eo) := ForestOK.of_perm hvp hep
-  have hS := walk_sim g tern _ hf (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo)
-  have hts := (walk_full g tern _ hf (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo)).2
+  have hecov : ∀ e, e < g.ne → e ∈ (g.dfsForest vo eo).flatMap DfsTree.edges :=
+    fun e he => hep.mem_iff.2 (List.mem_range.2 he)
+  have hS := walk_sim g tern _ hf (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo) hecov
+  have hts := (walk_full g tern _ hf (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo) hecov).2
   rcases hS.closed i hi ht with ⟨x, hx, -⟩ | h
   · rw [hts] at hx; simp [readStack, readL, readR] at hx
   · exact h

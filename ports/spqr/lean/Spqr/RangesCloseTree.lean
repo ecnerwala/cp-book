@@ -26,6 +26,7 @@ structure DfsSite (σ : List Nat) (n curV d : Nat) (o : DfsOut) (s : WalkState) 
     Items.PairEq (s.stackVerts[k]!, s.stackVerts[k + 1]!) s.g.edges[e]!
   dest_edge : o.cls.isTree = true → o.cls.lowval d < d →
     ∃ e, e < s.g.ne ∧ e ≠ o.e ∧ s.g.Inc e o.dest
+  dest_edges : o.cls.isTree = true → ∀ e, e < s.g.ne → s.g.Inc e o.dest → subEdges o e
   dest_lt : o.dest < s.g.nv
   bd_loop : o.cls.isTree = false → d ≤ o.cls.lowval d → o.dest = curV
 
@@ -107,6 +108,7 @@ theorem CloseCtx.of_exports (h : CloseBase σ n D curV d o origTstack hasVert s)
   ends := h.site.ends
   path := h.site.path
   dest_edge := h.site.dest_edge
+  dest_edges := h.site.dest_edges
   dest_lt := h.site.dest_lt
   bd_loop := h.site.bd_loop
   bd_vert := closeCtx_bd_vert h
@@ -282,7 +284,9 @@ theorem classify_back {d i : Nat} (hi : i < d + 1) :
     simp [h, this]
 
 abbrev DsTree (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
-  ∀ (g : Graph) (anc : List Nat), Types g s → d = anc.length → t.WF anc → t.Ends g →
+  ∀ (g : Graph) (anc : List Nat) (pe : Nat → Prop), Types g s → d = anc.length → t.WF anc → t.Ends g →
+    (∀ e', e' < g.ne → ∀ x, g.Inc e' x → x ∈ t.verts → e' ∈ t.edges ∨ pe e') →
+    (∀ e', pe e' → ∀ x, g.Inc e' x → x ∈ anc ++ [t.v]) →
     (anc ++ t.verts).Nodup → (∀ a ∈ anc, a < g.nv) → (∀ v ∈ t.verts, v < g.nv) →
     (∀ e ∈ t.edges, e < g.ne) → t.edges.Nodup → s.stackVerts.size = g.nv →
     (∀ k, k < d → anc[k]? = some s.stackVerts[k]!) →
@@ -290,8 +294,11 @@ abbrev DsTree (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState) 
     (∀ v outs, t = .node v outs → AncPath g σ (n + t.edgePostorder.length) (anc ++ [v])) →
     CsTree σ n t d s
 abbrev DsOuts (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
-  ∀ (g : Graph) (anc : List Nat), Types g s → d = anc.length → (∀ o ∈ outs, o.WF anc v) →
-    (∀ o ∈ outs, DfsOut.Ends g v o) → (anc ++ v :: DfsOut.vertsList outs).Nodup →
+  ∀ (g : Graph) (anc : List Nat) (pe : Nat → Prop), Types g s → d = anc.length → (∀ o ∈ outs, o.WF anc v) →
+    (∀ o ∈ outs, DfsOut.Ends g v o) →
+    (∀ e', e' < g.ne → ∀ x, g.Inc e' x → x ∈ DfsOut.vertsList outs → e' ∈ DfsOut.edgesList outs ∨ pe e') →
+    (∀ e', pe e' → ∀ x, g.Inc e' x → x ∈ anc ++ [v]) →
+    (anc ++ v :: DfsOut.vertsList outs).Nodup →
     (∀ a ∈ anc, a < g.nv) → v < g.nv → (∀ w ∈ DfsOut.vertsList outs, w < g.nv) →
     (∀ e ∈ DfsOut.edgesList outs, e < g.ne) → (DfsOut.edgesList outs).Nodup →
     s.stackVerts.size = g.nv → (∀ k, k < d → anc[k]? = some s.stackVerts[k]!) → s.stackVerts[d]! = v →
@@ -299,8 +306,11 @@ abbrev DsOuts (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert : Bool
     AncPath g σ (n + (DfsOut.edgePostorderList outs).length) (anc ++ [v]) →
     CsOuts σ n v d outs hasVert s
 abbrev DsOut (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
-  ∀ (g : Graph) (anc : List Nat), Types g s → d = anc.length → o.WF anc v →
-    DfsOut.Ends g v o → (anc ++ v :: o.verts).Nodup →
+  ∀ (g : Graph) (anc : List Nat) (pe : Nat → Prop), Types g s → d = anc.length → o.WF anc v →
+    DfsOut.Ends g v o →
+    (∀ e', e' < g.ne → ∀ x, g.Inc e' x → x ∈ o.verts → subEdges o e' ∨ pe e') →
+    (∀ e', pe e' → ∀ x, g.Inc e' x → x ∈ anc ++ [v]) →
+    (anc ++ v :: o.verts).Nodup →
     (∀ a ∈ anc, a < g.nv) → v < g.nv → (∀ w ∈ o.verts, w < g.nv) →
     (∀ e ∈ o.edges, e < g.ne) → o.edges.Nodup →
     s.stackVerts.size = g.nv → (∀ k, k < d → anc[k]? = some s.stackVerts[k]!) → s.stackVerts[d]! = v →
@@ -311,7 +321,7 @@ abbrev DsOut (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (s : Wa
 mutual
 theorem dsTree : ∀ (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState), DsTree σ n t d s
   | σ, n, .node v outs, d, s => by
-    intro g anc hT hd hwf hends hnd hanc hvlt helt hen hsz hsvk hσn hat hpath
+    intro g anc pe hT hd hwf hends hcomp hpeA hnd hanc hvlt helt hen hsz hsvk hσn hat hpath
     simp only [DfsTree.verts, DfsTree.edges] at hnd hvlt helt hen
     simp only [DfsTree.WF] at hwf
     simp only [DfsTree.Ends] at hends
@@ -330,7 +340,8 @@ theorem dsTree : ∀ (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : Walk
         · exact (List.mem_singleton.1 hw) ▸ hv
       have := (List.Nodup.subperm hnd' hsub).length_le
       simp at this; omega
-    exact dsOuts σ n v d outs false _ g anc ⟨hT.g_eq, hT.size, hT.root, hT.vert, hT.edge⟩ hd hwf.2 hends
+    exact dsOuts σ n v d outs false _ g anc pe ⟨hT.g_eq, hT.size, hT.root, hT.vert, hT.edge⟩ hd hwf.2 hends
+      (fun e' he' x hx hxm => hcomp e' he' x hx (List.mem_cons_of_mem _ hxm)) hpeA
       hnd hanc hv (fun w hw => hvlt w (List.mem_cons_of_mem _ hw)) helt hen (by simp [hsz])
       (fun k hk => by rw [getElem!_set!_ne _ _ _ _ (by omega)]; exact hsvk k hk)
       (getElem!_set!_self _ _ _ (by rw [hsz]; exact hdlt)) hσn hat hp
@@ -338,15 +349,56 @@ theorem dsTree : ∀ (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : Walk
 theorem dsOuts : ∀ (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState),
     DsOuts σ n v d outs hasVert s
   | σ, n, v, d, [], hasVert, s => by
-    intro g anc hT hd hwf hends hnd hanc hv hw he hen hsz hsvk hsvd hσn hat hpath
+    intro g anc pe hT hd hwf hends hcomp hpeA hnd hanc hv hw he hen hsz hsvk hsvd hσn hat hpath
     unfold CsOuts; trivial
   | σ, n, v, d, o :: rest, hasVert, s => by
-    intro g anc hT hd hwf hends hnd hanc hv hw he hen hsz hsvk hsvd hσn hat hpath
+    intro g anc pe hT hd hwf hends hcomp hpeA hnd hanc hv hw he hen hsz hsvk hsvd hσn hat hpath
+    have hnd' := hnd
+    rw [DfsOut.vertsList_eq, List.flatMap_cons, ← DfsOut.vertsList_eq] at hnd'
+    have hndA : ∀ x, x ∈ anc → x ∈ v :: (o.verts ++ DfsOut.vertsList rest) → False :=
+      fun x hx hx' => List.disjoint_of_nodup_append hnd' hx hx'
+    have hndV : v ∉ o.verts ++ DfsOut.vertsList rest :=
+      (List.nodup_cons.1 (List.nodup_append.1 hnd').2.1).1
+    have hndOR : ∀ x, x ∈ o.verts → x ∈ DfsOut.vertsList rest → False :=
+      fun x hx hx' =>
+        List.disjoint_of_nodup_append (List.nodup_cons.1 (List.nodup_append.1 hnd').2.1).2 hx hx'
+    have hmemR : ∀ x, x ∈ DfsOut.vertsList rest → x ∈ DfsOut.vertsList (o :: rest) := fun x hx => by
+      rw [DfsOut.vertsList_eq, List.flatMap_cons, ← DfsOut.vertsList_eq]
+      exact List.mem_append_right _ hx
+    have hcompO : ∀ e', e' < g.ne → ∀ x, g.Inc e' x → x ∈ o.verts → subEdges o e' ∨ pe e' := by
+      intro e' he' x hx hxo
+      rcases hcomp e' he' x hx (mem_vertsList_of_verts (List.mem_cons_self ..) hxo) with h | h
+      · obtain ⟨o', ho', hs⟩ := mem_subEdges_edgesList.1 h
+        rcases List.mem_cons.1 ho' with heq | ho'
+        · subst heq; exact .inl hs
+        · exfalso
+          rcases endsOut_wf g anc v o' (hwf o' (List.mem_cons_of_mem _ ho'))
+            (hends o' (List.mem_cons_of_mem _ ho')) e' hs x hx with h' | rfl | h'
+          · exact hndA x h' (List.mem_cons_of_mem _ (List.mem_append_left _ hxo))
+          · exact hndV (List.mem_append_left _ hxo)
+          · exact hndOR x hxo (mem_vertsList_of_verts ho' h')
+      · exact .inr h
+    have hcompR : ∀ e', e' < g.ne → ∀ x, g.Inc e' x → x ∈ DfsOut.vertsList rest →
+        e' ∈ DfsOut.edgesList rest ∨ pe e' := by
+      intro e' he' x hx hxr
+      rcases hcomp e' he' x hx (hmemR x hxr) with h | h
+      · obtain ⟨o', ho', hs⟩ := mem_subEdges_edgesList.1 h
+        rcases List.mem_cons.1 ho' with heq | ho'
+        · exfalso
+          subst heq
+          rcases endsOut_wf g anc v o' (hwf o' (List.mem_cons_self ..))
+            (hends o' (List.mem_cons_self ..)) e' hs x hx with h' | rfl | h'
+          · exact hndA x h' (List.mem_cons_of_mem _ (List.mem_append_right _ hxr))
+          · exact hndV (List.mem_append_right _ hxr)
+          · exact hndOR x h' hxr
+        · exact .inl (mem_subEdges_edgesList.2 ⟨o', ho', hs⟩)
+      · exact .inr h
     rw [DfsOut.vertsList_eq, List.flatMap_cons, ← DfsOut.vertsList_eq] at hnd hw
     rw [DfsOut.edgesList_eq, List.flatMap_cons, ← DfsOut.edgesList_eq] at he hen
     rw [DfsOut.edgePostorderList_cons] at hat hpath
     unfold CsOuts
-    refine ⟨dsOut σ n v d o hasVert s g anc hT hd (hwf o (List.mem_cons_self ..)) (hends o (List.mem_cons_self ..))
+    refine ⟨dsOut σ n v d o hasVert s g anc pe hT hd (hwf o (List.mem_cons_self ..)) (hends o (List.mem_cons_self ..))
+      hcompO hpeA
       (List.Nodup.sublist (List.Sublist.append_left (List.Sublist.cons_cons v (List.sublist_append_left _ _)) _) hnd)
       hanc hv (fun w hw' => hw w (List.mem_append_left _ hw')) (fun e he' => he e (List.mem_append_left _ he'))
       (List.Nodup.sublist (List.sublist_append_left _ _) hen) hsz hsvk hsvd hσn hat.left
@@ -354,8 +406,9 @@ theorem dsOuts : ∀ (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert
     have hK := kOut v d o hasVert s g (d + 1) 0 s hT (Nat.le_refl _) (by omega) (vertItem_ne_zero v)
       (fun w _ => vertItem_ne_zero w) (fun e _ => edgeItem_ne_zero g e) Keep.refl
     refine wp_mono _ hK fun hv' s' hK' => ?_
-    exact dsOuts σ (n + o.block.length) v d rest hv' s' g anc (hT.of_keep hK') hd
+    exact dsOuts σ (n + o.block.length) v d rest hv' s' g anc pe (hT.of_keep hK') hd
       (fun o' ho' => hwf o' (List.mem_cons_of_mem _ ho')) (fun o' ho' => hends o' (List.mem_cons_of_mem _ ho'))
+      hcompR hpeA
       (List.Nodup.sublist (List.Sublist.append_left (List.Sublist.cons_cons v (List.sublist_append_right _ _)) _) hnd)
       hanc hv (fun w hw' => hw w (List.mem_append_right _ hw')) (fun e he' => he e (List.mem_append_right _ he'))
       (List.Nodup.sublist (List.sublist_append_right _ _) hen) (hK'.sv.trans hsz)
@@ -365,7 +418,7 @@ theorem dsOuts : ∀ (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert
 
 theorem dsOut : ∀ (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), DsOut σ n v d o hasVert s
   | σ, n, v, d, o, hasVert, s => by
-    intro g anc hT hd hwf hends hnd hanc hv hw he hen hsz hsvk hsvd hσn hat hpath
+    intro g anc pe hT hd hwf hends hcomp hpeA hnd hanc hv hw he hen hsz hsvk hsvd hσn hat hpath
     subst hd
     unfold CsOut
     have hK₀ := keep_walkOutPre (D := anc.length + 1) (j := 0) v anc.length o hasVert (Keep.refl (s := s))
@@ -388,11 +441,14 @@ theorem dsOut : ∀ (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) 
         have := (List.getElem?_eq_some_iff.1 hi).1; simpa using this
       subst hcls
       rw [classify_back hil] at hends ⊢
-      refine ⟨hat.singleton, hat.block_infix, by rw [hg₁]; exact hends, ?_, ?_, ?_, ?_⟩
+      refine ⟨hat.singleton, hat.block_infix, by rw [hg₁]; exact hends, ?_, ?_, ?_, ?_, ?_⟩
       · intro k hk
         obtain ⟨e', he', hm, hpe⟩ := hpath k (by simp; omega)
         refine ⟨e', hg₁ ▸ he', by simp at hm; omega, ?_⟩
         rw [hsv₁ k (by omega), hsv₁ (k + 1) (by omega), hg₁]; exact hpe
+      · intro ht
+        simp only [DfsOut.cls] at ht
+        split at ht <;> simp [OutClass.isTree] at ht
       · intro ht
         simp only [DfsOut.cls] at ht
         split at ht <;> simp [OutClass.isTree] at ht
@@ -456,7 +512,25 @@ theorem dsOut : ∀ (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) 
             getElem!_concat_length']
           simp only [DfsTree.v] at hpe
           exact PairEq.flip hpe
-      refine ⟨dsTree σ n child (anc.length + 1) _ g (anc ++ [v]) hT₂ (by simp) hwfc hendsc hnd'
+      have hcompC : ∀ e', e' < g.ne → ∀ x, g.Inc e' x → x ∈ child.verts →
+          e' ∈ child.edges ∨ (e' = e ∨ pe e') := by
+        intro e' he' x hx hxc
+        rcases hcomp e' he' x hx hxc with h | h
+        · rcases h with h | h
+          · exact .inr (.inl h)
+          · exact .inl h
+        · exact .inr (.inr h)
+      have hpeC : ∀ e', (e' = e ∨ pe e') → ∀ x, g.Inc e' x → x ∈ anc ++ [v] ++ [child.v] := by
+        intro e' h x hx
+        rcases h with rfl | h
+        · rcases eq_of_inc_pairEq hpe hx with h | h <;> rw [h]
+          · exact List.mem_append_right _ (List.mem_singleton_self _)
+          · exact List.mem_append_left _ (List.mem_append_right _ (List.mem_singleton_self _))
+        · exact List.mem_append_left _ (hpeA e' h x hx)
+      have hcv : child.v ∈ child.verts := by
+        obtain ⟨w, outs⟩ := child; exact List.mem_cons_self ..
+      refine ⟨dsTree σ n child (anc.length + 1) _ g (anc ++ [v]) (fun e' => e' = e ∨ pe e') hT₂ (by simp)
+        hwfc hendsc hcompC hpeC hnd'
         (fun a ha => by
           rcases List.mem_append.1 ha with ha | ha
           · exact hanc a ha
@@ -479,7 +553,7 @@ theorem dsOut : ∀ (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) 
       have hg₃ : s₃.g = g := hK₃.g.trans hg₁
       have hsv₃ : ∀ k, k ≤ anc.length → s₃.stackVerts[k]! = (anc ++ [v])[k]! := fun k hk => by
         rw [hK₃.svlo k (by omega)]; exact hsv₁ k hk
-      refine ⟨hat.right.singleton, hat.block_infix, by rw [hg₃]; simp only [DfsOut.Ends]; exact ⟨hpe, hendsc⟩, ?_, ?_, ?_, ?_⟩
+      refine ⟨hat.right.singleton, hat.block_infix, by rw [hg₃]; simp only [DfsOut.Ends]; exact ⟨hpe, hendsc⟩, ?_, ?_, ?_, ?_, ?_⟩
       · intro k hk
         obtain ⟨e', he', hm, hpe'⟩ := hpath k (by simp; omega)
         refine ⟨e', hg₃ ▸ he', by simp at hm; omega, ?_⟩
@@ -503,6 +577,11 @@ theorem dsOut : ∀ (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) 
           cases o' with
           | back e₀ d₀ c₀ => simp only [DfsOut.Ends] at hE; exact (Graph.inc_of_pairEq hE).1
           | tree e₀ c₀ ch => simp only [DfsOut.Ends] at hE; exact (Graph.inc_of_pairEq hE.1).2
+      · intro _ e' he' hinc
+        rw [hg₃] at he' hinc
+        rcases hcomp e' he' _ hinc hcv with h | h
+        · exact h
+        · exact (List.disjoint_of_nodup_append hnd' (hpeA e' h _ hinc) hcv).elim
       · show child.v < s₃.g.nv
         rw [hg₃]
         obtain ⟨w, outs⟩ := child
@@ -515,21 +594,26 @@ end
 /-- `CsTree` on the real walk: a DFS tree below the ancestor path `anc`, scheduled at `n`. -/
 theorem csTree_of_dfs {g : Graph} {anc : List Nat} (t : DfsTree) (d : Nat) (s : WalkState)
     (hT : Types g s) (hd : d = anc.length) (hwf : t.WF anc) (hends : t.Ends g)
+    (hcomp : ∀ e, e < g.ne → ∀ x, g.Inc e x → x ∈ t.verts → e ∈ t.edges)
     (hnd : (anc ++ t.verts).Nodup) (hanc : ∀ a ∈ anc, a < g.nv) (hvlt : ∀ v ∈ t.verts, v < g.nv)
     (helt : ∀ e ∈ t.edges, e < g.ne) (hen : t.edges.Nodup) (hsz : s.stackVerts.size = g.nv)
     (hsvk : ∀ k, k < d → anc[k]? = some s.stackVerts[k]!) (hσn : σ.Nodup) (hat : PostAt σ n t.edgePostorder)
     (hpath : ∀ v outs, t = .node v outs → AncPath g σ (n + t.edgePostorder.length) (anc ++ [v])) :
     CsTree σ n t d s :=
-  dsTree σ n t d s g anc hT hd hwf hends hnd hanc hvlt helt hen hsz hsvk hσn hat hpath
+  dsTree σ n t d s g anc (fun _ => False) hT hd hwf hends
+    (fun e he x hx hxt => .inl (hcomp e he x hx hxt)) (fun _ h => h.elim)
+    hnd hanc hvlt helt hen hsz hsvk hσn hat hpath
 
 theorem forest_closeInv {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < g.ne) :
     ∀ forest pre n s, RootState g pre s → s.RangesInv σ n 0 → ForestOK g (pre ++ forest) →
-      (∀ t ∈ forest, t.WF []) → (∀ t ∈ forest, t.Ends g) → RootsCover σ n forest s →
+      (∀ t ∈ forest, t.WF []) → (∀ t ∈ forest, t.Ends g) →
+      (∀ t ∈ forest, ∀ e, e < g.ne → ∀ x, g.Inc e x → x ∈ t.verts → e ∈ t.edges) →
+      RootsCover σ n forest s →
       PostAt σ n (edgePostorderForest forest) → s.CloseInv →
       wp (walkForest forest) (fun _ s' => s'.CloseInv) s
-  | [], _, _, _, _, _, _, _, _, _, _, hcl => by simpa [walkForest, wp_pure] using hcl
-  | t :: rest, pre, n, s, h, hr, hf, hwf, hends, hc, hat, hcl => by
-    have hb := h.book hf (hwf t (by simp)) (hends t (by simp))
+  | [], _, _, _, _, _, _, _, _, _, _, _, hcl => by simpa [walkForest, wp_pure] using hcl
+  | t :: rest, pre, n, s, h, hr, hf, hwf, hends, hcomp, hc, hat, hcl => by
+    have hb := h.book hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     have hg := gbTree t 0 s hb
     have hi : ∀ v outs, t = .node v outs →
         ({ s with stackVerts := s.stackVerts.set! 0 v } : WalkState).RangesInv σ n 0 :=
@@ -541,6 +625,7 @@ theorem forest_closeInv {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ : ∀ 
     have hrg := rgTree σ n t 0 s hi h.shape hnd hσ' hg hb hsched
     have hcs : CsTree σ n t 0 s :=
       csTree_of_dfs (anc := []) t 0 s h.place.types rfl (hwf t (by simp)) (hends t (by simp))
+        (hcomp t (by simp))
         (by simpa using (RootState.hvn hf).1) (by simp) (RootState.hvlt hf) (RootState.helt hf)
         (RootState.hen hf).1 h.sv (fun k hk => absurd hk (Nat.not_lt_zero _)) hnd hat'.left
         (fun v outs _ k hk => absurd hk (by simp))
@@ -554,7 +639,7 @@ theorem forest_closeInv {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ : ∀ 
       (by rw [h.sd, ← h.g_eq]; exact hnv)
     have hp := (walk_place_aux g).1 t 0 _ _ s h.place (RootState.hvlt hf) (RootState.helt hf)
       (RootState.hvn hf).1 (RootState.hen hf).1 (RootState.hPv hf) (RootState.hPe hf)
-    have hst := h.step hf (hwf t (by simp)) (hends t (by simp))
+    have hst := h.step hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     show wp ((walkTree t 0 >>= fun _ => popTstack >>= fun top =>
       modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }) >>= fun _ => walkForest rest) _ s
     simp only [wp_bind]
@@ -569,18 +654,20 @@ theorem forest_closeInv {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ : ∀ 
       (wp_and hrpop (wp_and hst (wp_and hc hclpop))) fun _ s₂ ⟨hr₂, hs₂, hc₂, hcl₂⟩ =>
       forest_closeInv hnd hσ rest (pre ++ [t]) (n + t.edgePostorder.length) s₂ hs₂ hr₂
         (by simpa using hf) (fun t' ht' => hwf t' (by simp [ht']))
-        (fun t' ht' => hends t' (by simp [ht'])) hc₂ hat'.right hcl₂
+        (fun t' ht' => hends t' (by simp [ht'])) (fun t' ht' => hcomp t' (by simp [ht'])) hc₂ hat'.right hcl₂
 
 /-- `CloseInv` for the walk of a DFS forest, from `RootsCover` (the range-side schedule). -/
 theorem walk_closeInv' (g : Graph) (tern : Bool) (forest : List DfsTree)
     (hf : ForestOK g forest) (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g)
+    (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges)
     (hc : RootsCover (edgePostorderForest forest) 0 forest (WalkState.init g tern)) :
     (g.walk tern forest).CloseInv := by
   have hnd := DfsData.edgePostorderForest_perm.nodup_iff.2 hf.edges_nodup
   have hσ : ∀ e ∈ edgePostorderForest forest, e < g.ne :=
     fun e he => hf.edges_lt e (DfsData.edgePostorderForest_perm.subset he)
   have h := forest_closeInv hnd hσ forest [] 0 (WalkState.init g tern)
-    (rootState_init g tern) (init_rangesInv g tern hnd) (by simpa using hf) hwf hends hc
+    (rootState_init g tern) (init_rangesInv g tern hnd) (by simpa using hf) hwf hends
+    (fun t ht => comp_of_forest hf hwf hends hecov ht) hc
     ⟨[], [], rfl, by simp⟩ (init_closeInv g tern)
   simpa only [wp, Graph.walk] using h
 

@@ -391,6 +391,7 @@ structure CloseCtx (σ : List Nat) (n D curV d : Nat) (o : DfsOut) (origTstack :
     Items.PairEq (s.stackVerts[k]!, s.stackVerts[k + 1]!) s.g.edges[e]!
   dest_edge : o.cls.isTree = true → o.cls.lowval d < d →
     ∃ e, e < s.g.ne ∧ e ≠ o.e ∧ s.g.Inc e o.dest
+  dest_edges : o.cls.isTree = true → ∀ e, e < s.g.ne → s.g.Inc e o.dest → subEdges o e
   dest_lt : o.dest < s.g.nv
   /-- Boundary (`d ≤ lowval`) facts the ear layer does not export: a self-loop returns to `curV`;
   the popped block entry holds exactly the child's vertex item; at a component edge the
@@ -1234,14 +1235,6 @@ theorem CloseInv.vertex_append' (h : s.CloseInv) (hs : Shape s) (v e : Nat) (hv 
       exact h.closed c (cnt_lt_size hs hpos) (Or.inr hpos)
     · obtain rfl := List.mem_singleton.mp hc; exact hq
 
-theorem eq_of_inc_pairEq {g : Graph} {e a b v : Nat} (hp : Items.PairEq (a, b) g.edges[e]!)
-    (hv : g.Inc e v) : v = a ∨ v = b := by
-  have hv' : (g.edges[e]!).1 = v ∨ (g.edges[e]!).2 = v := hv
-  generalize g.edges[e]! = q at hp hv'
-  obtain ⟨x, y⟩ := q
-  simp only [Items.PairEq, Prod.mk.injEq] at hp hv'
-  omega
-
 theorem CloseCtx.ends_tree (hc : CloseCtx σ n D curV d o origTstack hasVert s)
     (hT : o.cls.isTree = true) : Items.PairEq (o.dest, curV) s.g.edges[o.e]! := by
   obtain ⟨e, cls, child, rfl⟩ := hc.book.tree.mp hT
@@ -1426,7 +1419,7 @@ theorem finishBoundary_closeAt (hc : CloseCtx σ n D curV d o origTstack hasVert
         intro e' he' hinc
         by_cases heq : e' = o.e
         · exact Or.inl heq
-        · obtain ⟨t', ht', hte⟩ := hE.sub_cover e' he' heq (hE.dest_edges hT e' he' hinc)
+        · obtain ⟨t', ht', hte⟩ := hE.sub_cover e' he' heq (hc.dest_edges hT e' he' hinc)
           rw [hsub, List.mem_singleton] at ht'
           exact Or.inr (ht' ▸ hte)
       have hatt : ∀ v, Items.Att s.g items₅ (edgeItem s.g o.e) v → v = curV := by
@@ -1572,7 +1565,7 @@ theorem finishBoundary_closeAt (hc : CloseCtx σ n D curV d o origTstack hasVert
         intro e' he' hinc
         by_cases heq : e' = o.e
         · exact Or.inl heq
-        · obtain ⟨t', ht', hte⟩ := hE.sub_cover e' he' heq (hE.dest_edges hT e' he' hinc)
+        · obtain ⟨t', ht', hte⟩ := hE.sub_cover e' he' heq (hc.dest_edges hT e' he' hinc)
           rw [hsub, List.mem_cons, List.mem_singleton] at ht'
           rcases ht' with rfl | rfl
           · exact Or.inr (Or.inl hte)
