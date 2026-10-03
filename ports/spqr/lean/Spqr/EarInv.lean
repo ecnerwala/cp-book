@@ -266,6 +266,11 @@ structure EarFinish (curV d : Nat) (o : DfsOut) (hasVert : Bool) (sub base : Lis
           vy.edges (feS₂ d o s).g (feS₂ d o s).items e)
   /-- Loop 2 read after loop 1 (`EarLate`), and the stack after loops 1–2 (`EarClose`). -/
   late : o.cls.isTree = true → o.cls.lowval d < d → ∃ c₀ R, EarLate d (feS₁ d o s) c₀ R
+  /-- The bottom entry of the stack after loop 1 was opened no later than `curV`'s first back edge
+  (`Inv2` of `FinishGuards`): a `base` entry predates the subtree, and the chain bottom's vertex
+  entry predates every back edge of the subtree. -/
+  late_fo : o.cls.isTree = true → o.cls.lowval d < d →
+    ∀ e ∈ (feS₁ d o s).tstack.getLast?, e.firstIdx ≤ (feS₁ d o s).firstOccurrence[d]!
   close : o.cls.isTree = true → o.cls.lowval d < d →
     ∃ c mid py vy, EarClose curV d (o.cls.lowval d) o hasVert base s (feS₂ d o s) c mid py vy
   /-- The open path: `stackVerts[d] = curV`, `stackVerts[d+1]` is the child (not on the path up to

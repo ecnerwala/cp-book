@@ -255,6 +255,9 @@ def closeCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : Wa
     if !pairwiseDisjB s₁ s₁.tstack then out := bad₁ "late_disj" "" :: out
     let fo := s₁.firstOccurrence[d]!
     if fo < c₀.firstIdx then out := lateWalk s₁ (d+1) fo bad₁ c₀ R ++ out
+    match s₁.tstack.getLast? with
+    | some e => if fo < e.firstIdx then out := bad₁ "late_fo" (showT e) :: out
+    | none => pure ()
   -- `EarClose` at `feS₂`
   let s₂ := WalkState.feS₂ d o s
   let bad₂ (k : String) (info : String) : V :=
