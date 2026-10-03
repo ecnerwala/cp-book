@@ -1762,6 +1762,29 @@ single-edge/star/self-loop/isolated-vertices cases, with zero violations.
 The capped-node-child case of Q still needs its cofacial contract audited;
 these endpoint corrections do not claim that Q's current statement is sufficient.
 
+**Cofacial gap (kernel-checked).** `PlanarEmbedFaceCounterexample.lean` now
+exhibits the remaining obstruction on three parallel edges. The literal tree's
+printed representation matches the executable output. Its P child has two real
+edges and the planar rotation `[5,4,7,6,1,0,3,2]`. The bad exposed row is
+`[8,5,10,7]`: both pairs have the correct endpoint and direction and are facing
+pairs of that rotation, but the local slot-0 and slot-2 ends are `0` and `2`, in
+different face orbits. `badFaceState_before` proves the entire current `GluedUpTo`
+precondition; `badFaceState_after` proves failure even of `GluedPieces` after Q.
+The forced closed rotation then has two face orbits instead of the six required
+by Euler's formula. `doubleRot_not_cofacial` proves the boundary obstruction.
+All four lemmas have standard axioms only.
+
+The needed restatement is: for each **maximal capped piece**, its planar witness
+`ρ` in `GluedUpTo.piece` must additionally satisfy
+`ρ.SameFaceOrbit la lc`, where `loc a = some la`, `loc c = some lc`, and `a`, `c`
+are slots 0 and 2. This must refer to the same `ρ` that agrees with `rotAdj` and
+the two facing pairs, not a separately existential embedding. The extended
+`check_piece_sep` closes both boundary pairs, localizes the rotation, and checks
+this condition on each maximal capped piece; seeds 0–300 and the four tiny cases
+pass. **This restatement is not yet threaded through the Lean invariant or the
+F/V/leaf proofs.** Q/node remain admitted, and the current Q statement remains
+insufficient. Preserve this cofacial information before attempting their proofs.
+
 `glued_root` is proved. `edgesBelow 0` is a permutation of `range t.ne`, rather
 than the identity enumeration claimed by its old docstring. Each item's piece is
 included in its parent's by `edgesBelow_eq`; induction along the decreasing parent
@@ -1830,6 +1853,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `glued_root` | `PlanarSpec.lean` | **proved**, `sorryAx` only through accepted `walk_items_wf` via `spqrTree_childShape` |
 | `glued_root_of`, `edgesBelow_subset_root`, `mem_edgesBelow_root_iff`, `edgesBelow_root_perm`, `pieceBelow_root_perm` | `PlanarEmbedRoot.lean` | **proved** (standard axioms) |
 | `IsPlanarEmbedding.reindex`, `graphCounts_congr`, `Piece.loc_xor` | `Proofs/PlanarReindex.lean`, `Proofs/PieceLoc.lean` | **proved** (standard axioms) |
+| `doubleRot_planar`, `badFaceState_before`, `badFaceState_after`, `doubleRot_not_cofacial` | `Proofs/PlanarEmbedFaceCounterexample.lean` | **proved** (standard axioms); necessary cofacial correction identified, integration pending |
 | `planarEmbed_sound` | `PlanarSpec.lean` | proved from `gluedUpTo_planarEmbed` (with `WF`/`ChildShape` of `g.planarTree …` from `spqrTree_wf'`/`spqrTree_childShape` via `planarRelabel_proj`, hence the `g.WF`/`OrderOK` hypotheses) + `glued_root` |
 | `spqrTree_planar` (`→` from `planarEmbed_sound`; `←` needs completeness + skeletons are minors of `g`) | `PlanarSpec.lean` | sorry |
 
