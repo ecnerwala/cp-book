@@ -15,7 +15,7 @@ entry has no edges and no pieces: `EntryR.vert`).
 The content-carrying blocks live in `Proofs/RInvBack.lean` (the back-edge branch of
 `finishEdge_rInvTop`) and `Proofs/RInvTree.lean` (the tree-edge branch: Loop 1 positionally,
 Loop 2, `closeVert` and the P-check below the top; the `EntryR` of the entry built on top is the
-admitted `finishEdge_tree_top_settled_first`), and `loop1_rBranch` below admits the stack shape at
+admitted `finishEdge_tree_top_settled_first`), and `loop1_rBranch_content` below admits the content at
 Loop 1's R branch. `WalkTreeRReturnSpec` states the provisional-return
 obligation. `loop1_r_threeConnected` combines the last admission with `RBranch.threeConnected`.
 -/
@@ -373,6 +373,26 @@ theorem closeEars_iter_step {D v nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' D
 
 /-! ### Admitted content lemmas (PROOF.md §4.5, walk side) -/
 
+/-- The stack shape at an iterate of Loop 1 where `loop1Type` answers `.R`: two entries on top,
+`nxt` topping out exactly at `d` (loop guard and the non-`S` answer) and starting elsewhere than
+`cur` (the non-`P` answer). -/
+theorem loop1_r_shape {d : Nat} {edgeDir : Bool}
+    (hk : result (loop1Cond d) s = true) (hty : l1Ty d edgeDir s = .R) :
+    ∃ cur nxt rest, s.tstack = cur :: nxt :: rest ∧ nxt.topDepth = d ∧ nxt.vStart ≠ cur.vStart := by
+  have hc : (decide (s.tstack.length ≥ 2) && decide (s.tstack.tail.head!.topDepth ≥ d)) = true := hk
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at hc
+  match hts : s.tstack with
+  | [] | [_] => rw [hts] at hc; simp at hc
+  | cur :: nxt :: rest =>
+    rw [hts] at hc
+    have hty' : ((loop1Type d edgeDir).run s).1 = .R := hty
+    rw [loop1Type_run] at hty'
+    simp only [nxtE, curE, hts, List.tail_cons, List.head!_cons] at hty'
+    split_ifs at hty' with hgt heq
+    all_goals try simp at hty'
+    refine ⟨cur, nxt, rest, rfl, ?_, fun h => heq (beq_iff_eq.2 h)⟩
+    have := hc.2; simp only [List.tail_cons, List.head!_cons] at this; omega
+
 /-- Admitted (Lemma 4.3 at the R branch): during `closeEars` of `finishEdge` at depth `d` for the
 tree edge `e` to the child `nxtV = stackVerts[d+1]`, every iterate of Loop 1 at which `loop1Type`
 answers `.R` has the shape `RBranch`, and its two top entries are `EntryR` and edge-disjoint
@@ -381,8 +401,24 @@ answers `.R` has the shape `RBranch`, and its two top entries are `EntryR` and e
 below do not determine which edges the entries hold, so `interior`, `proper`, `nxt_ne`, `cur_c`
 need postorder interval ownership at `ceS₁` and its preservation through the loop.
 `RTop` additionally needs saturation and its consequences for previously closed pieces.
-Only `tstack`, `cur_top`, `nxt_top`, `ne` follow from `run_loop1Cond`, `loop1Type_run` and
-the head-`topDepth` induction; the interval/saturation restatement is still open. -/
+`tstack`, `nxt_top`, `ne` are `loop1_r_shape` (from `run_loop1Cond`, `loop1Type_run`) and enter
+as hypotheses; `cur_top` needs the head-`topDepth` induction; the interval/saturation restatement
+is still open. -/
+theorem loop1_rBranch_content {D nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : Shape s)
+    (hok : CloseEarsOk D nxtV d e edgeDir s)
+    (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
+    (hc : nxtV = s.stackVerts[d + 1]!) {origTstack : Nat}
+    (hR : s.RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
+    (hk : ∀ j, j ≤ k → result (loop1Cond d) (iter (loop1Body d edgeDir) j (ceS₁ nxtV d e s)) = true)
+    (hty : l1Ty d edgeDir (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)) = .R)
+    (cur nxt : TEntry) (rest : List TEntry)
+    (hts : (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)).tstack = cur :: nxt :: rest)
+    (hnt : nxt.topDepth = d) (hne : nxt.vStart ≠ cur.vStart) :
+    (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)).RBranch d cur nxt rest ∧
+      (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)).RTop dfs cur nxt := by
+  sorry
+
+/-- `loop1_rBranch_content` with its stack shape supplied by `loop1_r_shape`. -/
 theorem loop1_rBranch {D nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : Shape s)
     (hok : CloseEarsOk D nxtV d e edgeDir s)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
@@ -392,7 +428,9 @@ theorem loop1_rBranch {D nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : 
     (hty : l1Ty d edgeDir (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)) = .R) :
     ∃ cur nxt rest, (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)).RBranch d cur nxt rest ∧
       (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)).RTop dfs cur nxt := by
-  sorry
+  obtain ⟨cur, nxt, rest, hts, hnt, hne⟩ := loop1_r_shape (hk k le_rfl) hty
+  exact ⟨cur, nxt, rest,
+    loop1_rBranch_content hi hs hok h2 hsp hrt hc hR k hk hty cur nxt rest hts hnt hne⟩
 
 /-- The R skeleton closed at any R branch of Loop 1 is 3-connected (modulo `loop1_rBranch`): the
 walk at depth `d` runs under `Inv' (d+1)` (via `Step`; `RBranch.threeConnected` itself only needs
