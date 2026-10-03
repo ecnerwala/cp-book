@@ -122,9 +122,9 @@ structure RangesInv (σ : List Nat) (n D : Nat) (s : WalkState) : Prop where
   inv : s.Inv' D
   /-- Open entries own processed edges only. -/
   processed : ∀ t ∈ s.tstack, ∀ e, e < s.g.ne → t.edges s.g s.items e → σ.idxOf e < n
-  /-- Top-down, the pieces of the entries move strictly backwards in `σ`. -/
+  /-- Every piece edge lies strictly after all edges owned by lower entries. -/
   ordered : ∀ above t below, s.tstack = above ++ t :: below → ∀ t' ∈ below,
-    ∀ e e', e < s.g.ne → e' < s.g.ne → t.piece s.g s.items e → t'.piece s.g s.items e' →
+    ∀ e e', e < s.g.ne → e' < s.g.ne → t.piece s.g s.items e → t'.edges s.g s.items e' →
       σ.idxOf e' < σ.idxOf e
   /-- An entry's piece is an interval of `σ` whose holes are edges of the entry. -/
   convex : ∀ t ∈ s.tstack, ∀ a b c, a ≤ b → b ≤ c → c < σ.length →
@@ -153,7 +153,7 @@ theorem RangesInv.items_congr (h : s.RangesInv σ n D) {items' : Items}
   ⟨hinv, fun t ht e he hte => h.processed t ht e he ((hE t ht e).1 hte),
    fun above t below hs t' ht' e e' he he' hp hp' =>
      h.ordered above t below hs t' ht' e e' he he' ((hP t (by rw [hs]; simp) e).1 hp)
-       ((hP t' (by rw [hs]; simp [ht']) e').1 hp'),
+       ((hE t' (by rw [hs]; simp [ht']) e').1 hp'),
    fun t ht a b c hab hbc hc hpa hpc =>
      (hE t ht _).2 (h.convex t ht a b c hab hbc hc ((hP t ht _).1 hpa) ((hP t ht _).1 hpc)),
    hC⟩
@@ -235,7 +235,7 @@ theorem RangesInv.pushEdge (vStart topDepth e : Nat) (h : s.RangesInv σ n D) (h
     cases above with
     | nil =>
       simp only [List.nil_append, List.cons.injEq] at hs; obtain ⟨rfl, rfl⟩ := hs
-      rw [(hP e₁).1 hp, hidx]; exact h.processed t' ht' e₂ he₂ hp'.edges
+      rw [(hP e₁).1 hp, hidx]; exact h.processed t' ht' e₂ he₂ hp'
     | cons a above =>
       simp only [List.cons_append, List.cons.injEq] at hs; obtain ⟨rfl, hs⟩ := hs
       exact h.ordered above t below hs t' ht' e₁ e₂ he₁ he₂ hp hp'
@@ -291,7 +291,7 @@ theorem RangesInv.mergeTop (cur nxt : TEntry) (rest : List TEntry) (hs : s.tstac
       rcases (hP _).1 hpa with ha | ha <;> rcases (hP _).1 hpc with hc' | hc'
       · exact .inl (h.convex cur hcur a b c hab hbc hc ha hc')
       · have := h.ordered [] cur (nxt :: rest) hs nxt (List.mem_cons_self ..) _ _
-          (getElem!_lt hσ (s := s) (by omega : a < σ.length)) (getElem!_lt hσ (s := s) hc) ha hc'
+          (getElem!_lt hσ (s := s) (by omega : a < σ.length)) (getElem!_lt hσ (s := s) hc) ha hc'.edges
         rw [idxOf_getElem! hnd (by omega : a < σ.length), idxOf_getElem! hnd hc] at this; omega
       · exact hadj a b c hab hbc hc ha hc'
       · exact .inr (h.convex nxt hnxt a b c hab hbc hc ha hc')
@@ -382,13 +382,13 @@ theorem RangesInv.finishTop (item : ItemId) (t : TEntry) (rest : List TEntry)
     cases above with
     | nil =>
       simp only [List.nil_append, List.cons.injEq] at hs'; obtain ⟨rfl, rfl⟩ := hs'
-      exact h.ordered [] t rest hs u' hu' e e' he he' (hP' e he hp) ((hPu u' hu' e').1 hp')
+      exact h.ordered [] t rest hs u' hu' e e' he he' (hP' e he hp) ((hEu u' hu' e').1 hp')
     | cons a above =>
       simp only [List.cons_append, List.cons.injEq] at hs'; obtain ⟨rfl, hs'⟩ := hs'
       have hu : u ∈ rest := by rw [hs']; simp
       have hu'' : u' ∈ rest := by rw [hs']; simp [hu']
       exact h.ordered (t :: above) u below (by rw [hs, hs']; rfl) u' hu' e e' he he'
-        ((hPu u hu e).1 hp) ((hPu u' hu'' e').1 hp')
+        ((hPu u hu e).1 hp) ((hEu u' hu'' e').1 hp')
   · intro u hu a b c hab hbc hc hpa hpc
     have hσa := getElem!_lt hσ (s := s) (by omega : a < σ.length)
     have hσb := getElem!_lt hσ (s := s) (by omega : b < σ.length)

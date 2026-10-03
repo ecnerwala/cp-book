@@ -1021,8 +1021,8 @@ therefore carry `g.WF`/`OrderOK` like `spqrTree_wf'`.
 after the first `n` edges of `σ` at depth `D`: `inv : Inv' D` (the attachment half, `WalkSpec.lean`;
 there is no "≤ 2 terminals" claim — an open chain is attached at every path vertex between its
 `topDepth` and `D`, and at `vStart`s of entries above it, exactly `Term'`), `processed` (entries own
-processed edges only), `ordered` (top-down, the entries' *piece* edges move strictly backwards in
-`σ`: laminar consecutive intervals; `TEntry.piece` = below a non-V span item without passing a V
+processed edges only), `ordered` (each entry's *piece* edges lie strictly after all edges of lower
+entries in `σ`; `TEntry.piece` = below a non-V span item without passing a V
 item), `convex` (an entry's piece is an interval of `σ` whose holes are *edges of the entry* — blocks
 hanging at its interior vertices), `closed` (`Ranges.convex` for every allocated node item). It is
 schedule-agnostic (no ear, no merge order). Preservation, all standard axioms:
@@ -1031,7 +1031,8 @@ schedule-agnostic (no ear, no merge order). Preservation, all standard axioms:
 merged entries are adjacent in `σ` — every edge strictly between a piece edge of `nxt` and one of
 `cur` is an edge of one of them), `finishTop` (as `Inv'.finishTop`: the closed item takes over the
 entry's edges and a subset of its pieces, so `closed` for it is the entry's `convex`). The
-`finishEdge`/`walkTree` induction (and `walk_ranges` from the final state) stays admitted.
+`finishEdge`/`walkTree` preservation is proved under its range-side site hypotheses;
+their instantiation for the real walk and `walk_ranges` from the final state stay admitted.
 Checked at every `finishEdge` by `checks/RangesInvCheck.lean` (`lake env lean`; reimplements
 `walkTree` around `finishEdge`, asserts the instrumented items equal the library walk's; seeds
 0..400 × tern, tiny graphs): `processed`, `ordered`, `convex`, `closed` 0 violations.
@@ -1096,7 +1097,14 @@ under `FinishOk` + `FinishAdj` (`RgStep.loop`/`loop1Body`/`closeEars`/`mergeLate
 `GuardsTree`/`BookTree` and the range-side hypotheses `RgTree` (`σ[n]? = some o.e` at every edge,
 `FinishR` = `FinishAdj` at returning edges / `BoundaryAdj` at block boundaries) the state after
 `walkTree t d` satisfies `RangesInv σ (n + t.edgePostorder.length) d`. The block-boundary case
-`finishBoundary_rangesInv` is a named admission. `ranges_of_rangesInv` (standard axioms):
+`finishBoundary_rangesInv` is proved under `BoundaryOk` and the unchanged `BoundaryAdj`:
+`RangesBoundary.lean` transports ranges through leaf endpoint writes, stack pops, and free-root
+child writes; `Items.CapRange`/`cap_convex` fill the popped spans up to the pending edge.
+Both it and `walkTree_rangesInv` print only `[propext, Classical.choice, Quot.sound]`.
+The stronger `ordered` clause (pieces versus all lower edges, not just lower pieces) is preserved
+by all the same local lemmas and passes seeds 0..400 inclusive × both modes. The checker also
+checks `MergeAdj` at the actual loop-1/2/3, vertex, P, and tail merge sites, with zero violations.
+`ranges_of_rangesInv` (standard axioms):
 `RangesInv σ n D s → WalkTyping s.g s.items → Items.CloseFacts s.g s.items → Items.Ranges s.g s.items σ`.
 Exactly two `Ranges` clauses come from the invariant: `convex` (= `closed`) and `att_vs` for the
 *allocated node items* (`Inv'.nodes`: `TwoAttached` at their `vs`; `I`/`O` leaves own no edge).

@@ -87,7 +87,7 @@ theorem RangesInv.replaceNxt (a b b' : TEntry) (rest : List TEntry) (hs : s.tsta
     | [], hs' =>
       simp only [List.nil_append, List.cons.injEq] at hs'; obtain ⟨rfl, rfl⟩ := hs'
       rcases List.mem_cons.1 hu' with rfl | hu'
-      · exact h.ordered [] a (b :: rest) hs b (by simp) e e' he he' hp ((hP e' he').1 hp')
+      · exact h.ordered [] a (b :: rest) hs b (by simp) e e' he he' hp ((hE e' he').1 hp')
       · exact h.ordered [] a (b :: rest) hs u' (by simp [hu']) e e' he he' hp hp'
     | [_], hs' =>
       simp only [List.cons_append, List.nil_append, List.cons.injEq] at hs'; obtain ⟨rfl, rfl, rfl⟩ := hs'

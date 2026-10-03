@@ -1,6 +1,7 @@
 import Spqr.Walk
 import Spqr.SepPair
 import Spqr.Ranges
+import Spqr.RangesTree
 /-!
 # Empirical check of `WalkState.RangesInv` (`Spqr/RangesInv.lean`)
 
@@ -11,7 +12,7 @@ and, right before every `finishEdge curV d o origTstack hasVert`, evaluates each
 so far are exactly `σ.take n`), and `Saturated k s` with `k = tstack.length - origTstack` (the
 `Frontier` split).
 -/
-open Spqr WalkM
+open Spqr WalkM WalkState
 instance : Inhabited Spqr.DfsTree := ⟨.node 0 []⟩
 instance : Inhabited Spqr.DfsOut := ⟨.back 0 0 .selfLoop⟩
 
@@ -43,6 +44,62 @@ structure V where
   info : String
 deriving Repr
 
+def mergeSites (cond : WalkM Bool) (body : WalkM Unit) (s : WalkState) : List WalkState :=
+  go (s.tstack.length + 1) s
+where
+  go : Nat → WalkState → List WalkState
+    | 0, _ => []
+    | k + 1, s => if result cond s then s :: go k (after body s) else []
+
+def adjacencySites (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
+    List (String × WalkState) := Id.run do
+  let lv := o.cls.lowval d
+  if d ≤ lv then return []
+  let mut sites := []
+  let mut rest := feBack curV lv d o s
+  let mut single := true
+  if o.cls.isTree then
+    let edgeDir := s.stackDir[d]!
+    for st in mergeSites (loop1Cond d) (loop1Body d edgeDir) (ceS₁ o.dest d o.e (feS₀ d o s)) do
+      if (nxtE st).topDepth > d then sites := sites ++ [("loop1.S", st)]
+      sites := sites ++ [("loop1.close", l1S₂ d edgeDir st)]
+    let st := feS₁ d o s
+    if (curE st).firstIdx > st.firstOccurrence[d]! then
+      sites := sites ++ (mergeSites (loop2Cond st.firstOccurrence[d]!) mergeTstackTops st).map ("loop2", ·)
+    let st := feS₂ d o s
+    let b := feSingle d o s
+    if hv then
+      if !o.cls.isType1 then
+        sites := sites ++ (mergeSites (loop3Cond orig) mergeTstackTops st).map ("loop3", ·)
+      sites := sites ++ [("vertex.1", cvS₂ o.cls.isType1 orig b st), ("vertex.2", cvS₃ o.cls.isType1 orig b st)]
+      rest := feS₃ curV d o orig s
+      single := feB₃ curV d o orig s
+    else
+      rest := st
+      single := b
+  if result (condP curV lv o.cls.isType1) rest then
+    sites := sites ++ [("P", after (maybeUnwrapNxt .P) rest)]
+  if !hv && !single then
+    sites := sites ++ [("tail", after (pushVertTstack curV d) (after (finishP curV lv o.cls.isType1) rest))]
+  return sites
+
+def checkAdj (seed : Nat) (σ : List Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool)
+    (s : WalkState) : List V := Id.run do
+  let mut out := []
+  for (site, st) in adjacencySites curV d o orig hv s do
+    let cur := st.tstack.head!
+    let nxt := st.tstack.tail.head!
+    let low := ((entryPiece st nxt).map σ.idxOf).min?
+    let high := ((entryPiece st cur).map σ.idxOf).max?
+    match low, high with
+    | some lo, some hi =>
+      for b in List.range' lo (hi + 1 - lo) do
+        if !(entryEdges st cur).contains σ[b]! && !(entryEdges st nxt).contains σ[b]! then
+          out := ⟨seed, s.ternarize, curV, d, s!"e={o.e} lv={o.cls.lowval d}", "merge_adj",
+            s!"site={site} gap={σ[b]!} orig={orig} σ={σ} stack={st.tstack.map showT}"⟩ :: out
+    | _, _ => pure ()
+  return out
+
 def check (seed : Nat) (σ : List Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (s : WalkState) : List V := Id.run do
   let pos := fun e => σ.idxOf e
   let n := pos o.e
@@ -73,7 +130,7 @@ def check (seed : Nat) (σ : List Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) 
   let rec ord : List TEntry → List V
     | [] => []
     | t :: rest =>
-      (rest.flatMap fun t' => (P t).flatMap fun e => (P t').filterMap fun e' =>
+      (rest.flatMap fun t' => (P t).flatMap fun e => (E t').filterMap fun e' =>
         if pos e' < pos e then none else some (bad "ordered" s!"{showT t} e={e} below {showT t'} e'={e'}")) ++ ord rest
   out := ord stk ++ out
   -- open convexity (holes are nobody's piece); candidate: holes are below the entry
@@ -208,7 +265,7 @@ partial def iOut (seed : Nat) (σ : List Nat) (v d : Nat) (o : DfsOut) (hv : Boo
   let (s, vs) := match o with
     | .tree _ _ child => iTree seed σ child (d+1) { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
     | .back .. => (s, [])
-  let vs := vs ++ check seed σ v d o orig s
+  let vs := vs ++ check seed σ v d o orig s ++ checkAdj seed σ v d o orig hv s
   let (hv', s) := (finishEdge v d o orig hv).run s
   (hv', s, vs)
 end
@@ -266,4 +323,4 @@ def summarize (lo hi : Nat) : IO Unit := do
   IO.println s!"required failures: {req.foldl (fun a (_, n) => a + n) 0} {req}"
   IO.println s!"candidate observations (not fields of RangesInv, see PROOF.md §4.6): {counts.filter fun (k, _) => k.startsWith "cand_"}"
   for (_, l) in shown do IO.println l
-#eval summarize 0 400
+#eval summarize 0 401
