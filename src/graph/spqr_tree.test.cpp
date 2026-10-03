@@ -485,6 +485,52 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						// Worse embeddings can only have larger Euler characteristic
 						assert(num_face_cycles >= expected_face_cycles);
 						REQUIRE_FAST(num_face_cycles == expected_face_cycles);
+
+						// Parallel edges must be homotopic: all copies of an edge are consecutive in the rotation at both endpoints,
+						// and consecutive copies bound 2-gon faces.
+						// This is needed to collapse multi-edges without changing the embedding (e.g. for straight-line drawings).
+						{
+							std::vector<int> cls(E, -1);
+							std::vector<std::array<int, 2>> cls_ends;
+							std::vector<int> cls_size;
+							{
+								std::vector<int> ord;
+								for (int e = 0; e < E; e++) {
+									if (is_embedded[e] && ends[e][0] != ends[e][1]) ord.push_back(e);
+								}
+								auto key = [&](int e) { return std::array{std::min(ends[e][0], ends[e][1]), std::max(ends[e][0], ends[e][1])}; };
+								std::ranges::sort(ord, {}, key);
+								for (int e : ord) {
+									if (cls_ends.empty() || cls_ends.back() != key(e)) {
+										cls_ends.push_back(key(e));
+										cls_size.push_back(0);
+									}
+									cls[e] = int(cls_ends.size()) - 1;
+									cls_size.back()++;
+								}
+							}
+							// Number of rotation neighbors outside the class, per (class, endpoint); a single run has at most 2.
+							std::vector<std::array<int, 2>> cls_exits(cls_ends.size(), {0, 0});
+							// Number of quarter-edges on 2-gon faces between two copies; each such face has 4.
+							std::vector<int> cls_bigon_qes(cls_ends.size(), 0);
+							for (int a = 0; a < 4 * E; a++) {
+								int c = cls[a >> 2];
+								if (c == -1) continue;
+								int b = pe.rot_adj[a];
+								if ((b >> 2) == (a >> 2)) continue;
+								if (cls[b >> 2] == c) {
+									if (pe.rot_adj[a ^ 3] == (b ^ 3)) cls_bigon_qes[c]++;
+								} else {
+									int v = ends[a >> 2][(a & 2) >> 1];
+									cls_exits[c][v == cls_ends[c][1]]++;
+								}
+							}
+							for (int c = 0; c < int(cls_ends.size()); c++) {
+								REQUIRE_FAST(cls_exits[c][0] <= 2);
+								REQUIRE_FAST(cls_exits[c][1] <= 2);
+								REQUIRE_FAST(cls_bigon_qes[c] >= 4 * (cls_size[c] - 1));
+							}
+						}
 					};
 					{
 						INFO("Checking partial embeddings");
