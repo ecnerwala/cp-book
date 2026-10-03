@@ -174,10 +174,42 @@ structure WalkInv (G : TreeGhost) (t : DfsTree) (d : Nat) (s : WalkState) : Prop
     StLive G.g s.items G.segs[j].1
       (openBlock G.g (G.fs.take (G.fs.length - 1 - j)) (DirsOf s (G.fs.length - 1 - j)) G.segs[j].2)
 
+/-- A fixed item (vertex/edge item or the root) outside the items of the vertices `vs` and edges
+`es`. -/
+abbrev FreshItem (g : Graph) (vs es : List Nat) (j : ItemId) : Prop :=
+  j < 1 + g.nv + g.ne ∧ (∀ v ∈ vs, j ≠ vertItem v) ∧ (∀ e ∈ es, j ≠ edgeItem g e)
+
+/-- `Keep D j` for every fixed item `j` fresh w.r.t. `vs`/`es`: the walk of those vertices/edges
+leaves every other fixed item's children untouched. -/
+def KeepF (g : Graph) (D : Nat) (vs es : List Nat) (s s' : WalkState) : Prop :=
+  ∀ j, FreshItem g vs es j → Keep D j s s'
+
+theorem FreshItem.zero (g : Graph) (vs es : List Nat) : FreshItem g vs es 0 :=
+  ⟨by show 0 < 1 + g.nv + g.ne; omega, fun w _ => (vertItem_ne_zero w).symm, fun e _ => (edgeItem_ne_zero g e).symm⟩
+
+theorem KeepF.cons_out {g : Graph} {D v : Nat} {o : DfsOut} {rest : List DfsOut} {s s₁ s₂ : WalkState}
+    (h₁ : KeepF g D (v :: o.verts) o.edges s s₁)
+    (h₂ : KeepF g D (v :: DfsOut.vertsList rest) (DfsOut.edgesList rest) s₁ s₂) :
+    KeepF g D (v :: DfsOut.vertsList (o :: rest)) (DfsOut.edgesList (o :: rest)) s s₂ := by
+  intro j ⟨hj, hv, he⟩
+  rw [DfsOut.vertsList_cons, DfsOut.vertsList_single] at hv
+  rw [DfsOut.edgesList_cons, DfsOut.edgesList_single] at he
+  refine (h₁ j ⟨hj, ?_, ?_⟩).trans (h₂ j ⟨hj, ?_, ?_⟩)
+  · intro w hw
+    rcases List.mem_cons.1 hw with rfl | hw
+    · exact hv _ (List.mem_cons_self ..)
+    · exact hv _ (List.mem_cons_of_mem _ (List.mem_append_left _ hw))
+  · exact fun e he' => he e (List.mem_append_left _ he')
+  · intro w hw
+    rcases List.mem_cons.1 hw with rfl | hw
+    · exact hv _ (List.mem_cons_self ..)
+    · exact hv _ (List.mem_cons_of_mem _ (List.mem_append_right _ hw))
+  · exact fun e he' => he e (List.mem_append_right _ he')
+
 /-- The backbone conclusion at the exit of `walkTree t d` started from `s`. -/
 structure WalkInvEnd (G : TreeGhost) (t : DfsTree) (d : Nat) (s s' : WalkState) : Prop where
   treeEnd : TreeEnd t.v d t.outs G.base G.bE G.sv G.sd s'
-  keep : Keep d 0 s s'
+  keep : KeepF G.g d t.verts t.edges s s'
   inv : s'.Inv' d
   shape : Shape s'
   ranges : RgS G.σ (G.n + t.edgePostorder.length) d s'
@@ -573,7 +605,7 @@ structure PreOut (G : TreeGhost) (B v d : Nat) (outs₀ : List DfsOut) (done : L
     (refOuts G.g v d (DirsOf s d) (done.map (·.1)) false).1
     (simBlocks G.g G.prev G.fs (DirsOf s d) ++ (refOuts G.g v d (DirsOf s d) (done.map (·.1)) false).2.1)
     hv₁ s₁
-  keep : Keep (d + 1) 0 s s₁
+  keep : ∀ j, Keep (d + 1) j s s₁
 
 namespace WalkInvOut
 
@@ -628,11 +660,10 @@ theorem walkOutPre_out (h : WalkInvOut G B v d outs₀ done (o :: rest) hasVert 
     (wp_and (walkOutPre_full h.full h.v_lt h.Pcur h.Pcur')
     (wp_and (walkOutPre_ownedD d o hasVert h.owned h.sv_d h.sts_le h.vcover)
     (wp_and hr
-    (wp_and (walkOutPre_pre s v d o hasVert hd₀ hts hR h.stPre.items hvert)
-      (keep_walkOutPre (D := d + 1) (j := 0) v d o hasVert Keep.refl)))))))))) ?_
-  rintro hv₁ s₁ ⟨⟨push, hpush, hhv, hst⟩, ⟨hi, hs⟩, ⟨hrg, -, -⟩, hc, htn, ⟨hf, -⟩, ⟨ho, hvc⟩, hr, hp, hK⟩
+    (walkOutPre_pre s v d o hasVert hd₀ hts hR h.stPre.items hvert))))))))) ?_
+  rintro hv₁ s₁ ⟨⟨push, hpush, hhv, hst⟩, ⟨hi, hs⟩, ⟨hrg, -, -⟩, hc, htn, ⟨hf, -⟩, ⟨ho, hvc⟩, hr, hp⟩
   exact ⟨push, ⟨hpush, hhv, hst, hi, hs, hrg, hc, h.canon.frame (by subst hst; rfl) (by subst hst; rfl), htn,
-    hf, ho, hvc, hr, hp, hK⟩⟩
+    hf, ho, hvc, hr, hp, fun j => by subst hst; exact Keep.frame rfl rfl (by simp) rfl (fun _ _ => rfl) rfl⟩⟩
 
 end WalkInvOut
 
@@ -716,7 +747,7 @@ theorem PreOut.child {e : Nat} {cls : OutClass} {c : Nat} {couts : List DfsOut} 
             (if cls.lowval d ≥ d then false else !s.stackDir[cls.lowval d]!))[d]!
           [vertItem v] []⟩]
       else []) ++ s.tstack := by rw [hst]; rfl
-  have hgE : s₁.g = s.g := hK₁.g
+  have hgE : s₁.g = s.g := (hK₁ 0).g
   have hitE : s₁.items = s.items := hp₁.items
   have hxd : s₁.stackDir[d]! =
       (if d ≤ cls.lowval d then false else !s.stackDir[cls.lowval d]!) := by
@@ -848,7 +879,7 @@ theorem PreOut.child {e : Nat} {cls : OutClass} {c : Nat} {couts : List DfsOut} 
         have h1 := DfsOut.heightList_le_of_mem hmem
         simp only [DfsOut.heightList, Nat.max_zero] at h1
         have h2 := h.height
-        have h3 : s₁.stackDir.size = s.stackDir.size := hK₁.sd
+        have h3 : s₁.stackDir.size = s.stackDir.size := (hK₁ 0).sd
         show d + 1 + _ ≤ s₁.stackDir.size
         omega
       tstack := by rw [segsStack_cons]; exact hts₁
@@ -1159,7 +1190,7 @@ theorem exit_true (hW : WalkInv G (.node v outs) d s)
       s.tstack.length v d outs done' [] true (G.n + (DfsOut.edgePostorderList outs).length)
       (Pushed G.g (fun i => G.P i ∨ (true = true ∧ i = vertItem v))
         (DfsOut.vertsList outs) (DfsOut.edgesList outs)) s₂)
-    (hK : Keep d 0 s s₂) :
+    (hK : KeepF G.g d (v :: DfsOut.vertsList outs) (DfsOut.edgesList outs) s s₂) :
     WalkInvEnd G (.node v outs) d s s₂ := by
   have hmap : done'.map (·.1) = outs := by simpa using h.split
   obtain ⟨new, hts₂, hR₂, -⟩ := h.stPre.read
@@ -1169,7 +1200,7 @@ theorem exit_true (hW : WalkInv G (.node v outs) d s)
   have hlc := h.live_cur true new hts₂
   rw [hmap] at hhv hR₂ hI hvs hlc
   exact {
-    keep := hK
+    keep := by simp only [DfsTree.verts, DfsTree.edges]; exact hK
     treeEnd := ⟨done', true, s₂, false, [], false, s₂.stackDir, rfl, h.ear, hmap, by simp, rfl,
       fun _ _ => rfl, fun h => absurd h Bool.false_ne_true⟩
     inv := h.inv
@@ -1212,7 +1243,7 @@ theorem exit_false (hW : WalkInv G (.node v outs) d s)
       s.tstack.length v d outs done' [] false (G.n + (DfsOut.edgePostorderList outs).length)
       (Pushed G.g (fun i => G.P i ∨ (false = true ∧ i = vertItem v))
         (DfsOut.vertsList outs) (DfsOut.edgesList outs)) s₂)
-    (hK : Keep d 0 s s₂) :
+    (hK : KeepF G.g d (v :: DfsOut.vertsList outs) (DfsOut.edgesList outs) s s₂) :
     WalkInvEnd G (.node v outs) d s
       { s₂ with
         stackDir := s₂.stackDir.set! d true,
@@ -1253,7 +1284,9 @@ theorem exit_false (hW : WalkInv G (.node v outs) d s)
     ⟨v, d, s₂.nxtEdgeIdx, setSides (getElem! (s₂.stackDir.set! d true) d) [vertItem v] []⟩
   have hd : d = G.fs.length := h.d_fs
   exact {
-    keep := hK.trans ((Keep.setStackDir d true).trans (Keep.tstack _))
+    keep := by
+      simp only [DfsTree.verts, DfsTree.edges]
+      exact fun j hj => (hK j hj).trans ((Keep.setStackDir d true).trans (Keep.tstack _))
     treeEnd := ⟨done', false, s₂, (s₂.stackDir.set! d true)[d]!, _, true, s₂.stackDir.set! d true, rfl,
       h.ear, hmap, by simp, rfl, fun k hk => getElem!_set!_ne' s₂.stackDir d k true (Nat.ne_of_lt hk),
       fun _ hd => getElem!_set!_self' _ _ _ (by simpa using hd)⟩
@@ -1335,7 +1368,8 @@ abbrev BbTree (t : DfsTree) (d : Nat) : Prop :=
 abbrev BbOuts (v d : Nat) (rest : List DfsOut) (hasVert : Bool) : Prop :=
   ∀ (G : TreeGhost) (B : Nat) (outs₀ : List DfsOut) (done : List (DfsOut × Bool)) (n : Nat)
     (P : ItemId → Prop) (s : WalkState), WalkInvOut G B v d outs₀ done rest hasVert n P s →
-    wp (walkOuts v d rest hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧ Keep (d + 1) 0 s s' ∧
+    wp (walkOuts v d rest hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧
+      KeepF G.g (d + 1) (v :: DfsOut.vertsList rest) (DfsOut.edgesList rest) s s' ∧
       ∃ done', WalkInvOut G B v d outs₀ done' [] hv' (n + (DfsOut.edgePostorderList rest).length)
         (Pushed G.g (fun i => P i ∨ (hv' = true ∧ i = vertItem v))
           (DfsOut.vertsList rest) (DfsOut.edgesList rest)) s') s
@@ -1345,7 +1379,8 @@ abbrev BbOut (v d : Nat) (o : DfsOut) (hasVert : Bool) : Prop :=
   ∀ (G : TreeGhost) (B : Nat) (outs₀ : List DfsOut) (done : List (DfsOut × Bool)) (rest : List DfsOut)
     (n : Nat) (P : ItemId → Prop) (s : WalkState),
     WalkInvOut G B v d outs₀ done (o :: rest) hasVert n P s →
-    wp (walkOut v d o hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧ Keep (d + 1) 0 s s' ∧
+    wp (walkOut v d o hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧
+      KeepF G.g (d + 1) (v :: o.verts) o.edges s s' ∧
       ∃ hvF, WalkInvOut G B v d outs₀ (done ++ [(o, hvF)]) rest hv' (n + o.block.length)
         (Pushed G.g (fun i => P i ∨ (hv' = true ∧ i = vertItem v)) o.verts o.edges) s') s
 
@@ -1358,11 +1393,12 @@ theorem bbTree_node (v : Nat) (outs : List DfsOut) (d : Nat) (ih : BbOuts v d ou
   intro G s h
   unfold walkTree
   simp only [wp_bind, wp_modify]
-  have hK₀ : Keep d 0 s { s with stackVerts := s.stackVerts.set! d v } :=
+  have hK₀ : ∀ j, Keep d j s { s with stackVerts := s.stackVerts.set! d v } := fun _ =>
     ⟨rfl, by simp, rfl, rfl, fun k hk => Array.getElem!_set!_ne _ _ _ _ (Nat.ne_of_gt hk), Nat.le_refl _,
       fun _ _ => rfl, rfl⟩
   refine wp_mono _ (ih _ _ _ _ _ _ _ h.toOut) fun hv' s₂ ⟨_, hK, done', h₂⟩ => ?_
-  have hK' := hK₀.trans (hK.mono (Nat.le_succ d))
+  have hK' : KeepF G.g d (v :: DfsOut.vertsList outs) (DfsOut.edgesList outs) s s₂ :=
+    fun j hj => (hK₀ j).trans ((hK j hj).mono (Nat.le_succ d))
   cases hv'
   · simp only [Bool.false_eq_true, ↓reduceIte, wp_bind, wp_setStackDir, wp_pushVertTstack]
     exact h₂.exit_false h hK'
@@ -1373,7 +1409,7 @@ theorem bbTree_node (v : Nat) (outs : List DfsOut) (d : Nat) (ih : BbOuts v d ou
 theorem bbOuts_nil (v d : Nat) (hasVert : Bool) : BbOuts v d [] hasVert := by
   intro G B outs₀ done n P s h
   unfold walkOuts; simp only [wp_pure]
-  refine ⟨fun h => h, Keep.refl, done, h.congr (by simp [DfsOut.edgePostorderList]) fun i => ?_⟩
+  refine ⟨fun h => h, fun _ _ => Keep.refl, done, h.congr (by simp [DfsOut.edgePostorderList]) fun i => ?_⟩
   constructor
   · exact fun hp => Or.inl (Or.inl hp)
   · rintro ((hp | ⟨h1, rfl⟩) | ⟨w, hw, _⟩ | ⟨e, he, _⟩)
@@ -1390,7 +1426,7 @@ theorem bbOuts_cons (v d : Nat) (hasVert : Bool) (o : DfsOut) (rest : List DfsOu
   unfold walkOuts; simp only [wp_bind]
   refine wp_mono _ (ih₁ G B outs₀ done rest n P s h) fun hv₁ s₁ ⟨hhv₁, hK₁, hvF, h₁⟩ => ?_
   refine wp_mono _ (ih₂ hv₁ G B outs₀ _ _ _ s₁ h₁) fun hv' s' ⟨hhv', hK', done', h'⟩ =>
-    ⟨fun h0 => hhv' (hhv₁ h0), hK₁.trans hK', done', h'.congr ?_ fun i => ?_⟩
+    ⟨fun h0 => hhv' (hhv₁ h0), hK₁.cons_out hK', done', h'.congr ?_ fun i => ?_⟩
   · rw [DfsOut.edgePostorderList_cons, List.length_append, Nat.add_assoc]
   · rw [DfsOut.vertsList_cons, DfsOut.vertsList_single, DfsOut.edgesList_cons, DfsOut.edgesList_single]
     constructor

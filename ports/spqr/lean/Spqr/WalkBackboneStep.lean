@@ -56,12 +56,14 @@ theorem finish_core {σ : List Nat} {g : Graph} {n D m : Nat} {hv₁ : Bool} {s�
     (hsts : ∀ k, k ≤ d → sts[k]! ≤ sts[d]!) (hstn : sts[d]! ≤ n)
     (horigs : ∀ k, k ≤ d → origs[k]! ≤ origs[d]!) (horig : origs[d]! ≤ m)
     (hpath : ∀ k, k < d → s₃.stackVerts[k]! ≠ v) (hsvlt : ∀ k, k ≤ d → s₃.stackVerts[k]! < s₃.g.nv)
-    (hT : Types g s₀) (hK : Keep (d + 1) 0 s₀ s₃) :
+    (hT : Types g s₀) {J : ItemId → Prop}
+    (hJ : ∀ j, J j → j < 1 + g.nv + g.ne ∧ vertItem v ≠ j ∧ edgeItem g o.e ≠ j)
+    (hK : ∀ j, J j → Keep (d + 1) j s₀ s₃) :
     wp (finishEdge v d o m hv₁) (fun hv' s' =>
       (hv₁ = true → hv' = true) ∧ s'.Inv' d ∧ Shape s' ∧ s'.RangesInv σ (n + 1) d ∧ s'.g = s₃.g ∧
       s'.CloseInv ∧ OwnedD σ sts origs P d (n + 1) s' ∧ (hv' = true → VertCover v s') ∧
       s'.Full g (fun i => P' i ∨ i = edgeItem g o.e ∨ (hv' = true ∧ i = vertItem v)) X ∧
-      Keep (d + 1) 0 s₀ s' ∧ s'.CanonInv ∧ s'.ternarize = s₃.ternarize) s₃ := by
+      (∀ j, J j → Keep (d + 1) j s₀ s') ∧ s'.CanonInv ∧ s'.ternarize = s₃.ternarize) s₃ := by
   have hD := hcb.hD
   have hstep := finishEdge_step hD hi hcb.rgs.2.1 hcb.guards hcb.book
   have hrg := finishEdge_ranges hD hcb.rgs.1 hcb.rgs.2.1 hcb.nodup hcb.rgs.2.2 hcb.guards hcb.book
@@ -73,8 +75,9 @@ theorem finish_core {σ : List Nat} {g : Graph} {n D m : Nat} {hv₁ : Bool} {s�
   have hvc := finishEdge_vertCover hos
   have hF := finishEdge_full hfull hv he hPe hPv hPv'
     (finishEdge_sides hcb.guards hcb.book hi hcb.rgs.2.1 hD)
-  have hK' := keep_finishEdge hT (j := 0) (by omega) v d o m hv₁ (vertItem_ne_zero v)
-    (edgeItem_ne_zero g o.e) hK
+  have hK' : wp (finishEdge v d o m hv₁) (fun _ s' => ∀ j, J j → Keep (d + 1) j s₀ s') s₃ := by
+    intro j hj
+    exact keep_finishEdge hT (hJ j hj).1 v d o m hv₁ (hJ j hj).2.1 (hJ j hj).2.2 (hK j hj)
   have hcn := finishEdge_canon hcb (closeBase_canon hcb) hc
   have htn := tern_finishEdge (b := s₃.ternarize) v d o m hv₁ rfl
   exact ⟨hF.2, hstep.1, hstep.2, hrg.1, hrg.2.2, hcl, how', hvc, hF.1, hK', hcn, htn⟩
@@ -191,9 +194,9 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
   have hPe' : ¬ (P (edgeItem G.g o.e) ∨ (hv₁ = true ∧ edgeItem G.g o.e = vertItem v)) := fun hp' =>
     hp'.elim hPeo fun h1 => vertItem_ne_edgeItem h.v_lt o.e h1.2.symm
   have hpath₁ : ∀ k, k < d → s₁.stackVerts[k]! ≠ v := fun k hk => by
-    rw [hp.keep.svlo k (by omega)]; exact hsvne k hk
+    rw [(hp.keep 0).svlo k (by omega)]; exact hsvne k hk
   have hsvlt₁ : ∀ k, k ≤ d → s₁.stackVerts[k]! < s₁.g.nv := fun k hk => by
-    rw [hp.keep.svlo k (by omega), hsgeq]; exact hsvlt k hk
+    rw [(hp.keep 0).svlo k (by omega), hsgeq]; exact hsvlt k hk
   cases o with
   | back e dest cls =>
     try simp only at hg₁ hb₁ hf₁ hcb₁ hr₁ hE₁ hL₁
@@ -210,9 +213,14 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
     have hD : d = if (DfsOut.back e dest cls).cls.isTree then d + 1 else d := by simp [hnt]
     have hcore := finish_core hcb₁ hp.inv hp.canon hp.full hp.owned h.v_lt helt hPe' hPv hPv'
       (fun ht => absurd ht (by rw [hnt]; decide)) h.sts_le h.sts_n h.origs_le
-      (hp.owned.len d (le_refl _)) hpath₁ hsvlt₁ h.types hp.keep
+      (hp.owned.len d (le_refl _)) hpath₁ hsvlt₁ h.types
+      (J := FreshItem G.g (v :: (DfsOut.back e dest cls).verts) (DfsOut.back e dest cls).edges)
+      (fun j hj => ⟨hj.1, fun h' => hj.2.1 v (List.mem_cons_self ..) h'.symm,
+        fun h' => hj.2.2 e (by simp [DfsOut.edges]) h'.symm⟩)
+      (fun j _ => hp.keep j)
     rw [hts₁] at hg₁ hb₁ hf₁ hcb₁ hcore hE₁ hL₁ ⊢
     obtain ⟨hhv', hi', hs', hrg', hgs', hc', ho', hvc', hF', hK', hcn', htn'⟩ := hcore
+    have hK0 := hK' 0 (FreshItem.zero _ _ _)
     have hgR : ((finishEdge v d (.back e dest cls) (new₁ ++ segsStack G.segs).length hv₁).run s₁).2.g =
       s₁.g := hgs'
     obtain ⟨hvF, hC'⟩ := hE₁
@@ -275,8 +283,8 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
             rooted := by rw [hg'']; exact R.rooted
             outs_v := R.outs_v
             sub := R.sub
-            chain := ⟨by rw [hK'.svlo d (by omega)]; exact R.chain.1,
-              fun k hk => by rw [hK'.svlo k (by omega)]; exact R.chain.2 k hk⟩
+            chain := ⟨by rw [hK0.svlo d (by omega)]; exact R.chain.1,
+              fun k hk => by rw [hK0.svlo k (by omega)]; exact R.chain.2 k hk⟩
             rwalk := ⟨fun f hf => absurd hf (by rw [hF0]; exact List.not_mem_nil),
               ⟨fun t ht => absurd ht (by rw [hts']; exact List.not_mem_nil),
                 by rw [hts']; exact List.Pairwise.nil⟩⟩
@@ -339,8 +347,8 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
             · rw [hp.hpush.2 ⟨hhV, hlt, by rw [ho]; rfl⟩]; rfl
             · rfl
           have hanc₁ : AncChain G.dfs v d s₁ :=
-            ⟨by rw [hp.keep.svlo d (by omega)]; exact R.chain.1,
-              fun k hk => by rw [hp.keep.svlo k (by omega)]; exact R.chain.2 k hk⟩
+            ⟨by rw [(hp.keep 0).svlo d (by omega)]; exact R.chain.1,
+              fun k hk => by rw [(hp.keep 0).svlo k (by omega)]; exact R.chain.2 k hk⟩
           have h2₁ : s₁.g.TwoConnected := by rw [hgeq₁]; exact h2
           have hsp₁ : G.dfs.Spec s₁.g := by rw [hgeq₁]; exact R.spec
           have hrt₁ : G.dfs.Rooted s₁.g := by rw [hgeq₁]; exact R.rooted
@@ -368,8 +376,8 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
             rooted := by rw [hg'']; exact R.rooted
             outs_v := R.outs_v
             sub := R.sub
-            chain := ⟨by rw [hK'.svlo d (by omega)]; exact R.chain.1,
-              fun k hk => by rw [hK'.svlo k (by omega)]; exact R.chain.2 k hk⟩
+            chain := ⟨by rw [hK0.svlo d (by omega)]; exact R.chain.1,
+              fun k hk => by rw [hK0.svlo k (by omega)]; exact R.chain.2 k hk⟩
             rwalk := ⟨fun f hf => ⟨by have := R.fB f hf; omega,
                 finishEdge_rInvG_base f.1 f.2.1 v d lv .backEdge _ _ f.2.2 hv₁ ho hl hb₁.v_lt hp.inv
                   hp.shape hok hfront (fun h' => absurd rfl h') (fun _ => ⟨hhvt, hle₁⟩)
@@ -414,10 +422,10 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
       enodup := h.enodup
       comp := h.comp
       pe_anc := h.pe_anc
-      sv_size := hK'.sv.trans h.sv_size
-      sd_size := hK'.sd.trans h.sd_size
-      anc_sv := fun k hk => by rw [hK'.svlo k (by omega)]; exact h.anc_sv k hk
-      sv_d := by rw [hK'.svlo d (by omega)]; exact h.sv_d
+      sv_size := hK0.sv.trans h.sv_size
+      sd_size := hK0.sd.trans h.sd_size
+      anc_sv := fun k hk => by rw [hK0.svlo k (by omega)]; exact h.anc_sv k hk
+      sv_d := by rw [hK0.svlo d (by omega)]; exact h.sv_d
       ear := hC'
       inv := hi'
       shape := hs'
@@ -462,9 +470,9 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
         · exact vertItem_ne_edgeItem h.v_lt e hp
       Pcur' := fun h1 => Or.inl (Or.inr ⟨h1, rfl⟩)
       vcover := hvc'
-      r := fun h2 => hRR (by rw [hK'.g] at h2; exact h2)
+      r := fun h2 => hRR (by rw [hK0.g] at h2; exact h2)
       d_fs := h.d_fs
-      height := by rw [hK'.sd]; exact h.height
+      height := by rw [hK0.sd]; exact h.height
       base_out := h.base_out
       stPre := by rw [List.map_append]; exact hSt
       segs_len := h.segs_len
@@ -490,9 +498,14 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
     intro _ s₃ ⟨hend, hg₃, hb₃, hcb₃, hr₃, hE₃, hL₃, hkb₃⟩
     have hit : (DfsOut.tree e cls (.node c couts)).cls.isTree = true := hb₃.tree.2 ⟨_, _, _, rfl⟩
     have hD : d + 1 = if (DfsOut.tree e cls (.node c couts)).cls.isTree then d + 1 else d := by simp [hit]
-    have hK₂ : Keep (d + 1) 0 s₁ { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } :=
-      Keep.frame rfl rfl rfl (by simp) (fun _ _ => rfl) rfl
-    have hK₃ : Keep (d + 1) 0 s s₃ := (hp.keep.trans hK₂).trans hend.keep
+    have hK₂ : ∀ j, Keep (d + 1) j s₁ { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } :=
+      fun _ => Keep.frame rfl rfl rfl (by simp) (fun _ _ => rfl) rfl
+    have hKF : ∀ j, FreshItem G.g (v :: (DfsOut.tree e cls (.node c couts)).verts)
+        (DfsOut.tree e cls (.node c couts)).edges j → Keep (d + 1) j s s₃ := fun j hj =>
+      ((hp.keep j).trans (hK₂ j)).trans (hend.keep j ⟨hj.1,
+        fun w hw => hj.2.1 w (List.mem_cons_of_mem _ hw),
+        fun e' he' => hj.2.2 e' (List.mem_cons_of_mem _ he')⟩)
+    have hK₃ : Keep (d + 1) 0 s s₃ := hKF 0 (FreshItem.zero _ _ _)
     have hpath₃ : ∀ k, k < d → s₃.stackVerts[k]! ≠ v := fun k hk => by
       rw [hK₃.svlo k (by omega)]; exact hsvne k hk
     have hsvlt₃ : ∀ k, k ≤ d → s₃.stackVerts[k]! < s₃.g.nv := fun k hk => by
@@ -525,7 +538,9 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
       fun h1 => Or.inl (hPv' h1)
     have hcore := finish_core hcb₃ hend.inv hend.canon hend.full how₃ h.v_lt helt hPe₃ hPv₃ hPv'₃
       (fun _ => Or.inr (Or.inl ⟨c, hcv, rfl⟩)) h.sts_le (Nat.le_trans h.sts_n (Nat.le_add_right _ _))
-      h.origs_le (hp.owned.len d (le_refl _)) hpath₃ hsvlt₃ h.types hK₃
+      h.origs_le (hp.owned.len d (le_refl _)) hpath₃ hsvlt₃ h.types
+      (fun j hj => ⟨hj.1, fun h' => hj.2.1 v (List.mem_cons_self ..) h'.symm,
+        fun h' => hj.2.2 e (by simp [DfsOut.edges]) h'.symm⟩) hKF
     have hR₂ : s.g.TwoConnected →
         RWalk G.dfs ((v, d, s₁.tstack.length) :: G.F) c (d + 1) s₃ ∧
           BotKeep s₁.tstack.length s₁ s₃ ∧ Items.RSkelInv s₃.g s₃.items := fun h2 => by
@@ -533,6 +548,7 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
       exact ⟨hr.1, hr.2.1, hr.2.2.2⟩
     rw [hts₁] at hg₃ hb₃ hcb₃ hcore hE₃ hL₃ hr₃ hR₂ ⊢
     obtain ⟨hhv', hi', hs', hrg', hgs', hc', ho', hvc', hF', hK', hcn', htn'⟩ := hcore
+    have hK0 := hK' 0 (FreshItem.zero _ _ _)
     have hgR : ((finishEdge v d (.tree e cls (.node c couts)) (new₁ ++ segsStack G.segs).length hv₁).run
       s₃).2.g = s₃.g := hgs'
     obtain ⟨hvF, hC'⟩ := hE₃
@@ -629,8 +645,8 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
             rooted := by rw [hg'']; exact R.rooted
             outs_v := R.outs_v
             sub := R.sub
-            chain := ⟨by rw [hK'.svlo d (by omega)]; exact R.chain.1,
-              fun k hk => by rw [hK'.svlo k (by omega)]; exact R.chain.2 k hk⟩
+            chain := ⟨by rw [hK0.svlo d (by omega)]; exact R.chain.1,
+              fun k hk => by rw [hK0.svlo k (by omega)]; exact R.chain.2 k hk⟩
             rwalk := ⟨fun f hf => absurd hf (by rw [hF0]; exact List.not_mem_nil),
               ⟨fun t ht => absurd ht (by rw [hts']; exact List.not_mem_nil),
                 by rw [hts']; exact List.Pairwise.nil⟩⟩
@@ -720,8 +736,8 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
             rooted := by rw [hg'']; exact R.rooted
             outs_v := R.outs_v
             sub := R.sub
-            chain := ⟨by rw [hK'.svlo d (by omega)]; exact R.chain.1,
-              fun k hk => by rw [hK'.svlo k (by omega)]; exact R.chain.2 k hk⟩
+            chain := ⟨by rw [hK0.svlo d (by omega)]; exact R.chain.1,
+              fun k hk => by rw [hK0.svlo k (by omega)]; exact R.chain.2 k hk⟩
             rwalk := ⟨fun f hf => ⟨by have := R.fB f hf; omega,
                 finishEdge_rInvG_base f.1 f.2.1 v d lv kind _ _ f.2.2 hv₁ ho hl hb₃.v_lt hend.inv
                   hend.shape hok hfront (fun _ => hsh) (fun h' => absurd h' hk) (fun _ => hclose)
@@ -768,10 +784,10 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
       enodup := h.enodup
       comp := h.comp
       pe_anc := h.pe_anc
-      sv_size := hK'.sv.trans h.sv_size
-      sd_size := hK'.sd.trans h.sd_size
-      anc_sv := fun k hk => by rw [hK'.svlo k (by omega)]; exact h.anc_sv k hk
-      sv_d := by rw [hK'.svlo d (by omega)]; exact h.sv_d
+      sv_size := hK0.sv.trans h.sv_size
+      sd_size := hK0.sd.trans h.sd_size
+      anc_sv := fun k hk => by rw [hK0.svlo k (by omega)]; exact h.anc_sv k hk
+      sv_d := by rw [hK0.svlo d (by omega)]; exact h.sv_d
       ear := hC'
       inv := hi'
       shape := hs'
@@ -816,9 +832,9 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
         · exact vertItem_ne_edgeItem h.v_lt e hp
       Pcur' := fun h1 => Or.inl (Or.inr ⟨h1, rfl⟩)
       vcover := hvc'
-      r := fun h2 => hRR (by rw [hK'.g] at h2; exact h2)
+      r := fun h2 => hRR (by rw [hK0.g] at h2; exact h2)
       d_fs := h.d_fs
-      height := by rw [hK'.sd]; exact h.height
+      height := by rw [hK0.sd]; exact h.height
       base_out := h.base_out
       stPre := by rw [List.map_append]; exact hSt
       segs_len := h.segs_len
@@ -844,7 +860,8 @@ theorem walkTree_inv (h : WalkInv G t d s) :
   backbone.1 t d G s h
 
 theorem walkOuts_inv (h : WalkInvOut G B v d outs₀ done rest hasVert n P s) :
-    wp (walkOuts v d rest hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧ Keep (d + 1) 0 s s' ∧
+    wp (walkOuts v d rest hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧
+      KeepF G.g (d + 1) (v :: DfsOut.vertsList rest) (DfsOut.edgesList rest) s s' ∧
       ∃ done', WalkInvOut G B v d outs₀ done' [] hv' (n + (DfsOut.edgePostorderList rest).length)
         (Pushed G.g (fun i => P i ∨ (hv' = true ∧ i = vertItem v))
           (DfsOut.vertsList rest) (DfsOut.edgesList rest)) s') s :=
