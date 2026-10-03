@@ -2049,7 +2049,8 @@ done hasVert base s` is the same at the start of an out-edge of `v` with `refOut
 false` (pieces, and its `hasVert` equals the walk's). `StItems`: the items on the stack are roots
 (`¬ IsParent p x`), `readStack tstack` is `Nodup` (what `readStack_reopen` needs — the reopened
 children are not elsewhere on the stack), the stack's subtrees and all children are in range (`bounded`, `chLt`, so `allocItem` does not
-touch them), child lists have no repeats (`chNodup`, what reopening needs), and every S / P / R item is *live* (`Below x i` for some
+touch them), child lists have no repeats (`chNodup`, what reopening needs), every S / P / R item strictly below a
+leaf-type (V / Q) item is finished (`finished`, sim-4; what the root pop and the boundary completion consume), and every S / P / R item is *live* (`Below x i` for some
 stack item `x`) or *finished*: `InBlock g items b i` for a block `b`, i.e. `b.items = A ++ L ++ B`
 with `Expands items i L` and `VsOrientedAt g items b i L` (the body of `VsOriented` for one block
 with the leaf list `L` in place of `leaves items items.size i`, `vsOriented_iff`; the final step
@@ -2100,8 +2101,8 @@ through `closeEars`/`mergeLate`/`closeVert`/`finishP` is a `Fresh`-style frame l
 not yet written).
 **Status (sim-3).** (2)–(4) below are done: `stOut_step`/`stOuts_*`/`stTree_node`/`stWalk`/`stForest`
 (`StInduct.lean`) and the final step `walk_sim`/`walk_inBlock`/`restrictCh_eq` (`StFinal.lean`) make
-`walk_st'`/`walk_vsOriented` proved modulo the named admissions `finishBoundary_st` (item (1)) and
-`rootPop_st` (both `StBoundary.lean`);
+`walk_st'`/`walk_vsOriented` proved modulo the named admission `finishBoundary_st` (item (1),
+`StBoundary.lean`);
 `hvf` is discharged inside `stOut_step` from `Full`. **Sim-4:** `finishEdge_vStart` is proved
 (`StVStart.lean`, a `vStart`-provenance invariant `VsIn` through every `finishEdge` primitive; its
 statement gained the disjunct "`vStart = o.dest` for a returning tree edge", which the original
@@ -2119,7 +2120,17 @@ tstack entry above the untouched base `B` is `U`-free — carried through every 
 returning `finishEdge`; instantiated with `U` = "below a span item of `B`" for the base frame and
 with `U = {V curV}` for the `hvf` facts; the hypotheses are `EarFinish`, `Full` (`cnt ≤ 1` gives
 unique parents and a parentless, off-stack `rootItem`), `StItems` and `curV < g.nv`, so
-`stRet_finish` now also takes `Full`, which the tree case obtains from `walk_full_aux`). The
+`stRet_finish` now also takes `Full`, which the tree case obtains from `walk_full_aux`), and
+`rootPop_st` is proved: `StItems` gained the clause `finished` — every S/P/R item strictly below a
+leaf-type (V / Q) item is `InBlock` of some block (block roots hang under the `Q` of the boundary
+edge / the `V` of the root entry) — added to `check_stsim` first (`stItemsB`, `m7`; seeds 0..1000,
+0 violations) and then carried through every `StItems` step (`congr`/`perm`/`modify_root`/
+`pushEntry`/`close`, the fresh-item and reopen sites of `StUnwrap`/`StVert`); since the root entry
+holds only vertex items (`RootOK`), every S/P/R item below it is already finished, so the root pop
+only has to frame the old blocks past the root's children change (`InBlock.modify_root`) and the
+new block `⟨none, stNest ps⟩` is appended with nothing to show. For `finishBoundary_st` the same
+clause means: the block completed under `Q e` must contain every S/P/R item below it, which is
+exactly the `InBlock` obligation for the popped entries. The
 boundary statement is exactly what the induction consumes and is dump-checked by `check_stsim`
 (seeds 0..1000). The original plan, for reference:
 What remains: (1) `finishBoundary` — the only place a block completes: popping the child's ear
@@ -2204,7 +2215,7 @@ Classical.choice, Quot.sound.
 | `StMerge.lean`: `mergeTopsN`, `iter_mergeTstackTops`, `mergeTopsN_length`, `mergeTopsN_above` (`k` merges above a suffix `B` keep `readL`/`readR` of the part above `B`), `L1StInv.mergeTopsN`, `L1StInv.mergeLoop` (any `loop _ cond mergeTstackTops` that ends with an entry above `B` keeps `L1StInv`: merges only shorten the stack, so all of them happened above `B`), `L1StInv.mergeLate` (loop 2) | `StMerge.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | `StVert.lean`: `ExpandsList.{unique, split}`, `StRead.{append, split, fold}`, `StItems.perm`, `closeVert_st` (the type-1 `closeVert` unwrap/reopen/merge/fold, lower entries `pre`/`qs` carried), `finishP_st` (P merge; `hP` side conditions only for `isType1 = true`; result `new' ≠ []`), `finishTail_st` (vertex push / merge; vertex-item conditions only for `hasVert = false`) | `StVert.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | `StTree.lean`: `mem_readStack_of_mem`, `mem_spans_setSides_single`, `finishTree_st` (`finishTree` for a tree edge with `lowval < d`: `closeEars_st`, `L1StInv.mergeLate`, `closeVert_st`, `finishP_st`, `finishTail_st` composed; `hvf` named hypothesis), `finishBack_st` (`finishBack` for a back edge with `lowval < d`), `walkOutPre_st` (`setStackDir d` keeps `DirsOf s d`; the type-1 vertex push appends the `pre` piece), `DirsOf_getD`, `fePState`, `finishEdge_st` (`finishEdge` for a returning edge via `finishEdge_eq`: `qs ++ mid ++ post` with `lowDir = !stackDir[d]`, `sd = stackDir[d]`, above the untouched `B`; `stackDir[k]`, `k ≤ d`, kept) | `StTree.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
-| `StBoundary.lean`: `Place.fresh`, `finishRet_frame_st` (frame facts of a returning `finishEdge`; from `finishRet_frame`, `StRetFrame.lean`) (proved); `finishBoundary_st` (block completion at a boundary edge `lowval ≥ d`: the entries above `base` read as the child's pieces and become the block `⟨some (curV, o.dest), stNest ps⟩`, every S/P/R item of them `InBlock`, `tstack = base`, `stackDir`/`hasVert` kept), `rootPop_st` (the root pop after a tree) | `StBoundary.lean`, `CheckStSim.lean` | **admitted** (`Admitted:` docstrings; the boundary statement is dump-checked by `check_stsim` on seeds 0..1000, 0 violations) |
+| `StBoundary.lean`: `Place.fresh`, `finishRet_frame_st` (frame facts of a returning `finishEdge`; from `finishRet_frame`, `StRetFrame.lean`) (proved); `finishBoundary_st` (block completion at a boundary edge `lowval ≥ d`: the entries above `base` read as the child's pieces and become the block `⟨some (curV, o.dest), stNest ps⟩`, every S/P/R item of them `InBlock`, `tstack = base`, `stackDir`/`hasVert` kept), `rootPop_st` (the root pop after a tree; proved from `StItems.finished` + `RootOK`) | `StBoundary.lean`, `CheckStSim.lean` | `finishBoundary_st` **admitted** (`Admitted:` docstring; dump-checked by `check_stsim` on seeds 0..1000, 0 violations); the rest proved (`rootPop_st`: axioms propext, Quot.sound) |
 | `StVStart.lean`: `VsIn` (every stack entry's `vStart` satisfies `V`), `VsIn.{tail, cons, merge, modifyCur, modifyNxt}`, `vsIn_{mergeTstackTops, finishTstackTop, maybeUnwrapNxt, loop1Body, loop, finishRest, closeVertTail, closeVert, finishTree, finishBoundary, finishEdge}`, `finishEdge_vStart` (entries after `finishEdge` start at `curV`, at `o.dest` for a returning tree edge, or at an existing start) | `StVStart.lean` | proved (axioms propext, Quot.sound) |
 | `StNodup.lean`: `pieceItems`, `stNest_perm` (`stNest ps ~ pieceItems ps`), `Prov`/`Prov.ne`, `refOut_ret_items`, `refOut_items_of`, `refTree_items`/`refOuts_items` (the pieces and blocks of `refTree g t d dirs` are `Nodup` and hold only vertex items of `t.verts` / edge items of `t.edges`), `refOrder_nodup_of_forestOK`, `refOrder_nodup_of_perm`, `refOrder_nodup` (`StFinal.lean`) | `StNodup.lean`, `StFinal.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | `StSimLemmas.lean`: `refOuts_snoc`, `refOut_hv_false`/`refOuts_hv_false`, `DirsOf_{length, succ, take, congr}`, `frameBlocks_{append, congr}`, `simBlocks_{snoc, congr, DirsOf}`, `DfsOut.{vertsList, edgesList}_append`, `segsStack`/`SegRead`, `mem_readStack_{append, segsStack}`, `SegRead.{congr, cons}`, `StRead.nil` | `StSimLemmas.lean` | proved |

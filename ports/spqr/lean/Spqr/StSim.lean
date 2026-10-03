@@ -274,9 +274,15 @@ theorem vsOriented_iff (g : Graph) (items : Items) (blocks : List StBlock) :
 def InBlock (g : Graph) (items : Items) (b : StBlock) (i : ItemId) : Prop :=
   ∃ L, Expands items i L ∧ (∃ A B, b.items = A ++ L ++ B) ∧ VsOrientedAt g items b i L
 
+theorem Items.lt_of_type_ne_F {items : Items} {i : ItemId} (h : Items.type items i ≠ .F) :
+    i < items.size := by
+  by_contra hi
+  exact h (by simp [Items.type, Array.getElem?_eq_none (Nat.le_of_not_lt hi)])
+
 /-- The items relative to the stack and the blocks: stack items are roots and distinct; every
-S / P / R item is live (below a stack item) or finished in one of `blocks`; the stack's subtrees and
-all children are in range, child lists have no repeats. -/
+S / P / R item is live (below a stack item) or finished in one of `blocks`; everything S / P / R
+strictly below a leaf-type (V / Q) item is finished (block roots hang under V / Q items); the stack's
+subtrees and all children are in range, child lists have no repeats. -/
 structure StItems (g : Graph) (s : WalkState) (blocks : List StBlock) : Prop where
   roots : ∀ x ∈ readStack s.tstack, ∀ p, ¬ Items.IsParent s.items p x
   nodup : (readStack s.tstack).Nodup
@@ -286,6 +292,9 @@ structure StItems (g : Graph) (s : WalkState) (blocks : List StBlock) : Prop whe
   closed : ∀ i, i < s.items.size →
     Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R →
     (∃ x ∈ readStack s.tstack, Items.Below s.items x i) ∨ ∃ b ∈ blocks, InBlock g s.items b i
+  finished : ∀ x i, (Items.type s.items x = .V ∨ Items.type s.items x = .Q) → Items.Below s.items x i →
+    Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R →
+    ∃ b ∈ blocks, InBlock g s.items b i
 
 /-! ### The truncated tree and the relation at the boundaries -/
 

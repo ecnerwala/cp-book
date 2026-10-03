@@ -338,6 +338,11 @@ theorem stItems_init (g : Graph) (tern : Bool) :
     rw [Items.initialItems_type] at ht
     rw [Items.initialItems_size] at hi
     split_ifs at ht <;> simp at ht
+  finished x i hx hb ht := by
+    rcases Relation.ReflTransGen.cases_tail hb with e | ⟨p, _, hp⟩
+    · subst e
+      rcases hx with hx | hx <;> rw [hx] at ht <;> simp at ht
+    · simp [Items.IsParent, WalkState.init, Items.initialItems_ch] at hp
 
 theorem walk_sim (g : Graph) (tern : Bool) (forest : List DfsTree) (hf : ForestOK g forest)
     (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g) :

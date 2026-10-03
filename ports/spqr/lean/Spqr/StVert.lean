@@ -18,21 +18,26 @@ structure StItemsX (g : Graph) (s : WalkState) (blocks : List StBlock) (item : I
   closed : ∀ j, j < s.items.size → j ≠ item →
     Items.type s.items j = .S ∨ Items.type s.items j = .P ∨ Items.type s.items j = .R →
     (∃ x ∈ readStack s.tstack, Items.Below s.items x j) ∨ ∃ b ∈ blocks, InBlock g s.items b j
+  finished : ∀ x i, (Items.type s.items x = .V ∨ Items.type s.items x = .Q) → Items.Below s.items x i →
+    Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R →
+    ∃ b ∈ blocks, InBlock g s.items b i
   lt : item < s.items.size
   root : ∀ p, ¬ Items.IsParent s.items p item
   notin : item ∉ readStack s.tstack
   notBelow : ∀ x ∈ readStack s.tstack, ¬ Items.Below s.items x item
+  ty : ¬ (Items.type s.items item = .V ∨ Items.type s.items item = .Q)
 
 theorem StItemsX.perm {g : Graph} {s s' : WalkState} {blocks : List StBlock} {item : ItemId}
     (h : StItemsX g s blocks item) (hread : (readStack s'.tstack).Perm (readStack s.tstack))
     (htail : ∀ x ∈ readStack s'.tstack.tail, x ∈ readStack s.tstack.tail)
     (hitems : s'.items = s.items) : StItemsX g s' blocks item := by
-  obtain ⟨roots, nodup, bounded, chLt, chNodup, closed, lt, root, notin, notBelow⟩ := h
+  obtain ⟨roots, nodup, bounded, chLt, chNodup, closed, finished, lt, root, notin, notBelow, ty⟩ := h
   refine ⟨fun x hx => by rw [hitems]; exact roots x (htail x hx), hread.nodup_iff.2 nodup,
     fun x hx => by rw [hitems]; exact bounded x (hread.mem_iff.1 hx), by rw [hitems]; exact chLt,
-    by rw [hitems]; exact chNodup, fun j hj hji hty => ?_, by rw [hitems]; exact lt,
+    by rw [hitems]; exact chNodup, fun j hj hji hty => ?_, by rw [hitems]; exact finished,
+    by rw [hitems]; exact lt,
     by rw [hitems]; exact root, fun h => notin (hread.mem_iff.1 h),
-    fun x hx => by rw [hitems]; exact notBelow x (hread.mem_iff.1 hx)⟩
+    fun x hx => by rw [hitems]; exact notBelow x (hread.mem_iff.1 hx), by rw [hitems]; exact ty⟩
   rw [hitems] at hj hty ⊢
   rcases closed j hj hji hty with ⟨x, hx, hxj⟩ | h
   · exact Or.inl ⟨x, hread.mem_iff.2 hx, hxj⟩
@@ -43,7 +48,8 @@ theorem StItemsX.close {g : Graph} {s : WalkState} {blocks : List StBlock} {item
     (hside : getSide t.spans (!s.stackDir[t.topDepth]!) = []) :
     StItems g ((WalkM.finishTstackTop item).run s).2 blocks :=
   StItems.close s blocks item t rest hts hside h.lt h.root h.notin
-    (fun x hx => h.roots x (by rw [hts]; exact hx)) h.nodup h.bounded h.chLt h.chNodup h.closed
+    (fun x hx => h.roots x (by rw [hts]; exact hx)) h.nodup h.bounded h.chLt h.chNodup h.closed h.ty
+    h.finished
 
 /-! ### The fold (`retarget`) -/
 
@@ -219,8 +225,9 @@ theorem StSim.unwrapMerge {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEn
       rw [readL_mergeInto_cons, readR_mergeInto_cons, hitems₂]
       exact ⟨hR.1.push _ (fun x hx y hy => hI.bounded x (hsub x (mem_readStack_of_readL hx)) y hy),
         hR.2.push _ (fun x hx y hy => hI.bounded x (hsub x (mem_readStack_of_readR hx)) y hy)⟩
-    refine ⟨?_, by rw [hread₂]; exact hI.nodup, ?_, ?_, ?_, ?_, by rw [hsz]; exact Nat.lt_succ_self _, ?_,
-      by rw [hread₂]; exact hnotin, ?_⟩
+    refine ⟨?_, by rw [hread₂]; exact hI.nodup, ?_, ?_, ?_, ?_, ?_, by rw [hsz]; exact Nat.lt_succ_self _, ?_,
+      by rw [hread₂]; exact hnotin, ?_,
+      by rw [hitems₂, Items.type_push_size]; exact fun h => h.elim hty'.1 hty'.2⟩
     · intro x hx p hpx
       rw [hts₂] at hx
       exact hI.roots x (hsubR x hx) p ((hparent₂ p x).1 hpx).2
@@ -246,6 +253,21 @@ theorem StSim.unwrapMerge {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEn
         refine ⟨b, hb, ?_⟩
         rw [hitems₂]
         exact hbj.push _ hI.chLt hj'
+    · intro x i hVQ hb hsp
+      have hxne : x ≠ s.items.size := fun e => by
+        rw [e, hitems₂, Items.type_push_size] at hVQ
+        exact hVQ.elim hty'.1 hty'.2
+      have hx : x < s.items.size := by
+        have h1 := Items.lt_of_type_ne_F (items := s₂.items) (i := x)
+          (fun e => by rw [e] at hVQ; rcases hVQ with h | h <;> cases h)
+        rw [hsz] at h1
+        exact Nat.lt_of_le_of_ne (Nat.le_of_lt_succ h1) hxne
+      have hb' : Items.Below s.items x i := by rw [hitems₂] at hb; exact hb.of_push _ hI.chLt hx
+      have hi : i < s.items.size := Items.Below.lt_of_chLt hI.chLt hx hb'
+      rw [htype₂ x hxne] at hVQ
+      rw [htype₂ i (Nat.ne_of_lt hi)] at hsp
+      obtain ⟨b, hb, hB⟩ := hI.finished x i hVQ hb' hsp
+      exact ⟨b, hb, by rw [hitems₂]; exact hB.push _ hI.chLt hi⟩
     · intro p hp
       exact Nat.lt_irrefl _ (hI.chLt p _ ((hparent₂ p _).1 hp).2)
     · intro x hx h
@@ -315,8 +337,9 @@ theorem StSim.unwrapMerge {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEn
         readL_reopen c t new dir h _ htsp ha hnew, readR_reopen c t new dir h _ htsp ha hnew]
       exact ⟨(ExpandsList.expandItem_self_iff htyh).2 hR.1, (ExpandsList.expandItem_self_iff htyh).2 hR.2⟩
     refine ⟨?_, by rw [hread₂]; exact nodup_expandItem hnd (hI.chNodup h) hchfresh, ?_,
-      by rw [hitems₂]; exact hI.chLt, by rw [hitems₂]; exact hI.chNodup, ?_, by rw [hitems₂]; exact hlth,
-      by rw [hitems₂]; exact hroot, hnotin₂, ?_⟩
+      by rw [hitems₂]; exact hI.chLt, by rw [hitems₂]; exact hI.chNodup, ?_,
+      by rw [hitems₂]; exact hI.finished, by rw [hitems₂]; exact hlth,
+      by rw [hitems₂]; exact hroot, hnotin₂, ?_, by rw [hitems₂]; exact htyh⟩
     · intro x hx p hpx
       rw [hts₂] at hx
       rw [hitems₂] at hpx
@@ -345,10 +368,10 @@ theorem StSim.unwrapMerge {g : Graph} (s : WalkState) (ty : NodeType) (c t : TEn
 theorem StItems.perm {g : Graph} {s s' : WalkState} {blocks : List StBlock} (h : StItems g s blocks)
     (hread : (readStack s'.tstack).Perm (readStack s.tstack)) (hitems : s'.items = s.items) :
     StItems g s' blocks := by
-  obtain ⟨roots, nodup, bounded, chLt, chNodup, closed⟩ := h
+  obtain ⟨roots, nodup, bounded, chLt, chNodup, closed, finished⟩ := h
   refine ⟨fun x hx => by rw [hitems]; exact roots x (hread.mem_iff.1 hx), hread.nodup_iff.2 nodup,
     fun x hx => by rw [hitems]; exact bounded x (hread.mem_iff.1 hx), by rw [hitems]; exact chLt,
-    by rw [hitems]; exact chNodup, fun j hj hty => ?_⟩
+    by rw [hitems]; exact chNodup, fun j hj hty => ?_, by rw [hitems]; exact finished⟩
   rw [hitems] at hj hty ⊢
   rcases closed j hj hty with ⟨x, hx, hxj⟩ | h
   · exact Or.inl ⟨x, hread.mem_iff.2 hx, hxj⟩

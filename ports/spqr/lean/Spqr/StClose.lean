@@ -204,7 +204,11 @@ theorem StItems.close {g : Graph} (s : WalkState) (blocks : List StBlock) (item 
     (chNodup : ∀ p, (Items.ch s.items p).Nodup)
     (closed : ∀ j, j < s.items.size → j ≠ item →
       Items.type s.items j = .S ∨ Items.type s.items j = .P ∨ Items.type s.items j = .R →
-      (∃ x ∈ readStack s.tstack, Items.Below s.items x j) ∨ ∃ b ∈ blocks, InBlock g s.items b j) :
+      (∃ x ∈ readStack s.tstack, Items.Below s.items x j) ∨ ∃ b ∈ blocks, InBlock g s.items b j)
+    (hty : ¬ (Items.type s.items item = .V ∨ Items.type s.items item = .Q))
+    (finished : ∀ x i, (Items.type s.items x = .V ∨ Items.type s.items x = .Q) → Items.Below s.items x i →
+      Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R →
+      ∃ b ∈ blocks, InBlock g s.items b i) :
     StItems g ((WalkM.finishTstackTop item).run s).2 blocks := by
   have hts' := run_finishTstackTop_tstack s item t rest hts
   have hitems := finishTstackTop_items s item t rest hts
@@ -255,7 +259,7 @@ theorem StItems.close {g : Graph} (s : WalkState) (blocks : List StBlock) (item 
     intro x y hx h
     rw [hitems]
     exact h.modify_of_not_below _ (hnb x hx)
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro x hx p hpx
     rcases (hparent p x).1 hpx with ⟨rfl, hxC⟩ | ⟨hp, hpx'⟩
     · rcases (hmem' x).1 hx with rfl | hx
@@ -300,5 +304,16 @@ theorem StItems.close {g : Graph} (s : WalkState) (blocks : List StBlock) (item 
       refine ⟨b, hb, ?_⟩
       rw [hitems]
       exact hbj.modify_root _ hroot hji
+  · intro x i hVQ hb hsp
+    rw [htype] at hVQ hsp
+    have hxi : x ≠ item := fun e => by rw [e] at hVQ; exact hty hVQ
+    have hb' : Items.Below s.items x i := by
+      rw [hitems] at hb; exact hb.of_modify _ (Items.not_below_root_of_ne hroot hxi)
+    have hii : i ≠ item := by
+      rcases Relation.ReflTransGen.cases_tail hb' with e | ⟨p, _, hp⟩
+      · exact e ▸ hxi
+      · exact fun e => hroot p (e ▸ hp)
+    obtain ⟨b, hb, hB⟩ := finished x i hVQ hb' hsp
+    exact ⟨b, hb, by rw [hitems]; exact hB.modify_root _ hroot hii⟩
 
 end Spqr

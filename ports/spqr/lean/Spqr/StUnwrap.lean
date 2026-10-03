@@ -193,7 +193,7 @@ theorem StSim.allocMergeClose {g : Graph} (s : WalkState) (ty : NodeType) (c t :
         ch := getSide (TEntry.mergeInto c t).spans s₂.stackDir[(TEntry.mergeInto c t).topDepth]! })
       (fun _ => rfl), hitems₂, Items.type_push_size]
   · refine StItems.close s₂ blocks s.items.size (TEntry.mergeInto c t) (new ++ base) hts₂ hside hi₂
-      ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+      ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ hty₂ ?_
     · intro p hp
       exact Nat.lt_irrefl _ (hI.chLt p _ ((hparent₂ p _).1 hp).2)
     · rw [hread₂]; exact hnotin
@@ -223,6 +223,21 @@ theorem StSim.allocMergeClose {g : Graph} (s : WalkState) (ty : NodeType) (c t :
         refine ⟨b, hb, ?_⟩
         rw [hitems₂]
         exact hbj.push _ hI.chLt hj'
+    · intro x i hVQ hb hsp
+      have hxne : x ≠ s.items.size := fun e => by
+        rw [e, hitems₂, Items.type_push_size] at hVQ
+        exact hVQ.elim hty.1 hty.2
+      have hx : x < s.items.size := by
+        have h1 := Items.lt_of_type_ne_F (items := s₂.items) (i := x)
+          (fun e => by rw [e] at hVQ; rcases hVQ with h | h <;> cases h)
+        rw [hsz] at h1
+        exact Nat.lt_of_le_of_ne (Nat.le_of_lt_succ h1) hxne
+      have hb' : Items.Below s.items x i := by rw [hitems₂] at hb; exact hb.of_push _ hI.chLt hx
+      have hi : i < s.items.size := Items.Below.lt_of_chLt hI.chLt hx hb'
+      rw [htype₂ x hxne] at hVQ
+      rw [htype₂ i (Nat.ne_of_lt hi)] at hsp
+      obtain ⟨b, hb, hB⟩ := hI.finished x i hVQ hb' hsp
+      exact ⟨b, hb, by rw [hitems₂]; exact hB.push _ hI.chLt hi⟩
 
 /-! ### The reopen path -/
 
@@ -335,7 +350,7 @@ theorem StSim.reopenMergeClose {g : Graph} (s : WalkState) (c t : TEntry) (h : I
         ch := getSide (TEntry.mergeInto c t').spans s₂.stackDir[(TEntry.mergeInto c t').topDepth]! })
       (fun _ => rfl), hitems₂]
   · refine StItems.close s₂ blocks h (TEntry.mergeInto c t') (new ++ base) hts₂ hside hi₂
-      ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+      ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ hty₂ (by rw [hitems₂]; exact hI.finished)
     · rw [hitems₂]; exact hroot
     · exact hnotin₂
     · intro x hx p hpx
