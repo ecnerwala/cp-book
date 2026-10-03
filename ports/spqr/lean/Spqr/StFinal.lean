@@ -1,6 +1,7 @@
 import Spqr.StInduct
 import Spqr.StRestrict
 import Spqr.WalkItemsWF
+import Spqr.StNodup
 
 /-!
 # `walk_st'` / `walk_vsOriented` from the simulation (PROOF.md §7.6)
@@ -381,11 +382,11 @@ theorem walk_vsOriented (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
   rw [leaves_size_eq hwf.tree.ch_lt hwf.no_cycle hi hL]
   exact ⟨b, hb, hV⟩
 
-/-- Admitted (reference side, dump-checked by `check_stref`): the reference order lists every
-V / Q item at most once. -/
+/-- The reference order lists every item at most once (`refOrder_nodup_of_perm`). -/
 theorem refOrder_nodup (g : Graph) (hg : g.WF) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
-    (heo : OrderOK g.ne eo) : (refOrder g (g.dfsForest vo eo)).Nodup := by
-  sorry
+    (heo : OrderOK g.ne eo) : (refOrder g (g.dfsForest vo eo)).Nodup :=
+  let ⟨hvp, hep⟩ := dfsForest_spanning' hg hvo heo
+  refOrder_nodup_of_perm hvp hep
 
 theorem walk_st' (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) (i : ItemId)
