@@ -12,9 +12,9 @@ import Spqr.WalkInv
 their items children of the boundary edge's Q item; popping the root entry of a tree of the forest
 closes the root block. Both steps turn the live S / P / R items of the popped entries into
 `InBlock` items of the new block (`StItems.closed`). The bookkeeping (`BdPop`, `StRead.complete`,
-`StBdPop.lean`) is proved; what remains admitted is `finishBoundary_vsOrientedAt`, the orientation
-clauses of the new block, which need the `vs`-position invariant of the stack spans (PROOF.md
-§7.6, step (c)). `Place.fresh` gives the freshness of a not-yet-pushed fixed item from the
+`StBdPop.lean`) is proved; what remains admitted is `finishBoundary_stLive`, the open-block invariant
+`StLive` at the boundary (the orientation clauses of the new block), whose preservation along the
+walk is PROOF.md §7.6, step (c). `Place.fresh` gives the freshness of a not-yet-pushed fixed item from the
 coverage invariant.
 -/
 
@@ -31,14 +31,26 @@ theorem Place.fresh {g : Graph} {P X : ItemId → Prop} {s : WalkState} (h : s.P
   have := spansCount_pos_of_mem_readStack hm
   simp only [WalkState.cnt] at hc; omega
 
-/-- Admitted: the orientation clauses of `VsOrientedAt` for the block closed at a boundary tree edge,
-on the pre-state. For every S / P / R item `i` below a span item of the popped entries `sub` and
-its leaves `L`, `VsOrientedAt g s.items ⟨some (curV, o.dest), stNest ps⟩ i L`: the leaves lie in the
-block (segment, trivial), the block's edge items below `i` are leaves of `i`, `vs i` is oriented in
-the block's st-order `curV :: (vertices of stNest ps)`, the V children of `i` lie between its
-endpoints, the non-V children are oriented, and the block edges below a non-V child lie between its
-endpoints. This needs the `vs`-position invariant of the stack spans (PROOF.md §7.6 (c)) that
-`StRead` does not carry. Checked at every boundary edge by `check_stsim` (`StItems.closed`). -/
+/-- Admitted: the open-block invariant `StLive` (StBdPop.lean) at a boundary tree edge, on the
+pre-state: every S / P / R item below a span item of the popped entries `sub` is `InBlock` of the
+block `⟨some (curV, o.dest), stNest ps⟩` closed there — its leaves are a segment of `stNest ps`
+(trivial from `StRead`), and the orientation clauses `VsOrientedAt` hold: `vs i` is oriented in the
+block's st-order `curV :: (vertices of stNest ps)`, the V children of `i` lie between its endpoints,
+the non-V children are oriented, and the block edges below a non-V child lie between its endpoints.
+This is the invariant `check_stsim` checks as m8 (against the blocks of the truncated reference
+`refBlocks g (prev ++ [truncTree fs t])`, seeds 0..1000, 0 violations) and whose preservation along
+the walk is what remains (PROOF.md §7.6 (c)). -/
+theorem finishBoundary_stLive {D curV d : Nat} {o : DfsOut} {hasVert : Bool} {s : WalkState}
+    {sub base : List TEntry} {g : Graph} {ps : List StPiece} {blocks : List StBlock}
+    (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s)
+    (hD : D = if o.cls.isTree then d + 1 else d) (hok : BoundaryOk D curV d o s)
+    (hb : FinishBook curV d o base.length hasVert s) (hge : d ≤ o.cls.lowval d)
+    (ht : o.cls.isTree = true) (hg : s.g = g)
+    (hR : StRead s.items sub ps) (hI : StItems g s blocks) :
+    StLive g s.items sub ⟨some (curV, o.dest), stNest ps⟩ := by
+  sorry
+
+/-- The orientation clauses of the block closed at a boundary tree edge, from `finishBoundary_stLive`. -/
 theorem finishBoundary_vsOrientedAt {D curV d : Nat} {o : DfsOut} {hasVert : Bool} {s : WalkState}
     {sub base : List TEntry} {g : Graph} {ps : List StPiece} {blocks : List StBlock}
     (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s)
@@ -50,7 +62,7 @@ theorem finishBoundary_vsOrientedAt {D curV d : Nat} {o : DfsOut} {hasVert : Boo
     (hty : Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R)
     (hL : Expands s.items i L) :
     VsOrientedAt g s.items ⟨some (curV, o.dest), stNest ps⟩ i L := by
-  sorry
+  exact (finishBoundary_stLive hE hi hs hD hok hb hge ht hg hR hI).vsOrientedAt hx hty hL
 
 /-- `finishEdge` at a block boundary. The popped entries `sub` read as the pieces `ps` of the
 child's subtree (`[]` for a back edge; `[t]` at a bridge, `[t₁, t₂]` at a component edge:

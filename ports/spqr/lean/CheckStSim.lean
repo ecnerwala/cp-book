@@ -92,6 +92,65 @@ def report (st : IO.Ref Stats) (ok : Bool) (msg : String) : IO Unit := do
   unless ok do IO.println s!"BAD {msg}"
 
 def above (s : WalkState) (base : List TEntry) : List TEntry := s.tstack.take (s.tstack.length - base.length)
+/-- The per-entry terminal checks m9 / m12 (`(stackVerts[t.topDepth], t.vStart)` oriented, V span items
+strictly between) are FALSE as stated (seeds 6, 9, 12, 17, 554: buried entries of finished sibling
+subtrees keep a `topDepth` whose `stackVerts` is stale; two-sided merged entries and the fold retarget
+`vStart := curV`); kept here as the record of what was tried, off by default. -/
+def truncEntryChecks : Bool := false
+
+/-- Candidate invariant (sim-4): against the blocks of the *truncated* forest `prev ++ [truncTree fs t]`
+(the open blocks along the path read with the pieces walked so far), every S / P / R item is
+`InBlock` (m8), and every live non-V item with two endpoints is oriented in its block's st-order
+(m10). -/
+def truncItemsB (g : Graph) (s : WalkState) (tblocks : List StBlock) : List String :=
+  let items := s.items
+  let live := (readStack s.tstack).flatMap (descOf items items.size)
+  let m8 := (List.range items.size).filterMap fun i =>
+    if !isSPR items i then none
+    else if tblocks.any (inBlockB g items · i) then none
+    else some s!"trunc: S/P/R item {i} is in no truncated block"
+  let m10 := live.filterMap fun y =>
+    if Items.type items y = .V then none
+    else match Items.vs items y with
+      | (some a, some b) =>
+        if tblocks.any (fun b' => decide (Oriented (b'.seq g) (some a, some b))) then none
+        else some s!"trunc: live item {y} vs ({a}, {b}) oriented in no truncated block"
+      | _ => none
+  let m9 := s.tstack.filterMap fun t =>
+    let a := s.stackVerts[t.topDepth]!
+    let dir := s.stackDir[t.topDepth]!
+    let σ := if getSide t.spans dir != [] then dir else !dir
+    if a == t.vStart || vertItem t.vStart ∈ t.spans.1 ++ t.spans.2 then none
+    else if tblocks.any (fun b' => decide (Oriented (b'.seq g) (setSides σ (some a) (some t.vStart)))) then none
+    else some s!"trunc: entry (vStart {t.vStart}, topDepth {t.topDepth}, sv {a}, dir {σ}) spans {t.spans} unoriented"
+  let m11 := live.flatMap fun y =>
+    if !isSPR items y then []
+    else match Items.vs items y with
+      | (some u, some v) =>
+        let dy := descOf items items.size y
+        let b? := tblocks.find? (inBlockB g items · y)
+        match b? with
+        | none => []
+        | some b' =>
+          (List.range g.ne).filterMap fun e =>
+            if !(edgeItem g e ∈ dy) then none
+            else if !(edgeItem g e ∈ b'.items || b'.root.any fun r => decide (Items.PairEq g.edges[e]! r)) then none
+            else if [(g.edges[e]!).1, (g.edges[e]!).2].all (fun z =>
+                (u == z || decide (Precedes (b'.seq g) u z)) && (z == v || decide (Precedes (b'.seq g) z v))) then none
+            else some s!"trunc: live S/P/R item {y} vs ({u}, {v}) edge {e} {g.edges[e]!} outside; seq {b'.seq g} leaves {leavesB items y} stack {s.tstack.map fun t => (t.vStart, t.topDepth, t.spans)}"
+      | _ => []
+  let m12 := s.tstack.flatMap fun t =>
+    let a := s.stackVerts[t.topDepth]!
+    let dir := s.stackDir[t.topDepth]!
+    let σ := if getSide t.spans dir != [] then dir else !dir
+    let (a', b') := setSides σ a t.vStart
+    if a == t.vStart || vertItem t.vStart ∈ t.spans.1 ++ t.spans.2 || (t.spans.1 != [] && t.spans.2 != []) then [] else
+    (t.spans.1 ++ t.spans.2).filterMap fun c =>
+      if Items.type items c != .V then none
+      else if tblocks.any (fun b'' => decide (Precedes (b''.seq g) a' (c - 1)) && decide (Precedes (b''.seq g) (c - 1) b')) then none
+      else some s!"trunc: V item {c} under entry (vStart {t.vStart}, topDepth {t.topDepth}, sv {a}, dir {σ}) (span item) not strictly between; seqs {tblocks.map (·.seq g)} stack {s.tstack.map fun t => (t.vStart, t.topDepth, t.spans)} sv {s.stackVerts.toList.take 6}"
+  m8 ++ m10 ++ m11 ++ (if truncEntryChecks then m9 ++ m12 else [])
+
 def baseOk (s : WalkState) (base : List TEntry) : Bool :=
   base.length ≤ s.tstack.length && s.tstack.drop (s.tstack.length - base.length) == base
 
@@ -110,6 +169,8 @@ partial def chkTree (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : 
       s!"read at end of walkTree {v} d={d}: {(readStack (above s base)).flatMap (leavesB s.items)} vs {stNest ps}"
     for m in stItemsB g s (simBlocks g prev fs (DirsOf s d) ++ (refTree g t d (DirsOf s d)).2) do
       report st false s!"items at end of walkTree {v} d={d}: {m}"
+    for m in truncItemsB g s (refBlocks g (prev ++ [truncTree fs t])) do
+      report st false s!"trunc items at end of walkTree {v} d={d}: {m}"
     return s
 
 partial def chkOuts (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : List PathFrame)
@@ -122,6 +183,8 @@ partial def chkOuts (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : 
   report st (hv == hasVert) s!"hasVert at out-edge {done.length} of {v} d={d}: ref {hv} walk {hasVert}"
   for m in stItemsB g s (simBlocks g prev fs (DirsOf s d) ++ (refOuts g v d (DirsOf s d) done false).2.1) do
     report st false s!"items at out-edge {done.length} of {v} d={d}: {m}"
+  for m in truncItemsB g s (refBlocks g (prev ++ [truncTree fs (.node v done)])) do
+    report st false s!"trunc items at out-edge {done.length} of {v} d={d}: {m}"
   match outs with
   | [] => return (hasVert, s)
   | o :: rest =>
@@ -150,6 +213,8 @@ partial def chkOut (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : L
     s!"read before finishEdge {o.e} of {v} d={d}: {(readStack (above s orig)).flatMap (leavesB s.items)} vs {stNest psChild}"
   for m in stItemsB g s (simBlocks g prev fs (DirsOf s d) ++ (refOuts g v d (DirsOf s d) done false).2.1 ++ blChild) do
     report st false s!"items before finishEdge {o.e} of {v} d={d}: {m}"
+  for m in truncItemsB g s (refBlocks g (prev ++ [truncTree fs (.node v (done ++ [o]))])) do
+    report st false s!"trunc items before finishEdge {o.e} of {v} d={d}: {m}"
   let (hv', s') := (finishEdge v d o orig.length hasVert).run s
   if d ≤ lowval then
     report st (s'.tstack == orig && hv' == hasVert && s'.stackDir == s.stackDir)
