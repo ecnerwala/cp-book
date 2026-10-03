@@ -402,8 +402,9 @@ below do not determine which edges the entries hold, so `interior`, `proper`, `n
 need postorder interval ownership at `ceS₁` and its preservation through the loop.
 `RTop` additionally needs saturation and its consequences for previously closed pieces.
 `tstack`, `nxt_top`, `ne` are `loop1_r_shape` (from `run_loop1Cond`, `loop1Type_run`) and enter
-as hypotheses; `cur_top` needs the head-`topDepth` induction; the interval/saturation restatement
-is still open. -/
+as hypotheses. This ear-context-free form is kept only for `loop1_rBranch`'s fixed statement; the
+R-skeleton pipeline consumes the ear-context form `loop1_rBranch_content_ctx`
+(`Proofs/RLoop1.lean`), where `cur_top` and `cur_ne` are proved from `L1Piece`. -/
 theorem loop1_rBranch_content {D nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : Shape s)
     (hok : CloseEarsOk D nxtV d e edgeDir s)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
