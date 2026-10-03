@@ -8,12 +8,14 @@ import Spqr.RangesSites
 induction mirroring `rrTree`/`rrOuts`/`rrOut`: the positional parts are proved here (the
 ancestor chain `ancChain_child` with `d + 1 < stackVerts.size` from `ancChain_lt_size`, the
 DFS-layer `ret` from `DfsData.Spec.outs_lowval_lt`, the children's `dfs.outs` from `DfsTree.Sub`),
-and the R content is isolated at its three sites as the named admissions `rSide_entry_site`
-(`EntryR` stability and the parent-start bound at a child entry), `rSide_vertFree_site`
-(`VertFree` where a vertex entry may be pushed) and `rSide_finish_content_site`
+and the R content is isolated at its sites as `rSide_entry_site`
+(`EntryR` stability and the parent-start bound at a child entry; from `REntryContent`) and
+`rSide_finish_content_site`
 (`FinishRShape`'s `settled`/`unwrap`/`vert_own` at a tree-edge `finishEdge` site, with the child's
 `RWalk`, `FinishGuards`/`FinishBook`/`Frontier` and the parent's chain in hand; `pend`/`ear` are
-`rSide_finish_site`'s bookkeeping).
+`rSide_finish_site`'s bookkeeping; from `RCloseContent`). `VertFree` where a vertex entry may be
+pushed is the `CoverOut`/`CoverOuts []` conjunct (`Place.vertFree`), so `rsTree`/`rsOuts`/`rsOut`
+take `CoverTree`/`CoverOuts`/`CoverOut` alongside `CbTree`/`CbOuts`/`CbOut`.
 -/
 
 namespace Spqr
@@ -126,16 +128,6 @@ theorem rSide_entry_site {d c : Nat} (hi : s.Inv' d) (hs : Shape s)
   · exact hrc.stab t ht hk hE
   · exact hE.set_stackVerts hk
 
-/-- **Named admission** (R content, PROOF.md §4.5). Exact obligation: while `v`'s vertex entry has
-not been pushed (`VertBook v false`: `vertItem v` holds the blocks already closed at `v`), no open
-entry owns an edge below `vertItem v` (`VertFree`; the `vert_disj` shape of `EarClose` at the
-`finishEdge` sites, here at the `walkOut` entries and the end of `walkOuts`). Checked at every
-site of seeds 0..400 × both modes + 6000 random multigraphs (`vertown` line, 0 failures). -/
-theorem rSide_vertFree_site {F : List RFrame} {v d : Nat} (hi : s.Inv' d) (hs : Shape s)
-    (hb : VertBook v false s) (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
-    (hanc : AncChain dfs v d s) (hW : RWalk dfs F v d s) : VertFree v s := by
-  sorry
-
 /-- **Named admission** (R content, PROOF.md §4.5). Exact obligation: the content fields of
 `FinishRShape` at a tree-edge `finishEdge` site of a non-root vertex `v = stackVerts[d]` (`o` the
 tree edge to the child `c`, `B` the stack size before the child, the child walked: `RWalk` with
@@ -198,7 +190,7 @@ theorem AncChain.parent {v dp : Nat} (hanc : AncChain dfs v (dp + 1) s) :
 
 abbrev RSTree (dfs : DfsData) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
   ∀ (σ : List Nat) (n dp : Nat), d = dp + 1 →
-    s.Inv' dp → Shape s → GuardsTree t d s → BookTree t d s → CbTree σ n t d s →
+    s.Inv' dp → Shape s → GuardsTree t d s → BookTree t d s → CbTree σ n t d s → CoverTree σ n t d s →
     s.g.TwoConnected → s.g.WF → dfs.Spec s.g → dfs.Rooted s.g → s.stackVerts.size = s.g.nv →
     (∀ v outs, t = .node v outs → dfs.IsParent s.stackVerts[dp]! v) →
     (∀ t' : DfsTree, t'.Sub t → dfs.outs t'.v = t'.outs) →
@@ -210,7 +202,7 @@ abbrev RSOuts (dfs : DfsData) (v d : Nat) (outs : List DfsOut) (hasVert : Bool) 
     Prop :=
   ∀ (σ : List Nat) (n : Nat) (F : List RFrame) (B dp : Nat), d = dp + 1 →
     s.Inv' d → Shape s → GuardsOuts v d outs hasVert s → BookOuts v d outs hasVert s →
-    CbOuts σ n v d outs hasVert s →
+    CbOuts σ n v d outs hasVert s → CoverOuts σ n v d outs hasVert s →
     s.g.TwoConnected → s.g.WF → dfs.Spec s.g → dfs.Rooted s.g → s.stackVerts.size = s.g.nv →
     (∀ o ∈ outs, o ∈ dfs.outs v) →
     (∀ o ∈ outs, ∀ e cls child, o = .tree e cls child → ∀ t' : DfsTree, t'.Sub child → dfs.outs t'.v = t'.outs) →
@@ -221,7 +213,7 @@ abbrev RSOuts (dfs : DfsData) (v d : Nat) (outs : List DfsOut) (hasVert : Bool) 
 abbrev RSOut (dfs : DfsData) (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
   ∀ (σ : List Nat) (n : Nat) (F : List RFrame) (B dp : Nat), d = dp + 1 →
     s.Inv' d → Shape s → GuardsOut v d o hasVert s → BookOut v d o hasVert s →
-    CbOut σ n v d o hasVert s →
+    CbOut σ n v d o hasVert s → CoverOut σ n v d o hasVert s →
     s.g.TwoConnected → s.g.WF → dfs.Spec s.g → dfs.Rooted s.g → s.stackVerts.size = s.g.nv →
     o ∈ dfs.outs v →
     (∀ e cls child, o = .tree e cls child → ∀ t' : DfsTree, t'.Sub child → dfs.outs t'.v = t'.outs) →
@@ -231,9 +223,9 @@ abbrev RSOut (dfs : DfsData) (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : Walk
 
 mutual
 theorem rsTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), RSTree dfs t d s
-  | .node v outs, d, s => fun σ n dp hdp hi hs hg hb hcb h2 hwf hsp hrt hsz hp hout hchain hpar => by
+  | .node v outs, d, s => fun σ n dp hdp hi hs hg hb hcb hcv h2 hwf hsp hrt hsz hp hout hchain hpar => by
     subst hdp
-    unfold GuardsTree at hg; unfold BookTree at hb; unfold CbTree at hcb
+    unfold GuardsTree at hg; unfold BookTree at hb; unfold CbTree at hcb; unfold CoverTree at hcv
     unfold RSideTree
     have hp := hp v outs rfl
     have hsize : dp + 1 < s.stackVerts.size := ancChain_lt_size hsp hwf hsz hp hchain
@@ -245,7 +237,7 @@ theorem rsTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), RSTree dfs t d s
         ⟨fun t ht hd hne => hstab t ht (hpar.entries t ht (by omega) fun hv => by
           have := hvs t ht hv; omega), hpar.disj⟩⟩
     have hvo : dfs.outs v = outs := hout _ (DfsTree.Sub.refl _)
-    exact rsOuts v (dp + 1) outs false _ σ n [] s.tstack.length dp rfl (hi.setSv v) hs.frame' hg hb hcb h2 hwf
+    exact rsOuts v (dp + 1) outs false _ σ n [] s.tstack.length dp rfl (hi.setSv v) hs.frame' hg hb hcb hcv h2 hwf
       hsp hrt (by show (s.stackVerts.set! (dp + 1) v).size = s.g.nv; rw [Array.size_set!]; exact hsz)
       (fun o ho => by rw [hvo]; exact ho)
       (fun o ho e cls child hoe t' ht' => hout t' (DfsTree.Sub.step ht' (hoe ▸ ho)))
@@ -253,16 +245,16 @@ theorem rsTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), RSTree dfs t d s
 
 theorem rsOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState),
     RSOuts dfs v d outs hasVert s
-  | v, d, [], hasVert, s => fun _ _ F B dp hdp hi hs hg hb _ h2 hwf hsp hrt hsz hmem hout hanc hW hB hBl hnv => by
-    unfold BookOuts at hb
+  | v, d, [], hasVert, s => fun _ _ F B dp hdp hi hs hg hb _ hcv h2 hwf hsp hrt hsz hmem hout hanc hW hB hBl hnv => by
+    unfold CoverOuts at hcv
     unfold RSideOuts
     intro hv
     subst hv
-    exact rSide_vertFree_site hi hs hb h2 hsp hrt hanc hW
-  | v, d, o :: rest, hasVert, s => fun σ n F B dp hdp hi hs hg hb hcb h2 hwf hsp hrt hsz hmem hout hanc hW hB hBl hnv => by
-    unfold GuardsOuts at hg; unfold BookOuts at hb; unfold CbOuts at hcb
+    exact hcv.2 rfl
+  | v, d, o :: rest, hasVert, s => fun σ n F B dp hdp hi hs hg hb hcb hcv h2 hwf hsp hrt hsz hmem hout hanc hW hB hBl hnv => by
+    unfold GuardsOuts at hg; unfold BookOuts at hb; unfold CbOuts at hcb; unfold CoverOuts at hcv
     have hro : RSideOut dfs v d o hasVert s :=
-      rsOut v d o hasVert s σ n F B dp hdp hi hs hg.1 hb.1 hcb.1 h2 hwf hsp hrt hsz (hmem o (List.mem_cons_self ..))
+      rsOut v d o hasVert s σ n F B dp hdp hi hs hg.1 hb.1 hcb.1 hcv.1 h2 hwf hsp hrt hsz (hmem o (List.mem_cons_self ..))
         (hout o (List.mem_cons_self ..)) hanc hW hB hBl hnv
     unfold RSideOuts
     refine ⟨hro, ?_⟩
@@ -270,21 +262,22 @@ theorem rsOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : Walk
     have hk := kOut v d o hasVert s s.g (d + 1) rootItem s hT (le_refl _) (by show 0 < 1 + _ + _; omega)
       (by show 1 + v ≠ 0; omega) (fun w _ => by show 1 + w ≠ 0; omega)
       (fun e _ => by show 1 + s.g.nv + e ≠ 0; omega) Keep.refl
-    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv' s' ⟨hi', hs'⟩ hg' hb' hcb'
-        ⟨hW', hK', hn', hg'', hsv'⟩ hk' => ?_)
-      (invOut v d o hasVert s hi hs hg.1 hb.1)) hg.2) hb.2) hcb.2)
+    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv' s' ⟨hi', hs'⟩ hg' hb' hcb'
+        hcv' ⟨hW', hK', hn', hg'', hsv'⟩ hk' => ?_)
+      (invOut v d o hasVert s hi hs hg.1 hb.1)) hg.2) hb.2) hcb.2) hcv.2)
       (rrOut v d o hasVert s F B hi hs hg.1 hb.1 hro h2 hsp hrt hanc hW hB hBl hnv)) hk
     have hanc' : AncChain dfs v d s' :=
       ⟨(hsv' d (le_refl _)).trans hanc.1, fun k hk => by rw [hsv' k hk]; exact hanc.2 k hk⟩
-    exact rsOuts v d rest hv' s' σ _ F B dp hdp hi' hs' hg' hb' hcb' (by rw [hg'']; exact h2)
+    exact rsOuts v d rest hv' s' σ _ F B dp hdp hi' hs' hg' hb' hcb' hcv' (by rw [hg'']; exact h2)
       (by rw [hg'']; exact hwf) (by rw [hg'']; exact hsp) (by rw [hg'']; exact hrt)
       (by rw [hk'.sv, hg'']; exact hsz) (fun o ho => hmem o (List.mem_cons_of_mem _ ho))
       (fun o ho => hout o (List.mem_cons_of_mem _ ho)) hanc' hW' hB hK'.1 hn'
 
 theorem rsOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), RSOut dfs v d o hasVert s
-  | v, d, o, hasVert, s => fun σ n F B dp hdp hi hs hg hb hcb h2 hwf hsp hrt hsz hmem hout hanc hW hB hBl hnv => by
+  | v, d, o, hasVert, s => fun σ n F B dp hdp hi hs hg hb hcb hcv h2 hwf hsp hrt hsz hmem hout hanc hW hB hBl hnv => by
     have hfr := frOut v d o hasVert s hi hs hg hb
     unfold GuardsOut at hg; unfold BookOut at hb; unfold FrontiersOut at hfr; unfold CbOut at hcb
+    unfold CoverOut at hcv
     have hlow : o.cls.lowval d < d := by
       subst hdp
       obtain ⟨p, hpv⟩ := hanc.parent
@@ -292,13 +285,12 @@ theorem rsOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), R
       have hd : dfs.depth v = dp + 1 := by
         have := (hanc.2 (dp + 1) (le_refl _)).2; rwa [hanc.1] at this
       rwa [hd] at h
-    have hfree : hasVert = false → VertFree v s := fun hv =>
-      rSide_vertFree_site hi hs (hv ▸ hb.1) h2 hsp hrt hanc hW
+    have hfree : hasVert = false → VertFree v s := hcv.2.1
     unfold RSideOut
     refine ⟨hlow, hfree, ?_⟩
-    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv₁ s₁ ⟨hi₁, hs₁⟩ hg₁ hb₁ hfr₁ hcb₁
-        ⟨hW₁, hK₁, hn₁, hhv₁, hpush₁, hg₁', hsv₁, hit₁⟩ => ?_)
-      (walkOutPre_inv hi hs hb.1)) hg) hb.2) hfr) hcb) (walkOutPre_r hfree hW hBl hnv)
+    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv₁ s₁ ⟨hi₁, hs₁⟩ hg₁ hb₁ hfr₁
+        hcb₁ hcv₁ ⟨hW₁, hK₁, hn₁, hhv₁, hpush₁, hg₁', hsv₁, hit₁⟩ => ?_)
+      (walkOutPre_inv hi hs hb.1)) hg) hb.2) hfr) hcb) hcv.2.2) (walkOutPre_r hfree hW hBl hnv)
     have hanc₁ : AncChain dfs v d s₁ := by rw [AncChain, hsv₁]; exact hanc
     have h2₁ : s₁.g.TwoConnected := by rw [hg₁']; exact h2
     have hwf₁ : s₁.g.WF := by rw [hg₁']; exact hwf
@@ -308,7 +300,7 @@ theorem rsOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), R
     | back e dest cls => trivial
     | tree e cls child =>
       obtain ⟨c, couts⟩ := child
-      try simp only [wp_modify] at hg₁ hb₁ hfr₁ hcb₁
+      try simp only [wp_modify] at hg₁ hb₁ hfr₁ hcb₁ hcv₁
       simp only [wp_modify]
       have hW₂ : RWalk dfs F v d ({ s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } : WalkState) :=
         RWalk.of_eq (s := s₁) rfl rfl rfl rfl hW₁
@@ -321,7 +313,8 @@ theorem rsOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), R
         rw [hanc₁.1]; exact ⟨_, hmem, rfl, rfl⟩
       have hside : RSideTree dfs (.node c couts) (d + 1)
           ({ s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } : WalkState) :=
-        rsTree (.node c couts) (d + 1) _ σ n d rfl hi₁.frame' hs₁.frame' hg₁.1 hb₁.1 hcb₁.1 h2₁ hwf₁ hsp₁ hrt₁
+        rsTree (.node c couts) (d + 1) _ σ n d rfl hi₁.frame' hs₁.frame' hg₁.1 hb₁.1 hcb₁.1 hcv₁.1 h2₁ hwf₁ hsp₁
+          hrt₁
           (by show s₁.stackVerts.size = s₁.g.nv; rw [hsv₁, hg₁']; exact hsz)
           (fun w wouts h => by cases h; exact hpv) (hout e cls _ rfl)
           (fun k hk => by
@@ -354,17 +347,19 @@ end
 /-- The side facts of the child-return induction at a block's non-root `walkTree` entry
 `(c, d + 1)` (`RSideTree`), given the ear bookkeeping `BookTree` of the entry, the parent's
 ancestor chain, the layout `stackVerts.size = g.nv`, and the DFS out-lists of the subtree
-(`DfsData.ofForest_outs`) and the Ranges site record `CbTree` (for `closeBase_rContent`). -/
+(`DfsData.ofForest_outs`) and the Ranges site records `CbTree` (for `closeBase_rContent`) and
+`CoverTree` (`VertFree` at the vertex sites). -/
 theorem walkTree_rSide (s : WalkState) (d c : Nat) (outs : List DfsOut) (σ : List Nat) (n : Nat)
     (hi : s.Inv' d) (hs : Shape s) (hg : GuardsTree (.node c outs) (d + 1) s)
     (hb : BookTree (.node c outs) (d + 1) s) (hcb : CbTree σ n (.node c outs) (d + 1) s)
+    (hcv : CoverTree σ n (.node c outs) (d + 1) s)
     (h2 : s.g.TwoConnected) (hwf : s.g.WF) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hsz : s.stackVerts.size = s.g.nv) (hp : dfs.IsParent s.stackVerts[d]! c)
     (hout : ∀ t : DfsTree, t.Sub (.node c outs) → dfs.outs t.v = t.outs)
     (hchain : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! s.stackVerts[d]! ∧ dfs.depth s.stackVerts[k]! = k)
     (hR : s.RInvTop dfs s.stackVerts[d]! d) :
     RSideTree dfs (.node c outs) (d + 1) s :=
-  rsTree (.node c outs) (d + 1) s σ n d rfl hi hs hg hb hcb h2 hwf hsp hrt hsz
+  rsTree (.node c outs) (d + 1) s σ n d rfl hi hs hg hb hcb hcv h2 hwf hsp hrt hsz
     (fun _ _ h => by cases h; exact hp) hout hchain hR
 
 end WalkState

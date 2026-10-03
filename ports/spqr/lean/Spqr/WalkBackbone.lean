@@ -264,7 +264,7 @@ theorem sites (h : WalkInv G t d s) : Sites G t d s := by
   refine ⟨hE.1, hb, hg, hf, hc, hcv.1, hr, hcb, fun h2 dp hd => ?_⟩
   have R := h.r h2
   have P := R.par dp hd
-  exact rsTree t d s G.σ G.n dp hd P.inv_par h.shape hg hb hcb h2 R.wf R.spec R.rooted
+  exact rsTree t d s G.σ G.n dp hd P.inv_par h.shape hg hb hcb hcv.1 h2 R.wf R.spec R.rooted
     (by rw [h.g_eq]; exact h.sv_size) P.parent R.outs P.chain P.top
 
 end WalkInv
@@ -522,7 +522,7 @@ theorem sites : OutSites G v d o hasVert n s := by
   have hcb := cbOut G.σ n v d o hasVert s h.rgs h.σ_nodup hg hb hf hr hc h.close
   refine ⟨hE.1, hb, hg, hf, hc, hcv.1, hr, hcb, fun h2 dp hd => ?_⟩
   have R := h.r h2
-  exact rsOut v d o hasVert s G.σ n G.F B dp hd h.inv h.shape hg hb hcb h2 R.wf R.spec R.rooted
+  exact rsOut v d o hasVert s G.σ n G.F B dp hd h.inv h.shape hg hb hcb hcv.1 h2 R.wf R.spec R.rooted
     (by rw [h.g_eq]; exact h.sv_size) (by rw [R.outs_v]; exact h.mem)
     (fun e cls child ho => R.sub e cls child (ho ▸ h.mem)) R.chain R.rwalk R.fB R.B_le R.hvB
 
@@ -590,7 +590,7 @@ theorem walkOutPre_out (h : WalkInvOut G B v d outs₀ done (o :: rest) hasVert 
     · have R := h.r h2
       have hfree : hasVert = false → VertFree v s := fun h0 => by
         subst h0
-        exact rSide_vertFree_site h.inv h.shape hb h2 R.spec R.rooted R.chain R.rwalk
+        exact h.full.place.vertFree h.v_lt (h.Pcur rfl)
       exact wp_mono _ (walkOutPre_r hfree R.rwalk R.B_le R.hvB)
         fun _ _ hw _ => ⟨hw.1, hw.2.1, hw.2.2.1⟩
     · exact wp_of_forall fun _ _ h2' => absurd h2' h2
@@ -935,7 +935,7 @@ theorem walkOut_inv_r (h : WalkInvOut G B v d outs₀ done (o :: rest) hasVert n
       have hK := kOut v 0 o false s G.g 1 0 s h.types (Nat.le_refl _) (by omega) (vertItem_ne_zero v)
         (fun w _ => vertItem_ne_zero w) (fun e _ => edgeItem_ne_zero G.g e) Keep.refl
       have hO := rootOut v o s S.book hts
-      have hR := rkRootOut G.dfs v o s G.σ n h.inv h.shape S.book S.cb hts h2 R.spec R.rooted R.wf
+      have hR := rkRootOut G.dfs v o s G.σ n h.inv h.shape S.book S.cb S.cover hts h2 R.spec R.rooted R.wf
         (by rw [h.g_eq]; exact h.sv_size)
         (fun e cls c couts heq => by
           subst heq
@@ -1366,8 +1366,7 @@ theorem exit_false (hW : WalkInv G (.node v outs) d s)
     r := fun h2 dp hd => by
       have h2' : s₂.g.TwoConnected := by rw [h.g_eq, ← hW.g_eq]; exact h2
       have R := h.r h2'
-      have hfree₀ : VertFree v s₂ :=
-        rSide_vertFree_site h.inv h.shape (fun _ => ⟨hv, hc, ha⟩) h2' R.spec R.rooted R.chain R.rwalk
+      have hfree₀ : VertFree v s₂ := h.full.place.vertFree (by rw [← h.full.place.g_eq]; exact hv) hnP
       have hfree : VertFree v { s₂ with stackDir := s₂.stackDir.set! d true } := hfree₀
       exact ⟨(RWalk.of_eq (s := s₂) (s' := { s₂ with stackDir := s₂.stackDir.set! d true }) rfl rfl rfl rfl
           R.rwalk).pushVert (k := d) hfree,

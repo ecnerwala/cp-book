@@ -1,6 +1,7 @@
 import Mathlib.Algebra.BigOperators.Group.Finset.Basic
 import Mathlib.Algebra.Order.BigOperators.Group.Finset
 import Spqr.WalkTyping
+import Spqr.WalkSpec
 
 /-!
 # Span discipline of the walk
@@ -33,6 +34,11 @@ theorem spansCount_tail_le (ts : List TEntry) (i : ItemId) : spansCount ts.tail 
   cases ts with
   | nil => exact Nat.le_refl _
   | cons t ts => rw [List.tail_cons, spansCount_cons]; omega
+theorem spansCount_pos {ts : List TEntry} {t : TEntry} (ht : t ∈ ts) {i : ItemId}
+    (hi : i ∈ t.spans.1 ++ t.spans.2) : 0 < spansCount ts i :=
+  Nat.lt_of_lt_of_le (List.count_pos_iff.2 hi)
+    (List.le_sum_of_mem (List.mem_map_of_mem (f := fun t => (t.spans.1 ++ t.spans.2).count i) ht))
+
 theorem spansCount_mergeTop_le (ts : List TEntry) (i : ItemId) :
     spansCount (WalkM.mergeTop ts) i ≤ spansCount ts i := by
   match ts with
@@ -64,6 +70,52 @@ theorem count_le_chCount {j : Nat} (hj : j < items.size) (i : ItemId) :
     (items.ch j).count i ≤ chCount items i :=
   Finset.single_le_sum (f := fun j => (items.ch j).count i) (fun _ _ => Nat.zero_le _)
     (Finset.mem_range.mpr hj)
+
+section
+variable {items}
+
+theorem lt_size_of_isParent {p c : ItemId} (h : items.IsParent p c) : p < items.size := by
+  by_contra hp
+  have : items.ch p = [] := by simp [ch, Array.getElem?_eq_none (Nat.le_of_not_lt hp)]
+  simp [IsParent, this] at h
+
+theorem no_parent_of_chCount_eq_zero {c : ItemId} (h : chCount items c = 0) (p : ItemId) :
+    ¬ items.IsParent p c := fun hp =>
+  Nat.lt_irrefl 0 (Nat.lt_of_lt_of_le (List.count_pos_iff.2 hp)
+    (h ▸ count_le_chCount items (lt_size_of_isParent hp) c))
+
+theorem parent_eq_of_chCount_le {p p' c : ItemId} (hle : chCount items c ≤ 1)
+    (h : items.IsParent p c) (h' : items.IsParent p' c) : p = p' := by
+  by_contra hne
+  have hp := lt_size_of_isParent h
+  have hp' := lt_size_of_isParent h'
+  have hsub : ({p, p'} : Finset Nat) ⊆ Finset.range items.size := by
+    intro x hx
+    simp only [Finset.mem_insert, Finset.mem_singleton] at hx
+    rcases hx with rfl | rfl <;> simp [*]
+  have hle' : (items.ch p).count c + (items.ch p').count c ≤ chCount items c := by
+    rw [← Finset.sum_pair (f := fun j => (items.ch j).count c) hne]
+    exact Finset.sum_le_sum_of_subset hsub
+  have h1 := List.count_pos_iff.2 h
+  have h2 := List.count_pos_iff.2 h'
+  omega
+
+/-- With unique parents, two parentless ancestors of `x` coincide. -/
+theorem root_eq_of_below (huniq : ∀ p p' c, items.IsParent p c → items.IsParent p' c → p = p')
+    {a b x : ItemId} (hax : items.Below a x) (hbx : items.Below b x)
+    (ha : ∀ p, ¬ items.IsParent p a) (hb : ∀ p, ¬ items.IsParent p b) : a = b := by
+  induction hbx generalizing a with
+  | refl =>
+    rcases Relation.ReflTransGen.cases_tail hax with rfl | ⟨c, _, hcx⟩
+    · rfl
+    · exact absurd hcx (hb c)
+  | @tail c x _ hcx ih =>
+    rcases Relation.ReflTransGen.cases_tail hax with rfl | ⟨c', hac', hc'x⟩
+    · exact absurd hcx (ha c)
+    · obtain rfl := huniq c' c x hc'x hcx
+      exact ih hac' ha
+
+end
 
 theorem chCount_push (x : Item) (hx : x.ch = []) (i : ItemId) :
     chCount (items.push x) i = chCount items i := by
@@ -488,6 +540,28 @@ theorem root_append (h : s.Place g P X) :
   omega
 
 end Place
+
+variable {g : Graph} {P X : ItemId → Prop} {s : WalkState}
+
+/-- No stack entry owns an edge below `vertItem v`. -/
+def VertFree (v : Nat) (s : WalkState) : Prop :=
+  ∀ t ∈ s.tstack, ∀ e, t.edges s.g s.items e → ¬ Items.EdgeBelow s.g s.items (vertItem v) e
+
+/-- A spanned item has no parent (`Place.le`), and an unpushed vertex item is parentless and
+unspanned (`cnt = 0`); since parents are unique, the two cannot both lie above an edge item. -/
+theorem Place.vertFree (h : s.Place g P X) {v : Nat} (hv : v < g.nv) (hP : ¬ P (vertItem v)) :
+    VertFree v s := by
+  intro t ht e ⟨i, hi, hie⟩ hve
+  have hc0 : s.cnt (vertItem v) = 0 :=
+    h.cnt_eq_zero (by show 0 < 1 + v; omega) (by show 1 + v < 1 + g.nv + g.ne; omega) hP
+  have hci := h.le i
+  have hsp := spansCount_pos ht hi
+  unfold cnt at hc0 hci
+  have huniq : ∀ p p' c, Items.IsParent s.items p c → Items.IsParent s.items p' c → p = p' := fun p p' c =>
+    Items.parent_eq_of_chCount_le (by have := h.le c; unfold cnt at this; omega)
+  obtain rfl := Items.root_eq_of_below huniq hie hve
+    (Items.no_parent_of_chCount_eq_zero (by omega)) (Items.no_parent_of_chCount_eq_zero (by omega))
+  omega
 
 end WalkState
 
