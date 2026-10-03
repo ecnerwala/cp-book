@@ -2326,7 +2326,25 @@ holding `V 4` with the final order `0 … 3, 4, 2`). The right per-entry fact mu
 entry's top vertex explicitly (not via `stackVerts`) and be stated for the one-sided entries that
 a close actually consumes (loop 1: `loop1_side`; the P entry: `p_entry`; the fold: against
 `(stackVerts[c.topDepth], curV)` after the fold, from `FoldSpec`/`EarClose`), i.e. it is an ear-side
-invariant in the sense of §7.6's `EarFinish` fields rather than a `StRead` clause. The original plan, for reference:
+invariant in the sense of §7.6's `EarFinish` fields rather than a `StRead` clause.
+
+*The site-level terminal facts (sim-5, `check_stsim` `truncCtxB`/`truncSiteB`, seeds 0..1000, 0
+violations).* Stated only for the entries whose terminals are current, against the truncated
+blocks: (m16/m17, at every out-edge, before every `finishEdge`, at the end of every `walkTree` of
+`v` at depth `d`) every entry `(v, l)` with `l < d` — `EarCtx.above` — has `(stackVerts[l], v)`
+`Oriented` by `stackDir[l]` (i.e. `setSides stackDir[l] stackVerts[l] v`, the `Q` convention) and its
+V span items strictly between; (m13/m14, before `finishEdge o` of `v` with `lowval < d`) the ear's
+terminals `(stackVerts[lowval], v)` are `Oriented` by `stackDir[lowval]` and every V span item of
+the child's leftover `sub` (other than `vertItem v`) is strictly between — the fold / tail close;
+(m15, same site) for every loop-1 entry `t'` of `sub` (the `topDepth ≥ d` prefix) with
+`t'.topDepth = d`, `(v, t'.vStart)` is `Oriented` by `stackDir[d]` and the V span items of the
+prefix down to `t'` are strictly between — the loop-1 closes, whose bottom is the consumed entry's
+`vStart`. Kept as counterexamples next to the statements: m9/m12 (any entry, via
+`stackVerts[t.topDepth]`) fail on seeds 554/6 (stale depth of a buried entry), 0 (two-sided entry)
+and 9 (fold retarget); m18 ("loop 1's range has `topDepth ≤ d + 1`") fails on seeds 154, 195, 442 —
+the buried `V y`/`(y, l)` pair of a chain bottom sits in loop 1's range with its deeper `topDepth`
+(`EarBottom.vy_top`), so the loop-1 statement must be per consumed entry, not per depth. The
+original plan, for reference:
 What remains: (1) `finishBoundary` — the only place a block completes: popping the child's ear
 must give `InBlock ⟨some (v, o.dest), stNest ps⟩` for every S/P/R
 item below the popped entries, i.e. the segment clause from `StRead sub ps` (done) *and* the
