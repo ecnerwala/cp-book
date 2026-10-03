@@ -5,25 +5,15 @@ import Spqr.RangesWF
 /-!
 # Walk-phase contract
 
-`walk_items_wf` is the walk→relabel interface (`Items.WF`, `PROOF.md` §3–§4) and `spqrTree_eq`
-identifies `Graph.spqrTree` with the reference pipeline. They live below `Spqr.Correctness` so that
-the st-order layer (`StSpec`/`StWalk`/`StOriented`) can use them and `Correctness` can import that
-layer.
+The walk-side admissions behind the walk→relabel interface `Items.WF` (`PROOF.md` §3–§4):
+`walk_ranges` (the postorder range / attachment structure, §4.6) and `walk_canonical`; `spqrTree_eq`
+identifies `Graph.spqrTree` with the reference pipeline. `walk_items_wf` itself is assembled in
+`Spqr.WalkItemsWF` (above `WalkCover`/`WalkTyping`, whose `walk_tree`/`walk_typing` it consumes);
+this module stays below the st-order layer (`StSpec`/`StWalk`/`StOriented`), which only needs
+`spqrTree_eq` and takes `Items.WF` as a hypothesis.
 -/
 
 namespace Spqr
-
-/-- Admitted (hypothesis-free bridge): `Items.Tree` for the walk. Under `g.WF`/`OrderOK` this is
-`WalkCover.walk_tree` (which lives above this module and is itself modulo `walk_sides`). -/
-theorem walk_items_tree (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    Items.Tree g (g.walk tern (g.dfsForest vo eo)).items := by
-  sorry
-
-/-- Admitted (hypothesis-free bridge): the typing facts of `WalkTyping.walk_typing`
-(`i_o_leaf`, `vs_shape`, `vs_lt`), which needs `0 < g.nv`, bounded trees and edge coverage. -/
-theorem walk_typingFacts (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    Items.TypingFacts g (g.walk tern (g.dfsForest vo eo)).items := by
-  sorry
 
 /-- Admitted: the walk's items have the postorder range / attachment structure (`PROOF.md` §4.6),
 relative to the DFS edge postorder. Checked empirically by `check_ranges`. -/
@@ -37,13 +27,7 @@ theorem walk_canonical (g : Graph) (vo eo : List Nat) :
     Items.Canonical (g.walk false (g.dfsForest vo eo)).items := by
   sorry
 
-/-- Phase 2: the walk's items satisfy the item-level specification. `Endpoints`/`Shapes` are derived
-from `walk_ranges` by `Items.wf_of_ranges` (pure item-level reasoning, no tstack facts). -/
-theorem walk_items_wf (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    Items.WF g (g.walk tern (g.dfsForest vo eo)).items :=
-  Items.wf_of_ranges (walk_items_tree g tern vo eo) (walk_typingFacts g tern vo eo)
-    (walk_ranges g tern vo eo)
-
+/-- `Graph.spqrTree` (the fast pipeline) is the reference walk followed by `relabelTree`. -/
 theorem spqrTree_eq (g : Graph) (tern : Bool) (vo eo : List Nat) :
     g.spqrTree tern vo eo = relabelTree g (g.walk tern (g.dfsForest vo eo)).items := by
   simp [Graph.spqrTree, Graph.dfsForestFast_eq, Graph.walkFast_items, Fast.relabelTreeFast_eq]

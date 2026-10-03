@@ -773,11 +773,15 @@ from `Ranges` (the Q clauses from `q_leaf`/`q_root`; `child_vs_in_parent`
 from `vs_att` at the child + `att_vs`/`interior` at the parent + `desc_disjoint`; `nv_nodup` from
 `vs_ne`, `vs_att` vs `interior` and the injectivity of `vertItem`; `separation` = `att_vs`;
 `interior` = `interior`). `convex` is not needed for `WF` at all — it is the field the walk-time
-invariant (`RangesInv`, step 4) and the R/st layers consume. `WalkWF.walk_items_wf` is now
-`wf_of_ranges (walk_items_tree) (walk_typingFacts) (walk_ranges) (walk_canonical)`: the
-`Endpoints`/`Shapes` half rests on the named admission `walk_ranges` instead of the ear layer;
-`walk_items_tree`/`walk_typingFacts` are hypothesis-free bridges to `WalkCover.walk_tree` /
-`WalkTyping.walk_typing` (which sit above `WalkWF` in the import order and need `g.WF`/`OrderOK`).
+invariant (`RangesInv`, step 4) and the R/st layers consume. `walk_items_wf` (`WalkItemsWF.lean`, under
+`g.WF`/`OrderOK`) is `wf_of_ranges walk_tree.toTree walk_typing.toTypingFacts walk_ranges`: `Tree`
+comes from `WalkCover.walk_tree`, the `Endpoints`/`Shapes` half rests on the named admission
+`walk_ranges` instead of the ear layer. `WalkItemsWF` sits above `WalkCover`/`WalkTyping`
+(the DFS prerequisites `Bounded`/`ForestOK`/coverage come from `dfsForest_spanning'`/`dfsForest_wf`;
+the empty graph, where `walk_tree`'s `0 < g.nv` fails, is the initial items), so the st layer
+(`StWalk.walk_st`/`spqrTree_st`) takes `Items.WF` as a hypothesis and `StOriented`/`Correctness`/
+`RelabelChildShape` supply it; `spqrTree_represents`/`spqrTree_canonical`/`spqrTree_childShape`
+therefore carry `g.WF`/`OrderOK` like `spqrTree_wf'`.
 
 `RangesInv.lean` (step 4, the walk-time invariant behind `walk_ranges`): `WalkState.RangesInv σ n D s`
 after the first `n` edges of `σ` at depth `D`: `inv : Inv' D` (the attachment half, `WalkSpec.lean`;
@@ -949,8 +953,8 @@ be corrected (both were false of the output, i.e. statement bugs):
 `ROriented` is needed for R nodes (`Ownership.ne_nvs`, `Shape`); `StOriented.lean` derives it from
 the st-ordering, `Items.rOriented_of_stNumbered : StNumbered → WF → ROriented` (`vertList =
 nvList` under `Items.Tree`), so `walk_items_rOriented' : ROriented (walk …).items` follows from
-`walk_st`; `spqrTree_wf` uses it directly (`walk_items_wf`/`spqrTree_eq` live in `WalkWF.lean`,
-below the st layer, so `Correctness` can import `StOriented`).
+`walk_st`; `spqrTree_wf'` uses it directly (`spqrTree_eq` lives in `WalkWF.lean` below the st
+layer; `walk_st` takes `Items.WF` as a hypothesis, supplied by `WalkItemsWF.walk_items_wf`).
 The other fields: `Sizes` is `RelabelIdx.sizes`; `Preorder` from `RelabelLayout.child_idx`/
 `subtree_end` (children are numbered `idx i + 1`, then after the previous child's subtree —
 `chainEnd`; by induction on `|Items.desc|` every subtree is non-empty and contained in the
@@ -995,9 +999,9 @@ disjointness), which restricts the global filter to the node's own segment (`row
 `relabelTree_represents_of_r` (same with the output-level R clause, the hypothesis
 `spqrTree_r_three_connected` provides). `Correctness.relabelTree_represents` now takes
 `Items.RThreeConnected` as its explicit hypothesis and is `relabelTree_represents'`;
-`spqrTree_represents` is `relabelTree_represents_of_r` on `walk_items_wf` and
-`spqrTree_r_three_connected`, so its admissions are `walk_items_wf` and
-`spqrTree_r_three_connected`.
+`spqrTree_represents` (under `g.WF`/`OrderOK`) is `relabelTree_represents_of_r` on `walk_items_wf`
+and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf` (`walk_ranges`,
+`walk_sides`) and `spqrTree_r_three_connected`.
 
 `RelabelSt.lean` proves `relabel_st : Items.StNumbered → Items.WF g → (relabelTree g items).StOrder`
 **[proved]** from the same package, see §7.3.
@@ -1045,7 +1049,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 5 relabel, CSR bounds: `relabelTree_adj : Items.WF → Items.ROriented → (∀ n, adjBounds[2 nvSt n] = 2 neSt n) ∧ adjBounds[2 |nodeVerts|] = |adjDat|` (the statement of `relabel_adj_spec`); `layout_local` (`Layout.Local` for every item's `nodeLayout`) | `RelabelAdj.lean` | proved; `relabel_adj_spec` itself stays admitted in `RelabelSpec.lean` only because that file cannot import its proof |
 | 5 relabel, `WF` assembly: `RelabelAll.wf_tree`, `preorder` (`child_idx`/`subtree_end` chain, `subtree_props`, `parent_eq_iff`), `only_root_F`, `shape` (`skeleton_eq` + `LayoutShape.shape_*`), `adj_bounds_mono`, `adj_dest`, `adj_incident'` (`global_bound`/`global_row`: global CSR rows = `Layout.Local` rows; `foreign_ne`, `row_filter`) | `RelabelWF.lean` | proved (standard axioms) |
 | 2/7 `Items.ROriented` of the walk output: `rOriented_of_stNumbered`, `walk_items_rOriented'` | `StOriented.lean` | proved from `walk_st` (+ `walk_items_wf`), under `g.WF`/`OrderOK` like `walk_st`; used by `spqrTree_wf'` (`Correctness.lean`); the hypothesis-free `spqrTree_wf` the planar layer uses is a named admission (§7.6) |
-| 2 walk→relabel interface `walk_items_wf : Items.WF g (g.walk tern (g.dfsForest vo eo)).items`, and `spqrTree_eq` | `WalkWF.lean` (below `StSpec`/`StWalk`/`StOriented` and `Correctness`) | `walk_items_wf = wf_of_ranges walk_items_tree walk_typingFacts walk_ranges walk_canonical`; admitted: `walk_ranges` (§4.6), `walk_canonical` (false for `tern = true`), the bridges `walk_items_tree`/`walk_typingFacts`; `spqrTree_eq` proved |
+| 2 walk→relabel interface `walk_items_wf : g.WF → OrderOK g.nv vo → OrderOK g.ne eo → Items.WF g (g.walk tern (g.dfsForest vo eo)).items` (`WalkItemsWF.lean`, above `WalkCover`/`WalkTyping`), and `spqrTree_eq` (`WalkWF.lean`, below the st layer) | `walk_items_wf = wf_of_ranges walk_tree.toTree walk_typing.toTypingFacts walk_ranges` (empty graph: `wf_initialItems`); admitted: `walk_ranges` (§4.6), `walk_canonical` (`tern = false`, used by `spqrTree_canonical`); `spqrTree_eq` proved |
 | §4.6 final-state ranges `Items.Ranges g items σ` (piece-edge convexity in the DFS edge postorder + attachment facts), `wf_of_ranges : Tree → TypingFacts → Ranges → canonical → Items.WF` (`endpoints_of_ranges`, `shapes_of_ranges`); checker `check_ranges` (`CheckRanges.lean`) | `Ranges.lean`, `RangesWF.lean` | def / proved (standard axioms); every field 0 violations on seeds 0..400 + tiny graphs; corrected `s_shape` (`1 ≤`), `r_shape` (`5 ≤`), `q_children` (Q leaf child allowed) in `ItemSpec.lean` with counterexamples |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
 | 5 relabel per-node interface `RelabelNode`/`RelabelLayout`/`RelabelIdx`, `Items.nvList`/`ordered`/`edgeChildren`/`PosOK`/`hasCap`/`nEdges`/`ROriented` | `RelabelSpec.lean` | def; `relabel_node_spec` proved in `RelabelMain.lean` (`Ghost.relabel_node_spec_proved`) |

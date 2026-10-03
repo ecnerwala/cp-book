@@ -26,6 +26,7 @@ import Spqr.WalkCover
 import Spqr.WalkSpec
 import Spqr.WalkInv
 import Spqr.WalkWF
+import Spqr.WalkItemsWF
 import Spqr.RangesInv
 import Spqr.Correctness
 import Spqr.EarSpec
