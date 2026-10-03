@@ -685,15 +685,36 @@ theorem walkTree_rReturn (s : WalkState) (d c : Nat) (outs : List DfsOut)
   refine ⟨hK.1, ?_, hfr.entries, hW.top.disj⟩
   have := hK.2; rwa [Nat.sub_self, List.drop_zero] at this
 
-/-- Admitted: the side facts of the child-return induction at a block's non-root `walkTree` entry
-`(c, d + 1)` (`RSideTree`): the ancestor chain `stackVerts[k]` (`k ≤ d + 1`) is the depth-`k`
-ancestor of `c`; `EntryR` is stable under `stackVerts.set! (d + 1) c`; no entry starting at the
-parent tops out above `d`; every out-edge of a non-root vertex returns (`lowval < depth`); no entry
-owns an edge below `vertItem v` before `v`'s vertex entry is pushed; and the R-maximality content
-`FinishRShape` at tree-edge sites — together with the ear bookkeeping `BookTree`. Checked on seeds
-0..300 and 6000 extra multigraphs, both ternarize modes (`checks/RFinishEdgeCheck.lean`: `anc`,
-`stab`, `entry`, `ret`, `vertown`, `FinishRShape` lines). -/
+/-- **Named admission** (R-4 statement correction, PROOF.md §4.5). Exact obligation: the side
+facts of the child-return induction at a block's non-root `walkTree` entry `(c, d + 1)`
+(`RSideTree`), given the ear bookkeeping `BookTree` of the entry and the parent's ancestor chain
+(`stackVerts[k]`, `k ≤ d`, is the depth-`k` ancestor of `stackVerts[d]`): the ancestor chain at
+`(c, d + 1)` (from `hchain`, `hp` and `dfs.Spec.depth_parent`); `EntryR` is stable under
+`stackVerts.set! (d + 1) c`; no entry starting at the parent tops out above `d`; every out-edge of
+a non-root vertex returns (`lowval < depth`; `dfs.Spec.cls_*` + 2-connectivity); no entry owns an
+edge below `vertItem v` before `v`'s vertex entry is pushed; and the R-maximality content
+`FinishRShape` at tree-edge sites (`pend` from `EarFinish`'s `q_root`/`q_free`, `ear` =
+`FinishBook.ear`; `settled`/`unwrap`/`vert_own` are R content). `BookTree` and the chain are
+root-threaded (`bTree`/`walkTree_book`, `DfsData.ofForest_depth_root`) and are supplied by the
+root glue (`rkRootOut`, `Proofs/RSkelRoot.lean`). Checked on seeds 0..300 and 6000 extra
+multigraphs, both ternarize modes (`checks/RFinishEdgeCheck.lean`: `anc`, `stab`, `entry`, `ret`,
+`vertown`, `FinishRShape` lines). -/
 theorem walkTree_rSide (s : WalkState) (d c : Nat) (outs : List DfsOut)
+    (hi : s.Inv' d) (hs : Shape s) (hg : GuardsTree (.node c outs) (d + 1) s)
+    (hf : FrontiersTree (.node c outs) (d + 1) s) (hb : BookTree (.node c outs) (d + 1) s)
+    (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g)
+    (hrt : dfs.Rooted s.g) (hp : dfs.IsParent s.stackVerts[d]! c) (ho : outs = dfs.outs c)
+    (hchain : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! s.stackVerts[d]! ∧ dfs.depth s.stackVerts[k]! = k)
+    (hR : s.RInvTop dfs s.stackVerts[d]! d) :
+    RSideTree dfs (.node c outs) (d + 1) s := by
+  sorry
+
+/-- **Named admission** — the standalone form `WalkTreeRReturnSpec` needs, kept only because that
+statement is fixed; nothing else consumes it (the root glue uses `walkTree_rSide`). It is
+under-hypothesized rather than false-by-counterexample: `BookTree` at a non-root entry is ear
+content that only the root-threaded `bTree` produces, and `AncChain` for `k < d` constrains
+`stackVerts` below `d`, which none of the hypotheses mention. -/
+theorem walkTree_rSide_spec (s : WalkState) (d c : Nat) (outs : List DfsOut)
     (hi : s.Inv' d) (hs : Shape s) (hg : GuardsTree (.node c outs) (d + 1) s)
     (hf : FrontiersTree (.node c outs) (d + 1) s) (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g)
     (hrt : dfs.Rooted s.g) (hp : dfs.IsParent s.stackVerts[d]! c) (ho : outs = dfs.outs c)
@@ -703,7 +724,7 @@ theorem walkTree_rSide (s : WalkState) (d c : Nat) (outs : List DfsOut)
 
 theorem walkTreeRReturnSpec : WalkTreeRReturnSpec dfs :=
   fun s d c outs hi hs hg hf h2 hsp hrt hp ho hR =>
-    have ⟨hb, hr⟩ := walkTree_rSide s d c outs hi hs hg hf h2 hsp hrt hp ho hR
+    have ⟨hb, hr⟩ := walkTree_rSide_spec s d c outs hi hs hg hf h2 hsp hrt hp ho hR
     walkTree_rReturn s d c outs hi hs hg hb hr h2 hsp hrt hR
 
 
