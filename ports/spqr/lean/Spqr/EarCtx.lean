@@ -61,7 +61,7 @@ modes, before being stated):
   end-of-outs context (`hasVert = true` after the final push, `rest = []`);
 * `vt_vstart`: the entry holding `V v` is still `V v` itself if it starts at `v` → `p_entry`;
 * `touch_bot`, `span_root` (every span item is a root), `sd`, `hv_ret` (`hasVert` only after a
-  returning out, while outs remain) → `touch_bot`, `q_root`/`v_root`, `dir_d`, `bd_noVert`;
+  returning out) → `touch_bot`, `q_root`/`v_root`, `dir_d`, `bd_noVert`;
 * `vert_book` → `VertBook` of `EarOuts []`; `vert_disj` (before the push no entry holds a boundary
   edge of `v`) → `disj` once `V v` is pushed;
 * `v_fresh` also: no entry starts at or touches a vertex of a remaining subtree → `base_bot`,
@@ -142,7 +142,7 @@ structure EarCtx (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut)
   v_root : ∀ p, ¬ Items.IsParent s.items p (vertItem v)
   vert_free : ∀ t ∈ s.tstack, vertItem v ∈ t.spans.1 ++ t.spans.2 → hasVert = true
   afterVert_ret : ∀ o ∈ afterVert done, o.cls.lowval d < d
-  hv_ret : hasVert = true → rest ≠ [] → ∃ o ∈ done, o.1.cls.lowval d < d
+  hv_ret : hasVert = true → ∃ o ∈ done, o.1.cls.lowval d < d
   /-- Before the vertex push no done out ran with it. -/
   noVert_after : hasVert = false → afterVert done = []
   /-- The entries started at `v` other than the one holding `V v` (the `above` entries) were pushed

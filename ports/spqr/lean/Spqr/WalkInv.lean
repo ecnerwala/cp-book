@@ -1334,7 +1334,7 @@ theorem ctx_step_back_boundary {v d : Nat} {done : List (DfsOut × Bool)} {rest 
   have hhv : hasVert = false := by
     cases hhv : hasVert
     · rfl
-    · exact absurd (hC.hv_ret hhv (List.cons_ne_nil _ _)) (no_ret_before_boundary hge hcls hrank)
+    · exact absurd (hC.hv_ret hhv) (no_ret_before_boundary hge hcls hrank)
   have hpf : push = false := by
     cases hp : push
     · rfl
@@ -1651,7 +1651,7 @@ theorem earCtx_pushBack {v d : Nat} {done : List (DfsOut × Bool)} {rest : List 
         rcases List.mem_append.1 ho' with h | h
         · exact hC.afterVert_ret o' h
         · rw [List.mem_singleton] at h; subst h; exact hlt
-      hv_ret := fun _ _ => ⟨(o, true), hoD, hlt⟩
+      hv_ret := fun _ => ⟨(o, true), hoD, hlt⟩
       vert_book := fun h => nomatch h
       vert_disj := fun h => nomatch h
       vert_edges := fun e' he' => by
@@ -2696,8 +2696,57 @@ theorem ctx_step_back {v d : Nat} {done : List (DfsOut × Bool)} {rest : List Df
   · exact ctx_step_back_ret hC hv hsd hrank hinc hnd hb hcls he hsz hend hself hrest_e hrest_v
       (hdest (Nat.lt_of_not_le hge)) hnc L push hpush hL (Nat.lt_of_not_le hge)
 
-/-- Named admission (`ctxCheck` after a tree out): `finishEdge` at a tree-edge site re-establishes
-the context with the out appended to `done`, from the `TreeSite` data of `earAt_tree_of_ctx`. -/
+/-- Admitted: the tree-edge step for a bridge (`lowval = d + 1`): the child's outs are all boundary, so its vertex entry is the only entry popped (dump-checked, `ctxCheck`). -/
+theorem ctx_step_tree_bridge {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
+    {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
+    {s : WalkState} {e : Nat} {cls : OutClass} {y : Nat} {outs : List DfsOut} {L : List TEntry}
+    {push : Bool} {done' : List (DfsOut × Bool)} {hv' : Bool} {bE' : List (Nat → Prop)}
+    {sv' : List Nat} {sd' : List Bool} {sE : WalkState} {dir' : Bool} {L' : List TEntry}
+    {push' : Bool} {D₃ : Array Bool}
+    (H : TreeSite v d done rest hasVert base bE sv sd s e cls y outs L push done' hv' bE' sv' sd'
+      sE dir' L' push' D₃)
+    (hb : cls = .bridge) :
+    wp (finishEdge v d (.tree e cls (.node y outs)) (L ++ s.tstack).length (hasVert || push))
+      (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) rest hv''
+        base bE sv sd s')
+      (pushEnd sE D₃ L') := by
+  sorry
+
+/-- Admitted: the tree-edge step for a component (`lowval = d`): `finishBoundary` pops the child's back-edge entry and its vertex entry (dump-checked, `ctxCheck`). -/
+theorem ctx_step_tree_comp {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
+    {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
+    {s : WalkState} {e : Nat} {cls : OutClass} {y : Nat} {outs : List DfsOut} {L : List TEntry}
+    {push : Bool} {done' : List (DfsOut × Bool)} {hv' : Bool} {bE' : List (Nat → Prop)}
+    {sv' : List Nat} {sd' : List Bool} {sE : WalkState} {dir' : Bool} {L' : List TEntry}
+    {push' : Bool} {D₃ : Array Bool}
+    (H : TreeSite v d done rest hasVert base bE sv sd s e cls y outs L push done' hv' bE' sv' sd'
+      sE dir' L' push' D₃)
+    (hc : cls = .component) :
+    wp (finishEdge v d (.tree e cls (.node y outs)) (L ++ s.tstack).length (hasVert || push))
+      (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) rest hv''
+        base bE sv sd s')
+      (pushEnd sE D₃ L') := by
+  sorry
+
+/-- Admitted: the tree-edge step for a returning child (`lowval < d`): loops 1–3 of `finishEdge` (dump-checked, `ctxCheck`). -/
+theorem ctx_step_tree_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
+    {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
+    {s : WalkState} {e : Nat} {cls : OutClass} {y : Nat} {outs : List DfsOut} {L : List TEntry}
+    {push : Bool} {done' : List (DfsOut × Bool)} {hv' : Bool} {bE' : List (Nat → Prop)}
+    {sv' : List Nat} {sd' : List Bool} {sE : WalkState} {dir' : Bool} {L' : List TEntry}
+    {push' : Bool} {D₃ : Array Bool}
+    (H : TreeSite v d done rest hasVert base bE sv sd s e cls y outs L push done' hv' bE' sv' sd'
+      sE dir' L' push' D₃)
+    (hr : cls.lowval d < d) :
+    wp (finishEdge v d (.tree e cls (.node y outs)) (L ++ s.tstack).length (hasVert || push))
+      (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) rest hv''
+        base bE sv sd s')
+      (pushEnd sE D₃ L') := by
+  sorry
+
+/-- `finishEdge` at a tree-edge site re-establishes the context with the out appended to `done`,
+from the `TreeSite` data of `earAt_tree_of_ctx`: a case split on the class (bridge / component /
+returning) over the three named admissions above. -/
 theorem ctx_step_tree {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
     {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
     {s : WalkState} {e : Nat} {cls : OutClass} {y : Nat} {outs : List DfsOut} {L : List TEntry}
@@ -2710,7 +2759,18 @@ theorem ctx_step_tree {v d : Nat} {done : List (DfsOut × Bool)} {rest : List Df
       (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) rest hv''
         base bE sv sd s')
       (pushEnd sE D₃ L') := by
-  sorry
+  have key : cls = .bridge ∨ cls = .component ∨ cls.lowval d < d := by
+    have ht := H.tree
+    have hr := H.cls_ret
+    cases cls with
+    | bridge => exact .inl rfl
+    | component => exact .inr (.inl rfl)
+    | selfLoop => exact absurd ht (by decide)
+    | ret lv k => exact .inr (.inr (hr lv k rfl))
+  rcases key with hb | hc | hr
+  · exact ctx_step_tree_bridge H hb
+  · exact ctx_step_tree_comp H hc
+  · exact ctx_step_tree_ret H hr
 
 theorem wp_walkOutPre {v d : Nat} {o : DfsOut} {hasVert : Bool} {s : WalkState}
     {Q : Bool → WalkState → Prop}

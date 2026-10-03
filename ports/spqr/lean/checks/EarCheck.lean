@@ -424,7 +424,8 @@ def ebCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (eb : EB) 
 start of `walkOuts` and after every `walkOut` return (`done` = finished outs, `rest` = the others;
 `base₀`/`bE₀`/`sv₀` = the tstack, its entries' edge sets and `stackVerts[0..d]` at entry to `v`). -/
 def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut) (hv : Bool) (base₀ : List TEntry)
-    (bE₀ : List (List Nat)) (sv₀ : List Nat) (sd₀ : List Bool) (s : WalkState) : List V := Id.run do
+    (bE₀ : List (List Nat)) (sv₀ : List Nat) (sd₀ : List Bool) (s : WalkState) (endPush : Bool := false) :
+    List V := Id.run do
   let n := s.tstack.length
   let top := s.tstack.take (n - base₀.length)
   let base := s.tstack.drop (n - base₀.length)
@@ -476,7 +477,7 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
   for j in List.range s.items.size do
     for c in s.items[j]!.ch do
       if c ≥ s.items.size then out := bad "ch_lt" s!"{j}" :: out
-  if hv && rest ≠ [] && !done.any (fun o => o.1.cls.lowval d < d) then out := bad "hv_ret" "" :: out
+  if hv && !endPush && !done.any (fun o => o.1.cls.lowval d < d) then out := bad "hv_ret" "" :: out
   for t in above do
     if t.firstIdx ≥ s.nxtEdgeIdx then out := bad "above_firstIdx" (showT t) :: out
   for t in s.tstack do
@@ -612,7 +613,7 @@ partial def iTree (seed : Nat) (t : DfsTree) (d : Nat) (eb : EB) (s : WalkState)
     let sd₀ := s.stackDir.toList.take d
     let (hv, s, eb, vs, done) := iOuts seed v d outs false eb s [] base₀ bE₀ sv₀ sd₀
     let s := if hv then s else ((setStackDir d true *> pushVertTstack v d).run s).2
-    let vs := vs ++ ctxCheck seed v d done [] true base₀ bE₀ sv₀ sd₀ s ++ leftCheck seed v d t s₀ s
+    let vs := vs ++ ctxCheck seed v d done [] true base₀ bE₀ sv₀ sd₀ s true ++ leftCheck seed v d t s₀ s
     let subv := s.tstack.take (s.tstack.length - orig)
     let eb := match subv.reverse with
       | vy :: py :: _ => if spanItems vy == [vertItem v] then (v, py, vy) :: eb else eb

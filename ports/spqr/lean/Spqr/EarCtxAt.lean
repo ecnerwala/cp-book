@@ -303,7 +303,7 @@ theorem earAt_back_of_ctx {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
     rw [hp, Bool.or_false]
     cases hhv : hasVert
     · rfl
-    · exact absurd (hC.hv_ret hhv (List.cons_ne_nil _ _)) (no_ret_before_boundary hge hcls hrank)
+    · exact absurd (hC.hv_ret hhv) (no_ret_before_boundary hge hcls hrank)
 
 theorem vertItem_inj' {x y : Nat} (h : vertItem x = vertItem y) : x = y := by
   have h' : (1 + x : Nat) = 1 + y := h
@@ -757,7 +757,7 @@ theorem earAt_tree_of_ctx :
     rw [hp, Bool.or_false]
     cases hhv : hasVert
     · rfl
-    · exact absurd (H.ctx.hv_ret hhv (List.cons_ne_nil _ _))
+    · exact absurd (H.ctx.hv_ret hhv)
         (no_ret_before_boundary hge H.cls_ret H.rank)
 
 end
