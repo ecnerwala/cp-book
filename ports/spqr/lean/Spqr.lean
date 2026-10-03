@@ -44,6 +44,9 @@ import Spqr.Proofs.PlanarEmbedQCounterexample
 import Spqr.Proofs.PlanarEmbedCapCounterexample
 import Spqr.Proofs.PlanarEmbedFaceCounterexample
 import Spqr.Proofs.PlanarSplice
+import Spqr.PlanarEmbedFaces
+import Spqr.PlanarEmbedFacesSteps
+import Spqr.Proofs.OrbitSplit
 import Spqr.Proofs.Postorder
 import Spqr.Proofs.SepPair
 import Spqr.Blocks
