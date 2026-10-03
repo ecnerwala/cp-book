@@ -1783,5 +1783,185 @@ theorem finishBoundary_closeAt (hc : CloseCtx σ n D curV d o origTstack hasVert
     have h₆ := h₅.vertex_append' b₅.shape curV o.e hvlt helt hz hnew
       (by rw [hch₅, hcs]; simp)
     exact h₆
+/-! ### `finishEdge` -/
+
+theorem CloseInv.loop (cond : WalkM Bool) (body : WalkM Unit) (fuel : Nat)
+    (hcond : ∀ s, (cond.run s).2 = s)
+    (hbody : ∀ k, (∀ j, j ≤ k → (cond.run (iter body j s)).1 = true) →
+      (iter body k s).CloseInv → (after body (iter body k s)).CloseInv)
+    (h : s.CloseInv) : (after (WalkM.loop fuel cond body) s).CloseInv := by
+  induction fuel generalizing s with
+  | zero => exact h
+  | succ fuel ih =>
+    show ((WalkM.loop (fuel + 1) cond body).run s).2.CloseInv
+    rw [loop_succ_run fuel cond body s (hcond s)]
+    by_cases hc : (cond.run s).1 = true
+    · simp only [hc, ↓reduceIte]
+      have h₁ := hbody 0 (fun j hj => by rw [Nat.le_zero.1 hj]; exact hc) h
+      exact ih (s := (body.run s).2) (fun k hk => hbody (k + 1) fun j hj => by
+        cases j with
+        | zero => exact hc
+        | succ j => exact hk j (Nat.le_of_succ_le_succ hj)) h₁
+    · simp only [hc]; exact h
+
+theorem CloseInv.mergeLoop (h : s.CloseInv) (cond : WalkM Bool) (hcond : ∀ s, (cond.run s).2 = s)
+    (fuel : Nat) : (after (WalkM.loop fuel cond mergeTstackTops) s).CloseInv :=
+  CloseInv.loop cond mergeTstackTops fuel hcond
+    (fun _ _ hk => by rw [after_mergeTstackTops]; exact hk.mergeTop) h
+
+theorem CloseInv.mergeLate (h : s.CloseInv) (d : Nat) : (after (Spqr.mergeLate d) s).CloseInv := by
+  show ((Spqr.mergeLate d).run s).2.CloseInv
+  rw [mergeLate_run]
+  by_cases hc : (curE s).firstIdx > s.firstOccurrence[d]!
+  · simp only [hc, ↓reduceIte]
+    exact h.mergeLoop _ (fun _ => rfl) _
+  · simp only [hc, ↓reduceIte]; exact h
+
+theorem CloseInv.vertPre (h : s.CloseInv) (isType1 : Bool) (origTstack : Nat) (isSingle : Bool) :
+    (cvS₁ isType1 origTstack isSingle s).CloseInv := by
+  cases isType1
+  · show ((WalkState.vertPre false origTstack isSingle).run s).2.CloseInv
+    simp only [WalkState.vertPre, Bool.not_false, ↓reduceIte, WalkM.run_bind, run_tstackSize,
+      WalkM.pure_run]
+    exact h.mergeLoop _ (fun _ => rfl) _
+  · exact h
+
+theorem two_entries_of_le {l : List TEntry} (h : 2 ≤ l.length) : ∃ a b rest, l = a :: b :: rest := by
+  rcases l with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> simp at h
+  exact ⟨a, b, rest, rfl⟩
+
+theorem CloseInv.vertUnwrap (h : s.CloseInv) (hs : Shape s) {isType1 isSingle : Bool}
+    (hok : isType1 = true → UnwrapOk (if isSingle then .S else .R) s) :
+    (after (vertUnwrap isType1 isSingle) s).CloseInv := by
+  cases isType1
+  · exact h
+  · obtain ⟨a, b, rest, hts⟩ := two_entries_of_le (hok rfl).two
+    show ((some <$> maybeUnwrapNxt _).run s).2.CloseInv
+    rw [WalkM.map_run]
+    exact h.maybeUnwrap hs _ hts
+
+theorem CloseInv.retarget (h : s.CloseInv) (curV : Nat) (dir : Bool) :
+    (after (WalkState.retarget curV dir) s).CloseInv := by
+  show ((WalkState.retarget curV dir).run s).2.CloseInv
+  rcases hts : s.tstack with _ | ⟨t, rest⟩
+  · rw [WalkState.retarget, run_modifyCur, hts]
+    exact h.frame rfl rfl (fun i hi => by simpa [cnt, spansCount, hts] using hi)
+  · rw [retarget_run_eq curV dir s t rest hts]
+    refine h.frame rfl rfl (fun i hi => ?_)
+    simp only [cnt, spansCount, hts, List.map_cons, List.sum_cons] at hi ⊢
+    cases dir <;> simpa [setSides, List.count_append] using hi
+
+theorem CloseInv.finishTail (h : s.CloseInv) {curV d : Nat} (hv : curV < s.g.nv)
+    (hs : s.g.nv < s.items.size) (hasVert isSingle : Bool) :
+    (after (Spqr.finishTail curV d hasVert isSingle) s).CloseInv := by
+  cases hasVert
+  · have h₁ := h.pushVert curV d hv hs
+    cases isSingle
+    · show (after mergeTstackTops (after (pushVertTstack curV d) s)).CloseInv
+      rw [after_mergeTstackTops]; exact h₁.mergeTop
+    · exact h₁
+  · exact h
+
+/-- `finishRest` from a `feRest` state: the P site, then the vertex push. -/
+theorem finishRest_closeInv (hc : CloseCtx σ n D curV d o origTstack hasVert s)
+    (hlow : o.cls.lowval d < d) {isSingle : Bool}
+    (hst : Step D curV s (feRest curV d o origTstack hasVert s))
+    (hok : FinishRestOk D curV d (o.cls.lowval d) o.cls.isType1 hasVert isSingle
+      (feRest curV d o origTstack hasVert s))
+    (h : (feRest curV d o origTstack hasVert s).CloseInv) :
+    (after (finishRest curV d (o.cls.lowval d) o.cls.isType1 hasVert isSingle)
+      (feRest curV d o origTstack hasVert s)).CloseInv := by
+  have hv : curV < (feRest curV d o origTstack hasVert s).g.nv := by rw [hst.g]; exact hc.book.v_lt
+  have st := Step.finishP (v := curV) hst.inv hst.shape hv hok.p
+  have hP := finishP_closeAt hc hlow h
+  have hv' : curV < (after (finishP curV (o.cls.lowval d) o.cls.isType1)
+      (feRest curV d o origTstack hasVert s)).g.nv := by
+    show curV < ((finishP _ _ _).run _).2.g.nv; rw [st.g]; exact hv
+  exact hP.finishTail hv' (by
+    have := st.shape.size
+    show ((finishP _ _ _).run _).2.g.nv < ((finishP _ _ _).run _).2.items.size; omega) hasVert isSingle
+
+/-- `finishEdge` preserves `CloseInv` under its context. -/
+theorem finishEdge_closeInv (hc : CloseCtx σ n D curV d o origTstack hasVert s) :
+    (after (finishEdge curV d o origTstack hasVert) s).CloseInv := by
+  by_cases hge : d ≤ o.cls.lowval d
+  · exact finishBoundary_closeAt hc hge
+  have hlow : o.cls.lowval d < d := Nat.lt_of_not_le hge
+  obtain ⟨lv, kind, ho, hl⟩ := ret_of_lowval_lt hlow
+  obtain ⟨sub, base, hlen, hE⟩ := hc.book.ear
+  have hok := finishOk_of_guards ho hl hc.guards hE hlen hc.ranges.inv hc.shape hc.hD hc.book.v_lt
+    hc.book.e_lt hc.book.q (hc.book.ends lv kind ho) hc.book.vert
+  have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
+  have hge' : ¬ (lv ≥ d) := by omega
+  have hv := hc.book.v_lt
+  have hj : edgeItem s.g o.e < 1 + s.g.nv + s.g.ne := by
+    show 1 + s.g.nv + o.e < _; have := hok.e_lt; omega
+  have st₀ : Step D curV s (feS₀ d o s) := Step.modifyVs hc.ranges.inv hc.shape (edgeItem s.g o.e) _ hj
+  have hv₀ : curV < (feS₀ d o s).g.nv := by rw [st₀.g]; exact hv
+  have h₀ := feS₀_closeInv hc
+  show ((finishEdge curV d o origTstack hasVert).run s).2.CloseInv
+  rw [finishEdge_eq]
+  simp only [finishEdge', finishTree, finishBack, hlv, hge', ↓reduceIte, WalkM.run_bind, WalkM.get_run,
+    run_stackDir, run_makeVs, run_modifyItem]
+  by_cases ht : o.cls.isTree = true
+  · simp only [ht, ↓reduceIte, closeVert_eq, WalkM.run_bind]
+    have st₁ : Step D curV _ (feS₁ d o s) := Step.closeEars st₀.inv st₀.shape hv₀ (hok.ears ht)
+    have hv₁ : curV < (feS₁ d o s).g.nv := by rw [st₁.g]; exact hv₀
+    have st₂ : Step D curV _ (feS₂ d o s) := Step.mergeLate st₁.inv st₁.shape hv₁ (hok.late ht)
+    have hv₂ : curV < (feS₂ d o s).g.nv := by rw [st₂.g]; exact hv₁
+    have h₁ : (feS₁ d o s).CloseInv := by
+      show (after (loop _ (loop1Cond d) (loop1Body d s.stackDir[d]!))
+        (ceS₁ o.dest d o.e (feS₀ d o s))).CloseInv
+      exact CloseInv.loop _ _ _ (fun _ => rfl) (fun k hk h => loop1Body_closeAt hc ht hlow k hk h)
+        (closeEars_closeAt hc ht hlow)
+    have h₂ : (feS₂ d o s).CloseInv := h₁.mergeLate d
+    cases hasVert
+    · simp only [Bool.false_eq_true, ↓reduceIte]
+      have hr : feRest curV d o origTstack false s = feS₂ d o s := by simp [feRest, ht]
+      have := finishRest_closeInv hc hlow (isSingle := feSingle d o s)
+        (by rw [hr]; exact st₀.trans (st₁.trans st₂)) (by rw [hr, hlv]; exact hok.rest_tree ht rfl)
+        (by rw [hr]; exact h₂)
+      rw [hr, hlv] at this
+      exact this
+    · simp only [↓reduceIte, WalkM.run_bind]
+      have hcv := hok.vert ht rfl
+      have st₃ : Step D curV _ (cvS₁ o.cls.isType1 origTstack (feSingle d o s) (feS₂ d o s)) :=
+        Step.vertPre st₂.inv st₂.shape hv₂ hcv.loop3
+      have h₃ := h₂.vertPre o.cls.isType1 origTstack (feSingle d o s)
+      have h₄ : (cvS₂ o.cls.isType1 origTstack (feSingle d o s) (feS₂ d o s)).CloseInv :=
+        h₃.vertUnwrap st₃.shape (fun h => by rw [h]; exact hcv.unwrap h)
+      have h₅ : (cvS₃ o.cls.isType1 origTstack (feSingle d o s) (feS₂ d o s)).CloseInv := by
+        show (after mergeTstackTops _).CloseInv; rw [after_mergeTstackTops]; exact h₄.mergeTop
+      have h₆ : (cvS₄ o.cls.isType1 origTstack (feSingle d o s) (feS₂ d o s)).CloseInv := by
+        show (after mergeTstackTops _).CloseInv; rw [after_mergeTstackTops]; exact h₅.mergeTop
+      have h₇ := h₆.retarget curV s.stackDir[d]!
+      have h₈ := closeVertTail_closeAt hc ht hlow rfl h₇
+      have st₈ : Step D curV _ (feS₃ curV d o origTstack s) :=
+        Step.closeVert' st₂.inv st₂.shape hv₂ hcv
+      have hr : feRest curV d o origTstack true s = feS₃ curV d o origTstack s := by simp [feRest, ht]
+      have := finishRest_closeInv hc hlow (isSingle := feB₃ curV d o origTstack s)
+        (by rw [hr]; exact st₀.trans (st₁.trans (st₂.trans st₈))) (by rw [hr, hlv]; exact hok.rest_vert ht rfl)
+        (by rw [hr]; exact h₈)
+      rw [hr, hlv] at this
+      exact this
+  · have ht' : o.cls.isTree = false := Bool.eq_false_iff.2 ht
+    simp only [ht', Bool.false_eq_true, ↓reduceIte, WalkM.run_bind]
+    have hq : Items.ch (feS₀ d o s).items (edgeItem (feS₀ d o s).g o.e) = [] := by
+      show Items.ch (s.items.modify _ _) (edgeItem s.g o.e) = []
+      rw [Items.ch_modify_ch_eq (edgeItem s.g o.e)
+        (fun it => { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) }) (fun _ => rfl)]
+      exact hok.q ht'
+    have st₁ : Step D curV _ (after (pushEdgeTstack curV lv o.e) (feS₀ d o s)) :=
+      Step.pushEdge st₀.inv st₀.shape curV lv o.e hok.e_lt hq (hok.ends ht') (hok.lv_le ht')
+    have st₂ : Step D curV _ (feBack curV lv d o s) :=
+      Step.frame st₁.inv st₁.shape rfl rfl rfl rfl
+    have hr : feRest curV d o origTstack hasVert s = feBack curV lv d o s := by simp [feRest, ht', hlv]
+    have hb := finishBack_closeAt hc ht' hlow
+    rw [hlv] at hb
+    have := finishRest_closeInv hc hlow (isSingle := true)
+      (by rw [hr]; exact st₀.trans (st₁.trans st₂)) (by rw [hr, hlv]; exact hok.rest_back ht')
+      (by rw [hr]; exact hb)
+    rw [hr, hlv] at this
+    exact this
 
 end Spqr.WalkState
