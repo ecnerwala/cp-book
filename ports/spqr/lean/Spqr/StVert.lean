@@ -318,7 +318,8 @@ theorem closeVert_st {g : Graph} {s st : WalkState} {d lv : Nat} {ps : List StPi
     (hpy : isType1 = true → py.topDepth = lv ∧ ∃ i, py.spans = setSides s.stackDir[lv]! [i] []) :
     let s' := ((closeVert' curV edgeDir isType1 origTstack isSingle).run st).2
     ∃ m : TEntry, s'.tstack = m :: base ∧ m.vStart = curV ∧ s'.stackDir = st.stackDir ∧ s'.g = st.g ∧
-      StRead s'.items [m] [⟨!edgeDir, stNest ps⟩] ∧ StItems g s' blocks := by
+      StRead s'.items [m] [⟨!edgeDir, stNest ps⟩] ∧ StItems g s' blocks ∧
+      (isType1 = true → m.topDepth = lv ∧ getSide m.spans (!st.stackDir[lv]!) = []) := by
   dsimp only
   have hrun : ((closeVert' curV edgeDir isType1 origTstack isSingle).run st).2 =
       ((vertFinish (result (vertUnwrap isType1 (cvB₁ isType1 origTstack isSingle st))
@@ -363,7 +364,7 @@ theorem closeVert_st {g : Graph} {s st : WalkState} {d lv : Nat} {ps : List StPi
     dsimp only
     have hsd₁ : S₁.stackDir = st.stackDir := by rw [hS₁, hl₁]
     have hg₁ : S₁.g = st.g := by rw [hS₁, hl₁]
-    refine ⟨_, rfl, rfl, hsd₁, hg₁, ?_, ?_⟩
+    refine ⟨_, rfl, rfl, hsd₁, hg₁, ?_, ?_, fun h => absurd h Bool.false_ne_true⟩
     · refine StRead.fold _ _ _ _ ?_
       unfold StRead at hR₁ ⊢
       rw [readL_mergeInto_cons, readR_mergeInto_cons, readL_mergeInto_cons, readR_mergeInto_cons]
@@ -442,10 +443,125 @@ theorem closeVert_st {g : Graph} {s st : WalkState} {d lv : Nat} {ps : List StPi
       (fun x hx => hX₅.notBelow x (by rw [hts₅]; exact mem_readStack_append_left hx)) (by simp [readStack, readL, readR])
       hR₅
     obtain ⟨x', items', hrun₆, -⟩ := finishTstackTop_run item S₅ hts₅
-    refine ⟨_, hts₆, ?_, ?_, ?_, ?_, hX₅.close F base hts₅ hside⟩
+    refine ⟨_, hts₆, ?_, ?_, ?_, ?_, hX₅.close F base hts₅ hside, fun _ => ⟨hFt, ?_⟩⟩
     · show F.vStart = curV; rw [← hF]
     · rw [hrun₆]; show S₅.stackDir = st.stackDir; rw [hsd₅, hsd₃]
     · rw [hrun₆]; show S₅.g = st.g; rw [← hS₅', hg₃]
     · exact hR₆
+    · show getSide (setSides S₅.stackDir[F.topDepth]! [item] []) _ = []
+      rw [hsd₅, hsd₃, hFt]; exact getSide_setSides_other _ _ _
+
+/-! ### `finishP` and `finishTail` -/
+
+theorem mergeTstackTops_g (s : WalkState) : (mergeTstackTops.run s).2.g = s.g := by
+  first | rfl | (rcases s with ⟨_, _, _, _, _, _, _, _, _, _⟩; rfl)
+
+theorem finishTstackTop_g (item : ItemId) (s : WalkState) :
+    ((finishTstackTop item).run s).2.g = s.g := by
+  first | rfl | (rcases s with ⟨_, _, _, _, _, _, _, _, ts, _, _⟩; cases ts <;> rfl)
+
+theorem maybeUnwrapNxt_g (ty : NodeType) (s : WalkState) :
+    ((maybeUnwrapNxt ty).run s).2.g = s.g := by
+  obtain ⟨g, tern, items, sv, sd, nei, fo, tstack, tb, tsl⟩ := s
+  simp only [maybeUnwrapNxt, WalkM.run_bind, WalkM.get_run, modifyNxt, Bool.or_eq_true, beq_iff_eq]
+  by_cases h : ty = NodeType.R ∨ tern = true
+  · simp only [h, ↓reduceIte]; rfl
+  · simp only [h, ↓reduceIte, WalkM.run_bind, run_nxt, run_stackDir, run_getItem]
+    by_cases h₂ : items[(getSide tstack.tail.head!.spans sd[tstack.tail.head!.topDepth]!).head!]!.type = ty <;>
+      simp only [h₂, ↓reduceIte] <;> rfl
+
+/-- The type-1 P-check on `c :: new ++ base` (`c` one-sided on `stackDir[lowval]`, no entry of
+`base` starts at `curV`): the P-target `t` (`L1Unwrap s .P t`, one-sided) is closed with `c` into
+one P item; otherwise nothing happens. -/
+theorem finishP_st {g : Graph} (s : WalkState) (curV lowval : Nat) (isType1 : Bool) (c : TEntry)
+    (new base : List TEntry) (ps : List StPiece) (blocks : List StBlock)
+    (hts : s.tstack = c :: (new ++ base))
+    (hc : getSide c.spans (!s.stackDir[lowval]!) = []) (hct : lowval ≤ c.topDepth)
+    (hB : ∀ t ∈ base, t.vStart ≠ curV)
+    (hP : isType1 = true → ∀ t ∈ new, t.vStart = curV → t.topDepth = lowval →
+      getSide t.spans (!s.stackDir[lowval]!) = [] ∧ L1Unwrap s .P t)
+    (hR : StRead s.items (c :: new) ps) (hI : StItems g s blocks) :
+    let s' := ((finishP curV lowval isType1).run s).2
+    ∃ new', s'.tstack = new' ++ base ∧ s'.stackDir = s.stackDir ∧ s'.g = s.g ∧
+      s.items.size ≤ s'.items.size ∧ StRead s'.items new' ps ∧ StItems g s' blocks := by
+  dsimp only
+  simp only [Spqr.finishP, WalkM.run_bind, run_condP]
+  by_cases h : result (condP curV lowval isType1) s = true
+  · have h' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == curV) &&
+        (s.tstack.tail.head!.topDepth == lowval)) = true := h
+    simp only [h', ↓reduceIte, WalkM.run_bind]
+    simp only [Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at h'
+    obtain ⟨⟨⟨h1, hlen⟩, hvs⟩, htd⟩ := h'
+    rw [hts] at hlen hvs htd
+    simp only [List.tail_cons] at hvs htd
+    obtain ⟨t, new', rfl⟩ : ∃ t new', new = t :: new' := by
+      cases new with
+      | nil =>
+        exfalso
+        cases base with
+        | nil => simp at hlen
+        | cons b bs => exact hB b List.mem_cons_self (by simpa using hvs)
+      | cons t new' => exact ⟨t, new', rfl⟩
+    simp only [List.cons_append, List.head!_cons] at hvs htd
+    obtain ⟨ht, hU⟩ := hP h1 t List.mem_cons_self hvs htd
+    have hmin : min t.topDepth c.topDepth = lowval := by rw [htd]; exact Nat.min_eq_left hct
+    have res := StSim.unwrapMergeClose s .P c t new' base ps blocks hts (by rw [hmin]; exact hc)
+      (by rw [hmin]; exact ht) (Or.inr (Or.inl rfl)) (fun _ => hU) hR hI
+    dsimp only at res
+    obtain ⟨hts', hsd', hsz', -, -, hR', hI'⟩ := res
+    refine ⟨_, hts', hsd', ?_, hsz', hR', hI'⟩
+    rw [finishTstackTop_g, mergeTstackTops_g, maybeUnwrapNxt_g]
+  · have h' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == curV) &&
+        (s.tstack.tail.head!.topDepth == lowval)) = false := Bool.eq_false_iff.2 h
+    simp only [h', Bool.false_eq_true, ↓reduceIte, WalkM.pure_run]
+    refine ⟨c :: new, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+      first | trivial | exact hts | exact hR | exact hI | exact Nat.le_refl _
+
+/-- The first-edge vertex push on `new ++ base`: the piece `⟨stackDir[d], [V curV]⟩` is appended
+(merged into the top entry unless `isSingle`). -/
+theorem finishTail_st {g : Graph} (s : WalkState) (curV d : Nat) (hasVert isSingle : Bool)
+    (new base : List TEntry) (ps : List StPiece) (blocks : List StBlock)
+    (hts : s.tstack = new ++ base)
+    (hne : hasVert = false → isSingle = false → new ≠ [])
+    (hv : vertItem curV < s.items.size) (hvty : Items.type s.items (vertItem curV) = .V)
+    (hvroot : ∀ p, ¬ Items.IsParent s.items p (vertItem curV))
+    (hvch : Items.ch s.items (vertItem curV) = [])
+    (hvfree : vertItem curV ∉ readStack s.tstack)
+    (hR : StRead s.items new ps) (hI : StItems g s blocks) :
+    let r := (finishTail curV d hasVert isSingle).run s
+    r.1 = true ∧ r.2.stackDir = s.stackDir ∧ r.2.g = s.g ∧ r.2.items = s.items ∧
+    ∃ new', r.2.tstack = new' ++ base ∧
+      StRead r.2.items new' (if hasVert then ps else ps ++ [⟨s.stackDir[d]!, [vertItem curV]⟩]) ∧
+      StItems g r.2 blocks := by
+  dsimp only
+  cases hasVert
+  · set E : TEntry := ⟨curV, d, s.nxtEdgeIdx, setSides s.stackDir[d]! [vertItem curV] []⟩ with hE
+    have hR₁ : StRead s.items (E :: new) (ps ++ [⟨s.stackDir[d]!, [vertItem curV]⟩]) :=
+      StRead.pushEntry curV d s.nxtEdgeIdx s.stackDir[d]! (vertItem curV) (Or.inl hvty) hR
+    have hI₁ : StItems g { s with tstack := E :: s.tstack } blocks :=
+      StItems.pushEntry curV d s.nxtEdgeIdx s.stackDir[d]! (vertItem curV) hv hvroot hvch hvfree hI
+    cases isSingle
+    · have hr : (finishTail curV d false false).run s =
+          (true, (mergeTstackTops.run { s with tstack := E :: s.tstack }).2) := rfl
+      rw [hr]
+      obtain ⟨c, new', rfl⟩ : ∃ c new', new = c :: new' := by
+        cases new with
+        | nil => exact absurd rfl (hne rfl rfl)
+        | cons c new' => exact ⟨c, new', rfl⟩
+      have hs₂ := run_mergeTstackTops_cons_cons { s with tstack := E :: s.tstack } E c (new' ++ base)
+        (by show E :: s.tstack = _; rw [hts]; rfl)
+      rw [hs₂]
+      refine ⟨rfl, rfl, rfl, rfl, TEntry.mergeInto E c :: new', rfl, ?_, ?_⟩
+      · unfold StRead at hR₁ ⊢
+        rw [readL_mergeInto_cons, readR_mergeInto_cons]
+        exact hR₁
+      · refine StItems.perm hI₁ ?_ rfl
+        dsimp only
+        rw [readStack_mergeInto_cons, hts]
+        exact List.Perm.refl _
+    · have hr : (finishTail curV d false true).run s = (true, { s with tstack := E :: s.tstack }) := rfl
+      rw [hr]
+      exact ⟨rfl, rfl, rfl, rfl, E :: new, by rw [hts]; rfl, hR₁, hI₁⟩
+  · exact ⟨rfl, rfl, rfl, rfl, new, hts, hR, hI⟩
 
 end Spqr
