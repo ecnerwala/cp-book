@@ -836,8 +836,8 @@ the child's end push (`L'`/`push'`/`D₃`, `pushEnd`). Derived: `tstack`, `back_
 `vert_free`, `q_free`, `q_root`, `v_root`, `p_entry`, `sv_d`, `sv_child`, `path_child`, `dir_d`,
 `boundary`, `base_touch`, `bd_noVert`. Named admissions (each the field verbatim over the site's
 `sub`, `EarCtxAt.lean`): `earAt_tree_loop1_side`, `earAt_tree_loop1_touch`, `earAt_tree_loop1`,
-`earAt_tree_bottom`, `earAt_tree_loops`, `earAt_tree_late`, `earAt_tree_late_fo`,
-`earAt_tree_close`, `earAt_tree_lower` — the chain-anchor clauses they
+`earAt_tree_loops`, `earAt_tree_late`, `earAt_tree_late_fo`,
+`earAt_tree_close`, `earAt_tree_lower` — the chain clauses they
 need are not yet in `EarCtx`. Three touch clauses are now `EarCtx` fields (each dump-checked in
 `ctxCheck`, 0 violations on 0..3000 × tern, and re-established in `ctx_init_root`/`ctx_init_child`
 and every `earCtx_*` post-state lemma): `CtxTop.touch_k` — a `top` entry touching
@@ -848,12 +848,27 @@ no enclosing `base` entry touches `v` or the processed subtree (`base_touch`), a
 no edge below `vertItem v` (the boundary outs' edges) reaches a proper ancestor `stackVerts[k]`,
 `k < d` (`vert_touch`; this is what makes `touch_k` hold for the entries holding `vertItem v`: the
 end push `L`, the fresh `(v, d)` entry and the `!hasVert` merge at a returning tree edge; at a
-bridge/component edge it is `TreeSite.ends` + `v_fresh`). Still a checker-only candidate:
-`ctx_bot_*` — once some done out returned, the bottom two entries of `top` are `EarBottom`
-(`d ≤ vy.topDepth`) at the lowest return depth: `vy` is the vertex entry of `v` or of a descendant
-(pushed first, so at the bottom), `py` directly above it is the single-parentless-item entry at
-the minimum `lowval` (the lowest-returning out is processed first), touching `vy.vStart` and
-`stackVerts[l]` (what `bottom` needs at the child's site). Proved from the child's end
+bridge/component edge it is `TreeSite.ends` + `v_fresh`). The bottom pair is an `EarCtx` field
+too: `CtxTop.bottom` — once some done out returned (`l` = the minimum `lowval` of `done`, `< d`),
+`top = mid ++ [py, vy]` with `CtxBottom d l s py vy` (`EarCtx.lean`; `ctx_bot_*` in `ctxCheck`,
+0 violations 0..3000 × tern): `vy` is the vertex entry of `v` or of a descendant (pushed first, so
+at the bottom; `d ≤ vy.topDepth`, a single `vertItem`, its edges touch only `vy.vStart` or
+interior vertices), `py` directly above it is the single-parentless-item entry at depth `l`
+(the lowest-returning out is processed first), touching `vy.vStart` and `stackVerts[l]`.
+`CtxBottom.frame` transports it through state changes that keep the two entries' edge sets and
+root items; `CtxBottom.toEarBottom` shifts `d + 1 → d`. Re-established in every `earCtx_*`
+lemma: unchanged `top` (self-loop/bridge/component, which only grow `done` — `min_lowval_append`,
+`lowval_le_of_rank`: a bounded tree out never lowers the minimum), `pushBack`/`mergeP` (the new
+entries sit above the pair, or `top` was empty and the new `Q e`/`V v` pair *is* the bottom with
+`l = lowval`), and the returning tree edge (`RetTop.bottom` — `hv = false`: the post-loop stack
+`c :: mid ++ [py, vy]` of the site's `EarClose` is the pair at the child's `lowval`, transported
+through loops 1–3 by the new `EarClose.bot_edges` (`close_bot_edges` in `closeCheck`, 0 violations);
+`hv = true`: the vertex entry `x` of `RetTop.vert` is `py` and the end push `L` is `vy`, whose
+edge set is `EdgeBelow (vertItem v)` by the new `EarCtx.vert_bd` (`vert_bd` in `ctxCheck`: those
+edges touch only `v` or interior vertices)). `earAt_tree_bottom` reads the child's `CtxTop.bottom`
+at its end-of-outs context (`TreeSite.ctx'`), with the child's `done'` minimum equal to the edge's
+`lowval` by the additive `TreeSite.lowval_min` (`EarDfs.ret_outs_lowval` from `WF`), and shifts
+it to `pushEnd sE D₃ L'` (`TreeSite.sd₃`). Proved from the child's end
 shape:
 `earAt_tree_bd_bridge` (`lowval = d + 1` forces `cls = .bridge`; `bridge_bd` ⇒ `hv' = false`, the
 child's `top` is empty by `CtxTop.ret`, so `sub = L'` is the single end push `(y, d + 1)`) and
@@ -2237,7 +2252,7 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   proved several of these; the current set is in stage 2g below; 36 = the 35 below +
   `walkOut_stLive`):
   ear `ctx_step_tree_ret`, `walkTree_below_kept`, `walkTree_items_kept`, `ends_of_wf_boundary`,
-  `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,bottom,close,late,late_fo,loop1,loop1_side,
+  `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,close,late,late_fo,loop1,loop1_side,
   loop1_touch,loops,lower,of_ctx}`, `tree_comp_shape`; Ranges `closeCtx_{bd_node,bd_vert,l1_site,
   p_site,v_site}`, `finishEdge_ownedD`, `finishEdge_vertCover`; R `closeBase_rContent`,
   `entry_rContent`, `rSide_vertFree_site` (the other R site

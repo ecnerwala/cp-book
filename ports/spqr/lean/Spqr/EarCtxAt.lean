@@ -475,6 +475,10 @@ structure TreeSite (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOu
   comp_ex : cls = .component → ∃ o' ∈ done', o'.1.cls.lowval (d + 1) < d + 1
   comp_t1 : cls = .component → ∀ o' ∈ done', o'.1.cls.lowval (d + 1) < d + 1 →
     o'.1.cls.isType1 = true
+  /-- The returning depth of the tree edge is the least returning depth of the child's outs. -/
+  lowval_min : cls.lowval d < d →
+    (∃ o' ∈ done', o'.1.cls.lowval (d + 1) = cls.lowval d) ∧
+      ∀ o' ∈ done', cls.lowval d ≤ o'.1.cls.lowval (d + 1)
   /-- The child's end-of-outs shape (`ctxCheck` at the child's end). -/
   shape' : CtxShape y (d + 1) done' hv' (L ++ s.tstack) sE
   /-- The child's edges are connected to `y` through the child (DFS tree), within any edge set
@@ -536,6 +540,9 @@ structure RetTop (v d : Nat) (s : WalkState) (e : Nat) (cls : OutClass) (y : Nat
         w = v ∨ w = s.stackVerts[cls.lowval d]! ∨ s.g.Interior (x.edges s.g sX.items) w)
   noVert : hv = false → (∃ c R', R = c :: R' ∧ c.edges s.g sX.items e) ∧
     ∀ t ∈ R, t.vStart ≠ v ∧ ∀ k, k ≤ d → s.stackVerts[k]! ≠ t.vStart
+  /-- Without the vertex entry the returned stack ends with the ear's bottom two entries. -/
+  bottom : hv = false → ∃ c mid py vy, R = c :: mid ++ [py, vy] ∧
+    CtxBottom d (cls.lowval d) sX py vy
 
 theorem tree_comp_shape_of_shape {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
     {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
@@ -680,7 +687,17 @@ theorem earAt_tree_loop1 : (o₀).cls.isTree = true → (o₀).cls.lowval d < d 
 
 theorem earAt_tree_bottom : (o₀).cls.isTree = true → (o₀).cls.lowval d < d →
     ∃ mid py vy, sub = mid ++ [py, vy] ∧ EarBottom d ((o₀).cls.lowval d) s₃ py vy := by
-  sorry
+  intro _ hr
+  obtain ⟨top', hts', hCT'⟩ := H.ctx'.top
+  obtain ⟨hex, hle⟩ := H.lowval_min hr
+  obtain ⟨mid, py, vy, htop', hb⟩ := hCT'.bottom _ (Nat.lt_succ_of_lt hr) hex hle
+  have hsubeq : sub = L' ++ top' := by
+    have h1 : (pushEnd sE D₃ L').tstack = (L' ++ top') ++ (L ++ s.tstack) := by
+      show L' ++ sE.tstack = _; rw [hts', List.append_assoc]
+    exact List.append_inj_left' (hsub.symm.trans h1) rfl
+  refine ⟨L' ++ mid, py, vy, by rw [hsubeq, htop']; simp, ?_⟩
+  exact (hb.frame (s' := pushEnd sE D₃ L') rfl rfl (H.sd₃ _ (Nat.le_of_lt hr)) rfl rfl
+    fun _ _ h => h).toEarBottom
 
 theorem earAt_tree_loops : (o₀).cls.isTree = true → (o₀).cls.lowval d < d →
     ∃ c mid py vy, (feS₂ d o₀ s₃).tstack = c :: mid ++ [py, vy] ++ (L ++ s.tstack) ∧
@@ -1371,7 +1388,8 @@ theorem tree_ret_vert_of_wf (hr : cls.lowval d < d) (hb : (hasVert || push) = tr
         by show r.firstIdx < (feS₂ d o₀ s₃).nxtEdgeIdx; rw [hrfirst]; exact hf2, ?_,
         hatt _ (fun e' he' hs => (hrE e').2 (hcover e' he' hs)) (htouchr r (List.mem_singleton_self _)),
         fun h => by rw [ht1] at h; cases h⟩
-      noVert := fun h => by cases h }⟩
+      noVert := fun h => by cases h
+      bottom := fun h => by cases h }⟩
     · show getSide (setSides (!(s₃).stackDir[d]!) _ []) _ = []
       rw [← hsl, hdir, Bool.not_not]
       exact getSide_setSides_not _ _
@@ -1530,7 +1548,8 @@ theorem tree_ret_vert_of_wf (hr : cls.lowval d < d) (hb : (hasVert || push) = tr
       vert := fun _ => ⟨r, rfl, rfl, hmtop, ?_, hf1, by rw [hXn]; exact hf2, ?_,
         hatt _ (fun e' he' hs => (hrE e' he').2 (hcover e' he' hs)) (htouchr r (List.mem_singleton_self _)),
         fun _ => ⟨⟨item, by show setSides _ [item] [] = _; rw [hsdr', hsl]⟩, fun w hw => ?_⟩⟩
-      noVert := fun h => by cases h }⟩
+      noVert := fun h => by cases h
+      bottom := fun h => by cases h }⟩
     · show getSide (setSides s₂.stackDir[m.topDepth]! [item] []) _ = []
       rw [hsdr', hsl]
       exact getSide_setSides_not _ _
@@ -1608,7 +1627,34 @@ theorem tree_ret_shape (hr : cls.lowval d < d) : ∃ R,
         vstart := F.vstart
         touch_k := F.touch_k
         vert := fun h => absurd h (by decide)
-        noVert := fun _ => ⟨⟨c, mid ++ [py, vy], rfl, hce⟩, hnv rfl⟩ }⟩
+        noVert := fun _ => ⟨⟨c, mid ++ [py, vy], rfl, hce⟩, hnv rfl⟩
+        bottom := fun _ => by
+          obtain ⟨mid₂, py₂, vy₂, hsub₂, hB⟩ := hE.bottom H.tree hr
+          obtain ⟨c₁, mid₁, py₁, vy₁, hts₁, ⟨mid₀, hsub₁⟩, -⟩ := hE.loops H.tree hr
+          have h12 : [py, vy] = [py₁, vy₁] :=
+            List.append_inj_right' (List.append_inj_left' (hC.tstack.symm.trans hts₁) rfl) rfl
+          have h23 : [py₁, vy₁] = [py₂, vy₂] :=
+            List.append_inj_right' (hsub₁.symm.trans hsub₂) rfl
+          simp only [List.cons.injEq, and_true] at h12 h23
+          obtain ⟨rfl, rfl⟩ := h12
+          obtain ⟨rfl, rfl⟩ := h23
+          have hpe : TEntry.edges (feS₂ d o₀ s₃).g (feS₂ d o₀ s₃).items py =
+              TEntry.edges (s₃).g (s₃).items py := by
+            rw [hC.g]; exact funext fun e' => propext (hC.bot_edges e').1
+          have hve : TEntry.edges (feS₂ d o₀ s₃).g (feS₂ d o₀ s₃).items vy =
+              TEntry.edges (s₃).g (s₃).items vy := by
+            rw [hC.g]; exact funext fun e' => propext (hC.bot_edges e').2
+          obtain ⟨i, hi, hroot⟩ := hC.py_item
+          exact ⟨c, mid, py, vy, rfl,
+            { vy_top := Nat.le_of_lt hB.vy_top
+              vy_spans := hB.vy_spans
+              vy_bd := by rw [hve, hC.g]; exact hB.vy_bd
+              py_bot := hB.py_bot
+              py_top := hB.py_top
+              py_item := ⟨i, by
+                show py.spans = setSides (feS₂ d o₀ s₃).stackDir[(o₀).cls.lowval d]! [i] []
+                rw [hC.dir_l]; exact hi, hroot⟩
+              py_touch := by rw [hpe, hC.g, hC.sv]; exact hB.py_touch }⟩ }⟩
   · simp only [↓reduceIte]
     exact tree_ret_vert H hr hb
 
