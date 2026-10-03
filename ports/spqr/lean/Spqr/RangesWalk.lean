@@ -1,4 +1,5 @@
 import Spqr.RangesSchedule
+import Spqr.RangesClose
 import Spqr.EarWalk
 
 namespace Spqr.WalkState
@@ -140,6 +141,34 @@ theorem RootState.pushVertR {g : Graph} {pre rest : List DfsTree} {s : WalkState
     (fun v hv => hf.verts_lt v (by simpa only [List.flatMap_append] using List.mem_append_left (rest.flatMap DfsTree.verts) hv))
     (fun e he => DfsData.edgePostorderForest_perm.symm.subset he) hp hn
   simpa using hh
+
+theorem walkOutPre_closeInv {s : WalkState} (h : s.CloseInv) (v d : Nat) (o : DfsOut)
+    (hasVert : Bool) (hv : v < s.g.nv) (hs : s.g.nv < s.items.size) :
+    wp (walkOutPre v d o hasVert) (fun _ s' => s'.CloseInv) s := by
+  unfold walkOutPre
+  dsimp only
+  rw [bind_stackDir]
+  refine bind_spec (setStackDir_spec _ _) ?_
+  rintro _ _ rfl
+  have h' := h.frame (s' := { s with stackDir := s.stackDir.set! d (if o.cls.lowval d ≥ d then false else !s.stackDir[o.cls.lowval d]!) }) rfl rfl (fun _ hi => hi)
+  split
+  · refine bind_spec (pushVertTstack_spec v d) ?_
+    rintro _ _ rfl
+    rw [wp_pure]
+    exact h'.pushVert v d hv hs
+  · rw [wp_pure]; exact h'
+
+theorem rootAppend_closeInv {s : WalkState} {P X : ItemId → Prop} (h : s.CloseInv)
+    (hp : s.Place s.g P X) (hk : RootOK s) :
+    wp (popTstack >>= fun top => modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 })
+      (fun _ s' => s'.CloseInv) s := by
+  obtain ⟨t, ht, _, hvs⟩ := hk
+  simp only [wp_bind, wp_popTstack, wp_modifyItem]
+  apply h.pop.root_append
+  · exact hp.of_le rfl (Nat.le_refl _) (fun _ _ => rfl) (fun i => by
+      have := spansCount_tail_le s.tstack i
+      dsimp [cnt]; omega)
+  · simpa only [ht, head!_cons] using hvs
 
 mutual
 def CoverTree (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=

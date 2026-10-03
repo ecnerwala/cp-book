@@ -1184,6 +1184,11 @@ attachments; those actual-site attachment hypotheses still need the ear/DFS cont
 `CloseInv.root_append` constructs the root record and preserves all records when appending
 vertex items. These constructors and the strengthened preservation lemmas have only standard
 axioms. `modifyLoose` now requires the modified item to lie beyond the fixed vertex interval.
+`walkOutPre_closeInv` handles the real pre-push code, and `rootAppend_closeInv` handles the
+actual pop/append action from `RootOK` and `Place`. `CloseInv.vertex_append` constructs the
+vertex's updated record at a boundary from the already-closed, nonempty Q child, the old
+V-to-Q child typing, and the vertex's zero count. It remains to construct that Q record at
+the loop/bridge/block boundary, rather than assuming it.
 Node-finish and boundary new records, edge terminal attachments, and the walk-level reuse
 induction remain unproved, explicitly named by `walk_closeInv` in `WalkItemsWF`. `walk_closeFacts` is the proved
 tree/typing assembly from that admission, not an independent close-facts admission.
