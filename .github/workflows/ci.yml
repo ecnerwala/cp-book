@@ -21,11 +21,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Previous verify results (and the coverage counters staged from them)
-  # are reused in hash mode, which only compares source contents. Together
-  # with a hash of the .competitive-verifier/*.toml configs this versions
-  # both rolling caches; bump it when a verify setting the configs don't
-  # cover changes (e.g. --tle, --mle).
+  # Invalidates the rolling verify-result and coverage-counters caches
+  # (together with a hash of the .competitive-verifier/*.toml configs).
+  # Bump for verify settings outside the configs (e.g. --tle, --mle).
   VERIFY_CACHE_VERSION: 1
 
 jobs:
