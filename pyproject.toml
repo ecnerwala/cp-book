@@ -15,6 +15,6 @@ package = false
 required-version = ">=0.12"
 
 [tool.uv.sources]
-# Fork with cp-book integration patches (content-hash skip, docs coverage
-# integration, bundler include paths); see the branch's log vs upstream main.
-competitive-verifier = { git = "https://github.com/ecnerwala/competitive-verifier.git", rev = "b093c35f966f733eb88414e042f3fdd5cf5c4714" }
+# Fork with cp-book integration patches (relative basedir, docs coverage
+# integration, bundle/minify); see the branch's log vs upstream main.
+competitive-verifier = { git = "https://github.com/ecnerwala/competitive-verifier.git", rev = "e66ee60184f79d244455e1ed3fff4b0d9e17848a" }
