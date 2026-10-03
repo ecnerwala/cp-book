@@ -494,6 +494,29 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
         !retDone.any (fun o => t.spans == setSides (!s.stackDir[o.1.cls.lowval d]!) [vertItem v] []) then
       out := bad "vt_side_strict" (showT t) :: out
   | none => pure ()
+  -- candidate clauses for `earAt_tree_bottom` / `earAt_tree_bd_term`: a `below` entry touching `v`
+  -- has `topDepth ≤ d`; once some out returned, the bottom two entries of `top` are `EarBottom`
+  -- at the lowest return depth (`d ≤ vy.topDepth` at the own level)
+  for t in below do
+    if touches s (E t) v && d < t.topDepth then out := bad "below_touch_v" (showT t) :: out
+  if hv && retDone ≠ [] then
+    let l := (retDone.map (fun o => o.1.cls.lowval d)).foldl min d
+    match top.reverse with
+    | vy :: py :: _ =>
+      if spanItems vy ≠ [vertItem vy.vStart] || (vy.spans.1 ≠ [] && vy.spans.2 ≠ []) then
+        out := bad "bot_vy_spans" (showT vy) :: out
+      if vy.topDepth < d then out := bad "bot_vy_top" (showT vy) :: out
+      for x in List.range s.g.nv do
+        if touches s (E vy) x && x ≠ vy.vStart && !interiorB s (E vy) x then
+          out := bad "bot_vy_bd" s!"{showT vy} x={x}" :: out
+      if py.vStart ≠ vy.vStart then out := bad "bot_py_bot" (showT py) :: out
+      if py.topDepth ≠ l then out := bad "bot_py_top" s!"{showT py} l={l}" :: out
+      let si := spanItems py
+      if si.length ≠ 1 || hasParent s si.head! || py.spans ≠ setSides s.stackDir[l]! si [] then
+        out := bad "bot_py_item" (showT py) :: out
+      if !touches s (E py) vy.vStart || !touches s (E py) s.stackVerts[l]! then
+        out := bad "bot_py_touch" (showT py) :: out
+    | _ => out := bad "bot_len" "" :: out
   -- every open entry touches its bottom; every span item is a root; `hasVert` only after a return
   for t in s.tstack do
     if (E t) ≠ [] && !touches s (E t) t.vStart then out := bad "touch_bot" (showT t) :: out
