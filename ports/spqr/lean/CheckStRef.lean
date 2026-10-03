@@ -52,6 +52,9 @@ def main : IO Unit := do
   let order := refOrder g forest
   let mut bad := 0
   let mut n := 0
+  if order.eraseDups.length != order.length then
+    bad := bad + 1
+    IO.println s!"ORDER not nodup: {order}"
   for b in blocks do
     if ¬ b.St g then
       bad := bad + 1
