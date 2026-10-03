@@ -49,7 +49,35 @@ theorem finishBoundary_st {D curV d : Nat} {o : DfsOut} {hasVert : Bool} {s : Wa
     (hR : StRead s.items sub ps) (hI : StItems g s blocks) :
     let r := (finishEdge curV d o base.length hasVert).run s
     r.1 = hasVert ∧ r.2.g = s.g ∧ r.2.stackDir = s.stackDir ∧ r.2.tstack = base ∧
-    StItems g r.2 (blocks ++ (if o.cls.isTree then [⟨some (curV, o.dest), stNest ps⟩] else [])) := by
+    StItems g r.2 (blocks ++ (if o.cls.isTree then [⟨some (curV, o.dest), stNest ps⟩] else [])) ∧
+    ∀ x ∈ readStack base, ∀ y, Items.Below s.items x y →
+      Items.type r.2.items y = Items.type s.items y ∧ Items.ch r.2.items y = Items.ch s.items y := by
+  sorry
+
+/-- Admitted: frame facts of `finishEdge` on a returning edge (`lowval = lv < d`), the hypotheses of
+`finishEdge_st`: for `hasVert = false` the vertex item is still a root off the stack after `finishP`
+(the `hvf` of `finishTree_st`/`finishBack_st`; from `EarFinish.v_root`/`vert_free` by per-primitive
+frames), and the items below the untouched base `B` keep their type and children. -/
+theorem finishRet_frame_st {D d lv : Nat} {kind : RetKind} {o : DfsOut} {s : WalkState} {curV : Nat}
+    {hasVert : Bool} {sub pre B : List TEntry}
+    (hE : s.EarFinish curV d o hasVert sub (pre ++ B)) (hi : s.Inv' D) (hs : Shape s)
+    (hD : D = if o.cls.isTree then d + 1 else d)
+    (hok : FinishOk D curV d lv o (pre ++ B).length hasVert s)
+    (ho : o.cls = .ret lv kind) (hlow : lv < d) :
+    (hasVert = false →
+      (∀ p, ¬ Items.IsParent (fePState curV lv d o s).items p (vertItem curV)) ∧
+      vertItem curV ∉ readStack (fePState curV lv d o s).tstack) ∧
+    ∀ x ∈ readStack B, ∀ y, Items.Below s.items x y →
+      Items.type ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.type s.items y ∧
+      Items.ch ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.ch s.items y := by
+  sorry
+
+/-- Admitted: every entry on the stack after `finishEdge` starts at `curV` or at the start of an entry
+already on the stack (the merges keep the lower entry's `vStart`, the pushes use `curV`). -/
+theorem finishEdge_vStart (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool)
+    (s : WalkState) :
+    ∀ t ∈ ((finishEdge curV d o origTstack hasVert).run s).2.tstack,
+      t.vStart = curV ∨ ∃ t₀ ∈ s.tstack, t.vStart = t₀.vStart := by
   sorry
 
 /-- Admitted: popping the root entry of a tree of the forest onto `rootItem` closes the root block
