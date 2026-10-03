@@ -58,6 +58,21 @@ theorem RInvAt.toRTop {v : Nat} (hR : s.RInvAt dfs v) (hs : s.tstack = cur :: nx
   exact ⟨hR.entries cur (by simp [hs]) hc, hR.entries nxt (by simp [hs]) hn,
     hd.1 nxt (List.mem_cons_self ..)⟩
 
+theorem RInvTop.toRTop {v d : Nat} (hR : s.RInvTop dfs v d) (hs : s.tstack = cur :: nxt :: rest)
+    (hcd : d ≤ cur.topDepth) (hnd : d ≤ nxt.topDepth) (hc : cur.vStart ≠ v) (hn : nxt.vStart ≠ v) :
+    s.RTop dfs cur nxt := by
+  have hd := hR.disj
+  rw [hs, List.pairwise_cons] at hd
+  exact ⟨hR.entries cur (by simp [hs]) hcd hc, hR.entries nxt (by simp [hs]) hnd hn,
+    hd.1 nxt (List.mem_cons_self ..)⟩
+
+theorem RInvAt.toTop {v : Nat} (hR : s.RInvAt dfs v) (d : Nat) : s.RInvTop dfs v d :=
+  ⟨fun t ht _ hv => hR.entries t ht hv, hR.disj⟩
+
+theorem RInvTop.toFront {v d : Nat} (hR : s.RInvTop dfs v d) (origTstack : Nat) :
+    s.RInvFront dfs v d origTstack :=
+  ⟨fun t ht hd hv => hR.entries t (List.mem_of_mem_drop ht) hd hv, hR.disj⟩
+
 theorem RBranch.pieceItems (hR : s.RTop dfs cur nxt) (hb : s.RBranch d cur nxt rest) :
     s.PieceItems (s.rPieceItems cur nxt) := by
   have hc := (hR.entry_cur).pieces

@@ -81,25 +81,29 @@ end
 
 variable {s s' : WalkState} {dfs : DfsData} {t : TEntry}
 
-/-- A child return keeps the old stack as a settled base, except at the parent vertex.
-Entries above that base remain provisional until the pending parent edge is processed. -/
-structure RReturn (before after : WalkState) (dfs : DfsData) (parent : Nat) : Prop where
+/-- A child return keeps the old stack as a settled base at the parent's depth `d`: base entries
+topping out at depth `≥ d` are `EntryR` unless they start at the parent. Entries above the base
+are provisional until the pending parent edge is processed, and so are base entries topping out
+strictly above `d` (`checks/RFinishEdgeCounter.lean`, `Base`). -/
+structure RReturn (before after : WalkState) (dfs : DfsData) (parent d : Nat) : Prop where
   size : before.tstack.length ≤ after.tstack.length
   base : after.tstack.drop (after.tstack.length - before.tstack.length) = before.tstack
   entries : ∀ t ∈ after.tstack.drop (after.tstack.length - before.tstack.length),
-    t.vStart ≠ parent → after.EntryR dfs t
+    d ≤ t.topDepth → t.vStart ≠ parent → after.EntryR dfs t
   disj : after.tstack.Pairwise fun t t' => ∀ e,
     t.edges after.g after.items e → ¬t'.edges after.g after.items e
 
 /-- Preservation obligation at the child-return boundary, before the parent's `finishEdge`.
-This is a proposition naming the contract, not an admitted proof of preservation. -/
+This is a proposition naming the contract, not an admitted proof of preservation. Checked on
+seeds 0..300 and 6000 extra multigraphs, both ternarize modes (`checks/RFinishEdgeCheck.lean`,
+contract B). -/
 def WalkTreeRReturnSpec (dfs : DfsData) : Prop :=
   ∀ (s : WalkState) (D d c : Nat) (outs : List DfsOut),
     s.Inv' D → Shape s → GuardsTree (.node c outs) (d + 1) s →
     FrontiersTree (.node c outs) (d + 1) s → s.g.TwoConnected →
     dfs.Spec s.g → dfs.Rooted s.g → dfs.IsParent s.stackVerts[d]! c →
-    outs = dfs.outs c → s.RInvAt dfs s.stackVerts[d]! →
-    RReturn s (after (walkTree (.node c outs) (d + 1)) s) dfs s.stackVerts[d]!
+    outs = dfs.outs c → s.RInvTop dfs s.stackVerts[d]! d →
+    RReturn s (after (walkTree (.node c outs) (d + 1)) s) dfs s.stackVerts[d]! d
 
 theorem mem_spans_of_entryPieceItems {i : ItemId} (hi : i ∈ s.entryPieceItems t) :
     i ∈ t.spans.1 ++ t.spans.2 :=
@@ -280,6 +284,71 @@ theorem RInvAt.pushVert {v d w : Nat} (hv : v < s.g.nv) (hsh : Shape s)
   · exact hcongr _ (EntryR.vert hv hsh hch _ rfl)
   · exact hcongr t (h.entries t ht hne)
 
+/-! ### The same frame lemmas for `RInvTop` -/
+
+theorem RInvTop.congr {v d : Nat} (hg : s'.g = s.g) (hsv : s'.stackVerts = s.stackVerts)
+    (hts : s'.tstack = s.tstack)
+    (hty : ∀ t ∈ s.tstack, ∀ i ∈ t.spans.1 ++ t.spans.2,
+      Items.type s'.items i = Items.type s.items i)
+    (hvs : ∀ t ∈ s.tstack, ∀ i ∈ t.spans.1 ++ t.spans.2, Items.vs s'.items i = Items.vs s.items i)
+    (hE : ∀ t ∈ s.tstack, ∀ i ∈ t.spans.1 ++ t.spans.2, ∀ e,
+      Items.EdgeBelow s.g s'.items i e ↔ Items.EdgeBelow s.g s.items i e)
+    (h : s.RInvTop dfs v d) : s'.RInvTop dfs v d := by
+  refine ⟨fun t ht hd hv => ?_, ?_⟩
+  · rw [hts] at ht
+    exact EntryR.congr hg hsv (hty t ht) (hvs t ht) (hE t ht) (h.entries t ht hd hv)
+  · rw [hts, hg]
+    exact h.disj.imp_of_mem fun {t t'} ht ht' hd e he => by
+      rw [TEntry.edges_congr (hE t' ht')]
+      rw [TEntry.edges_congr (hE t ht)] at he
+      exact hd e he
+
+theorem RInvTop.of_eq {v d : Nat} (hg : s'.g = s.g) (hi : s'.items = s.items)
+    (hsv : s'.stackVerts = s.stackVerts) (hts : s'.tstack = s.tstack) (h : s.RInvTop dfs v d) :
+    s'.RInvTop dfs v d :=
+  h.congr hg hsv hts (fun _ _ _ _ => by rw [hi]) (fun _ _ _ _ => by rw [hi])
+    (fun _ _ _ _ _ => by rw [hi])
+
+theorem RInvTop.setStackDir {v d k : Nat} {b : Bool} (h : s.RInvTop dfs v d) :
+    (after (setStackDir k b) s).RInvTop dfs v d :=
+  RInvTop.of_eq (s := s) (s' := after (WalkM.setStackDir k b) s) rfl rfl rfl rfl h
+
+theorem RInvTop.modify {v d : Nat} (f : WalkState → WalkState) (hg : (f s).g = s.g)
+    (hi : (f s).items = s.items) (hsv : (f s).stackVerts = s.stackVerts)
+    (hts : (f s).tstack = s.tstack) (h : s.RInvTop dfs v d) :
+    (after (modify f : WalkM Unit) s).RInvTop dfs v d :=
+  RInvTop.of_eq (s := s) (s' := after (_root_.modify f : WalkM Unit) s) hg hi hsv hts h
+
+theorem RInvTop.modifyItem_free {v d : Nat} (j : ItemId) (f : Item → Item)
+    (hroot : ∀ p, ¬ Items.IsParent s.items p j)
+    (hfree : ∀ t ∈ s.tstack, j ∉ t.spans.1 ++ t.spans.2)
+    (h : s.RInvTop dfs v d) : (after (modifyItem j f) s).RInvTop dfs v d := by
+  refine RInvTop.congr (s := s) (s' := after (modifyItem j f) s) rfl rfl rfl
+    (fun t ht i hi => ?_) (fun t ht i hi => ?_) (fun t ht i hi e => ?_) h
+  · have hne : i ≠ j := fun hij => hfree t ht (hij ▸ hi)
+    show Items.type (s.items.modify j f) i = Items.type s.items i
+    simp [Items.type, Array.getElem?_modify, hne.symm]
+  · exact Items.vs_modify_of_ne j f fun hij => hfree t ht (hij ▸ hi)
+  · exact Items.Below_modify_of_not_below j f fun hb =>
+      hfree t ht ((Items.Below.eq_of_no_parent hroot hb) ▸ hi)
+
+theorem RInvTop.pushVert {v k w d : Nat} (hv : v < s.g.nv) (hsh : Shape s)
+    (hch : Items.ch s.items (vertItem v) = []) (h : s.RInvTop dfs w d) :
+    (after (pushVertTstack v k) s).RInvTop dfs w d := by
+  show RInvTop { s with tstack := ⟨v, k, s.nxtEdgeIdx, setSides s.stackDir[k]! [vertItem v] []⟩ :: s.tstack } dfs w d
+  have hcongr : ∀ t, s.EntryR dfs t →
+      EntryR { s with tstack := ⟨v, k, s.nxtEdgeIdx, setSides s.stackDir[k]! [vertItem v] []⟩ :: s.tstack } dfs t :=
+    fun t => EntryR.congr rfl rfl (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ _ => Iff.rfl)
+  have hed : ∀ e, ¬ (⟨v, k, s.nxtEdgeIdx, setSides s.stackDir[k]! [vertItem v] []⟩ : TEntry).edges
+      s.g s.items e := by
+    rintro e ⟨i, hi, hb⟩
+    rw [List.mem_singleton.1 ((mem_setSides _ _ _).1 hi)] at hb
+    exact edgeBelow_vert_nil hv hch e hb
+  refine ⟨fun t ht hd hne => ?_, List.pairwise_cons.2 ⟨fun t' _ e he => absurd he (hed e), h.disj⟩⟩
+  rcases List.mem_cons.1 ht with rfl | ht
+  · exact hcongr _ (EntryR.vert hv hsh hch _ rfl)
+  · exact hcongr t (h.entries t ht hd hne)
+
 /-! ### Iterates of Loop 1 -/
 
 theorem iter_succ' (body : WalkM Unit) (k : Nat) (s : WalkState) :
@@ -303,16 +372,20 @@ theorem closeEars_iter_step {D v nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' D
 
 /-! ### Admitted content lemmas (PROOF.md §4.5, walk side) -/
 
-/-- Admitted (Lemma 4.3, R-maximality content, per `finishEdge`): with the invariant settled at
-`curV` (`stackVerts[d]`), `finishEdge` keeps it settled at `curV`. Loop 1's S/P/R closes build
-`EntryR` entries from `EntryR` entries (the merged items are the new entry's pieces; the complement
-of a closed `(nxt.vStart, d)` set is one class because all `(nxt.vStart, d)` classes were P-merged
-when `nxt.vStart` was finished); Loop 2 and `closeVert` glue the classes returning to `curV` into
-one `(curV, ·)` entry; the P-check bonds a type-1 class with the previous `(curV, lv)` entry; the
-back-edge branch pushes a `(curV, lv)` entry — all `(curV, ·)` entries are exempt. The statement
-takes `FinishOk`/`FinishGuards` (stack shape) as hypotheses; `dfs` is the sorted DFS tree of the
-block `s.g` and `stackVerts[0..d]` its ancestor chain of `curV`. -/
-theorem finishEdge_rInvAt {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsOut) (origTstack : Nat)
+/-- Admitted: (Lemma 4.3, R-maximality content, per `finishEdge`) with the base below the split
+`origTstack` settled at depth `d` and the frontier above it bounded by `Frontier`, `finishEdge` at
+`curV = stackVerts[d]` leaves the stack settled at depth `d`: every entry topping out at depth
+`≥ d` that does not start at `curV` is `EntryR`, and the stack is edge-disjoint. Loop 1's S/P/R
+closes build `EntryR` entries from the frontier (the merged items are the new entry's pieces; the
+complement of a closed `(nxt.vStart, d)` set is one class because all `(nxt.vStart, d)` classes
+were P-merged when `nxt.vStart` was finished and the path class is merged here); Loop 2 and
+`closeVert` glue the classes returning to `curV` into one `(curV, ·)` entry; the P-check bonds a
+type-1 class with the previous `(curV, lv)` entry; the back-edge branch pushes a `(curV, lv)`
+entry — all `(curV, ·)` entries are exempt, and so are entries topping out above `d`
+(`checks/RFinishEdgeCounter.lean`). `dfs` is the sorted DFS tree of the block `s.g` and
+`stackVerts[0..d]` its ancestor chain of `curV`. Checked on seeds 0..300 and 6000 extra
+multigraphs, both ternarize modes (`checks/RFinishEdgeCheck.lean`, contract B, 6414 sites). -/
+theorem finishEdge_rInvTop {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsOut) (origTstack : Nat)
     (hasVert : Bool) (ho : o.cls = .ret lv kind) (hlow : lv < d) (hv : curV < s.g.nv)
     (hi : s.Inv' D) (hs : Shape s) (hok : FinishOk D curV d lv o origTstack hasVert s)
     (hg : FinishGuards d o origTstack hasVert s)
@@ -320,18 +393,8 @@ theorem finishEdge_rInvAt {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsO
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hd : dfs.depth curV = d) (hcur : s.stackVerts[d]! = curV)
     (hanc : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! curV ∧ dfs.depth s.stackVerts[k]! = k)
-    (hR : s.RInvAt dfs curV) :
-    (after (finishEdge curV d o origTstack hasVert) s).RInvAt dfs curV := by
-  sorry
-
-/-- Legacy admitted ascend statement; its settled return conclusion is refuted by
-`checks/RInvReturnCheck.lean`. The provisional return contract is `WalkTreeRReturnSpec`. -/
-theorem walkTree_rInvAt {D : Nat} (d : Nat) (c : Nat) (outs : List DfsOut) (hi : s.Inv' D) (hs : Shape s)
-    (hg : GuardsTree (.node c outs) (d + 1) s)
-    (hfront : FrontiersTree (.node c outs) (d + 1) s)
-    (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
-    (hc : dfs.IsParent s.stackVerts[d]! c) (hR : s.RInvAt dfs c) :
-    (after (walkTree (.node c outs) (d + 1)) s).RInvAt dfs s.stackVerts[d]! := by
+    (hR : s.RInvFront dfs curV d origTstack) :
+    (after (finishEdge curV d o origTstack hasVert) s).RInvTop dfs curV d := by
   sorry
 
 /-- Admitted (Lemma 4.3 at the R branch): during `closeEars` of `finishEdge` at depth `d` for the
@@ -347,7 +410,8 @@ the head-`topDepth` induction; the interval/saturation restatement is still open
 theorem loop1_rBranch {D nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' D) (hs : Shape s)
     (hok : CloseEarsOk D nxtV d e edgeDir s)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
-    (hc : nxtV = s.stackVerts[d + 1]!) (hR : s.RInvAt dfs s.stackVerts[d]!) (k : Nat)
+    (hc : nxtV = s.stackVerts[d + 1]!) {origTstack : Nat}
+    (hR : s.RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
     (hk : ∀ j, j ≤ k → result (loop1Cond d) (iter (loop1Body d edgeDir) j (ceS₁ nxtV d e s)) = true)
     (hty : l1Ty d edgeDir (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)) = .R) :
     ∃ cur nxt rest, (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)).RBranch d cur nxt rest ∧
@@ -360,7 +424,8 @@ walk at depth `d` runs under `Inv' (d+1)` (via `Step`; `RBranch.threeConnected` 
 theorem loop1_r_threeConnected {nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' (d + 1)) (hs : Shape s)
     (hok : CloseEarsOk (d + 1) nxtV d e edgeDir s) (hv : nxtV < s.g.nv)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
-    (hc : nxtV = s.stackVerts[d + 1]!) (hR : s.RInvAt dfs s.stackVerts[d]!) (k : Nat)
+    (hc : nxtV = s.stackVerts[d + 1]!) {origTstack : Nat}
+    (hR : s.RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
     (hk : ∀ j, j ≤ k → result (loop1Cond d) (iter (loop1Body d edgeDir) j (ceS₁ nxtV d e s)) = true)
     (hty : l1Ty d edgeDir (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)) = .R) :
     let sk := iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s)

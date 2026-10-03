@@ -895,6 +895,28 @@ tree edge is incorporated by `finishEdge`. `WalkTreeRReturnSpec` names the prese
 obligation as a `Prop` definition, not a theorem/admission. It starts settled at the parent
 and relates the walked out-list to `dfs.outs c`. The old `walkTree_rInvAt` statement and
 `returned_not_rInvAt` counterexample are retained; no preservation proof is claimed.
+**Depth bound on settling (`RInvTop`, `RInvFront`; `checks/RFinishEdgeCounter.lean`).**
+The parent exemption alone is still too strong, in both directions. `Deep` (4 vertices,
+`0-1-2-3`, `3→1` doubled, `3→0`): after the parent `2` (depth 2) processes the tree edge `2→3`,
+the entry `(3, 1)` (bottom 3, top at depth 1) holds the P piece `{3,1}` of the two back edges
+while the path class `1-2-3` is still a second `{3,1}` class — `finished_not_rInvAt` refutes the
+settled-at-`curV` output of the old `finishEdge_rInvAt` although its base is settled
+(`base_entryR`). `Base` (seed 3757 of the extra corpus, 5 used vertices): before the return from
+`2` to its parent `3`, the grandparent's base entry `(1, 0)` holds the closed S piece `{6,1}` of
+the first ear `1-4-6` while the tree edge `1→3` and the back edge `1→6` are outside it, so
+`RReturn.entries` with only `vStart ≠ parent` exempt is false (`not_base_entries`). The
+invariant the walk actually keeps is bounded by the top depth: an entry is settled only once the
+walk is back at its top, i.e. `RInvTop s dfs v d` (= `RInvAt` restricted to `d ≤ t.topDepth`),
+`RInvFront s dfs v d origTstack` (base below the split, same bound, plus whole-stack
+disjointness) is the input of the admitted `finishEdge_rInvTop` (replacing `finishEdge_rInvAt`;
+`walkTree_rInvAt` is deleted), `RReturn before after dfs parent d` carries the same bound, and
+`WalkTreeRReturnSpec` starts from `RInvTop` at the parent. `loop1_rBranch` takes `RInvFront`.
+`checks/RFinishEdgeCheck.lean` evaluates both contracts at every `finishEdge` site on blocks
+(all six `EntryR` fields via an executable `SepClass`/`Type2Pair`): on seeds 0..300, the fixed
+regression and 6000 extra random multigraphs, both ternarize modes (303 block graphs, 6414
+sites), the old contract A fails on 146 runs and contract B, whole-stack disjointness and the
+R-branch `RTop` check (34 R closes) fail on none. The R-side frame lemmas (`congr`, `of_eq`,
+`setStackDir`, `modify`, `modifyItem_free`, `pushVert`, `toRTop`) are restated for `RInvTop`.
 `checks/RInvReturnCheck.lean` kernel-checks the fixed example's preserved base and its
 settled-entry clause. Its executable checks the base split, disjointness (including item IDs
 beyond physical edges), and preservation of every state observation read by `EntryR` on
@@ -1302,8 +1324,9 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | R correctness input domain | `Correctness.lean`, `Proofs/RItems.lean`, `checks/RInvalidOrderCheck.lean` | corrected to `g.WF` + `OrderOK` for both orders; K4 with invalid edge order `[6]` kernel-checks failure of the former public target (standard axioms) |
 | R coverage and laminarity edge domain | `RInv.lean`, `RClose.lean`, `RMax.lean`, `Proofs/RunSaturation.lean`, `checks/REdgeDomainCheck.lean` | restricted containment and coverage to `e < g.ne`; kernel-checked K4 failure of unrestricted coverage and success of bounded coverage; affected transport proofs audited (standard axioms) |
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |
+| 4.5 Depth-bounded settling `RInvTop`/`RInvFront`; `finishEdge_rInvTop` (admitted, replaces `finishEdge_rInvAt`) | `RInv.lean`, `Proofs/RInvFrame.lean`, `checks/RFinishEdgeCounter.lean`, `checks/RFinishEdgeCheck.lean` | two kernel-checked counterexamples to the parent-only exemption (standard axioms); contract B checked on 6414 sites, 0 failures; frame lemmas proved |
 | 4.5 Child-return settling diagnostic and provisional contract | `Proofs/RInvFrame.lean`, `checks/RInvReturnCheck.lean` | `RReturn`/`WalkTreeRReturnSpec` stated without an admission; legacy conclusion still refuted; fixed base/settled-entry clauses kernel-checked (standard axioms); seeds 0..300 × both modes pass shape/disjointness, with content frames checked on the 65 block inputs; preservation proof remains open |
-| 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean`, `EarFrontier.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export proved: `finishEdge_frontier` (from `FinishBook.ear` + `Inv'`/`Shape`), `walkTree_frontiers` (`FrontiersTree` under the `walkTree_inv'` hypotheses), standard axioms; R interval/saturation preservation remains open |
+| 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean`, `EarFrontier.lean` | stated and threaded into `finishEdge_rInvTop`; ear export proved: `finishEdge_frontier` (from `FinishBook.ear` + `Inv'`/`Shape`), `walkTree_frontiers` (`FrontiersTree` under the `walkTree_inv'` hypotheses), standard axioms; R interval/saturation preservation remains open |
 | 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge_rangesInv` (`RangesStep.lean`, under `FinishAdj`) and `walkTree_rangesInv` (`RangesTree.lean`, under `GuardsTree`/`BookTree`/`RgTree`) proved; `finishBoundary_rangesInv`, `walk_rangesInv`, `walk_closeFacts` (`WalkWF.lean`) admitted; `ranges_of_rangesInv` (`RangesFinal.lean`) derives `convex` + node `att_vs` from `RangesInv`, the rest is `Items.CloseFacts`; saturation not a field (attachment-count forms false, §4.6) |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |

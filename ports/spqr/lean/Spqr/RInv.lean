@@ -107,6 +107,23 @@ structure RInvAt (s : WalkState) (dfs : DfsData) (v : Nat) : Prop where
   entries : ∀ t ∈ s.tstack, t.vStart ≠ v → s.EntryR dfs t
   disj : s.tstack.Pairwise fun t t' => ∀ e, t.edges s.g s.items e → ¬t'.edges s.g s.items e
 
+/-- `RInvAt` bounded by depth: only the entries whose top is at depth `≥ d` (attached at the
+vertex `v = stackVerts[d]` being walked, or below it) are settled. An entry whose top is strictly
+above `d` keeps collecting classes of its terminal pair until the walk returns to its top (the
+path class through the current vertex is merged only there), so it is exempt as well
+(`checks/RFinishEdgeCounter.lean`: `Deep` for a frontier entry, `Base` for a base entry). -/
+structure RInvTop (s : WalkState) (dfs : DfsData) (v d : Nat) : Prop where
+  entries : ∀ t ∈ s.tstack, d ≤ t.topDepth → t.vStart ≠ v → s.EntryR dfs t
+  disj : s.tstack.Pairwise fun t t' => ∀ e, t.edges s.g s.items e → ¬t'.edges s.g s.items e
+
+/-- The settled part of the stack entering `finishEdge` at `v = stackVerts[d]` with the frontier
+split at `origTstack`: the base below the split is settled at depth `d`; the whole stack is
+edge-disjoint. The frontier above the split is constrained only by `Frontier`. -/
+structure RInvFront (s : WalkState) (dfs : DfsData) (v d origTstack : Nat) : Prop where
+  base : ∀ t ∈ s.tstack.drop (s.tstack.length - origTstack), d ≤ t.topDepth → t.vStart ≠ v →
+    s.EntryR dfs t
+  disj : s.tstack.Pairwise fun t t' => ∀ e, t.edges s.g s.items e → ¬t'.edges s.g s.items e
+
 /-- The stack shape at Loop 1's R branch (`loop1Type` returns `.R` while `finishEdge` runs at
 depth `d` for the tree edge `stackVerts[d] → stackVerts[d+1]`), beyond `Inv (d+1)`. -/
 structure RBranch (s : WalkState) (d : Nat) (cur nxt : TEntry) (rest : List TEntry) : Prop where
