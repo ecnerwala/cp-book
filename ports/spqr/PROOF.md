@@ -1983,8 +1983,19 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   child's boundary) and `live_lower`. `#print axioms`: `StLive.cons_vert`, `WalkInv.d_lt`,
   `WalkInvOut.exit_true` standard; `WalkInv.toOut`, `WalkInvOut.exit_false`, `walkTree_inv` reach
   `sorryAx` (`exit_false` only through `rSide_vertFree_site`; `toOut` through `sites.rside`).
-* Not yet: `walkOut_inv` is still the out-level composition; the `walkTree.mutual_induct` skeleton
-  with the `finishEdge` primitives at the `walkOut` step is the next stage.
+* **Stage 2d — the induction skeleton.** `backbone : (∀ t d, BbTree t d) ∧ (∀ v d outs hv, BbOuts
+  v d outs hv) ∧ (∀ v d o hv, BbOut v d o hv)` is one `walkTree.mutual_induct` with the three
+  motives `BbTree t d` (`∀ G s, WalkInv G t d s → wp (walkTree t d) (WalkInvEnd G t d s)`),
+  `BbOuts v d rest hasVert` (the `walkOuts` statement over `WalkInvOut`), `BbOut v d o hasVert`
+  (the `walkOut` statement); the cases are the named site lemmas `bbTree_node` (= `toOut`, the
+  out-list hypothesis, `exit_true`/`exit_false`), `bbOuts_nil`, `bbOuts_cons` (standard axioms),
+  and `bbOut_step` — whose body in this stage is still the out-level composition `walkOut_inv`
+  (the child hypothesis `BbTree child (d + 1)` is **not consumed yet**). `walkTree_inv`/
+  `walkOuts_inv` are now `backbone.1`/`backbone.2.1`. Next: open `walkOut` in `bbOut_step` —
+  `walkOutPre` site (`wp_walkOutPre` + the `walkOutPre_*` primitives), the child entry
+  `WalkInvOut … (.tree e cls child :: rest) → WalkInv G' child (d + 1)` (the per-layer child-entry
+  derivations currently inside `invOut`/`dsOut`/`cvOut`/`scheduleOut`/`rsOut`/`stOut_step`/
+  `rrOut`), then `finishEdge` from its primitives consuming `WalkInvEnd` of the child.
 * Admissions reachable from `walkTree_inv` (direct `sorry` bodies in its dependency closure, 36 =
   the 35 below + `walkOut_stLive`):
   ear `ctx_step_tree_ret`, `walkTree_below_kept`, `walkTree_items_kept`, `ends_of_wf_boundary`,
