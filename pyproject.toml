@@ -17,4 +17,6 @@ required-version = ">=0.12"
 [tool.uv.sources]
 # Fork with cp-book integration patches (relative basedir, docs coverage
 # integration, bundle/minify); see the branch's log vs upstream main.
-competitive-verifier = { git = "https://github.com/ecnerwala/competitive-verifier.git", rev = "e66ee60184f79d244455e1ed3fff4b0d9e17848a" }
+# uv.lock pins the exact commit; `uv lock --upgrade-package competitive-verifier`
+# moves it to the branch tip.
+competitive-verifier = { git = "https://github.com/ecnerwala/competitive-verifier.git", branch = "cp-book-integration" }

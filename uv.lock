@@ -184,7 +184,7 @@ wheels = [
 [[package]]
 name = "competitive-verifier"
 version = "4.2.0"
-source = { git = "https://github.com/ecnerwala/competitive-verifier.git?rev=e66ee60184f79d244455e1ed3fff4b0d9e17848a#e66ee60184f79d244455e1ed3fff4b0d9e17848a" }
+source = { git = "https://github.com/ecnerwala/competitive-verifier.git?branch=cp-book-integration#e66ee60184f79d244455e1ed3fff4b0d9e17848a" }
 dependencies = [
     { name = "appdirs" },
     { name = "charset-normalizer" },
@@ -211,7 +211,7 @@ docs = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "competitive-verifier", git = "https://github.com/ecnerwala/competitive-verifier.git?rev=e66ee60184f79d244455e1ed3fff4b0d9e17848a" }]
+requires-dist = [{ name = "competitive-verifier", git = "https://github.com/ecnerwala/competitive-verifier.git?branch=cp-book-integration" }]
 
 [package.metadata.requires-dev]
 docs = [
