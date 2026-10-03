@@ -113,10 +113,11 @@ theorem RBranch.rStep (hR : s.RTop dfs cur nxt) (hb : s.RBranch d cur nxt rest) 
     hb.pieceItems hR⟩
 
 theorem RBranch.hmid (hb : s.RBranch d cur nxt rest) :
-    ∀ k, d < k → k ≤ d + 1 → s.stackVerts[k]! = cur.vStart := by
+    ∀ k, d < k → k ≤ d + 1 → s.stackVerts[k]! = cur.vStart ∨
+      s.g.Interior (cur.edges s.g s.items) s.stackVerts[k]! := by
   intro k h1 h2
   obtain rfl : k = d + 1 := by omega
-  exact hb.cur_c.symm
+  exact hb.mid
 
 section Content
 

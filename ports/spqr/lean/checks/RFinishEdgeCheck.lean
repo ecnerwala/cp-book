@@ -234,8 +234,36 @@ def checkEntries (D : Dfs) (d : Nat) (ts : List TEntry) (s : WalkState) (keep : 
 def tagged (tag : String) (l : List String) : List String :=
   l.map fun b => if b.startsWith "stat:" then b else tag ++ b
 
-/-- Loop 1 step by step from the state after `pushEdgeTstack`; at every R branch, `RTop` of
-`cur`, `nxt` (on the state after `loop1Type`). -/
+/-- `RBranch`'s content fields at an R branch of loop 1 (`Spqr/RInv.lean`): `mid` (the child is the
+bottom or interior to `cur`; the bottom-is-the-child form `cur_c` fails after an S merge,
+`checks/RBranchCounter.lean`), `interior`, `cur_piece`, `cur_vs`, `nxt_ne`, `proper`,
+`nxt_touch_top`, `nxt_touch_bot`, `nxt_no_cu`, read on the state after `loop1Type`. -/
+def rBranch (d : Nat) (s : WalkState) (cur nxt : TEntry) : List String := Id.run do
+  let g := s.g
+  let mut bad := []
+  let top := s.stackVerts[d]!
+  let Ecur := (cur.spans.1 ++ cur.spans.2).flatMap (belowList s)
+  let Enxt := (nxt.spans.1 ++ nxt.spans.2).flatMap (belowList s)
+  let c := s.stackVerts[d + 1]!
+  if cur.vStart != c && !(List.range g.ne).all (fun e => !inc g e c || Ecur.contains e) then
+    bad := "mid" :: bad
+  if !(List.range g.ne).all (fun e => !inc g e cur.vStart || Ecur.contains e || Enxt.contains e) then
+    bad := "interior" :: bad
+  let Pi := pieceItems s cur
+  if Pi.isEmpty then bad := "cur_piece" :: bad
+  for i in Pi do
+    if vsOf s i != some (cur.vStart, top) && vsOf s i != some (top, cur.vStart) then
+      bad := s!"cur_vs i={i}" :: bad
+  if Enxt.isEmpty then bad := "nxt_ne" :: bad
+  if (List.range g.ne).all (fun e => Ecur.contains e || Enxt.contains e) then bad := "proper" :: bad
+  if !Enxt.any (inc g · top) then bad := "nxt_touch_top" :: bad
+  if !Enxt.any (inc g · nxt.vStart) then bad := "nxt_touch_bot" :: bad
+  if Enxt.any (fun e => inc g e cur.vStart && inc g e top && cur.vStart != top) then
+    bad := "nxt_no_cu" :: bad
+  return bad
+
+/-- Loop 1 step by step from the state after `pushEdgeTstack`; at every R branch, `RTop` and the
+`RBranch` content fields (`rBranch`) of `cur`, `nxt` (on the state after `loop1Type`). -/
 partial def loop1Emu (D : Dfs) (d : Nat) (edgeDir : Bool) (s : WalkState) (fuel : Nat) :
     WalkState × List String :=
   if fuel = 0 then (s, []) else
@@ -243,7 +271,7 @@ partial def loop1Emu (D : Dfs) (d : Nat) (edgeDir : Bool) (s : WalkState) (fuel 
     let (ty, s₁) := (loop1Type d edgeDir).run s
     let bad := if ty == .R then match s₁.tstack with
       | cur :: nxt :: _ => "stat:rclose" :: (entryR D s₁ cur).map ("rclose-cur " ++ ·) ++
-          (entryR D s₁ nxt).map ("rclose-nxt " ++ ·)
+          (entryR D s₁ nxt).map ("rclose-nxt " ++ ·) ++ (rBranch d s₁ cur nxt).map ("rbranch " ++ ·)
       | _ => ["rclose-short"]
       else []
     let (item, s₂) := (maybeUnwrapNxt ty).run s₁
@@ -479,5 +507,5 @@ def main : IO UInt32 := do
           IO.println s!"seed={seed} tern={tern}: nv={g.nv} edges={g.edges} vo={vo} eo={eo}"
           for b in bad do IO.println s!"  {b}"
   IO.println s!"stats={stats.toList}"
-  IO.println s!"cases={toks[0]!} + fixed + 6000 extra; block cases={blocks}; finishEdge sites checked (both ternarize)={sites}; old-contract-A runs failing (expected)={expectedA}; failures (contract B / disjointness / loop-1 emulation / R-branch RTop / FinishRShape / RInvG base frame / child-return side facts)={fails}"
+  IO.println s!"cases={toks[0]!} + fixed + 6000 extra; block cases={blocks}; finishEdge sites checked (both ternarize)={sites}; old-contract-A runs failing (expected)={expectedA}; failures (contract B / disjointness / loop-1 emulation / R-branch RTop + RBranch fields / FinishRShape / RInvG base frame / child-return side facts)={fails}"
   return if fails == 0 then 0 else 1

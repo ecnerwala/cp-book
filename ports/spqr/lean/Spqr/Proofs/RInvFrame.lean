@@ -464,7 +464,7 @@ tree edge `e` to the child `nxtV = stackVerts[d+1]`, every iterate of Loop 1 at 
 answers `.R` has the shape `RBranch`, and its two top entries are `EntryR` and edge-disjoint
 (`RTop`). `cur`'s bottom is the child, finished, so `cur`'s `(nxtV, d)` classes are P-merged and
 `cur` is settled; `nxt`'s bottom is a finished vertex strictly below the child. The hypotheses
-below do not determine which edges the entries hold, so `interior`, `proper`, `nxt_ne`, `cur_c`
+below do not determine which edges the entries hold, so `interior`, `proper`, `nxt_ne`, `mid`
 need postorder interval ownership at `ceS₁` and its preservation through the loop.
 `RTop` additionally needs saturation and its consequences for previously closed pieces.
 `tstack`, `nxt_top`, `ne` are `loop1_r_shape` (from `run_loop1Cond`, `loop1Type_run`) and enter

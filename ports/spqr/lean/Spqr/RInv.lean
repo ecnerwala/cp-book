@@ -131,8 +131,10 @@ structure RBranch (s : WalkState) (d : Nat) (cur nxt : TEntry) (rest : List TEnt
   cur_top : cur.topDepth = d
   nxt_top : nxt.topDepth = d
   ne : nxt.vStart ≠ cur.vStart
-  /-- `cur`'s bottom is the child being finished. -/
-  cur_c : cur.vStart = s.stackVerts[d + 1]!
+  /-- The child being finished is `cur`'s bottom or interior to `cur` (an S merge in Loop 1 moves
+  the bottom down the path: `checks/RBranchCounter.lean`); `FinishTopOk.mid`'s shape. -/
+  mid : s.stackVerts[d + 1]! = cur.vStart ∨
+    s.g.Interior (cur.edges s.g s.items) s.stackVerts[d + 1]!
   /-- `cur` has a closed item, and all its items are between the child and `stackVerts[d]`. -/
   cur_piece : ∃ i, i ∈ s.entryPieceItems cur
   cur_vs : ∀ i ∈ s.entryPieceItems cur,
