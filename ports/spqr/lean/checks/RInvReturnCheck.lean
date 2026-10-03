@@ -126,8 +126,13 @@ def isBlock (g : Graph) : Bool := (List.range g.nv).all fun v => Id.run do
   return seen.length == g.ne
 
 /-- Check return shape/disjointness on every graph, and the `EntryR` observation frame on blocks.
-The frame check assumes the input's settled-base obligations; empty entries need no terminal. -/
-def checkReturn (parent : Nat) (s s' : WalkState) : List String := Id.run do
+The frame check assumes the input's settled-base obligations; empty entries need no terminal. The
+terminal frame (`stackVerts[topDepth]` unchanged) is only observed for base entries topping out at
+`≤ d` (`d` = the parent's depth): a buried entry with `topDepth > d` (a single `Q` of a finished
+deeper vertex, seed 390) has its slot rewritten by the child's walk and keeps `EntryR` only
+because its fields are vacuous there — that exact contract is what `RFinishEdgeCheck`'s
+contract-B lines check. -/
+def checkReturn (parent d : Nat) (s s' : WalkState) : List String := Id.run do
   let mut bad := []
   let base := s'.tstack.drop (s'.tstack.length - s.tstack.length)
   if s.tstack.length > s'.tstack.length then bad := "size" :: bad
@@ -135,7 +140,8 @@ def checkReturn (parent : Nat) (s s' : WalkState) : List String := Id.run do
   if s.g.nv != s'.g.nv || s.g.edges != s'.g.edges then bad := "graph" :: bad
   for t in base do
     if isBlock s.g && t.vStart != parent then
-      if !(entryBelow s t).isEmpty && s.stackVerts[t.topDepth]! != s'.stackVerts[t.topDepth]! then
+      if !(entryBelow s t).isEmpty && t.topDepth ≤ d &&
+          s.stackVerts[t.topDepth]! != s'.stackVerts[t.topDepth]! then
         bad := "base terminal" :: bad
       for i in t.spans.1 ++ t.spans.2 do
         if Items.type s.items i != Items.type s'.items i || Items.vs s.items i != Items.vs s'.items i ||
@@ -167,7 +173,7 @@ partial def outs (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkState) :
       | .tree _ _ child =>
         let before := { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
         let (after, bad) := tree child (d + 1) before
-        (after, bad ++ (checkReturn v before after).map (s!"v={v} e={o.e} " ++ ·))
+        (after, bad ++ (checkReturn v d before after).map (s!"v={v} e={o.e} " ++ ·))
     let (hv, s) := (finishEdge v d o orig hv).run s
     let (hv, s, bad') := outs v d rest hv s
     (hv, s, bad ++ bad')
@@ -216,7 +222,7 @@ def main : IO UInt32 := do
       if !bad.isEmpty then
         fails := fails + 1
         IO.println s!"seed={seed} tern={tern}: {bad}"
-  let fixed := RReturnCheck.checkReturn 1 Spqr.RInvReturnCheck.before Spqr.RInvReturnCheck.returned
+  let fixed := RReturnCheck.checkReturn 1 1 Spqr.RInvReturnCheck.before Spqr.RInvReturnCheck.returned
   if !fixed.isEmpty then
     fails := fails + 1
     IO.println s!"fixed counterexample: {fixed}"
