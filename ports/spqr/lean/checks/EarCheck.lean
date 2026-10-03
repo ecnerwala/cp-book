@@ -130,6 +130,16 @@ def earCheck (seed curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : Walk
         | _ => out := bad "bd_comp" (toString (sub.map showT)) :: out
       for u in s.tstack.tail do
         if touches s (E u) curV && u.vStart ≠ curV && d < u.topDepth then out := bad "bd_term" (showT u) :: out
+      if lowval == d + 1 then
+        match s.tstack.head? with
+        | some t => if t.spans.1 ≠ [] then out := bad "bd_side.bridge" (showT t) :: out
+        | none => pure ()
+      else
+        match s.tstack with
+        | b :: t :: _ =>
+          if b.spans.2 ≠ [] then out := bad "bd_side.back" (showT b) :: out
+          if t.spans.1 ≠ [] then out := bad "bd_side.vert" (showT t) :: out
+        | _ => pure ()
     let fe := WalkState.after (finishEdge curV d o orig hv) s
     if fe.g.ne ≠ s.g.ne || fe.g.edges ≠ s.g.edges || fe.stackVerts ≠ s.stackVerts then out := bad "lower_frame" "" :: out
     for i in List.range fe.tstack.length do

@@ -97,6 +97,7 @@ import Spqr.RInv
 import Spqr.Proofs.RInv
 import Spqr.Proofs.RInvFrame
 import Spqr.EarFrontier
+import Spqr.EarSides
 import Spqr.Proofs.RItems
 import Spqr.PlanarGlue
 import Spqr.Proofs.Orbits
