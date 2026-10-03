@@ -72,8 +72,8 @@ jobs:
     runs-on: ubuntu-26.04
     outputs:
       testcases-key: testcases-${{ steps.problems-version.outputs.hash }}-${{ steps.problems-set.outputs.hash }}
-      results-key: ${{ steps.cache-keys.outputs.results }}
-      coverage-key: ${{ steps.cache-keys.outputs.coverage }}
+      verify-result-key: ${{ steps.cache-keys.outputs.verify-result }}
+      coverage-counters-key: ${{ steps.cache-keys.outputs.coverage-counters }}
     steps:
       - uses: actions/checkout@v7
 
@@ -82,8 +82,8 @@ jobs:
       - name: Compute results cache keys
         id: cache-keys
         run: |
-          echo "results=v${{ env.VERIFY_CACHE_VERSION }}-${{ hashFiles('.competitive-verifier/config.toml') }}" >> "$GITHUB_OUTPUT"
-          echo "coverage=v${{ env.VERIFY_CACHE_VERSION }}-${{ hashFiles('.competitive-verifier/config-coverage.toml') }}" >> "$GITHUB_OUTPUT"
+          echo "verify-result=verify-result-v${{ env.VERIFY_CACHE_VERSION }}-${{ hashFiles('.competitive-verifier/config.toml') }}" >> "$GITHUB_OUTPUT"
+          echo "coverage-counters=coverage-counters-v${{ env.VERIFY_CACHE_VERSION }}-${{ hashFiles('.competitive-verifier/config-coverage.toml') }}" >> "$GITHUB_OUTPUT"
 
       - uses: astral-sh/setup-uv@v7
         with:
@@ -213,10 +213,10 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: .cv-prev-result
-          key: verify-result-${{ steps.cache-keys.outputs.results }}-${{ github.ref }}-${{ github.run_id }}
+          key: ${{ steps.cache-keys.outputs.verify-result }}-${{ github.ref }}-${{ github.run_id }}
           restore-keys: |
-            verify-result-${{ steps.cache-keys.outputs.results }}-${{ github.ref }}-
-            verify-result-${{ steps.cache-keys.outputs.results }}-refs/heads/master-
+            ${{ steps.cache-keys.outputs.verify-result }}-${{ github.ref }}-
+            ${{ steps.cache-keys.outputs.verify-result }}-refs/heads/master-
 
       - name: Restore previous coverage results
         if: github.event_name != 'schedule'
@@ -225,10 +225,10 @@ jobs:
           path: |
             coverage-counters
             .cv-coverage-result
-          key: coverage-counters-${{ steps.cache-keys.outputs.coverage }}-${{ github.ref }}-${{ github.run_id }}
+          key: ${{ steps.cache-keys.outputs.coverage-counters }}-${{ github.ref }}-${{ github.run_id }}
           restore-keys: |
-            coverage-counters-${{ steps.cache-keys.outputs.coverage }}-${{ github.ref }}-
-            coverage-counters-${{ steps.cache-keys.outputs.coverage }}-refs/heads/master-
+            ${{ steps.cache-keys.outputs.coverage-counters }}-${{ github.ref }}-
+            ${{ steps.cache-keys.outputs.coverage-counters }}-refs/heads/master-
 
       - name: Upload previous verify result
         if: github.event_name != 'schedule'
@@ -368,7 +368,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: .cv-prev-result
-          key: verify-result-${{ needs.setup-verify.outputs.results-key }}-${{ github.ref }}-${{ github.run_id }}
+          key: ${{ needs.setup-verify.outputs.verify-result-key }}-${{ github.ref }}-${{ github.run_id }}
 
       - name: Upload result artifact
         uses: actions/upload-artifact@v7
@@ -515,10 +515,10 @@ jobs:
           path: |
             coverage-counters
             .cv-coverage-result
-          key: coverage-counters-${{ needs.setup-verify.outputs.coverage-key }}-${{ github.ref }}-${{ github.run_id }}
+          key: ${{ needs.setup-verify.outputs.coverage-counters-key }}-${{ github.ref }}-${{ github.run_id }}
           restore-keys: |
-            coverage-counters-${{ needs.setup-verify.outputs.coverage-key }}-${{ github.ref }}-
-            coverage-counters-${{ needs.setup-verify.outputs.coverage-key }}-refs/heads/master-
+            ${{ needs.setup-verify.outputs.coverage-counters-key }}-${{ github.ref }}-
+            ${{ needs.setup-verify.outputs.coverage-counters-key }}-refs/heads/master-
 
       - name: Download verify_files-coverage.json
         uses: actions/download-artifact@v7
@@ -591,7 +591,7 @@ jobs:
           path: |
             coverage-counters
             .cv-coverage-result
-          key: coverage-counters-${{ needs.setup-verify.outputs.coverage-key }}-${{ github.ref }}-${{ github.run_id }}
+          key: ${{ needs.setup-verify.outputs.coverage-counters-key }}-${{ github.ref }}-${{ github.run_id }}
 
       - name: Install gcovr
         run: pipx install gcovr
