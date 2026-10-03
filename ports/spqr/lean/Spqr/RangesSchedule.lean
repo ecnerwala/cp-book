@@ -9,11 +9,11 @@ variable {σ : List Nat} {n D : Nat} {s : WalkState}
 structure FinishCover (σ : List Nat) (n curV d : Nat) (o : DfsOut) (orig : Nat)
     (hasVert : Bool) (s : WalkState) : Prop where
   vert : hasVert = false → PushVertR σ n curV s
-  p_vert : o.cls.isTree = true → hasVert = true →
+  p_vert : o.cls.lowval d < d → o.cls.isTree = true → hasVert = true →
     FinishPCover σ (n + 1) curV (o.cls.lowval d) o.cls.isType1 (feS₃ curV d o orig s)
-  p_tree : o.cls.isTree = true → hasVert = false →
+  p_tree : o.cls.lowval d < d → o.cls.isTree = true → hasVert = false →
     FinishPCover σ (n + 1) curV (o.cls.lowval d) o.cls.isType1 (feS₂ d o s)
-  p_back : o.cls.isTree = false →
+  p_back : o.cls.lowval d < d → o.cls.isTree = false →
     FinishPCover σ (n + 1) curV (o.cls.lowval d) o.cls.isType1 (feBack curV (o.cls.lowval d) d o s)
 
 theorem Step.pushVertR {v m : Nat} {s' : WalkState} (st : Step D v s s')
@@ -66,12 +66,12 @@ theorem finishAdj_of_cover {curV d lv orig : Nat} {kind : RetKind} {o : DfsOut} 
       (st₂ ht).trans (RgStep.closeVert' (st₂ ht).ranges (st₂ ht).step.shape hnd ((st₂ ht).hσ hσ)
         (by rw [(st₂ ht).step.g]; exact hb.v_lt) (hok.vert ht hv) (ha₃ ht hv))
     exact finishRestAdj_of_cover st.ranges st.step.shape (by rw [st.step.g]; exact hb.v_lt) hnd
-      (st.hσ hσ) (hok.rest_vert ht hv) (by simpa only [hlv] using hc.p_vert ht hv)
+      (st.hσ hσ) (hok.rest_vert ht hv) (by simpa only [hlv] using hc.p_vert hlow ht hv)
       (fun hh => by simp [hv] at hh)
   · intro ht hv
     exact finishRestAdj_of_cover (st₂ ht).ranges (st₂ ht).step.shape
       (by rw [(st₂ ht).step.g]; exact hb.v_lt) hnd ((st₂ ht).hσ hσ) (hok.rest_tree ht hv)
-      (by simpa only [hlv] using hc.p_tree ht hv)
+      (by simpa only [hlv] using hc.p_tree hlow ht hv)
       (fun hh => (st₂ ht).step.pushVertR hb.v_lt (hc.vert hh) (by omega))
   · intro ht
     have hq : Items.ch (feS₀ d o s).items (edgeItem (feS₀ d o s).g o.e) = [] := by
@@ -85,7 +85,7 @@ theorem finishAdj_of_cover {curV d lv orig : Nat} {kind : RetKind} {o : DfsOut} 
     have st : RgStep σ (n + 1) D curV s (feBack curV lv d o s) := st₀.trans (st₁.trans
       ⟨Step.frame st₁.step.inv st₁.step.shape rfl rfl rfl rfl, st₁.ranges.frame rfl rfl rfl rfl⟩)
     exact finishRestAdj_of_cover st.ranges st.step.shape (by rw [st.step.g]; exact hb.v_lt) hnd
-      (st.hσ hσ) (hok.rest_back ht) (by simpa only [hlv] using hc.p_back ht)
+      (st.hσ hσ) (hok.rest_back ht) (by simpa only [hlv] using hc.p_back hlow ht)
       (fun hh => st.step.pushVertR hb.v_lt (hc.vert hh) (by omega))
 
 theorem finishR_of_cover {curV d orig : Nat} {o : DfsOut} {hasVert : Bool}

@@ -252,12 +252,83 @@ def check (seed : Nat) (σ : List Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) 
       else out := bad "cand_sat_run" s!"run={r.map showT} atts={A}" :: out
   return out
 
+def checkVertPast (seed : Nat) (σ : List Nat) (v n : Nat) (s : WalkState) : List V :=
+  if (edgesBelow s (vertItem v)).all (fun e => σ.idxOf e < n) then []
+  else [⟨seed, s.ternarize, v, 0, "vertex", "vertex_past", s!"n={n} edges={edgesBelow s (vertItem v)} σ={σ}"⟩]
+
+def checkClose (seed : Nat) (s : WalkState) : List V := Id.run do
+  let ty := fun i => s.items[i]!.type
+  let ch := fun i => s.items[i]!.ch
+  let vs := fun i => s.items[i]!.vs
+  let live := fun i => s.tstack.any (fun t => (spanItems t).contains i) || s.items.any (fun it => it.ch.contains i)
+  let spr := fun i => [NodeType.S, .P, .R].contains (ty i)
+  let pair := fun (p q : Nat × Nat) => p == q || p == (q.2, q.1)
+  let two := fun i => match vs i with | (some a, some b) => a != b | _ => false
+  let isVs := fun i v => (vs i).1 == some v || (vs i).2 == some v
+  let below := ((List.range s.items.size).map (edgesBelow s)).toArray
+  let attachments := below.map (atts s)
+  let allBelow := fun i v => (List.range s.g.ne).all fun e => !inc s e v || below[i]!.contains e
+  let inner := fun i v => touches s (List.range s.g.ne) v && allBelow i v
+  let att := fun i v => attachments[i]!.contains v
+  let mut out := []
+  for i in List.range s.items.size do
+    if live i then
+      let bad := fun k => (⟨seed, s.ternarize, 0, 0, "close", "close_" ++ k,
+        s!"i={i} type={repr (ty i)} vs={vs i} ch={ch i} stack={s.tstack.map showT}"⟩ : V)
+      if spr i then
+        if !two i then out := bad "vs_ne" :: out
+        for v in List.range s.g.nv do
+          if isVs i v && !att i v then out := bad "vs_att" :: out
+          if (ch i).contains (vertItem v) != (inner i v && (ch i).all (fun c => !allBelow c v)) then
+            out := bad "interior" :: out
+        for c in ch i do
+          if ty c != .V && !two c then out := bad "child_two" :: out
+      for c in ch i do
+        if (ty c == .I || ty c == .O) && ty i != .Q then out := bad "io_parent" :: out
+        if ty i == .V && (ch c).isEmpty then out := bad "q_under_v" :: out
+      let ve := Items.virtualEdges s.items i
+      let xs := ((ch i).filter (fun c => ty c == .V)).map (· - 1)
+      if ty i == .P then
+        let ok := ve.length ≥ 2 && xs.isEmpty &&
+          (match vs i with | (some u, some v) => ve.all (fun q => pair q (u, v)) | _ => false)
+        if !ok then out := bad "p_shape" :: out
+      if ty i == .S then
+        let ok := xs.length ≥ 1 &&
+          (match vs i with | (some u, some v) => ve == List.zip (u :: xs) (xs ++ [v]) | _ => false)
+        if !ok then out := bad "s_order" :: out
+      if ty i == .R then
+        let keys := ve.map fun q => min q.1 q.2 + s.g.nv * max q.1 q.2
+        let ok := xs.length ≥ 2 && ve.length ≥ 5 && keys.Nodup &&
+          (match vs i with | (some u, some v) => ve.all (fun q => !pair q (u, v)) | _ => false)
+        if !ok then out := bad "r_shape" :: out
+      if ty i == .Q then
+        let e := i - 1 - s.g.nv
+        let edge := s.g.edges[e]!
+        for v in List.range s.g.nv do
+          if att i v && !isVs i v then out := bad "q_att_vs" :: out
+          if (ch i).isEmpty && isVs i v && !att i v then out := bad "vs_att_q" :: out
+        if (ch i).isEmpty then
+          let ok := two i && (match vs i with | (some a, some b) => pair (a, b) edge | _ => false)
+          if !ok then out := bad "q_leaf" :: out
+        else
+          let ok := match vs i, ch i with
+            | (some u, none), [c] => edge.1 == edge.2 && inc s e u && ty c != .F && ty c != .V &&
+                (ty c != .Q || (ch c).isEmpty) && vs c == (some u, none)
+            | (some u, none), [c, w] => edge.1 != edge.2 && 1 ≤ w && w ≤ s.g.nv && inc s e u &&
+                ty c != .F && ty c != .V && (ty c != .Q || (ch c).isEmpty) && pair (u, w - 1) edge &&
+                (match vs c with | (some a, some b) => pair (a, b) (u, w - 1) | _ => false)
+            | _, _ => false
+          if !ok then out := bad "q_root" :: out
+  return out
+
 mutual
 partial def iTree (seed : Nat) (σ : List Nat) (t : DfsTree) (d : Nat) (s : WalkState) : WalkState × List V :=
   match t with
   | .node v outs =>
+    let n := σ.idxOf t.edgePostorder.head!
     let s := { s with stackVerts := s.stackVerts.set! d v }
     let (hv, s, vs) := iOuts seed σ v d outs false s
+    let vs := vs ++ if hv then [] else checkVertPast seed σ v (if t.edgePostorder.isEmpty then σ.length else n + t.edgePostorder.length) s
     let s := if hv then s else ((setStackDir d true *> pushVertTstack v d).run s).2
     (s, vs)
 partial def iOuts (seed : Nat) (σ : List Nat) (v d : Nat) (outs : List DfsOut) (hv : Bool) (s : WalkState) : Bool × WalkState × List V :=
@@ -268,6 +339,7 @@ partial def iOuts (seed : Nat) (σ : List Nat) (v d : Nat) (outs : List DfsOut) 
     let (hv', s', vs') := iOuts seed σ v d rest hv s
     (hv', s', vs ++ vs')
 partial def iOut (seed : Nat) (σ : List Nat) (v d : Nat) (o : DfsOut) (hv : Bool) (s : WalkState) : Bool × WalkState × List V :=
+  let vp := if hv then [] else checkVertPast seed σ v (σ.idxOf o.block.head!) s
   let lowval := o.cls.lowval d
   let s := ((do let lowDir ← stackDir lowval; setStackDir d (if lowval ≥ d then false else !lowDir) : WalkM Unit).run s).2
   let (hv, s) := if !hv && lowval < d && o.cls.isType1 then (true, ((pushVertTstack v d).run s).2) else (hv, s)
@@ -275,9 +347,10 @@ partial def iOut (seed : Nat) (σ : List Nat) (v d : Nat) (o : DfsOut) (hv : Boo
   let (s, vs) := match o with
     | .tree _ _ child => iTree seed σ child (d+1) { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
     | .back .. => (s, [])
-  let vs := vs ++ check seed σ v d o orig s ++ checkAdj seed σ v d o orig hv s
+  let vs := vp ++ vs ++ check seed σ v d o orig s ++ checkAdj seed σ v d o orig hv s ++ checkClose seed s
+  let vs := vs ++ if hv then [] else checkVertPast seed σ v (σ.idxOf o.e) s
   let (hv', s) := (finishEdge v d o orig hv).run s
-  (hv', s, vs)
+  (hv', s, vs ++ checkClose seed s)
 end
 
 def iForest (seed : Nat) (σ : List Nat) (forest : List DfsTree) (s : WalkState) : WalkState × List V :=

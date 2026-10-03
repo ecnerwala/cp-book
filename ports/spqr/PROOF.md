@@ -1153,6 +1153,11 @@ and threads `g.WF` and both `OrderOK` hypotheses through `walk_ranges`. Its resi
 admission is named `walk_rootsCover`; the statement specifies precisely the P-site coverage
 and unpushed-vertex bounds still to establish. `Place.pushVertR` proves the latter bound from
 the existing placement invariant once its pushed-edge predicate is bounded by the prefix.
+`FinishCover` asks for P coverage only on the return branch (`lowval < d`), where P finishing
+actually executes. The empirical checker now also checks the unpushed vertex bound and every
+`CloseFacts` clause on live items (`cnt > 0`) before and after each edge finish. Seeds 0–400,
+both modes, and the tiny examples have no violations. Allocated but loose items are excluded:
+freshly allocated nodes and reopened nodes are not closed records until they are reattached.
 All twenty-two lemmas have only standard axioms. Full `FinishAdj` still needs the P merge
 into the base; the child's frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece
