@@ -1036,6 +1036,17 @@ their instantiation for the real walk and `walk_ranges` from the final state sta
 Checked at every `finishEdge` by `checks/RangesInvCheck.lean` (`lake env lean`; reimplements
 `walkTree` around `finishEdge`, asserts the instrumented items equal the library walk's; seeds
 0..400 × tern, tiny graphs): `processed`, `ordered`, `convex`, `closed` 0 violations.
+`RangesFrontier.lean`: `boundaryAdj_of_book` discharges `BoundaryAdj` from `FinishBook.ear`,
+the pending edge's postorder position and `o.block <:+: σ` (`subEdges_interval`,
+`subEdges_iff_mem_block`, `infix_interval`). `RangesInv.mergeAdj_of_frontier` derives
+`MergeAdj` when the top two entries lie above `origTstack`, `FrontierOwns` covers an interval,
+and the state has `RangesInv`: the interval supplies a stack owner of each gap, and the
+stronger `ordered` excludes lower owners (`mergeAdj_of_cover`). All six lemmas have only
+standard axioms. Full `FinishAdj` still needs the loop/site induction, including the
+P merge into the base; the frontier lemma alone applies only to merges above the split.
+The final assembly must avoid importing `RangesFrontier` into `WalkWF`: the current
+`EarFrontier → RInvFrame → EarShape → EarSpec → WalkWF` path would make a cycle.
+`WalkItemsWF`, already above the ear layer, can host that assembly.
 False candidates (recorded): *every processed edge is owned by some entry or the root* — false
 (star: after the bridge `0–1` closes its Q hangs under `vertItem 0`, which is on no entry yet);
 *≤ 2 attachments per entry* — false (K4, entry `vStart 2, topDepth 0` attached at `0, 1, 2`);
