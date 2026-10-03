@@ -7,6 +7,7 @@ import Spqr.WalkWF
 import Spqr.WalkItemsWF
 import Spqr.RelabelWF
 import Spqr.StOriented
+import Spqr.Proofs.RWalkItems
 
 /-!
 # Correctness theorems
@@ -51,7 +52,9 @@ theorem spqrTree_r_three_connected (g : Graph) (hg : g.WF) (tern : Bool) (vo eo 
     ∀ i, i < t.size → t.type i = .R →
       SpqrTree.ThreeConnected (t.nVerts i)
         ((t.skeleton i).map fun p => (p.1 - (t.nvRange i).1, p.2 - (t.nvRange i).1)) := by
-  sorry
+  rw [spqrTree_eq]
+  obtain ⟨idx, hok⟩ := relabelOK_of_wf g _ (walk_items_wf g hg tern vo eo hvo heo)
+  exact hok.r_three_connected (walk_items_rThreeConnected g hg tern vo eo hvo heo)
 
 theorem spqrTree_wf' (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
     (heo : OrderOK g.ne eo) : (g.spqrTree tern vo eo).WF := by

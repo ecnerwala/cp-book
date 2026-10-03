@@ -496,4 +496,22 @@ theorem items_r_three_connected (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : L
     ∀ i, i < items.size → Items.type items i = NodeType.R → Items.RSkel3 g items i := by
   sorry
 
+/-- On a block, the output contract `Items.RThreeConnected` for the walk's items: `items_r_three_connected`
+bridged by `Items.RSkel3.rThreeConnected_of_block`, whose placement input (`Q` children of `V` items
+have children) is `Items.Ranges.q_under_v` from `walk_ranges`. -/
+theorem walk_items_rThreeConnected_of_twoConnected (g : Graph) (hg : g.WF) (tern : Bool)
+    (vo eo : List Nat) (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) (h2 : g.TwoConnected) :
+    Items.RThreeConnected g (g.walk tern (g.dfsForest vo eo)).items := by
+  intro i hi hR
+  have hwf := walk_items_wf g hg tern vo eo hvo heo
+  refine (items_r_three_connected g hg tern vo eo hvo heo h2 i hi hR).rThreeConnected_of_block
+    hwf hg h2 ?_ hi hR
+  intro v hv c hc
+  have hnv : 0 < g.nv := by omega
+  obtain ⟨hvp, hep⟩ := dfsForest_spanning' hg hvo heo
+  have hcov : ∀ e, e < g.ne → ∃ t ∈ g.dfsForest vo eo, e ∈ t.edges := fun e he => by
+    simpa [List.mem_flatMap] using hep.mem_iff.2 (List.mem_range.2 he)
+  exact (walk_ranges g tern vo eo hg hvo heo hnv (dfsForest_bounded g hg hvo heo) hcov).q_under_v
+    v c hv hc
+
 end Spqr
