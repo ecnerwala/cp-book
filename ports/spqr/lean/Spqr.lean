@@ -51,6 +51,7 @@ import Spqr.StWalk
 import Spqr.StEar
 import Spqr.StRefEt
 import Spqr.StFrame
+import Spqr.StTree
 import Spqr.Planar
 import Spqr.PlanarWalk
 import Spqr.PlanarRelabel
