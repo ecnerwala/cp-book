@@ -1138,6 +1138,11 @@ at actual P sites pass seeds 0–400 × both modes in `RangesInvCheck`.
 book and frontier, the postorder position, and `FinishCover`. The latter retains only the
 P-site ownership and the unpushed vertex's processed-edge bound; all other adjacency is derived.
 `Step.pushVertR` transports that bound through the returning-edge primitives.
+`RangesWalk.scheduleTree` / `scheduleOuts` / `scheduleOut` prove the mutual instantiation of
+`RgTree` / `RgOuts` / `RgOut` from `Guards*`, `Book*`, `Frontiers*`, and the reduced `Cover*`
+ownership obligations. `PostAt` derives every edge's position and subtree interval from the
+DFS edge-postorder concatenations. These theorems use only standard axioms; instantiating
+the remaining `Cover*` obligations on actual DFS walks is still required.
 All twenty-two lemmas have only standard axioms. Full `FinishAdj` still needs the P merge
 into the base; the child's frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece
