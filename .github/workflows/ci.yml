@@ -6,11 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-    # Weekly full re-verify: scheduled runs skip the previous-results
-    # restore, so every solution is re-verified from scratch.
+    # Weekly full re-verify (scheduled runs skip the previous-results restore).
     - cron: '0 5 * * 6'
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
@@ -19,6 +17,12 @@ permissions:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  # Invalidates the rolling verify-result and coverage-counters caches
+  # (together with a hash of the .competitive-verifier/*.toml configs).
+  # Bump for verify settings outside the configs (e.g. --tle, --mle).
+  VERIFY_CACHE_VERSION: 1
 
 jobs:
   unit-tests:
@@ -40,8 +44,7 @@ jobs:
       - name: Configure
         run: cmake -B build -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
-      # Only the unit tests; the verify solutions are compiled by the
-      # verification jobs below.
+      # Only the unit tests; verify solutions are compiled by the verify jobs.
       - name: Build
         run: cmake --build build -j --target tests
 
@@ -57,8 +60,6 @@ jobs:
         with:
           enable-cache: true
 
-      # Bundle + minify every src/ header and verify (via clang's raw
-      # lexer) that minification preserves every token.
       - name: Bundle and check all headers
         run: uv run --locked scripts/bundle.py --all --check
 
@@ -66,15 +67,21 @@ jobs:
     runs-on: ubuntu-26.04
     outputs:
       testcases-key: testcases-${{ steps.problems-version.outputs.hash }}-${{ steps.problems-set.outputs.hash }}
+      verify-result-key: ${{ steps.cache-keys.outputs.verify-result }}
+      coverage-counters-key: ${{ steps.cache-keys.outputs.coverage-counters }}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Compute results cache keys
+        id: cache-keys
+        run: |
+          echo "verify-result=verify-result-v${{ env.VERIFY_CACHE_VERSION }}-${{ hashFiles('.competitive-verifier/config.toml') }}" >> "$GITHUB_OUTPUT"
+          echo "coverage-counters=coverage-counters-v${{ env.VERIFY_CACHE_VERSION }}-${{ hashFiles('.competitive-verifier/config-coverage.toml') }}" >> "$GITHUB_OUTPUT"
 
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
-      # Installs the competitive-verifier pinned in uv.lock and puts it on
-      # PATH for the competitive-verifier/actions/* steps.
       - name: Set up competitive-verifier
         run: |
           uv sync --locked
@@ -91,9 +98,6 @@ jobs:
             third_party
           config: .competitive-verifier/config.toml
 
-      # Second resolve for the coverage environment (its compile commands
-      # differ: --coverage via config-coverage.toml), so coverage-verify
-      # doesn't have to resolve again.
       - name: oj-resolve (coverage environment)
         uses: competitive-verifier/actions/oj-resolve@v2
         with:
@@ -129,11 +133,8 @@ jobs:
         run: |
           echo "hash=$(git ls-remote https://github.com/yosupo06/library-checker-problems HEAD | cut -f1)" >> "$GITHUB_OUTPUT"
 
-      # Key on the set of referenced problem URLs, not solution contents:
-      # cache entries are immutable, so a fresh (multi-GB) entry should only
-      # be saved when the test data can actually differ — a problem is added
-      # or upstream library-checker-problems changes — not on every edit to
-      # a verify solution.
+      # Key on the set of problem URLs, not solution contents, so a fresh
+      # (multi-GB) cache entry is only saved when the test data can differ.
       - name: Compute problem-set hash
         id: problems-set
         run: |
@@ -150,10 +151,7 @@ jobs:
           EOF
           )" >> "$GITHUB_OUTPUT"
 
-      # An exact key hit means the saved entry was fully generated for this
-      # problem set + upstream version, so setup doesn't need the cache
-      # itself (only the shards do): check existence without downloading,
-      # and only restore + generate + save on a miss.
+      # lookup-only: setup doesn't need the testcases itself, only the shards do.
       - name: Check testcases cache
         id: testcases-cache
         uses: actions/cache/restore@v6
@@ -162,9 +160,7 @@ jobs:
           key: testcases-${{ steps.problems-version.outputs.hash }}-${{ steps.problems-set.outputs.hash }}
           lookup-only: true
 
-      # Generate all testcases once and save them here; the verify and
-      # coverage-verify shards restore this cache read-only, so every shard
-      # (and both environments) sees identical test data.
+      # Generated once here; the shards restore this cache read-only.
       - name: Restore testcases
         if: steps.testcases-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@v6
@@ -186,21 +182,18 @@ jobs:
           path: .competitive-verifier/cache
           key: testcases-${{ steps.problems-version.outputs.hash }}-${{ steps.problems-set.outputs.hash }}
 
-      # Snapshot the previous results once and hand them to the shards as an
-      # artifact: all shards then filter against the same previous results,
-      # so the builtin --split sharding partitions the remaining files
-      # consistently (each shard restoring caches itself could race with
-      # concurrent saves and disagree). Scheduled runs skip this so every
-      # solution is re-verified from scratch.
+      # Snapshot the previous results once for all shards, so --split
+      # partitions the remaining files consistently (shards restoring the
+      # cache themselves could race with concurrent saves).
       - name: Restore previous verify results
         if: github.event_name != 'schedule'
         uses: actions/cache/restore@v6
         with:
           path: .cv-prev-result
-          key: verify-result-${{ github.ref }}-${{ github.run_id }}
+          key: ${{ steps.cache-keys.outputs.verify-result }}-${{ github.ref }}-${{ github.run_id }}
           restore-keys: |
-            verify-result-${{ github.ref }}-
-            verify-result-refs/heads/master-
+            ${{ steps.cache-keys.outputs.verify-result }}-${{ github.ref }}-
+            ${{ steps.cache-keys.outputs.verify-result }}-refs/heads/master-
 
       - name: Restore previous coverage results
         if: github.event_name != 'schedule'
@@ -209,10 +202,10 @@ jobs:
           path: |
             coverage-counters
             .cv-coverage-result
-          key: coverage-counters-${{ github.ref }}-${{ github.run_id }}
+          key: ${{ steps.cache-keys.outputs.coverage-counters }}-${{ github.ref }}-${{ github.run_id }}
           restore-keys: |
-            coverage-counters-${{ github.ref }}-
-            coverage-counters-refs/heads/master-
+            ${{ steps.cache-keys.outputs.coverage-counters }}-${{ github.ref }}-
+            ${{ steps.cache-keys.outputs.coverage-counters }}-refs/heads/master-
 
       - name: Upload previous verify result
         if: github.event_name != 'schedule'
@@ -249,15 +242,11 @@ jobs:
         with:
           enable-cache: true
 
-      # Installs the competitive-verifier pinned in uv.lock and puts it on
-      # PATH for the competitive-verifier/actions/* steps.
       - name: Set up competitive-verifier
         run: |
           uv sync --locked
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      # Restore-only: setup-verify owns generating and saving this cache,
-      # and exports the exact key it saved under.
       - name: Restore testcases
         uses: actions/cache/restore@v6
         with:
@@ -266,8 +255,7 @@ jobs:
           restore-keys: |
             testcases-
 
-      # continue-on-error: the artifact doesn't exist on scheduled runs or
-      # when setup-verify found no previous results.
+      # No artifact on scheduled runs or when there were no previous results.
       - name: Download previous result
         if: github.event_name != 'schedule'
         continue-on-error: true
@@ -283,19 +271,13 @@ jobs:
             echo "file=prev-result/result.json" >> "$GITHUB_OUTPUT"
           fi
 
-      # Direct invocation (the verify action has no input for
-      # --prev-result-mode). Hash mode skips solutions whose transitive
-      # sources, verification commands and Library Checker test data are
-      # unchanged; failures surface in the check job like the action's
-      # default check: false. --no-download tests exactly the cases (and the
-      # Library Checker version) generated by setup-verify instead of each
-      # shard pulling upstream again. --split shards the post-filter
-      # remaining files across the matrix jobs.
+      # Run the verify CLI directly (rather than competitive-verifier/actions/verify)
+      # to pass --no-download.
       - name: Verify
         run: |
           competitive-verifier verify --check-error \
             --timeout 1800 \
-            --prev-result-mode hash \
+            --change-detection hash \
             --no-download \
             --split '${{ strategy.job-total }}' \
             --split-index '${{ matrix.shard }}' \
@@ -313,7 +295,7 @@ jobs:
 
   verify-merge:
     runs-on: ubuntu-26.04
-    needs: [verify]
+    needs: [setup-verify, verify]
     steps:
       - uses: actions/checkout@v7
 
@@ -321,8 +303,6 @@ jobs:
         with:
           enable-cache: true
 
-      # Installs the competitive-verifier pinned in uv.lock and puts it on
-      # PATH for the competitive-verifier/actions/* steps.
       - name: Set up competitive-verifier
         run: |
           uv sync --locked
@@ -334,9 +314,6 @@ jobs:
           pattern: VerifyResult-shard-*
           path: .shard-results
 
-      # Each shard's result carries fresh (newest: true) entries for the
-      # files it ran plus copies of the previous results for the rest;
-      # merge-result keeps the newest entry per file.
       - name: Merge shard results
         run: |
           competitive-verifier merge-result .shard-results/VerifyResult-shard-*/result.json \
@@ -351,7 +328,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: .cv-prev-result
-          key: verify-result-${{ github.ref }}-${{ github.run_id }}
+          key: ${{ needs.setup-verify.outputs.verify-result-key }}-${{ github.ref }}-${{ github.run_id }}
 
       - name: Upload result artifact
         uses: actions/upload-artifact@v7
@@ -374,8 +351,6 @@ jobs:
         with:
           enable-cache: true
 
-      # Installs the competitive-verifier pinned in uv.lock and puts it on
-      # PATH for the competitive-verifier/actions/* steps.
       - name: Set up competitive-verifier
         run: |
           uv sync --locked
@@ -386,8 +361,6 @@ jobs:
         with:
           name: verify_files-coverage
 
-      # Restore-only: setup-verify owns generating and saving this cache,
-      # and exports the exact key it saved under.
       - name: Restore testcases
         uses: actions/cache/restore@v6
         with:
@@ -396,8 +369,7 @@ jobs:
           restore-keys: |
             testcases-
 
-      # continue-on-error: the artifact doesn't exist on scheduled runs or
-      # when setup-verify found no previous results.
+      # No artifact on scheduled runs or when there were no previous results.
       - name: Download previous result
         if: github.event_name != 'schedule'
         continue-on-error: true
@@ -417,7 +389,7 @@ jobs:
         run: |
           competitive-verifier verify --check-error \
             --timeout 1800 \
-            --prev-result-mode hash \
+            --change-detection hash \
             --no-download \
             --split '${{ strategy.job-total }}' \
             --split-index '${{ matrix.shard }}' \
@@ -427,12 +399,8 @@ jobs:
           PREV_RESULT: ${{ steps.prev-result.outputs.file }}
           COMPETITIVE_VERIFY_FILES_PATH: verify_files-coverage.json
 
-      # Ship only this shard's freshly written counters (newest: true
-      # entries are the ones this shard actually ran); coverage-verify-merge
-      # overlays them onto the rolling staged-counter cache. Counter paths
-      # are constructed exactly (no globbing): gcc compiling `x.cpp` with
-      # `-o <dir>/a.out` writes `<dir>/a-x.gcno`/`.gcda`, and the binary
-      # dir comes from the manifest's verification command.
+      # Ship only the counters this shard wrote (newest: true). gcc compiling
+      # x.cpp with -o <dir>/a.out writes <dir>/a-x.gcno and a-x.gcda.
       - name: Collect fresh coverage counters
         run: |
           python3 - <<'EOF'
@@ -473,7 +441,7 @@ jobs:
 
   coverage-verify-merge:
     runs-on: ubuntu-26.04
-    needs: [coverage-verify]
+    needs: [setup-verify, coverage-verify]
     steps:
       - uses: actions/checkout@v7
 
@@ -481,27 +449,23 @@ jobs:
         with:
           enable-cache: true
 
-      # Installs the competitive-verifier pinned in uv.lock and puts it on
-      # PATH for the competitive-verifier/actions/* steps.
       - name: Set up competitive-verifier
         run: |
           uv sync --locked
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      # Slim rolling cache: only the staged counters of the previous run
-      # plus the result.json used to skip unchanged solutions (a few MB).
-      # Skipped solutions keep their previously staged counters; re-run
-      # solutions get fresh ones from the shard artifacts.
+      # Rolling cache: the previous run's staged counters plus the result.json
+      # used to skip unchanged solutions.
       - name: Restore coverage counters
         uses: actions/cache/restore@v6
         with:
           path: |
             coverage-counters
             .cv-coverage-result
-          key: coverage-counters-${{ github.ref }}-${{ github.run_id }}
+          key: ${{ needs.setup-verify.outputs.coverage-counters-key }}-${{ github.ref }}-${{ github.run_id }}
           restore-keys: |
-            coverage-counters-${{ github.ref }}-
-            coverage-counters-refs/heads/master-
+            ${{ needs.setup-verify.outputs.coverage-counters-key }}-${{ github.ref }}-
+            ${{ needs.setup-verify.outputs.coverage-counters-key }}-refs/heads/master-
 
       - name: Download verify_files-coverage.json
         uses: actions/download-artifact@v7
@@ -514,21 +478,15 @@ jobs:
           pattern: CoverageShard-*
           path: .shards
 
-      # Each shard's result carries fresh (newest: true) entries for the
-      # files it ran plus copies of the previous results for the rest;
-      # merge-result keeps the newest entry per file.
       - name: Merge shard results
         run: |
           competitive-verifier merge-result .shards/CoverageShard-*/result.json \
             > '${{ runner.temp }}/coverage-result.json'
 
-      # Opt-in counter selection keyed off the merged result: a solution that
-      # ran this run (newest: true) gets exactly the counters its shard
-      # produced, and a solution skipped via prev-result gets the counters
-      # restored from the previous run's cache. Nothing else is staged, so
-      # counters from removed/renamed files or from a solution that ran but
-      # failed to compile (built against an older revision of its includes,
-      # which gcovr refuses to merge) can't leak into the report.
+      # Stage counters only for solutions in the merged result: fresh ones
+      # for solutions that ran, cached ones for skipped solutions. Nothing
+      # else, so counters from removed files or failed compiles (which gcovr
+      # refuses to merge) can't leak into the report.
       - name: Stage coverage counters
         run: |
           python3 - <<'EOF'
@@ -574,7 +532,7 @@ jobs:
           path: |
             coverage-counters
             .cv-coverage-result
-          key: coverage-counters-${{ github.ref }}-${{ github.run_id }}
+          key: ${{ needs.setup-verify.outputs.coverage-counters-key }}-${{ github.ref }}-${{ github.run_id }}
 
       - name: Install gcovr
         run: pipx install gcovr
@@ -618,10 +576,9 @@ jobs:
           cmake --build build -j --target tests
           ctest --test-dir build --output-on-failure
 
-      # Never-run instrumented stubs so untouched headers appear in coverage
-      # denominators as 0% instead of being invisible (uninstantiated
-      # templates emit no code even here; coverage_fill_missing.py fills
-      # those in later).
+      # Never-run instrumented stubs so untouched headers show as 0% instead
+      # of missing (uninstantiated templates are filled in by
+      # coverage_fill_missing.py later).
       - name: Instrument untouched headers
         run: |
           mkdir -p coverage-stubs
@@ -692,8 +649,6 @@ jobs:
         with:
           enable-cache: true
 
-      # Installs the competitive-verifier pinned in uv.lock and puts it on
-      # PATH for the competitive-verifier/actions/* steps.
       - name: Set up competitive-verifier
         run: |
           uv sync --locked --group docs
@@ -709,11 +664,8 @@ jobs:
             --add-tracefile '${{ steps.all-artifacts.outputs.artifacts-root }}/CoverageTrace-*/coverage-*.json' \
             --json coverage/coverage.json
 
-      # Code absent from the gcov data (uninstantiated templates emit no code
-      # even in the instrumented stubs) gets zero-coverage entries — both
-      # whole template-only headers and individual uninstantiated functions —
-      # so it counts as uncovered instead of being omitted. All reports below
-      # (docs, HTML, summary, badge) include these filled lines.
+      # Uninstantiated templates emit no gcov data even in the stubs; add them
+      # as uncovered so they count against coverage.
       - name: Add uncovered code to coverage.json
         run: python3 scripts/coverage_fill_missing.py coverage/coverage.json
 
@@ -729,8 +681,7 @@ jobs:
           cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
 
       # Run the docs CLI directly (rather than competitive-verifier/actions/docs)
-      # to pass --coverage-json, which renders per-page coverage summaries and
-      # a per-line coverage tab.
+      # to pass --coverage-json.
       - name: Docs
         run: |
           competitive-verifier docs \
@@ -743,8 +694,6 @@ jobs:
       - name: Copy README into docs
         run: cp README.md _jekyll/README.md
 
-      # Map source files to their gcovr details pages so doc pages can link
-      # to per-file coverage reports.
       - name: Link coverage pages
         run: python3 scripts/coverage_page_links.py --coverage-dir coverage --jekyll-dir _jekyll
 
@@ -806,8 +755,6 @@ jobs:
         with:
           enable-cache: true
 
-      # Installs the competitive-verifier pinned in uv.lock and puts it on
-      # PATH for the competitive-verifier/actions/* steps.
       - name: Set up competitive-verifier
         run: |
           uv sync --locked
