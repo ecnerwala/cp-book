@@ -5,7 +5,7 @@ import Spqr.WalkWF
 
 `walk_items_wf` assembles `Items.WF` for `g.walk tern (g.dfsForest vo eo)` from the proved tree
 (`walk_tree`) and typing (`WalkTyping.walk_typing`) layers and the range layer
-(`wf_of_ranges` with the admitted `walk_ranges`). It lives above `WalkCover` (which imports
+(`wf_of_ranges` with `walk_ranges`, from the admitted `walk_rangesInv`/`walk_closeFacts`). It lives above `WalkCover` (which imports
 `StWalk`, which imports `WalkWF`), so the DFS prerequisites of `walk_tree`/`walk_typing` are
 discharged here from `g.WF` and `OrderOK`. -/
 
@@ -138,6 +138,23 @@ theorem wf_initialItems (g : Graph) (hnv : g.nv = 0) (hne : g.ne = 0) :
       s_order := fun i _ h => by simp [(hit i).1] at h
       r_shape := fun i _ h => by simp [(hit i).1] at h }
 
+/-! ### `Items.Ranges` -/
+
+theorem walk_g (g : Graph) (tern : Bool) (forest : List DfsTree) (hnv : 0 < g.nv)
+    (hb : ∀ t ∈ forest, t.Bounded g.nv g.ne) : (g.walk tern forest).g = g :=
+  (WalkM.walkForest_typing forest (WalkState.init_typing g tern hnv) hb).g_eq
+
+/-- `Items.Ranges` for the walk: `convex`/node `att_vs` from the final range invariant
+(`walk_rangesInv`), the remaining attachment/shape clauses from `walk_closeFacts`. -/
+theorem walk_ranges (g : Graph) (tern : Bool) (vo eo : List Nat) (hnv : 0 < g.nv)
+    (hb : ∀ t ∈ g.dfsForest vo eo, t.Bounded g.nv g.ne)
+    (hcov : ∀ e, e < g.ne → ∃ t ∈ g.dfsForest vo eo, e ∈ t.edges) :
+    Items.Ranges g (g.walk tern (g.dfsForest vo eo)).items (edgePostorderForest (g.dfsForest vo eo)) := by
+  have hg := walk_g g tern _ hnv hb
+  have key := WalkState.ranges_of_rangesInv (walk_rangesInv g tern vo eo)
+    (by rw [hg]; exact walk_typing g tern _ hnv hb hcov) (by rw [hg]; exact walk_closeFacts g tern vo eo)
+  rwa [hg] at key
+
 /-! ### `Items.WF` -/
 
 /-- Phase 2: the walk's items satisfy the item-level specification. `Tree` is `walk_tree`,
@@ -164,8 +181,9 @@ theorem walk_items_wf (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     exact wf_initialItems g hnv hne
   · have hf : ForestOK g (g.dfsForest vo eo) := ForestOK.of_perm hvp hep
     have ht := walk_tree g tern _ hnv hb hf hwf hvcov hecov
-    have hty := walk_typing g tern _ hnv hb
-      (fun e he => by simpa [List.mem_flatMap] using hecov e he)
-    exact Items.wf_of_ranges ht.toTree hty.toTypingFacts (walk_ranges g tern vo eo)
+    have hcov : ∀ e, e < g.ne → ∃ t ∈ g.dfsForest vo eo, e ∈ t.edges :=
+      fun e he => by simpa [List.mem_flatMap] using hecov e he
+    have hty := walk_typing g tern _ hnv hb hcov
+    exact Items.wf_of_ranges ht.toTree hty.toTypingFacts (walk_ranges g tern vo eo hnv hb hcov)
 
 end Spqr

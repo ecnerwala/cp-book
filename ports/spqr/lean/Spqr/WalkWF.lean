@@ -1,12 +1,13 @@
 import Spqr.Build
 import Spqr.ItemSpec
 import Spqr.RangesWF
+import Spqr.RangesFinal
 
 /-!
 # Walk-phase contract
 
 The walk-side admissions behind the walk→relabel interface `Items.WF` (`PROOF.md` §3–§4):
-`walk_ranges` (the postorder range / attachment structure, §4.6) and `walk_canonical`; `spqrTree_eq`
+`walk_rangesInv`/`walk_closeFacts` (the postorder range / attachment structure, §4.6) and `walk_canonical`; `spqrTree_eq`
 identifies `Graph.spqrTree` with the reference pipeline. `walk_items_wf` itself is assembled in
 `Spqr.WalkItemsWF` (above `WalkCover`/`WalkTyping`, whose `walk_tree`/`walk_typing` it consumes);
 this module stays below the st-order layer (`StSpec`/`StWalk`/`StOriented`), which only needs
@@ -15,10 +16,20 @@ this module stays below the st-order layer (`StSpec`/`StWalk`/`StOriented`), whi
 
 namespace Spqr
 
-/-- Admitted: the walk's items have the postorder range / attachment structure (`PROOF.md` §4.6),
-relative to the DFS edge postorder. Checked empirically by `check_ranges`. -/
-theorem walk_ranges (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    Items.Ranges g (g.walk tern (g.dfsForest vo eo)).items (edgePostorderForest (g.dfsForest vo eo)) := by
+/-- Admitted: the walk ends in the range invariant (`RangesInv.lean`), relative to the DFS edge
+postorder. `walkTree_rangesInv` (`RangesTree.lean`) is the per-tree induction; this is its
+instantiation over `walkForest`, which needs the ear guards `GuardsTree`/`BookTree` and the range
+hypotheses `RTree` (edge positions in the postorder, local adjacency at every merge) at every
+`finishEdge`. -/
+theorem walk_rangesInv (g : Graph) (tern : Bool) (vo eo : List Nat) :
+    (g.walk tern (g.dfsForest vo eo)).RangesInv (edgePostorderForest (g.dfsForest vo eo))
+      (edgePostorderForest (g.dfsForest vo eo)).length 0 := by
+  sorry
+
+/-- Admitted: the attachment/shape clauses of `Items.Ranges` that `RangesInv` does not carry
+(`Items.CloseFacts`, `RangesFinal.lean`; `PROOF.md` §4.6). Checked empirically by `check_ranges`. -/
+theorem walk_closeFacts (g : Graph) (tern : Bool) (vo eo : List Nat) :
+    Items.CloseFacts g (g.walk tern (g.dfsForest vo eo)).items := by
   sorry
 
 /-- Admitted: canonicity of the unternarized walk (`PROOF.md` §4.6; for `tern = true` P under P /

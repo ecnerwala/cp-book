@@ -224,73 +224,73 @@ theorem RangesInv.pushEdge' (h : s.RangesInv σ n D) (hnd : σ.Nodup) (vStart to
 /-! ### Steps carrying the range invariant -/
 
 /-- A `Step` whose target satisfies the range invariant after `n` edges. -/
-structure RStep (σ : List Nat) (n D v : Nat) (s s' : WalkState) : Prop where
+structure RgStep (σ : List Nat) (n D v : Nat) (s s' : WalkState) : Prop where
   step : Step D v s s'
   ranges : s'.RangesInv σ n D
 
 variable {v : Nat}
 
-theorem RStep.trans {n' : Nat} {s₁ s₂ s₃ : WalkState} (h₁ : RStep σ n D v s₁ s₂) (h₂ : RStep σ n' D v s₂ s₃) :
-    RStep σ n' D v s₁ s₃ := ⟨h₁.step.trans h₂.step, h₂.ranges⟩
+theorem RgStep.trans {n' : Nat} {s₁ s₂ s₃ : WalkState} (h₁ : RgStep σ n D v s₁ s₂) (h₂ : RgStep σ n' D v s₂ s₃) :
+    RgStep σ n' D v s₁ s₃ := ⟨h₁.step.trans h₂.step, h₂.ranges⟩
 
-theorem RStep.refl (h : s.RangesInv σ n D) (hs : Shape s) : RStep σ n D v s s := ⟨Step.refl h.inv hs, h⟩
+theorem RgStep.refl (h : s.RangesInv σ n D) (hs : Shape s) : RgStep σ n D v s s := ⟨Step.refl h.inv hs, h⟩
 
-theorem RStep.hσ (st : RStep σ n D v s s') (hσ : ∀ e ∈ σ, e < s.g.ne) : ∀ e ∈ σ, e < s'.g.ne := by
+theorem RgStep.hσ (st : RgStep σ n D v s s') (hσ : ∀ e ∈ σ, e < s.g.ne) : ∀ e ∈ σ, e < s'.g.ne := by
   rw [st.step.g]; exact hσ
 
-theorem RStep.mergeTop (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
-    (hok : MergeTopOk D s) (hadj : MergeAdj σ s) : RStep σ n D v s (mergeTstackTops.run s).2 :=
+theorem RgStep.mergeTop (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+    (hok : MergeTopOk D s) (hadj : MergeAdj σ s) : RgStep σ n D v s (mergeTstackTops.run s).2 :=
   ⟨Step.mergeTop h.inv hs hok, h.mergeTop' hnd hσ hok hadj⟩
 
-theorem RStep.finishTop (h : s.RangesInv σ n D) (hs : Shape s) (hσ : ∀ e ∈ σ, e < s.g.ne) (hv : v < s.g.nv)
+theorem RgStep.finishTop (h : s.RangesInv σ n D) (hs : Shape s) (hσ : ∀ e ∈ σ, e < s.g.ne) (hv : v < s.g.nv)
     (item : ItemId) (hok : FinishTopOk D s) (hf : ItemFree s item) :
-    RStep σ n D v s ((finishTstackTop item).run s).2 :=
+    RgStep σ n D v s ((finishTstackTop item).run s).2 :=
   ⟨Step.finishTop h.inv hs hv item hok hf, h.finishTop' hσ item hok hf⟩
 
-theorem RStep.closeTwo (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.closeTwo (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
     (hv : v < s.g.nv) (item : ItemId) (hok : CloseTwoOk D s) (hadj : MergeAdj σ s) (hf : ItemFree s item) :
-    RStep σ n D v s ((finishTstackTop item).run (mergeTstackTops.run s).2).2 := by
-  have st := RStep.mergeTop (v := v) h hs hnd hσ hok.merge hadj
-  exact st.trans (RStep.finishTop st.ranges st.step.shape (st.hσ hσ) (by rw [st.step.g]; exact hv) item
+    RgStep σ n D v s ((finishTstackTop item).run (mergeTstackTops.run s).2).2 := by
+  have st := RgStep.mergeTop (v := v) h hs hnd hσ hok.merge hadj
+  exact st.trans (RgStep.finishTop st.ranges st.step.shape (st.hσ hσ) (by rw [st.step.g]; exact hv) item
     hok.finish hf.merge)
 
-theorem RStep.retarget (h : s.RangesInv σ n D) (hs : Shape s) (hσ : ∀ e ∈ σ, e < s.g.ne) (curV : Nat)
-    (edgeDir : Bool) (hok : RetargetOk D curV s) : RStep σ n D v s ((retarget curV edgeDir).run s).2 :=
+theorem RgStep.retarget (h : s.RangesInv σ n D) (hs : Shape s) (hσ : ∀ e ∈ σ, e < s.g.ne) (curV : Nat)
+    (edgeDir : Bool) (hok : RetargetOk D curV s) : RgStep σ n D v s ((retarget curV edgeDir).run s).2 :=
   ⟨Step.retarget h.inv hs curV edgeDir hok, h.retarget' hσ curV edgeDir hok⟩
 
 structure RUnwrapRes (σ : List Nat) (n D v : Nat) (s : WalkState) (r : ItemId × WalkState) : Prop where
-  step : RStep σ n D v s r.2
+  step : RgStep σ n D v s r.2
   free : ItemFree r.2 r.1
 
-theorem RStep.unwrapRes {ty : NodeType} (h : s.RangesInv σ n D) (hs : Shape s) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.unwrapRes {ty : NodeType} (h : s.RangesInv σ n D) (hs : Shape s) (hσ : ∀ e ∈ σ, e < s.g.ne)
     (hty : ty ∉ [NodeType.F, .V, .Q]) (hok : UnwrapOk ty s) :
     RUnwrapRes σ n D v s ((maybeUnwrapNxt ty).run s) :=
   let r := maybeUnwrapNxt_spec (v := v) h.inv hs hty hok
   ⟨⟨r.step, h.unwrap' hσ hs hty hok⟩, r.free⟩
 
-theorem RStep.pushVert (h : s.RangesInv σ n D) (hs : Shape s) (d : Nat) (hv : v < s.g.nv)
+theorem RgStep.pushVert (h : s.RangesInv σ n D) (hs : Shape s) (d : Nat) (hv : v < s.g.nv)
     (hc : s.g.ConnEdges (Items.EdgeBelow s.g s.items (vertItem v)))
     (ha : s.g.TwoAttached (Items.EdgeBelow s.g s.items (vertItem v)) v v) (hr : PushVertR σ n v s) :
-    RStep σ n D v s ((pushVertTstack v d).run s).2 :=
+    RgStep σ n D v s ((pushVertTstack v d).run s).2 :=
   ⟨Step.pushVert h.inv hs d hv hc ha, h.pushVert' v d hc ha hr⟩
 
-theorem RStep.pushEdge (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (vStart topDepth e : Nat)
+theorem RgStep.pushEdge (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (vStart topDepth e : Nat)
     (he : e < s.g.ne) (hq : Items.ch s.items (edgeItem s.g e) = [])
     (htq : Items.type s.items (edgeItem s.g e) ≠ .V)
     (hend : Items.PairEq (vStart, s.stackVerts[topDepth]!) s.g.edges[e]!) (hD : topDepth ≤ D)
-    (hn : σ[n]? = some e) : RStep σ (n + 1) D v s ((pushEdgeTstack vStart topDepth e).run s).2 :=
+    (hn : σ[n]? = some e) : RgStep σ (n + 1) D v s ((pushEdgeTstack vStart topDepth e).run s).2 :=
   ⟨Step.pushEdge h.inv hs vStart topDepth e he hq hend hD, h.pushEdge' hnd vStart topDepth e he hq htq hend hD hn⟩
 
-theorem RStep.loop (cond : WalkM Bool) (body : WalkM Unit) (Ok Adj : WalkState → Prop) (fuel : Nat)
+theorem RgStep.loop (cond : WalkM Bool) (body : WalkM Unit) (Ok Adj : WalkState → Prop) (fuel : Nat)
     (hcond : ∀ s, (cond.run s).2 = s)
     (hbody : ∀ s, v < s.g.nv → s.RangesInv σ n D → Shape s → (∀ e ∈ σ, e < s.g.ne) →
-      (cond.run s).1 = true → Ok s → Adj s → RStep σ n D v s (body.run s).2)
+      (cond.run s).1 = true → Ok s → Adj s → RgStep σ n D v s (body.run s).2)
     (hv : v < s.g.nv) (h : s.RangesInv σ n D) (hs : Shape s) (hσ : ∀ e ∈ σ, e < s.g.ne)
     (hok : ∀ k, (∀ j, j ≤ k → (cond.run (iter body j s)).1 = true) → Ok (iter body k s))
     (hadj : ∀ k, (∀ j, j ≤ k → (cond.run (iter body j s)).1 = true) → Adj (iter body k s)) :
-    RStep σ n D v s ((loop fuel cond body).run s).2 := by
+    RgStep σ n D v s ((loop fuel cond body).run s).2 := by
   induction fuel generalizing s with
-  | zero => exact RStep.refl h hs
+  | zero => exact RgStep.refl h hs
   | succ fuel ih =>
     rw [loop_succ_run fuel cond body s (hcond s)]
     by_cases hc : (cond.run s).1 = true
@@ -302,37 +302,37 @@ theorem RStep.loop (cond : WalkM Bool) (body : WalkM Unit) (Ok Adj : WalkState �
       · cases j with
         | zero => exact hc
         | succ j => exact hk j (Nat.le_of_succ_le_succ hj)
-    · simp only [hc]; exact RStep.refl h hs
+    · simp only [hc]; exact RgStep.refl h hs
 
 /-! ### The blocks of `finishEdge` -/
 
-theorem RStep.loop1Type (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.loop1Type (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
     {d : Nat} {edgeDir : Bool}
     (hok : (nxtE s).topDepth > d → MergeTopOk D { s with stackDir := s.stackDir.set! (nxtE s).topDepth edgeDir })
     (hadj : (nxtE s).topDepth > d → MergeAdj σ { s with stackDir := s.stackDir.set! (nxtE s).topDepth edgeDir }) :
-    RStep σ n D v s (l1S₁ d edgeDir s) := by
+    RgStep σ n D v s (l1S₁ d edgeDir s) := by
   unfold l1S₁ after; rw [loop1Type_run]
   by_cases hc : (nxtE s).topDepth > d
   · simp only [hc, ↓reduceIte]
-    have st : RStep σ n D v s { s with stackDir := s.stackDir.set! (nxtE s).topDepth edgeDir } :=
+    have st : RgStep σ n D v s { s with stackDir := s.stackDir.set! (nxtE s).topDepth edgeDir } :=
       ⟨Step.frame h.inv hs rfl rfl rfl rfl, h.frame rfl rfl rfl rfl⟩
-    exact st.trans (RStep.mergeTop st.ranges st.step.shape hnd hσ (hok hc) (hadj hc))
+    exact st.trans (RgStep.mergeTop st.ranges st.step.shape hnd hσ (hok hc) (hadj hc))
   · simp only [hc, ↓reduceIte]
-    first | exact RStep.refl h hs | (split <;> exact RStep.refl h hs)
+    first | exact RgStep.refl h hs | (split <;> exact RgStep.refl h hs)
 
 /-- Loop-1 body: adjacency at the S-merge and at the closing merge. -/
 structure Loop1BodyAdj (σ : List Nat) (d : Nat) (edgeDir : Bool) (s : WalkState) : Prop where
   mergeS : (nxtE s).topDepth > d → MergeAdj σ { s with stackDir := s.stackDir.set! (nxtE s).topDepth edgeDir }
   close : MergeAdj σ (l1S₂ d edgeDir s)
 
-theorem RStep.loop1Body (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.loop1Body (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
     (hv : v < s.g.nv) {d : Nat} {edgeDir : Bool} (hok : Loop1BodyOk D d edgeDir s)
-    (hadj : Loop1BodyAdj σ d edgeDir s) : RStep σ n D v s ((loop1Body d edgeDir).run s).2 := by
-  have st₁ : RStep σ n D v s (l1S₁ d edgeDir s) := RStep.loop1Type h hs hnd hσ hok.mergeS hadj.mergeS
+    (hadj : Loop1BodyAdj σ d edgeDir s) : RgStep σ n D v s ((loop1Body d edgeDir).run s).2 := by
+  have st₁ : RgStep σ n D v s (l1S₁ d edgeDir s) := RgStep.loop1Type h hs hnd hσ hok.mergeS hadj.mergeS
   have hσ₁ := st₁.hσ hσ
   have hv₁ : v < (l1S₁ d edgeDir s).g.nv := by rw [st₁.step.g]; exact hv
-  have r := RStep.unwrapRes (v := v) st₁.ranges st₁.step.shape hσ₁ (loop1Type_result d edgeDir s) hok.unwrap
-  have st₃ := RStep.closeTwo r.step.ranges r.step.step.shape hnd (r.step.hσ hσ₁)
+  have r := RgStep.unwrapRes (v := v) st₁.ranges st₁.step.shape hσ₁ (loop1Type_result d edgeDir s) hok.unwrap
+  have st₃ := RgStep.closeTwo r.step.ranges r.step.step.shape hnd (r.step.hσ hσ₁)
     (by rw [r.step.step.g]; exact hv₁) _ hok.close hadj.close r.free
   exact st₁.trans (r.step.trans st₃)
 
@@ -343,15 +343,15 @@ structure CloseEarsAdj (σ : List Nat) (n nxtV d e : Nat) (edgeDir : Bool) (s : 
   body : ∀ k, (∀ j, j ≤ k → result (loop1Cond d) (iter (loop1Body d edgeDir) j (ceS₁ nxtV d e s)) = true) →
     Loop1BodyAdj σ d edgeDir (iter (loop1Body d edgeDir) k (ceS₁ nxtV d e s))
 
-theorem RStep.closeEars (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.closeEars (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
     (hv : v < s.g.nv) {nxtV d e : Nat} {edgeDir : Bool} (hok : CloseEarsOk D nxtV d e edgeDir s)
     (hadj : CloseEarsAdj σ n nxtV d e edgeDir s) :
-    RStep σ (n + 1) D v s ((closeEars nxtV d e edgeDir).run s).2 := by
-  have st₁ : RStep σ (n + 1) D v s (ceS₁ nxtV d e s) :=
-    RStep.pushEdge h hs hnd nxtV d e hok.e_lt hok.q hadj.etype hok.ends hok.d_le hadj.pos
-  exact st₁.trans (RStep.loop (loop1Cond d) (Spqr.loop1Body d edgeDir) (Loop1BodyOk D d edgeDir)
+    RgStep σ (n + 1) D v s ((closeEars nxtV d e edgeDir).run s).2 := by
+  have st₁ : RgStep σ (n + 1) D v s (ceS₁ nxtV d e s) :=
+    RgStep.pushEdge h hs hnd nxtV d e hok.e_lt hok.q hadj.etype hok.ends hok.d_le hadj.pos
+  exact st₁.trans (RgStep.loop (loop1Cond d) (Spqr.loop1Body d edgeDir) (Loop1BodyOk D d edgeDir)
     (Loop1BodyAdj σ d edgeDir) _ (fun _ => rfl)
-    (fun _ hv h hs hσ _ hok hadj => RStep.loop1Body h hs hnd hσ hv hok hadj)
+    (fun _ hv h hs hσ _ hok hadj => RgStep.loop1Body h hs hnd hσ hv hok hadj)
     (by rw [st₁.step.g]; exact hv) st₁.ranges st₁.step.shape (st₁.hσ hσ) hok.body hadj.body)
 
 /-- `mergeLate`: adjacency at every late merge. -/
@@ -360,15 +360,15 @@ structure MergeLateAdj (σ : List Nat) (d : Nat) (s : WalkState) : Prop where
     (∀ j, j ≤ k → result (loop2Cond s.firstOccurrence[d]!) (iter mergeTstackTops j s) = true) →
     MergeAdj σ (iter mergeTstackTops k s)
 
-theorem RStep.mergeLate (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.mergeLate (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
     (hv : v < s.g.nv) {d : Nat} (hok : MergeLateOk D d s) (hadj : MergeLateAdj σ d s) :
-    RStep σ n D v s ((mergeLate d).run s).2 := by
+    RgStep σ n D v s ((mergeLate d).run s).2 := by
   rw [mergeLate_run]
   by_cases hc : (curE s).firstIdx > s.firstOccurrence[d]!
   · simp only [hc, ↓reduceIte]
-    exact RStep.loop _ mergeTstackTops (MergeTopOk D) (MergeAdj σ) _ (fun _ => rfl)
-      (fun _ _ h hs hσ _ hok hadj => RStep.mergeTop h hs hnd hσ hok hadj) hv h hs hσ (hok.body hc) (hadj.body hc)
-  · simp only [hc, ↓reduceIte]; exact RStep.refl h hs
+    exact RgStep.loop _ mergeTstackTops (MergeTopOk D) (MergeAdj σ) _ (fun _ => rfl)
+      (fun _ _ h hs hσ _ hok hadj => RgStep.mergeTop h hs hnd hσ hok hadj) hv h hs hσ (hok.body hc) (hadj.body hc)
+  · simp only [hc, ↓reduceIte]; exact RgStep.refl h hs
 
 /-- `closeVert'`: adjacency at the loop-3 merges and the two merges into the vertex entry. -/
 structure CloseVertAdj (σ : List Nat) (isType1 : Bool) (origTstack : Nat) (isSingle : Bool) (s : WalkState) :
@@ -379,7 +379,7 @@ structure CloseVertAdj (σ : List Nat) (isType1 : Bool) (origTstack : Nat) (isSi
   merge₁ : MergeAdj σ (cvS₂ isType1 origTstack isSingle s)
   merge₂ : MergeAdj σ (cvS₃ isType1 origTstack isSingle s)
 
-theorem RStep.vertPre (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.vertPre (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
     (hv : v < s.g.nv) {isType1 : Bool} {origTstack : Nat} {isSingle : Bool}
     (hok : isType1 = false → ∀ k,
       (∀ j, j ≤ k → result (loop3Cond origTstack) (iter mergeTstackTops j s) = true) →
@@ -387,47 +387,47 @@ theorem RStep.vertPre (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (
     (hadj : isType1 = false → ∀ k,
       (∀ j, j ≤ k → result (loop3Cond origTstack) (iter mergeTstackTops j s) = true) →
       MergeAdj σ (iter mergeTstackTops k s)) :
-    RStep σ n D v s ((vertPre isType1 origTstack isSingle).run s).2 := by
+    RgStep σ n D v s ((vertPre isType1 origTstack isSingle).run s).2 := by
   cases isType1
   · simp only [WalkState.vertPre, Bool.not_false, ↓reduceIte, WalkM.run_bind, run_tstackSize, WalkM.pure_run]
-    exact RStep.loop _ mergeTstackTops (MergeTopOk D) (MergeAdj σ) _ (fun _ => rfl)
-      (fun _ _ h hs hσ _ hok hadj => RStep.mergeTop h hs hnd hσ hok hadj) hv h hs hσ (hok rfl) (hadj rfl)
-  · exact RStep.refl h hs
+    exact RgStep.loop _ mergeTstackTops (MergeTopOk D) (MergeAdj σ) _ (fun _ => rfl)
+      (fun _ _ h hs hσ _ hok hadj => RgStep.mergeTop h hs hnd hσ hok hadj) hv h hs hσ (hok rfl) (hadj rfl)
+  · exact RgStep.refl h hs
 
-theorem RStep.vertUnwrap (h : s.RangesInv σ n D) (hs : Shape s) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.vertUnwrap (h : s.RangesInv σ n D) (hs : Shape s) (hσ : ∀ e ∈ σ, e < s.g.ne)
     {isType1 isSingle : Bool} (hok : isType1 = true → UnwrapOk (if isSingle then .S else .R) s) :
-    RStep σ n D v s ((vertUnwrap isType1 isSingle).run s).2 ∧
+    RgStep σ n D v s ((vertUnwrap isType1 isSingle).run s).2 ∧
       ∀ i, ((vertUnwrap isType1 isSingle).run s).1 = some i →
         ItemFree ((vertUnwrap isType1 isSingle).run s).2 i := by
   cases isType1
-  · exact ⟨RStep.refl h hs, fun i h => by simp [WalkState.vertUnwrap] at h⟩
-  · have r := RStep.unwrapRes (v := v) h hs hσ (ty := if isSingle then .S else .R)
+  · exact ⟨RgStep.refl h hs, fun i h => by simp [WalkState.vertUnwrap] at h⟩
+  · have r := RgStep.unwrapRes (v := v) h hs hσ (ty := if isSingle then .S else .R)
       (by cases isSingle <;> decide) (hok rfl)
     simp only [WalkState.vertUnwrap, ↓reduceIte, WalkM.map_run, Option.some.injEq]
     exact ⟨r.step, fun i h => h ▸ r.free⟩
 
-theorem RStep.closeVert' (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.closeVert' (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
     (hv : v < s.g.nv) {curV : Nat} {edgeDir isType1 : Bool} {origTstack : Nat} {isSingle : Bool}
     (hok : CloseVertOk D curV edgeDir isType1 origTstack isSingle s)
     (hadj : CloseVertAdj σ isType1 origTstack isSingle s) :
-    RStep σ n D v s ((closeVert' curV edgeDir isType1 origTstack isSingle).run s).2 := by
-  have st₁ : RStep σ n D v s (cvS₁ isType1 origTstack isSingle s) :=
-    RStep.vertPre h hs hnd hσ hv hok.loop3 hadj.loop3
+    RgStep σ n D v s ((closeVert' curV edgeDir isType1 origTstack isSingle).run s).2 := by
+  have st₁ : RgStep σ n D v s (cvS₁ isType1 origTstack isSingle s) :=
+    RgStep.vertPre h hs hnd hσ hv hok.loop3 hadj.loop3
   have hσ₁ := st₁.hσ hσ
   have hv₁ : v < (cvS₁ isType1 origTstack isSingle s).g.nv := by rw [st₁.step.g]; exact hv
-  obtain ⟨st₂, hfree⟩ := RStep.vertUnwrap (v := v) st₁.ranges st₁.step.shape hσ₁ (isType1 := isType1)
+  obtain ⟨st₂, hfree⟩ := RgStep.vertUnwrap (v := v) st₁.ranges st₁.step.shape hσ₁ (isType1 := isType1)
     (isSingle := cvB₁ isType1 origTstack isSingle s)
     (fun h => by subst h; exact hok.unwrap rfl)
-  have st₂ : RStep σ n D v (cvS₁ isType1 origTstack isSingle s) (cvS₂ isType1 origTstack isSingle s) := st₂
+  have st₂ : RgStep σ n D v (cvS₁ isType1 origTstack isSingle s) (cvS₂ isType1 origTstack isSingle s) := st₂
   have hσ₂ := st₂.hσ hσ₁
-  have st₃ : RStep σ n D v _ (cvS₃ isType1 origTstack isSingle s) :=
-    RStep.mergeTop st₂.ranges st₂.step.shape hnd hσ₂ hok.merge₁ hadj.merge₁
+  have st₃ : RgStep σ n D v _ (cvS₃ isType1 origTstack isSingle s) :=
+    RgStep.mergeTop st₂.ranges st₂.step.shape hnd hσ₂ hok.merge₁ hadj.merge₁
   have hσ₃ := st₃.hσ hσ₂
-  have st₄ : RStep σ n D v _ (cvS₄ isType1 origTstack isSingle s) :=
-    RStep.mergeTop st₃.ranges st₃.step.shape hnd hσ₃ hok.merge₂ hadj.merge₂
+  have st₄ : RgStep σ n D v _ (cvS₄ isType1 origTstack isSingle s) :=
+    RgStep.mergeTop st₃.ranges st₃.step.shape hnd hσ₃ hok.merge₂ hadj.merge₂
   have hσ₄ := st₄.hσ hσ₃
-  have st₅ : RStep σ n D v _ (cvS₅ curV edgeDir isType1 origTstack isSingle s) :=
-    RStep.retarget st₄.ranges st₄.step.shape hσ₄ curV edgeDir hok.retarget
+  have st₅ : RgStep σ n D v _ (cvS₅ curV edgeDir isType1 origTstack isSingle s) :=
+    RgStep.retarget st₄.ranges st₄.step.shape hσ₄ curV edgeDir hok.retarget
   have hσ₅ := st₅.hσ hσ₄
   have hv₅ : v < (cvS₅ curV edgeDir isType1 origTstack isSingle s).g.nv := by
     rw [st₅.step.g, st₄.step.g, st₃.step.g, st₂.step.g]; exact hv₁
@@ -437,58 +437,58 @@ theorem RStep.closeVert' (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup
   · have hf : ItemFree (cvS₂ true origTstack isSingle s)
         ((maybeUnwrapNxt (if isSingle then .S else .R)).run s).1 := hfree _ rfl
     have hf₅ := ((hf.merge).merge).retarget curV edgeDir
-    exact st.trans (RStep.finishTop st₅.ranges st₅.step.shape hσ₅ hv₅ _ (hok.finish rfl) hf₅)
+    exact st.trans (RgStep.finishTop st₅.ranges st₅.step.shape hσ₅ hv₅ _ (hok.finish rfl) hf₅)
 
 /-- `finishP`: adjacency at the P-close merge. -/
 structure FinishPAdj (σ : List Nat) (curV lowval : Nat) (isType1 : Bool) (s : WalkState) : Prop where
   adj : result (condP curV lowval isType1) s = true → MergeAdj σ (after (maybeUnwrapNxt .P) s)
 
-theorem RStep.finishP (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.finishP (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
     (hv : v < s.g.nv) {curV lowval : Nat} {isType1 : Bool} (hok : FinishPOk D curV lowval isType1 s)
-    (hadj : FinishPAdj σ curV lowval isType1 s) : RStep σ n D v s ((finishP curV lowval isType1).run s).2 := by
+    (hadj : FinishPAdj σ curV lowval isType1 s) : RgStep σ n D v s ((finishP curV lowval isType1).run s).2 := by
   simp only [Spqr.finishP, WalkM.run_bind, run_condP]
   by_cases hc : result (condP curV lowval isType1) s = true
   · have h' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == curV) &&
         (s.tstack.tail.head!.topDepth == lowval)) = true := hc
     simp only [h', ↓reduceIte, WalkM.run_bind]
     obtain ⟨hu, hcl⟩ := hok.ok hc
-    have r := RStep.unwrapRes (v := v) h hs hσ (by decide) hu
-    exact r.step.trans (RStep.closeTwo r.step.ranges r.step.step.shape hnd (r.step.hσ hσ)
+    have r := RgStep.unwrapRes (v := v) h hs hσ (by decide) hu
+    exact r.step.trans (RgStep.closeTwo r.step.ranges r.step.step.shape hnd (r.step.hσ hσ)
       (by rw [r.step.step.g]; exact hv) _ hcl (hadj.adj hc) r.free)
   · have h' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == curV) &&
         (s.tstack.tail.head!.topDepth == lowval)) = false := Bool.eq_false_iff.2 hc
     simp only [h', Bool.false_eq_true, ↓reduceIte]
-    exact RStep.refl h hs
+    exact RgStep.refl h hs
 
 /-- `finishTail`: the vertex push data and adjacency at the merge into the first ear. -/
 structure FinishTailAdj (σ : List Nat) (n curV d : Nat) (hasVert isSingle : Bool) (s : WalkState) : Prop where
   vert : hasVert = false → PushVertR σ n curV s
   merge : hasVert = false → isSingle = false → MergeAdj σ (after (pushVertTstack curV d) s)
 
-theorem RStep.finishTail (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.finishTail (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
     {curV d : Nat} (hv : curV < s.g.nv) {hasVert isSingle : Bool}
     (hok : FinishTailOk D curV d hasVert isSingle s) (hadj : FinishTailAdj σ n curV d hasVert isSingle s) :
-    RStep σ n D curV s ((finishTail curV d hasVert isSingle).run s).2 := by
+    RgStep σ n D curV s ((finishTail curV d hasVert isSingle).run s).2 := by
   cases hasVert
-  · have st₁ := RStep.pushVert h hs d hv (hok.conn rfl) (hok.att rfl) (hadj.vert rfl)
+  · have st₁ := RgStep.pushVert h hs d hv (hok.conn rfl) (hok.att rfl) (hadj.vert rfl)
     cases isSingle
-    · exact st₁.trans (RStep.mergeTop st₁.ranges st₁.step.shape hnd (st₁.hσ hσ) (hok.merge rfl rfl)
+    · exact st₁.trans (RgStep.mergeTop st₁.ranges st₁.step.shape hnd (st₁.hσ hσ) (hok.merge rfl rfl)
         (hadj.merge rfl rfl))
     · exact st₁
-  · exact RStep.refl h hs
+  · exact RgStep.refl h hs
 
 structure FinishRestAdj (σ : List Nat) (n curV d lowval : Nat) (isType1 hasVert isSingle : Bool)
     (s : WalkState) : Prop where
   p : FinishPAdj σ curV lowval isType1 s
   tail : FinishTailAdj σ n curV d hasVert isSingle (after (finishP curV lowval isType1) s)
 
-theorem RStep.finishRest (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+theorem RgStep.finishRest (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
     {curV d lowval : Nat} (hv : curV < s.g.nv) {isType1 hasVert isSingle : Bool}
     (hok : FinishRestOk D curV d lowval isType1 hasVert isSingle s)
     (hadj : FinishRestAdj σ n curV d lowval isType1 hasVert isSingle s) :
-    RStep σ n D curV s ((finishRest curV d lowval isType1 hasVert isSingle).run s).2 := by
-  have st₁ := RStep.finishP (v := curV) h hs hnd hσ hv hok.p hadj.p
-  exact st₁.trans (RStep.finishTail st₁.ranges st₁.step.shape hnd (st₁.hσ hσ) (by rw [st₁.step.g]; exact hv)
+    RgStep σ n D curV s ((finishRest curV d lowval isType1 hasVert isSingle).run s).2 := by
+  have st₁ := RgStep.finishP (v := curV) h hs hnd hσ hv hok.p hadj.p
+  exact st₁.trans (RgStep.finishTail st₁.ranges st₁.step.shape hnd (st₁.hσ hσ) (by rw [st₁.step.g]; exact hv)
     hok.tail hadj.tail)
 
 /-- The range-side hypotheses of `finishEdge` for an out-edge `o.cls = .ret lv kind`, `lv < d`,
@@ -525,30 +525,30 @@ theorem finishEdge_rangesInv (curV d lv : Nat) (kind : RetKind) (o : DfsOut) (or
     run_stackDir, run_makeVs, run_modifyItem]
   have hj : edgeItem s.g o.e < 1 + s.g.nv + s.g.ne := by
     show 1 + s.g.nv + o.e < _; have := hok.e_lt; omega
-  have st₀ : RStep σ n D curV s (feS₀ d o s) :=
+  have st₀ : RgStep σ n D curV s (feS₀ d o s) :=
     ⟨Step.modifyVs h.inv hs (edgeItem s.g o.e) _ hj, h.modifyVs (edgeItem s.g o.e) _ hj⟩
   have hσ₀ := st₀.hσ hσ
   have hv₀ : curV < (feS₀ d o s).g.nv := by rw [st₀.step.g]; exact hv
   by_cases ht : o.cls.isTree = true
   · simp only [ht, ↓reduceIte, closeVert_eq, WalkM.run_bind]
-    have st₁ : RStep σ (n + 1) D curV _ (feS₁ d o s) :=
-      RStep.closeEars st₀.ranges st₀.step.shape hnd hσ₀ hv₀ (hok.ears ht) (hadj.ears ht)
+    have st₁ : RgStep σ (n + 1) D curV _ (feS₁ d o s) :=
+      RgStep.closeEars st₀.ranges st₀.step.shape hnd hσ₀ hv₀ (hok.ears ht) (hadj.ears ht)
     have hσ₁ := st₁.hσ hσ₀
     have hv₁ : curV < (feS₁ d o s).g.nv := by rw [st₁.step.g]; exact hv₀
-    have st₂ : RStep σ (n + 1) D curV _ (feS₂ d o s) :=
-      RStep.mergeLate st₁.ranges st₁.step.shape hnd hσ₁ hv₁ (hok.late ht) (hadj.late ht)
+    have st₂ : RgStep σ (n + 1) D curV _ (feS₂ d o s) :=
+      RgStep.mergeLate st₁.ranges st₁.step.shape hnd hσ₁ hv₁ (hok.late ht) (hadj.late ht)
     have hσ₂ := st₂.hσ hσ₁
     have hv₂ : curV < (feS₂ d o s).g.nv := by rw [st₂.step.g]; exact hv₁
     cases hasVert
     · simp only [Bool.false_eq_true, ↓reduceIte]
-      exact (st₀.trans (st₁.trans (st₂.trans (RStep.finishRest st₂.ranges st₂.step.shape hnd hσ₂ hv₂
+      exact (st₀.trans (st₁.trans (st₂.trans (RgStep.finishRest st₂.ranges st₂.step.shape hnd hσ₂ hv₂
         (hok.rest_tree ht rfl) (hadj.rest_tree ht rfl))))).ranges
     · simp only [↓reduceIte, WalkM.run_bind]
-      have st₃ : RStep σ (n + 1) D curV _ (feS₃ curV d o origTstack s) :=
-        RStep.closeVert' st₂.ranges st₂.step.shape hnd hσ₂ hv₂ (hok.vert ht rfl) (hadj.vert ht rfl)
+      have st₃ : RgStep σ (n + 1) D curV _ (feS₃ curV d o origTstack s) :=
+        RgStep.closeVert' st₂.ranges st₂.step.shape hnd hσ₂ hv₂ (hok.vert ht rfl) (hadj.vert ht rfl)
       have hσ₃ := st₃.hσ hσ₂
       have hv₃ : curV < (feS₃ curV d o origTstack s).g.nv := by rw [st₃.step.g]; exact hv₂
-      exact (st₀.trans (st₁.trans (st₂.trans (st₃.trans (RStep.finishRest st₃.ranges st₃.step.shape hnd hσ₃
+      exact (st₀.trans (st₁.trans (st₂.trans (st₃.trans (RgStep.finishRest st₃.ranges st₃.step.shape hnd hσ₃
         hv₃ (hok.rest_vert ht rfl) (hadj.rest_vert ht rfl)))))).ranges
   · have ht' : o.cls.isTree = false := Bool.eq_false_iff.2 ht
     simp only [ht', Bool.false_eq_true, ↓reduceIte, WalkM.run_bind]
@@ -557,14 +557,14 @@ theorem finishEdge_rangesInv (curV d lv : Nat) (kind : RetKind) (o : DfsOut) (or
       rw [Items.ch_modify_ch_eq (edgeItem s.g o.e)
         (fun it => { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) }) (fun _ => rfl)]
       exact hok.q ht'
-    have st₁ : RStep σ (n + 1) D curV _ (after (pushEdgeTstack curV lv o.e) (feS₀ d o s)) :=
-      RStep.pushEdge st₀.ranges st₀.step.shape hnd curV lv o.e hok.e_lt hq (hadj.etype ht') (hok.ends ht')
+    have st₁ : RgStep σ (n + 1) D curV _ (after (pushEdgeTstack curV lv o.e) (feS₀ d o s)) :=
+      RgStep.pushEdge st₀.ranges st₀.step.shape hnd curV lv o.e hok.e_lt hq (hadj.etype ht') (hok.ends ht')
         (hok.lv_le ht') (hadj.pos ht')
-    have st₂ : RStep σ (n + 1) D curV _ (feBack curV lv d o s) :=
+    have st₂ : RgStep σ (n + 1) D curV _ (feBack curV lv d o s) :=
       ⟨Step.frame st₁.step.inv st₁.step.shape rfl rfl rfl rfl, st₁.ranges.frame rfl rfl rfl rfl⟩
     have hσ₂ := st₂.hσ (st₁.hσ hσ₀)
     have hv₂ : curV < (feBack curV lv d o s).g.nv := by rw [st₂.step.g, st₁.step.g]; exact hv₀
-    exact (st₀.trans (st₁.trans (st₂.trans (RStep.finishRest st₂.ranges st₂.step.shape hnd hσ₂ hv₂
+    exact (st₀.trans (st₁.trans (st₂.trans (RgStep.finishRest st₂.ranges st₂.step.shape hnd hσ₂ hv₂
       (hok.rest_back ht') (hadj.rest_back ht'))))).ranges
 
 end WalkState
