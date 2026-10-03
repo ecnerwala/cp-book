@@ -179,7 +179,8 @@ partial def iOuts (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n v d : Nat
   let cvs := cvs ++ (if hvRef == hv then [] else [⟨c.seed, tern, "st.hv", s!"{site} ref={hvRef} walk={hv}"⟩])
   let cvs := cvs ++ stSite c "cur" v d new ps (simBlocks g prev pfs dirs ++ bl) (refBlocks g (prev ++ [truncTree pfs (.node v doneO)])) s
   let cvs := cvs ++ ofStrs c tern "st.live_cur" s!"{site} new={new.map Extra.showT}"
-    (Extra.stLiveB g s.items new (openBlock g pfs dirs (ps ++ if hv then [] else [⟨true, [vertItem v]⟩])))
+    ([false, true].flatMap fun b =>
+      Extra.stLiveB g s.items new (openBlock g pfs dirs (ps ++ if hv then [] else [⟨b, [vertItem v]⟩])))
   let cvs := cvs ++ liveLower c site fs s
   let cvs := cvs ++ everySite c site d s
   match outs with

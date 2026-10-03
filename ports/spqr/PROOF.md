@@ -2082,8 +2082,10 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `ROutCtx` (`dfs.Spec`/`Rooted`, `dfs.outs v = outs₀` and the sub-out-lists, `AncChain`, `RWalk
   dfs F v d`, the frame bounds against `B`, `RSkelInv`), and the st data (`StPre … (done.map (·.1))
   hasVert`, the height bound, `base_out`, `segs.length = fs.length`) **plus the §7 pairing as
-  fields**: `live_cur` (`StLive g items new (openBlock g fs (DirsOf s d) (refOuts … done).1 ++ [vert
-  piece unless hasVert])` for the current segment `new`) and `live_lower` (segment `segs[j]` of
+  fields**: `live_cur` (`∀ b, StLive g items new (openBlock g fs (DirsOf s d) (refOuts … done).1 ++
+  [⟨b, [vertItem v]⟩ unless hasVert])` for the current segment `new`, quantified over the side `b`
+  the vertex piece will get at the push — the piece is a single V item, so its side is irrelevant
+  to `StLive`; checker mirrors both `b`) and `live_lower` (segment `segs[j]` of
   frame `k = fs.length - 1 - j` is `StLive` in `openBlock g (fs.take k) (DirsOf s k) segs[j].2`).
   `WalkInvOut.sites` produces `EarOut`/`BookOut`/`GuardsOut`/`FrontiersOut`/`CsOut`/`CoverOut`/
   `RgOut`/`CbOut`/`RSideOut` from the conjunction (`bOut`, `gbOut`, `frOut`, `dsOut`, `cvOut`,
@@ -2160,6 +2162,30 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `kOut`. Checker: the `r.anc`/`r.stab` mirrors are no longer skipped at `d = 0` and a new
   `r.root` field checks `tstack = [] ∧ hasVert = false` at every root out-site; still
   `violations=0`.
+* **Stage 2f — opening `walkOut`: the `walkOutPre` site and the child entry.** `PreOut G B v d
+  outs₀ done o rest hasVert n P s push hv₁ s₁` is the conjunction after `walkOutPre v d o hasVert`
+  from a `WalkInvOut` at head `o`: the push flag (`push ↔ ¬hasVert ∧ lowval < d ∧ isType1`),
+  `hv₁ = hasVert || push`, the exact state (`stackDir[d]` set, the optional `TEntry` for
+  `vertItem v` pushed), and every layer's post-`walkOutPre` contract (`Inv'`/`Shape`,
+  `RangesInv`, `CloseInv`, `Full` with `P ∨ (hv₁ ∧ · = vertItem v)`, `OwnedD` + `VertCover`,
+  `RWalk`/`BotKeep`/frame bound under 2-connectivity, the ST `PreSpec`, `Keep (d+1) 0`).
+  `WalkInvOut.walkOutPre_out : WalkInvOut … (o :: rest) … → wp (walkOutPre v d o hasVert) (fun hv₁
+  s₁ => ∃ push, PreOut … push hv₁ s₁)` is the conjunction of `wp_walkOutPre`, `walkOutPre_inv`,
+  `walkOutPre_ranges`, `walkOutPre_closeInv'`, `walkOutPre_full`, `walkOutPre_ownedD`,
+  `walkOutPre_r` (its `VertFree` hypothesis from `rSide_vertFree_site`, the only admission it
+  reaches), `walkOutPre_pre`, `keep_walkOutPre`. **Child entry** `PreOut.child`: for a tree edge
+  `.tree e cls (.node c couts)`, after `firstOccurrence[d] := ne`, `WalkInv G' (.node c couts) (d +
+  1) s₂` with the child ghost `G' = {G with anc := G.anc ++ [v], base/bE := the new tstack, pe := (·
+  = e), n, F := (v, d, |tstack|) :: F, P := P ∨ vertItem v, fs := fs ++ [frame v done o], segs :=
+  (new₁, refOuts … done ++ vertex piece) :: segs}` — ear by `ctx_init_child`, `Inv'`/`RangesInv` by
+  `frame'`+`setSv`, `PostAt`/`AncPath` from `post_o`/`path_o` (`e` sits at `σ[n + |child
+  postorder|]`), `OwnedD.entry`, `RCtx` from `RWalk.top` (`RPar` at `dp = d`, new frame `(v, d,
+  |tstack|)` by `RInvTop.toG`), `StPre` from `PreSpec.read`/`tstack`, and the per-segment
+  `StLive`: the new current segment is `live_lower 0`, obtained from `live_cur` at side
+  `s₁.stackDir[d]!` + `StLive.cons_vert` when the vertex piece was pushed (hence the `∀ b` in
+  `live_cur`). `#print axioms`: `PreOut.child` standard; `walkOutPre_out` reaches `sorryAx` only
+  through `rSide_vertFree_site`. Not yet wired into `bbOut_step` (next: the `.back` finish and the
+  child `WalkInvEnd` → `finishEdge` composition).
 
 ## 5. Phase 3: relabel
 

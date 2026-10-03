@@ -348,10 +348,10 @@ structure WalkInvOut (G : TreeGhost) (B v d : Nat) (outs₀ : List DfsOut) (done
   stPre : StPre G.g G.prev G.fs G.segs v d (done.map (·.1)) hasVert s
   segs_len : G.segs.length = G.fs.length
   /-- The §7 pairing: the current segment is live in the open block of the current frame … -/
-  live_cur : ∀ new, s.tstack = new ++ segsStack G.segs →
+  live_cur : ∀ (b : Bool) (new : List TEntry), s.tstack = new ++ segsStack G.segs →
     StLive G.g s.items new (openBlock G.g G.fs (DirsOf s d)
       ((refOuts G.g v d (DirsOf s d) (done.map (·.1)) false).1 ++
-        if hasVert then [] else [⟨true, [vertItem v]⟩]))
+        if hasVert then [] else [⟨b, [vertItem v]⟩]))
   /-- … and the segment of every lower frame `k` (`segs[j]`, `k = fs.length - 1 - j`) in its own. -/
   live_lower : ∀ j (hj : j < G.segs.length),
     StLive G.g s.items G.segs[j].1
@@ -529,15 +529,386 @@ theorem sites : OutSites G v d o hasVert n s := by
 end head
 end WalkInvOut
 
+/-! ## Opening `walkOut`: the `walkOutPre` site and the child entry -/
+
+/-- The conjunction after `walkOutPre v d o hasVert` from a between-edge state `s` with head
+out-edge `o`: the optional vertex push (`push`), the exact state, and every layer's
+post-`walkOutPre` contract. -/
+structure PreOut (G : TreeGhost) (B v d : Nat) (outs₀ : List DfsOut) (done : List (DfsOut × Bool))
+    (o : DfsOut) (rest : List DfsOut) (hasVert : Bool) (n : Nat) (P : ItemId → Prop) (s : WalkState)
+    (push hv₁ : Bool) (s₁ : WalkState) : Prop where
+  hpush : push = true ↔ hasVert = false ∧ o.cls.lowval d < d ∧ o.cls.isType1 = true
+  hv : hv₁ = (hasVert || push)
+  state : s₁ = { s with
+    stackDir := s.stackDir.set! d
+      (if o.cls.lowval d ≥ d then false else !s.stackDir[o.cls.lowval d]!),
+    tstack := (if push then
+      [⟨v, d, s.nxtEdgeIdx,
+        setSides
+          (s.stackDir.set! d
+            (if o.cls.lowval d ≥ d then false else !s.stackDir[o.cls.lowval d]!))[d]!
+          [vertItem v] []⟩]
+      else []) ++ s.tstack }
+  inv : s₁.Inv' d
+  shape : Shape s₁
+  ranges : s₁.RangesInv G.σ n d
+  close : s₁.CloseInv
+  full : s₁.Full G.g (fun i => P i ∨ (hv₁ = true ∧ i = vertItem v)) G.X
+  owned : OwnedD G.σ G.sts G.origs P d n s₁
+  vcover : hv₁ = true → VertCover v s₁
+  r : s.g.TwoConnected → RWalk G.dfs G.F v d s₁ ∧ BotKeep B s s₁ ∧
+    (hv₁ = true → B + 1 ≤ s₁.tstack.length)
+  pre : PreSpec G.g s v d o hasVert (segsStack G.segs)
+    (refOuts G.g v d (DirsOf s d) (done.map (·.1)) false).1
+    (simBlocks G.g G.prev G.fs (DirsOf s d) ++ (refOuts G.g v d (DirsOf s d) (done.map (·.1)) false).2.1)
+    hv₁ s₁
+  keep : Keep (d + 1) 0 s s₁
+
+namespace WalkInvOut
+
+theorem vertBook (h : WalkInvOut G B v d outs₀ done rest hasVert n P s) : VertBook v hasVert s :=
+  fun h0 => ⟨by rw [h.g_eq]; exact h.v_lt, h.ear.vert_book h0⟩
+
+theorem walkOutPre_out (h : WalkInvOut G B v d outs₀ done (o :: rest) hasVert n P s) :
+    wp (walkOutPre v d o hasVert)
+      (fun hv₁ s₁ => ∃ push, PreOut G B v d outs₀ done o rest hasVert n P s push hv₁ s₁) s := by
+  have hg := h.g_eq
+  have hb := h.vertBook
+  have hvert : hasVert = false → vertItem v < s.items.size ∧ Items.type s.items (vertItem v) = .V ∧
+      (∀ p, ¬ Items.IsParent s.items p (vertItem v)) ∧ vertItem v ∉ readStack s.tstack := by
+    intro h0
+    have hvlt : vertItem v < 1 + G.g.nv + G.g.ne := by
+      show 1 + v < _; have := h.v_lt; omega
+    obtain ⟨hroot, hoff⟩ := Place.fresh h.full.place (by show 0 < 1 + v; omega) hvlt (h.Pcur h0)
+    have hsz := h.shape.size; rw [hg] at hsz
+    exact ⟨Nat.lt_of_lt_of_le hvlt hsz, h.shape.vert v (hg ▸ h.v_lt), hroot, hoff⟩
+  obtain ⟨new, hts, hR, -⟩ := h.stPre.read
+  have hd₀ : d < s.stackDir.size := by have := h.height; omega
+  have hr : wp (walkOutPre v d o hasVert) (fun hv₁ s₁ => s.g.TwoConnected →
+      RWalk G.dfs G.F v d s₁ ∧ BotKeep B s s₁ ∧ (hv₁ = true → B + 1 ≤ s₁.tstack.length)) s := by
+    by_cases h2 : s.g.TwoConnected
+    · have R := h.r h2
+      have hfree : hasVert = false → VertFree v s := fun h0 => by
+        subst h0
+        exact rSide_vertFree_site h.inv h.shape hb h2 R.spec R.rooted R.chain R.rwalk
+      exact wp_mono _ (walkOutPre_r hfree R.rwalk R.B_le R.hvB)
+        fun _ _ hw _ => ⟨hw.1, hw.2.1, hw.2.2.1⟩
+    · exact wp_of_forall fun _ _ h2' => absurd h2' h2
+  refine wp_mono _ (wp_and
+    (wp_walkOutPre (Q := fun hv₁ s₁ => ∃ push,
+      (push = true ↔ hasVert = false ∧ o.cls.lowval d < d ∧ o.cls.isType1 = true) ∧
+      hv₁ = (hasVert || push) ∧
+      s₁ = { s with
+        stackDir := s.stackDir.set! d
+          (if o.cls.lowval d ≥ d then false else !s.stackDir[o.cls.lowval d]!),
+        tstack := (if push then
+          [⟨v, d, s.nxtEdgeIdx,
+            setSides
+              (s.stackDir.set! d
+                (if o.cls.lowval d ≥ d then false else !s.stackDir[o.cls.lowval d]!))[d]!
+              [vertItem v] []⟩]
+          else []) ++ s.tstack })
+      fun push L hpush hL => ⟨push, hpush, rfl, by subst hL; rfl⟩)
+    (wp_and (walkOutPre_inv h.inv h.shape hb)
+    (wp_and (walkOutPre_ranges h.ranges h.shape h.σ_lt hb
+      fun _ => h.full.place.pushVertR h.v_lt h.P_past)
+    (wp_and (walkOutPre_closeInv' h.close h.shape d o hb)
+    (wp_and (walkOutPre_full h.full h.v_lt h.Pcur h.Pcur')
+    (wp_and (walkOutPre_ownedD d o hasVert h.owned h.sv_d h.sts_le h.vcover)
+    (wp_and hr
+    (wp_and (walkOutPre_pre s v d o hasVert hd₀ hts hR h.stPre.items hvert)
+      (keep_walkOutPre (D := d + 1) (j := 0) v d o hasVert Keep.refl))))))))) ?_
+  rintro hv₁ s₁ ⟨⟨push, hpush, hhv, hst⟩, ⟨hi, hs⟩, ⟨hrg, -, -⟩, hc, ⟨hf, -⟩, ⟨ho, hvc⟩, hr, hp, hK⟩
+  exact ⟨push, ⟨hpush, hhv, hst, hi, hs, hrg, hc, hf, ho, hvc, hr, hp, hK⟩⟩
+
+end WalkInvOut
+
+/-- The child entry: from the `walkOutPre` site of a tree edge `v → c`, after the
+`firstOccurrence` update, the backbone invariant of the child at depth `d + 1`. -/
+theorem PreOut.child {e : Nat} {cls : OutClass} {c : Nat} {couts : List DfsOut} {push hv₁ : Bool}
+    {s₁ : WalkState}
+    (h : WalkInvOut G B v d outs₀ done (.tree e cls (.node c couts) :: rest) hasVert n P s)
+    (hp : PreOut G B v d outs₀ done (.tree e cls (.node c couts)) rest hasVert n P s push hv₁ s₁) :
+    ∃ sv' sd' new₁, s₁.tstack = new₁ ++ segsStack G.segs ∧
+      WalkInv { G with
+          anc := G.anc ++ [v], base := s₁.tstack,
+          bE := s₁.tstack.map fun t e' => t.edges s.g s.items e',
+          sv := sv', sd := sd', pe := (· = e), n := n,
+          F := (v, d, s₁.tstack.length) :: G.F,
+          P := fun i => P i ∨ (hv₁ = true ∧ i = vertItem v),
+          fs := G.fs ++ [⟨v, done.map (·.1), .tree e cls (.node c couts)⟩],
+          segs := (new₁, (refOuts G.g v d (DirsOf s d) (done.map (·.1)) false).1 ++
+            if push = true then [⟨s₁.stackDir[d]!, [vertItem v]⟩] else []) :: G.segs }
+        (.node c couts) (d + 1) { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } := by
+  obtain ⟨hpush, hhv, hst, hi₁, hs₁, hrg₁, hc₁, hf₁, ho₁, hvc₁, hr₁, hp₁, hK₁⟩ := hp
+  have hg := h.g_eq
+  have hmem := h.mem
+  have hwf_o := h.wf _ hmem
+  have hends_o := h.ends _ hmem
+  rw [DfsOut.WF] at hwf_o
+  rw [DfsOut.Ends] at hends_o
+  obtain ⟨hndO, -, hvnc, -, hendO, -⟩ := h.split_facts
+  have hnd_c : (G.anc ++ [v] ++ (DfsTree.node c couts).verts).Nodup := by
+    have hndO' : (G.anc ++ v :: (DfsTree.node c couts).verts).Nodup := hndO
+    simpa using hndO'
+  have hcmem : c ∈ (DfsTree.node c couts).verts := List.mem_cons_self
+  have hc_lt : c < G.g.nv := h.w_lt_o c hcmem
+  have he_lt : e < G.g.ne := h.e_lt_o e List.mem_cons_self
+  have hv' : v < s.g.nv := by rw [hg]; exact h.v_lt
+  have hc' : c < s.g.nv := by rw [hg]; exact hc_lt
+  have hdlt2 : d + 1 < G.g.nv := by
+    have := length_le_nv (hnd_c.sublist (List.Sublist.append_left
+      (List.cons_sublist_cons.2 (List.nil_sublist _)) _))
+      (fun a ha => by
+        simp only [List.mem_append, List.mem_singleton] at ha
+        rcases ha with (ha | ha) | ha
+        · exact h.anc_lt a ha
+        · exact ha ▸ h.v_lt
+        · exact ha ▸ hc_lt)
+    simp at this; have := h.d_anc; omega
+  have hsvsz : d + 1 < s.stackVerts.size := by rw [h.sv_size]; exact hdlt2
+  have hd₀ : d < s.stackDir.size := by have := h.height; omega
+  have hsz : 1 + s.g.nv ≤ s.items.size := by have := h.shape.size; omega
+  have hinc : ∀ o' ∈ done, o'.1.e < s.g.ne ∧ s.g.Inc o'.1.e v := fun o' ho' => by
+    have hm : o'.1 ∈ outs₀ := by
+      rw [← h.split]; exact List.mem_append_left _ (List.mem_map_of_mem ho')
+    rw [hg]
+    exact ⟨h.e_lt _ (mem_subEdges_edgesList.2 ⟨_, hm, subEdges_e _⟩), inc_e_of_ends (h.ends _ hm)⟩
+  have hn := h.nodup.of_append_right
+  rw [h.verts_eq] at hn
+  have hnc : ∀ e', e' < s.g.ne → Items.EdgeBelow s.g s.items (vertItem v) e' →
+      ∀ x ∈ (DfsTree.node c couts).verts, ¬ s.g.Inc e' x := by
+    intro e' he' hb x hx hxi
+    obtain ⟨o', ho', -, hs⟩ := (h.ear.vert_edges e' he').1 hb
+    have hm : o'.1 ∈ outs₀ := by
+      rw [← h.split]; exact List.mem_append_left _ (List.mem_map_of_mem ho')
+    rw [hg] at hxi
+    rcases endsOut_wf G.g G.anc v o'.1 (h.wf _ hm) (h.ends _ hm) e' hs x hxi with h1 | rfl | h1
+    · exact List.disjoint_of_nodup_append h.nodup h1
+        (List.mem_cons_of_mem _ (mem_vertsList_of_verts hmem hx))
+    · exact hvnc hx
+    · exact List.disjoint_of_nodup_append (List.nodup_cons.1 hn).2
+        (mem_vertsList_of_verts (List.mem_map_of_mem ho') h1) (List.mem_append_left _ hx)
+  obtain ⟨sv', sd', hC₂⟩ := ctx_init_child h.ear hv' hc' hd₀ hsvsz hinc hnc hnd_c.of_append_right hsz
+    push _ hpush rfl
+  obtain ⟨new₁, hts₁, hR₁, hI₁⟩ := hp₁.read
+  have hsvE : s₁.stackVerts = s.stackVerts := by rw [hst]
+  have htsE : s₁.tstack = (if push then
+      [⟨v, d, s.nxtEdgeIdx,
+        setSides
+          (s.stackDir.set! d
+            (if cls.lowval d ≥ d then false else !s.stackDir[cls.lowval d]!))[d]!
+          [vertItem v] []⟩]
+      else []) ++ s.tstack := by rw [hst]; rfl
+  have hgE : s₁.g = s.g := hK₁.g
+  have hitE : s₁.items = s.items := hp₁.items
+  have hxd : s₁.stackDir[d]! =
+      (if d ≤ cls.lowval d then false else !s.stackDir[cls.lowval d]!) := by
+    rw [hp₁.sd]; exact Array.getElem!_set!_self _ _ _ hd₀
+  have hpushB : (!hasVert && decide (cls.lowval d < d) && cls.isType1) = push :=
+    (Bool.eq_iff_iff.2 (by rw [hpush]; simp [and_assoc, DfsOut.cls])).symm
+  have hsvd : s₁.stackVerts[d]! = v := by rw [hsvE]; exact h.sv_d
+  refine ⟨sv', sd', new₁, hts₁, ?_⟩
+  refine
+    { full := hf₁.of_eq rfl rfl rfl
+      d_anc := by simp [h.d_anc]
+      wf := hwf_o.1
+      ends := hends_o.2
+      nodup := hnd_c
+      anc_lt := fun a ha => by
+        rcases List.mem_append.1 ha with ha | ha
+        · exact h.anc_lt a ha
+        · exact (List.mem_singleton.1 ha) ▸ h.v_lt
+      v_lt := fun w hw => h.w_lt_o w hw
+      e_lt := fun e' he' => h.e_lt_o e' (List.mem_cons_of_mem _ he')
+      enodup := (List.nodup_cons.1 hendO).2
+      comp := fun e' he' x hx hxc => by
+        rcases h.comp_out e' he' x hx hxc with hs | hpe
+        · rcases (hs : e' = e ∨ e' ∈ (DfsTree.node c couts).edges) with rfl | hs
+          · exact .inr rfl
+          · exact .inl hs
+        · exfalso
+          rcases List.mem_append.1 (h.pe_anc e' hpe x hx) with ha | ha
+          · exact List.disjoint_of_nodup_append h.nodup ha
+              (List.mem_cons_of_mem _ (mem_vertsList_of_verts hmem hxc))
+          · exact hvnc ((List.mem_singleton.1 ha) ▸ hxc)
+      pe_anc := fun e' he' x hx => by
+        subst he'
+        rcases eq_of_inc_pairEq hends_o.1 hx with hx | hx <;> simp [hx, DfsTree.v]
+      sv_size := hsvE ▸ h.sv_size
+      sd_size := by show (s₁.stackDir).size = _; rw [hp₁.sd]; simp [h.sd_size]
+      anc_sv := fun k hk => by
+        show (G.anc ++ [v])[k]? = some s₁.stackVerts[k]!
+        rw [hsvE]
+        rcases Nat.lt_succ_iff_lt_or_eq.1 hk with hk | hk
+        · rw [List.getElem?_append_left (by rw [← h.d_anc]; exact hk)]; exact h.anc_sv k hk
+        · rw [hk, List.getElem?_append_right (Nat.le_of_eq h.d_anc.symm), h.sv_d]; simp [h.d_anc]
+      ear := by rw [hst]; exact hC₂
+      inv := (hi₁.frame' (s' := { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne })).setSv c
+      shape := hs₁.frame'
+      ranges := (hrg₁.frame' (s' := { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne })).setSv c
+      σ_nodup := h.σ_nodup
+      σ_lt := by show ∀ e ∈ G.σ, e < s₁.g.ne; rw [hgE]; exact h.σ_lt
+      post := (h.post_o : PostAt G.σ n (_ ++ [e])).left
+      path := by
+        show AncPath G.g G.σ (n + (DfsTree.node c couts).edgePostorder.length) (G.anc ++ [v] ++ [c])
+        have hpos : G.σ.idxOf e = n + (DfsTree.node c couts).edgePostorder.length := by
+          have h1 : G.σ[n + (DfsTree.node c couts).edgePostorder.length]? = some e :=
+            (h.post_o : PostAt G.σ n (_ ++ [e])).right.singleton
+          have h2 := (List.getElem?_eq_some_iff.1 h1).1
+          rw [← getElem!_of_getElem? h1]; exact idxOf_getElem! h.σ_nodup h2
+        have hpath := h.path_o
+        intro k hk
+        simp only [List.length_append, List.length_singleton] at hk
+        rcases Nat.lt_or_ge (k + 1) (G.anc.length + 1) with hk' | hk'
+        · obtain ⟨e', he', hm, hpe'⟩ := hpath k (by simp; omega)
+          refine ⟨e', he', by simp [DfsOut.block] at hm; omega, ?_⟩
+          rw [getElem!_append_left' (l₁ := G.anc ++ [v]) (l₂ := [c]) (k := k) (by simp; omega),
+            getElem!_append_left' (l₁ := G.anc ++ [v]) (l₂ := [c]) (k := k + 1) (by simp; omega)]
+          exact hpe'
+        · have : k = G.anc.length := by omega
+          subst this
+          refine ⟨e, he_lt, hpos.symm.le, ?_⟩
+          have hl : G.anc.length + 1 = (G.anc ++ [v]).length := by simp
+          rw [getElem!_append_left' (l₁ := G.anc ++ [v]) (l₂ := [c]) (k := G.anc.length) (by simp),
+            getElem!_concat_length', hl,
+            getElem!_concat_length']
+          exact PairEq.flip hends_o.1
+      close := hc₁.frame rfl rfl fun _ hi => hi
+      P_past := fun e' he' hp => hp.elim (h.P_past e' he')
+        fun hp => absurd hp.2.symm (vertItem_ne_edgeItem h.v_lt e')
+      owned := (ho₁.mono fun _ hi => Or.inl hi).entry h.sts_len h.origs_len (hgE ▸ hc')
+        (hsvE ▸ hsvsz)
+        (fun hp => hp.elim (h.Pv_o c hcmem) fun hp => hvnc (vertItem_inj hp.2 ▸ hcmem))
+        (fun k hk heq => by
+          rw [hsvE] at heq
+          rcases Nat.lt_or_ge k d with hk' | hk'
+          · exact List.disjoint_of_nodup_append h.nodup (List.mem_of_getElem? (h.anc_sv k hk'))
+              (heq ▸ List.mem_cons_of_mem _ (mem_vertsList_of_verts hmem hcmem))
+          · rw [show k = d by omega, h.sv_d] at heq
+            exact hvnc (heq ▸ hcmem))
+        rfl rfl rfl rfl
+      sts_len := h.sts_len
+      origs_len := h.origs_len
+      sts_le := fun k hk => (h.sts_le k (Nat.lt_succ_iff.1 hk)).trans h.sts_n
+      origs_le := fun k hk => ho₁.len k (Nat.lt_succ_iff.1 hk)
+      Pv := fun w hw hp => hp.elim (h.Pv_o w hw) fun hp => hvnc (vertItem_inj hp.2 ▸ hw)
+      Pe := fun e' he' hp => hp.elim (h.Pe_o e' (List.mem_cons_of_mem _ he'))
+        fun hp => absurd hp.2.symm (vertItem_ne_edgeItem h.v_lt e')
+      r := fun h2 => by
+        have h2' : s.g.TwoConnected := by rw [← hgE]; exact h2
+        obtain ⟨hW₁, -, -⟩ := hr₁ h2'
+        have R := h.r h2'
+        have hW₂ : RWalk G.dfs G.F v d { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } :=
+          RWalk.of_eq (s := s₁) rfl rfl rfl rfl hW₁
+        exact
+          { wf := by show s₁.g.WF; rw [hgE]; exact R.wf
+            spec := by show G.dfs.Spec s₁.g; rw [hgE]; exact R.spec
+            rooted := by show G.dfs.Rooted s₁.g; rw [hgE]; exact R.rooted
+            outs := fun t' ht' => R.sub e cls _ hmem t' ht'
+            par := fun dp hdp => by
+              rw [show dp = d by omega]
+              exact
+                { inv_par := hi₁.frame'
+                  parent := fun w outs hw => by
+                    cases hw
+                    show G.dfs.IsParent s₁.stackVerts[d]! c
+                    rw [hsvd]
+                    exact ⟨_, by rw [R.outs_v]; exact hmem, rfl, rfl⟩
+                  chain := fun k hk => by
+                    show G.dfs.Anc s₁.stackVerts[k]! s₁.stackVerts[d]! ∧ G.dfs.depth s₁.stackVerts[k]! = k
+                    rw [hsvE, h.sv_d]; exact R.chain.2 k hk
+                  top := by show _; rw [hsvd]; exact hW₂.top }
+            root := fun h0 => absurd h0 (Nat.succ_ne_zero d)
+            frames := fun f hf => by
+              rcases List.mem_cons.1 hf with rfl | hf
+              · exact ⟨le_refl _, hW₂.top.toG _⟩
+              · exact hW₂.frames f hf
+            skel := by show Items.RSkelInv s₁.g s₁.items; rw [hgE, hitE]; exact R.skel }
+      d_fs := by simp [h.d_fs]
+      height := by
+        have h1 := DfsOut.heightList_le_of_mem hmem
+        simp only [DfsOut.heightList, Nat.max_zero] at h1
+        have h2 := h.height
+        have h3 : s₁.stackDir.size = s.stackDir.size := hK₁.sd
+        show d + 1 + _ ≤ s₁.stackDir.size
+        omega
+      tstack := by rw [segsStack_cons]; exact hts₁
+      segRead := by
+        show SegRead s₁.items _
+        refine SegRead.cons ?_ (hitE ▸ h.stPre.segRead)
+        rw [show (DfsOut.tree e cls (.node c couts)).cls = cls from rfl, hpushB, ← hxd] at hR₁
+        exact hR₁
+      base_out := fun t' ht' hmem' => by
+        rw [segsStack_cons, ← hts₁] at ht'
+        rcases hp₁.tstack t' ht' with h1 | h1
+        · exact hvnc (h1 ▸ hmem')
+        · rcases h.stPre.vStart t' h1 with h2 | ⟨t₀, ht₀, h2⟩
+          · rcases List.mem_cons.1 h2 with h2 | h2
+            · exact hvnc (h2 ▸ hmem')
+            · exact List.disjoint_of_nodup_append (List.nodup_cons.1 hn).2 h2
+                (List.mem_append_left _ hmem')
+          · exact h.base_out t₀ ht₀ (h2 ▸ List.mem_cons_of_mem _ (mem_vertsList_of_verts hmem hmem'))
+      stItems := by
+        have hdirs₂ : DirsOf { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } (d + 1) =
+            DirsOf s d ++ [s₁.stackDir[d]!] := by
+          rw [show DirsOf { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } (d + 1) =
+            DirsOf s₁ (d + 1) from rfl, DirsOf_succ, hp₁.dirs]
+        rw [hdirs₂, simBlocks_frame h.d_fs]
+        exact hI₁.congr rfl rfl
+      segs_len := by simp [h.segs_len]
+      live_lower := fun j hj => by
+        dsimp only
+        have hdk : ∀ k, k ≤ d → DirsOf { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } k =
+            DirsOf s k := fun k hk => DirsOf_congr fun i hi => by
+          show s₁.stackDir[i]! = s.stackDir[i]!
+          rw [hp₁.sd]; exact Array.getElem!_set!_ne _ _ _ _ (by omega)
+        cases j with
+        | zero =>
+          simp only [List.getElem_cons_zero, List.length_append, List.length_singleton,
+            Nat.add_sub_cancel, Nat.sub_zero, List.take_left]
+          rw [hdk _ h.d_fs.symm.le, ← h.d_fs]
+          show StLive G.g s₁.items new₁ _
+          rw [hitE]
+          obtain ⟨new, hts, -, hnil⟩ := h.stPre.read
+          rw [hts, ← List.append_assoc] at htsE
+          have hnew : new₁ = (if push then [_] else []) ++ new :=
+            List.append_cancel_right (hts₁.symm.trans htsE)
+          rcases Bool.eq_false_or_eq_true push with hpt | hpf
+          · obtain ⟨h0, -, -⟩ := hpush.1 hpt
+            subst hpt h0
+            simp only [↓reduceIte] at hnew ⊢
+            rw [hnew]
+            exact (h.live_cur _ new hts).cons_vert (h.shape.vert v hv')
+          · subst hpf
+            simp only [Bool.false_eq_true, ↓reduceIte, List.nil_append, List.append_nil] at hnew ⊢
+            rw [hnew]
+            rcases Bool.eq_false_or_eq_true hasVert with h1 | h0
+            · have := h.live_cur true new hts
+              rw [h1] at this; simp only [↓reduceIte, List.append_nil] at this
+              exact this
+            · rw [hnil h0]
+              intro x hx; simp [readStack, readL, readR] at hx
+        | succ j =>
+          have hj' : j < G.segs.length := by simp at hj; omega
+          have hk : (G.fs ++ [(⟨v, done.map (·.1), .tree e cls (.node c couts)⟩ : PathFrame)]).length - 1 -
+              (j + 1) = G.fs.length - 1 - j := by simp; omega
+          simp only [List.getElem_cons_succ]
+          rw [hk, List.take_append_of_le_length (l₂ := [_]) (i := G.fs.length - 1 - j) (by omega),
+            hdk _ (by have := h.d_fs; omega)]
+          show StLive G.g s₁.items _ _
+          rw [hitE]
+          exact h.live_lower j hj' }
+
 /-- **Named admission** (PROOF.md §4.7, "StLive step"; checker fields `st.live_cur`/`st.live_lower`,
 0 violations): one `walkOut` keeps the per-segment `StLive ↔ openBlock` pairing — the current
 segment in the open block of the current frame (now with `o` done), every lower segment in its own. -/
 theorem walkOut_stLive (h : WalkInvOut G B v d outs₀ done (o :: rest) hasVert n P s) :
     wp (walkOut v d o hasVert) (fun hv' s' =>
-      (∀ new, s'.tstack = new ++ segsStack G.segs →
+      (∀ (b : Bool) (new : List TEntry), s'.tstack = new ++ segsStack G.segs →
         StLive G.g s'.items new (openBlock G.g G.fs (DirsOf s' d)
           ((refOuts G.g v d (DirsOf s' d) (done.map (·.1) ++ [o]) false).1 ++
-            if hv' then [] else [⟨true, [vertItem v]⟩]))) ∧
+            if hv' then [] else [⟨b, [vertItem v]⟩]))) ∧
       ∀ j (hj : j < G.segs.length),
         StLive G.g s'.items G.segs[j].1
           (openBlock G.g (G.fs.take (G.fs.length - 1 - j)) (DirsOf s' (G.fs.length - 1 - j)) G.segs[j].2)) s := by
@@ -858,7 +1229,7 @@ theorem toOut {v : Nat} {outs : List DfsOut} (h : WalkInv G (.node v outs) d s) 
       vStart := fun t ht => Or.inr ⟨t, by rw [← h.tstack]; exact ht, rfl⟩
       items := by rw [List.map_nil, StRefEt.refOuts_nil, List.append_nil]; exact h.stItems.congr rfl rfl }
     segs_len := h.segs_len
-    live_cur := fun new hts => by
+    live_cur := fun _ new hts => by
       rw [hnew new hts]; intro x hx; simp [readStack, readL, readR] at hx
     live_lower := h.live_lower }
 
@@ -880,7 +1251,7 @@ theorem exit_true (hW : WalkInv G (.node v outs) d s)
   have hhv := h.stPre.hv
   have hI := h.stPre.items
   have hvs := h.stPre.vStart
-  have hlc := h.live_cur new hts₂
+  have hlc := h.live_cur true new hts₂
   rw [hmap] at hhv hR₂ hI hvs hlc
   exact {
     treeEnd := ⟨done', true, s₂, false, [], false, s₂.stackDir, rfl, h.ear, hmap, by simp, rfl,
@@ -927,7 +1298,7 @@ theorem exit_false (hW : WalkInv G (.node v outs) d s)
   have hhv := h.stPre.hv
   have hI := h.stPre.items
   have hvs := h.stPre.vStart
-  have hlc := h.live_cur new hts₂
+  have hlc := h.live_cur true new hts₂
   rw [hmap] at hhv hR₂ hI hvs hlc
   have hv : v < s₂.g.nv := by rw [h.g_eq]; exact h.v_lt
   have hdlt : d < s₂.stackDir.size := by have := h.height; omega
