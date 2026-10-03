@@ -297,23 +297,24 @@ def closeSites (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkSta
     sites := [("finishBack_closeAt", rest)]
   return sites ++ [("finishP_closeAt", after (finishP curV lv o.cls.isType1) rest), ("finishTail", fin)]
 
-/-- The boundary fields of `CloseCtx` that `finishBoundary_closeAt` consumes (`dest_lt`, `bd_loop`,
-`bd_vert`, `bd_node`), evaluated at the pre-state of every block-boundary `finishEdge`. -/
+/-- The boundary fields of `CloseCtx` that `finishBoundary_closeAt` consumes, evaluated at the pre-state of
+every block-boundary `finishEdge`: `dest_lt`/`bd_loop` (proved, `dsOut`) and the admissions
+`closeCtx_bd_vert`/`closeCtx_bd_node`. -/
 def checkCtx (seed : Nat) (curV d : Nat) (o : DfsOut) (s : WalkState) : List V := Id.run do
   let lv := o.cls.lowval d
   if !(d ≤ lv) then return []
   let ty : Nat → NodeType := fun i => s.items[i]!.type
   let ch : Nat → List ItemId := fun i => s.items[i]!.ch
   let vs : Nat → Option Nat × Option Nat := fun i => s.items[i]!.vs
-  let bad := fun k => (⟨seed, s.ternarize, curV, d, "finishBoundary_closeAt", "ctx_" ++ k,
+  let bad := fun th k => (⟨seed, s.ternarize, curV, d, th, "ctx_" ++ k,
     s!"o.e={o.e} dest={o.dest} lv={lv} stack={s.tstack.map showT}"⟩ : V)
   let mut out := []
-  if !(o.dest < s.g.nv) then out := bad "dest_lt" :: out
-  if !o.cls.isTree && o.dest != curV then out := bad "bd_loop" :: out
+  if !(o.dest < s.g.nv) then out := bad "dsOut" "dest_lt" :: out
+  if !o.cls.isTree && o.dest != curV then out := bad "dsOut" "bd_loop" :: out
   if o.cls.isTree then
     match (if lv == d + 1 then s.tstack.head? else s.tstack.tail.head?) with
-    | some t => if t.spans.2 != [vertItem o.dest] then out := bad "bd_vert" :: out
-    | none => out := bad "bd_vert_none" :: out
+    | some t => if t.spans.2 != [vertItem o.dest] then out := bad "closeCtx_bd_vert" "bd_vert" :: out
+    | none => out := bad "closeCtx_bd_vert" "bd_vert_none" :: out
     if lv != d + 1 then
       match s.tstack.head? with
       | some b =>
@@ -323,8 +324,8 @@ def checkCtx (seed : Nat) (curV d : Nat) (o : DfsOut) (s : WalkState) : List V :
                 | (some a, some b') => (a, b') == (curV, o.dest) || (a, b') == (o.dest, curV)
                 | _ => false)
           | _ => false
-        if !ok then out := bad "bd_node" :: out
-      | none => out := bad "bd_node_none" :: out
+        if !ok then out := bad "closeCtx_bd_node" "bd_node" :: out
+      | none => out := bad "closeCtx_bd_node" "bd_node_none" :: out
   return out
 
 /-- The `PSite` fields of `CloseCtx.p_site`, evaluated at the state `finishP` runs from whenever
@@ -342,7 +343,7 @@ def checkP (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s 
   let u := r.stackVerts[lv]!
   let dir := r.stackDir[lv]!
   let top := r.tstack.take 2
-  let bad := fun k => (⟨seed, r.ternarize, curV, d, "finishP_closeAt", "psite_" ++ k,
+  let bad := fun k => (⟨seed, r.ternarize, curV, d, "closeCtx_p_site", "psite_" ++ k,
     s!"o.e={o.e} lv={lv} u={u} stack={r.tstack.map showT}"⟩ : V)
   let mut out := []
   match r.tstack with
@@ -427,7 +428,7 @@ def checkV (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s 
   if !(o.cls.isTree && lv < d && hv && o.cls.isType1) then [] else
   let x := ((maybeUnwrapNxt (if feSingle d o s then NodeType.S else .R)).run (feS₂ d o s)).1
   let r := cvS₅ curV s.stackDir[d]! true orig (feSingle d o s) (feS₂ d o s)
-  checkVSite (fun k => ⟨seed, r.ternarize, curV, d, "closeVertTail_closeAt", "vsite_" ++ k,
+  checkVSite (fun k => ⟨seed, r.ternarize, curV, d, "closeCtx_v_site", "vsite_" ++ k,
     s!"o.e={o.e} x={x} stack={r.tstack.map showT}"⟩) curV x r
 
 def checkL1 (seed : Nat) (curV d : Nat) (o : DfsOut) (s : WalkState) : List V := Id.run do
@@ -438,7 +439,7 @@ def checkL1 (seed : Nat) (curV d : Nat) (o : DfsOut) (s : WalkState) : List V :=
     let s₁ := l1S₁ d dir st
     let x := result (maybeUnwrapNxt (l1Ty d dir st)) s₁
     let r := after mergeTstackTops (l1S₂ d dir st)
-    let bad := fun k => (⟨seed, r.ternarize, curV, d, "loop1Body_closeAt", "l1site_" ++ k,
+    let bad := fun k => (⟨seed, r.ternarize, curV, d, "closeCtx_l1_site", "l1site_" ++ k,
       s!"o.e={o.e} x={x} stack={r.tstack.map showT}"⟩ : V)
     if s₁.tstack.length < 2 then out := bad "two" :: out
     match r.tstack with

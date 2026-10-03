@@ -169,26 +169,16 @@ theorem walk_g (g : Graph) (tern : Bool) (forest : List DfsTree) (hnv : 0 < g.nv
     (hb : ∀ t ∈ forest, t.Bounded g.nv g.ne) : (g.walk tern forest).g = g :=
   (WalkM.walkForest_typing forest (WalkState.init_typing g tern hnv) hb).g_eq
 
-/-- Admitted: the per-site facts of the six close records (`CloseSite`: the out-edge position
-and block in the postorder, the DFS endpoints/open-path/returning-edge facts, the boundary
-entry shapes, and the `PSite`/`VSite` shapes at the P, vertex-close and loop-1 sites) hold at
-every `finishEdge` of the DFS forest walk, in the `wp` shape of `RootsCover`. -/
-theorem walk_closeSites (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
-    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
-    WalkState.CsForest (edgePostorderForest (g.dfsForest vo eo)) 0
-      (g.dfsForest vo eo) (WalkState.init g tern) := by
-  sorry
-
-/-- The close invariant of the walk: the six per-site records (`RangesCloseSites.lean`) threaded
-through the mutual walk/forest induction (`RangesCloseTree.lean`), over the range-side schedule
-`walk_rootsCover` and the per-site facts `walk_closeSites`. -/
+/-- `CloseInv` of the forest walk: `walk_closeInv'` runs the six close sites through the walk/forest
+induction; the DFS-side site facts are proved (`dsTree`), the remaining per-site admissions are the
+named `closeCtx_bd_vert`/`bd_node`/`p_site`/`v_site`/`l1_site` (RangesCloseTree.lean), plus
+`walk_rootsCover` for the schedule. -/
 theorem walk_closeInv (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
     (g.walk tern (g.dfsForest vo eo)).CloseInv := by
   obtain ⟨hvp, hep⟩ := dfsForest_spanning' hg hvo heo
-  exact WalkState.walk_closeInv_of_sites g tern _ (ForestOK.of_perm hvp hep)
+  exact WalkState.walk_closeInv' g tern _ (ForestOK.of_perm hvp hep)
     (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo) (walk_rootsCover g tern vo eo hg hvo heo)
-    (walk_closeSites g tern vo eo hg hvo heo)
 
 theorem walk_closeFacts (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) (hnv : 0 < g.nv) :
