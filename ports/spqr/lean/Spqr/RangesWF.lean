@@ -6,9 +6,8 @@ import Spqr.ItemTree
 
 Pure item-level reasoning: given the item tree (`Items.Tree`), the typing facts the walk supplies
 independently of any span reasoning (`TypingFacts`, a subset of `WalkTyping`) and the range/attachment
-structure `Items.Ranges`, every clause of `Items.Endpoints` and `Items.Shapes` follows, except
-`Shapes.canonical`, which is false for `ternarize = true` and is taken as a hypothesis
-(PROOF.md §4.6).
+structure `Items.Ranges`, every clause of `Items.Endpoints` and `Items.Shapes` follows
+(PROOF.md §4.6). Canonicity is not a `Shapes` clause: see `Items.Canonical`.
 -/
 
 namespace Spqr
@@ -467,10 +466,7 @@ theorem r_shape : ∀ i, i < items.size → items.type i = .R →
   obtain ⟨a, b, hab, hne⟩ := two c hc'.1 (by simpa using hc'.2)
   simp [hab, hne]
 
-theorem shapes_of_ranges
-    (hcanon : ∀ p c, items.IsParent p c →
-      (items.type c = .S → items.type p ≠ .S) ∧ (items.type c = .P → items.type p ≠ .P)) :
-    items.Shapes g where
+theorem shapes_of_ranges : items.Shapes g where
   i_o_leaf := hf.i_o_leaf
   q_children := q_children ht hf hr
   o_parent := o_parent ht hf hr
@@ -481,15 +477,10 @@ theorem shapes_of_ranges
     obtain ⟨u, v, xs, h1, h2, -, h4⟩ := hr.s_order i hi hS
     exact ⟨u, v, xs, h1, h2, h4⟩
   r_shape := r_shape ht hf hr
-  canonical := hcanon
 
-/-- `Items.WF` from the item tree, the typing facts, the ranges, and canonicity (the only clause
-not implied by `Ranges`: it fails for `ternarize = true`). -/
-theorem wf_of_ranges
-    (hcanon : ∀ p c, items.IsParent p c →
-      (items.type c = .S → items.type p ≠ .S) ∧ (items.type c = .P → items.type p ≠ .P)) :
-    items.WF g :=
-  ⟨ht, endpoints_of_ranges ht hf hr, shapes_of_ranges ht hf hr hcanon⟩
+/-- `Items.WF` from the item tree, the typing facts and the ranges. -/
+theorem wf_of_ranges : items.WF g :=
+  ⟨ht, endpoints_of_ranges ht hf hr, shapes_of_ranges ht hf hr⟩
 
 end
 

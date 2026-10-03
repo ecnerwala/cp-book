@@ -229,8 +229,11 @@ structure Represents (g : Graph) : Prop where
   /-- R skeletons are 3-connected (as graphs on their node-vertices, relabelled from `nvSt`). -/
   r_three_connected : ∀ i, i < t.size → t.type i = .R →
     ThreeConnected (t.nVerts i) ((t.skeleton i).map fun p => (p.1 - (t.nvRange i).1, p.2 - (t.nvRange i).1))
-  /-- Canonicity: no two adjacent S nodes and no two adjacent P nodes unless ternarizing. -/
-  canonical : ∀ i p, t.parent i = some p → (t.type i = .S → t.type p ≠ .S) ∧ (t.type i = .P → t.type p ≠ .P)
+
+/-- Canonicity: no S node under an S node and no P node under a P node.
+Stated apart from `Represents` because it holds for the unternarized tree only. -/
+def Canonical : Prop :=
+  ∀ i p, t.parent i = some p → (t.type i = .S → t.type p ≠ .S) ∧ (t.type i = .P → t.type p ≠ .P)
 
 end SpqrTree
 

@@ -485,12 +485,11 @@ theorem mem_children_iff {i : ItemId} (hi : i < items.size) (n : Nat) :
 
 /-! ### `Represents` fields that need only `Items.WF` -/
 
-theorem canonical : ∀ i p, t.parent i = some p →
-    (t.type i = .S → t.type p ≠ .S) ∧ (t.type i = .P → t.type p ≠ .P) := by
+theorem canonical (hcan : items.Canonical) : t.Canonical := by
   intro n m hp
   obtain ⟨c, p, hc, hp', rfl, rfl, hpar⟩ := h.parent_cases hp
   rw [h.type_eq hc, h.type_eq hp']
-  exact h.shapes.canonical p c hpar
+  exact hcan p c hpar
 
 theorem interior : ∀ i v, i < t.size → v < g.nv → t.type i ∈ [NodeType.S, .P, .R] →
     ∀ j, t.vertIndex[v]! = some j →
@@ -1467,7 +1466,6 @@ theorem represents (hR : items.RThreeConnected g) :
   separation := h.separation
   interior := h.interior
   r_three_connected := h.r_three_connected hR
-  canonical := h.canonical
 
 /-- `Represents` with the R clause supplied at the output level (the form `Correctness.lean`
 assumes). -/
@@ -1483,7 +1481,6 @@ theorem represents_of_r     (hR : ∀ i, i < t.size → t.type i = .R →
   separation := h.separation
   interior := h.interior
   r_three_connected := hR
-  canonical := h.canonical
 
 end RelabelOK
 
@@ -1498,6 +1495,11 @@ theorem relabelTree_represents' (g : Graph) (items : Items) (h : items.WF g)
     (relabelTree g items).Represents g := by
   obtain ⟨idx, hok⟩ := relabelOK_of_wf g items h
   exact hok.represents hR
+
+theorem relabelTree_canonical (g : Graph) (items : Items) (h : items.WF g) (hc : items.Canonical) :
+    (relabelTree g items).Canonical := by
+  obtain ⟨idx, hok⟩ := relabelOK_of_wf g items h
+  exact hok.canonical hc
 
 /-- Variant with the output-level R clause (the hypothesis `spqrTree_r_three_connected` provides). -/
 theorem relabelTree_represents_of_r (g : Graph) (items : Items) (h : items.WF g)

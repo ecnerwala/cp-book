@@ -759,15 +759,16 @@ False candidates (recorded, restated):
   `type c ∉ [F, V] ∧ (type c = Q → ch c = [])` (also in `WalkTyping.walk_q_children`,
   `RelabelOwn`, `RelabelRep`, `RelabelAdj`).
 * `Shapes.canonical` — **false for `tern = true`**: P under P in ~55% of seeds (e.g. seed 0, items
-  62 → 61), S under S (seed 386). `Spec.Represents.canonical`'s docstring already says "unless
-  ternarizing"; the statement (and `spqrTree_represents` for `tern = true`) needs a `tern = false`
-  guard — `Spec.lean` is not edited here; `canonical` is a hypothesis of `wf_of_ranges` and a named
-  (false-as-stated) admission `walk_canonical` in `WalkWF.lean`.
+  62 → 61), S under S (seed 386). Canonicity is therefore no longer a clause of `Items.Shapes` /
+  `Represents`: it is the separate predicates `Items.Canonical` / `SpqrTree.Canonical`, with
+  `spqrTree_canonical : (g.spqrTree false vo eo).Canonical` (via `RelabelOK.canonical` /
+  `relabelTree_canonical`) and the walk-side admission `walk_canonical` (`WalkWF.lean`) for
+  `tern = false` only.
 
-`RangesWF.lean`: `wf_of_ranges : Items.Tree → Items.TypingFacts → Items.Ranges → canonical → Items.WF`
+`RangesWF.lean`: `wf_of_ranges : Items.Tree → Items.TypingFacts → Items.Ranges → Items.WF`
 (`endpoints_of_ranges`, `shapes_of_ranges`; standard axioms). `TypingFacts` = the `i_o_leaf`,
-`vs_shape`, `vs_lt` fields of `WalkTyping`. Every clause of `Endpoints` and `Shapes` except
-`canonical` is derived from `Ranges` (the Q clauses from `q_leaf`/`q_root`; `child_vs_in_parent`
+`vs_shape`, `vs_lt` fields of `WalkTyping`. Every clause of `Endpoints` and `Shapes` is derived
+from `Ranges` (the Q clauses from `q_leaf`/`q_root`; `child_vs_in_parent`
 from `vs_att` at the child + `att_vs`/`interior` at the parent + `desc_disjoint`; `nv_nodup` from
 `vs_ne`, `vs_att` vs `interior` and the injectivity of `vertItem`; `separation` = `att_vs`;
 `interior` = `interior`). `convex` is not needed for `WF` at all — it is the field the walk-time

@@ -142,12 +142,15 @@ structure Shapes : Prop where
     (∀ q ∈ items.virtualEdges i, q.1 ≠ q.2) ∧
     (∀ u v, items.vs i = (some u, some v) → ∀ q ∈ items.virtualEdges i, ¬ PairEq q (u, v)) ∧
     ∀ c, items.IsParent i c → items.type c ≠ .V → ∃ u v, items.vs c = (some u, some v)
-  canonical : ∀ p c, items.IsParent p c → (items.type c = .S → items.type p ≠ .S) ∧ (items.type c = .P → items.type p ≠ .P)
 
 structure WF : Prop where
   tree : items.Tree g
   endpoints : items.Endpoints g
   shapes : items.Shapes g
+
+/-- Canonicity: no S under S, no P under P. Not part of `WF`: it fails for `ternarize = true`. -/
+def Canonical : Prop :=
+  ∀ p c, items.IsParent p c → (items.type c = .S → items.type p ≠ .S) ∧ (items.type c = .P → items.type p ≠ .P)
 
 end Items
 
