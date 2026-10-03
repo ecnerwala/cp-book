@@ -1324,6 +1324,103 @@ Pure R content with no export (R-5 proves it from the above): the `entry_cur` sa
 R iterate, `feS₂_top_entryR`'s class saturation, `closeVert_type1_rCloseShape`'s HT fields,
 `settled`.
 
+**R site obligations (R-5 handoff to the backbone induction).** The remaining named R admissions,
+each with the site it sits at and the `EarCtx`/`CtxEntry`/`EarFinish`/`RangesInv`/`CloseInv`
+fields that discharge it once one induction carries them together with `RInvTop`/`RInvFront`/
+`RSkelInv`. Sites as above (child-entry site = `walkOut v d o hasVert` call state; vertex site =
+`walkOut` call / end of `walkOuts` with `hasVert = false`; finish site = `finishEdge v d o B hasVert`
+call state after the child walk, `lowval < d`, `B = origTstack`). Every statement below was
+dump-checked on seeds 0..400 × both modes + 6000 random multigraphs (`checks/RFinishEdgeCheck.lean`,
+0 failures).
+
+1. `feS₂_top_entryR` (`Proofs/RInvTree.lean`): `(feS₂ d o s).EntryR dfs c` for the top `c` of
+   `feS₂ d o s` with `c.topDepth = d`, `c.vStart ≠ curV`, at a first-edge (`hasVert = false`)
+   tree-edge finish site (`o.cls = .ret lv kind`, `kind ≠ .backEdge`, `lv < d`; hypotheses
+   `Inv' D`, `Shape`, `FinishOk`, `FinishGuards`, `Frontier`, `FinishRShape`, `RInvFront dfs curV d
+   origTstack`, chain/`Spec`/`Rooted`/`TwoConnected`). `c` is loop 1's output (loop 2 did not fire,
+   `finishEdge_tree_top_settled_first`). Discharge: `pieces`/`maximal` from `RangesInv σ n (d + 1)`
+   at the site transported to `feS₂` (`convex`/`closed`: each closed item owns a σ-interval, so its
+   complement is one class) with `CloseInv.closed` at `feS₂` (`CloseAt.att_vs`/`vs_att`: the item's
+   `vs` are its attachments) and `CloseCtx.l1_site k`'s `VSite` (`kinds`/`two`/`r_shape`/`p_shape`/
+   `s_order`) for the piece shapes; `bond` from `EntryR.bond` of the consumed range entries
+   (`RInvFront.base` for those above `origTstack` with `topDepth ≥ d`) plus the P-merge of the tree
+   edge (`EarFinish.p_entry`); `single` from `EarFinish.loop1` (`Loop1Spec`: `L1Close.mid`, bottom
+   at `nxt.vStart`) and `RangesInv.ordered` (every `(nxt.vStart, curV)` class edge lies in the
+   consumed range); `type1`/`type2` from the consumed entries' `EntryR.type1`/`type2`
+   (`EntryLaminar` is closed under the union of pieces sharing the terminal pair) — R content on top
+   of those fields.
+2. `loop1_rTop_ctx` (`Proofs/RLoop1.lean`): `(rl1Iter d o s k).RTop dfs cur nxt` at an `.R`
+   iterate with `tstack = cur :: nxt :: rest`, `cur.topDepth = nxt.topDepth = d`,
+   `nxt.vStart ≠ cur.vStart`, from `L1Ctx`/`L1Inv` (`ceS₁ o.dest d o.e (feS₀ d o s)`),
+   `CloseEarsOk`, `RInvFront dfs stackVerts[d] d origTstack` at `feS₀`. `entry_nxt`: `nxt` is the
+   next unconsumed entry of the range `hi` (`L1Inv`'s `L1Reach`, edges unchanged by `L1Keep.edges`);
+   it tops out at `d` and starts below the child, so it is not in `RInvFront.base` — its `EntryR` is
+   the child-return settledness of the frontier (`walkTree_rSide`'s `settled`, item 7), which the
+   backbone must carry as `EntryR` for every entry with `topDepth = d`, `vStart ≠ curV` at
+   `feS₀`. `disj`: `RInvFront.disj` at `feS₀` transported across the iterates (merges keep pairwise
+   disjointness; the `e ≥ ne` part needs `L1Ctx.disj`/`span_disj`/`q_root`/`q_free` at item level).
+   `entry_cur`: the merged piece's saturation — R content on `RangesInv.convex`/`ordered` at the
+   iterate (R2) and `CloseCtx.l1_site k`'s `VSite`.
+3. `loop1_rBranch_fields_ctx` (`Proofs/RLoop1.lean`): `(rl1Iter d o s k).RBranchFields d cur nxt`
+   (same site/hypotheses as 2). `cur_piece` from `VSite.kinds`/`two` at `l1_site k` (a non-`V`
+   kid exists; `L1Piece` gives the tree edge's `Q`); `cur_vs` from `CloseInv.closed`
+   (`CloseAt.att_vs`/`vs_att`) + `VSite.att` (every kid attaches inside `{cur.vStart,
+   stackVerts[d]}`); `nxt_ne`/`nxt_touch_top`/`nxt_touch_bot` from `EarFinish.loop1_touch` (range
+   entries touch both terminals; nonempty); `proper` from `VSite.pend` at the post-merge state
+   (an unprocessed edge at `curV` outside the top entry) with `RangesInv.processed`; `nxt_no_cu`
+   from the consumed entry's `EntryR.bond` (`RInvFront.base`) — all `(cur.vStart, curV)` edges were
+   bonded into the item loop 1 merged into `cur`, so none is in `nxt` (`RInvFront.disj`).
+4. `loop1_rBranch_mid_ctx` (`Proofs/RLoop1.lean`):
+   `stackVerts[d + 1] = cur.vStart ∨ Interior (cur.edges) stackVerts[d + 1]` (same site). `L1Close.mid`
+   only gives the `l1Edges ∪ t.edges` form; discharge = the `Loop1Spec` field `mid_cur` (E5 above):
+   at a reached split closing `t` at `d`, `l1Bot o done = stackVerts[d + 1] ∨ Interior (l1Edges o s
+   done) stackVerts[d + 1]`.
+5. `rSide_entry_site` (`Proofs/RSide.lean`): at a child-entry site with `v = stackVerts[d]`,
+   `IsParent v c`, chain, `RInvTop dfs v d`: (a) `∀ t ∈ tstack, EntryR t → EntryR t` after
+   `stackVerts.set! (d + 1) c`; (b) `∀ t ∈ tstack, t.vStart = v → t.topDepth ≤ d`. (b) =
+   `EarCtx.split` at the call state (`CtxEntry.depth` for `above`, `vt.topDepth ≤ d`, `below` has
+   `vStart ≠ v`) + `EarCtx.base_bot`. (a) = `EntryR.set_stackVerts` for `topDepth ≠ d + 1`, and
+   for `topDepth = d + 1` the buried-entry field E3 (`buried_vacuous`: single edge or
+   `TwoAttached … vStart vStart`, which makes `EntryR.single` — the only field reading
+   `stackVerts[topDepth]` — vacuous).
+6. `rSide_vertFree_site` (`Proofs/RSide.lean`): `VertFree v s` at a vertex site with `VertBook v
+   false`, `RWalk`. `e < ne`: `EarCtx.vert_edges` (edges under `vertItem v` = `subEdges` of the
+   `done` outs with `d ≤ lowval`) + field E2 `bd_free` (no open entry owns one). `e ≥ ne`: E4
+   (span items are roots; unique parent) with `EarCtx.v_root`/`vert_free` — not in `RangesInv`/
+   `CloseInv` either (`ItemFree`-style facts).
+7. `rSide_finish_content_site` (`Proofs/RSide.lean`): at a tree-edge finish site (child walked:
+   `RWalk dfs ((v, d, B) :: F) c (d + 1) s`, `FinishGuards`/`FinishBook`/`Frontier`, chain):
+   `settled` (every entry loop 1 leaves above the base with `topDepth ≥ d`, `vStart ≠ v` is
+   `EntryR` at `feS₁`) — the frontier entries' `EntryR` (item 2's `entry_nxt`) and the merged
+   piece (item 1/2's `entry_cur`), R content on R1/R2 + `EarFinish.loop1`; `unwrap` (`hasVert`,
+   type 1: `Exempt v d (nxtE (feS₂))`) — provable now from `FinishBook.ear`: `EarFinish.close`
+   gives `feS₂`'s stack `c :: py :: vy :: base` with `py.topDepth = lv < d`; `vert_own`
+   (`hasVert = false`: `VertFree v (feP v d o s)`) — E2 at the site + transport through loops 1–2
+   and the P-check (`L1Keep.edges`, `maybeUnwrapNxt_edges`, merge lemmas) + E4 for `e ≥ ne`.
+8. `closeVert_type1_rCloseShape` (`Proofs/RVert.lean`): `RCloseShape g dfs (Pieces.ofItems
+   (vPieceItems c py vy)) (vU c py vy) curV stackVerts[lv]` at `feS₂ d o s` of a type-1 tree-edge
+   site with `hasVert = true`, `feSingle = false`, `EarClose` stack `c :: py :: vy :: base`,
+   `base.length = origTstack`. `wf`/`sub`: `CloseCtx.v_site`'s `VSite` (`kinds`, `two`, `free`) +
+   `CloseInv.closed` (`child_two`, `att_vs`); `conn`/`attached`/`touch_s`/`touch_t`/`ne`:
+   `VSite.att`/`touch`/`ne` + `EarClose`'s `vert_touch`/`c_edge`; `proper`: `CloseCtx.path lv`
+   (an unprocessed edge at depth `lv`) with `RangesInv.processed`; `maximal`: `RangesInv.closed`
+   at `feS₂` + `EntryR.maximal` of `c` (item 1) — `py`'s items (`topDepth = lv < d`) are in no
+   `RInv*` record, so their maximality is R content on `closed`; `bond`: `EntryR.bond` of `c` +
+   `VSite.p_shape`; `single`: `RangesInv.ordered` + `EarClose` (the vertex entry holds the whole
+   child subtree); `type1`/`type2`: `EntryR.type1`/`type2` of `c` + laminarity closure (R content).
+9. `walk_items_rThreeConnected` (`Proofs/RWalkItems.lean`): `Items.RThreeConnected g (g.walk tern
+   (g.dfsForest vo eo)).items` for general `g.WF`. No site; block-local restatement of
+   `walk_items_rThreeConnected_of_twoConnected` via `Blocks.lean` (`q_root_covers_block`,
+   `nonV_child_cover_of_block`, per-block `Represents`, `RSkel3.rThreeConnected_of_block`); no
+   ear/Ranges field involved.
+10. `walkTree_rSide_spec` (`Proofs/RInvWalk.lean`): the pre-R-4 statement (yields `BookTree ∧
+    RSideTree` from `GuardsTree`/`FrontiersTree` alone), kept only for `walkTreeRReturnSpec`; not
+    provable as stated (`BookTree` at a non-root entry is root-threaded ear content) — drop with
+    its consumer or restate as `walkTree_rSide`.
+
+Cross-cutting: every unbounded-`e` conclusion (`RTop.disj`, `VertFree`, `vert_own`, `RInvFront.disj`
+transport) needs the item-forest facts E4 at the site in addition to the bounded ear fields.
+
 ### 4.6 Ranges: `Endpoints`/`Shapes` without the tstack (`Ranges.lean`, `RangesWF.lean`)
 
 Almost all of `Items.Endpoints`/`Items.Shapes` is a consequence of the *final* item tree alone, read
