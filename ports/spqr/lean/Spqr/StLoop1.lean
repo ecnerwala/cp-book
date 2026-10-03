@@ -20,10 +20,10 @@ theorem mem_of_mem_getSide {p : List ItemId × List ItemId} {dir : Bool} {c : It
 theorem StItems.congr {g : Graph} {s s' : WalkState} {blocks : List StBlock} (h : StItems g s blocks)
     (hread : readStack s'.tstack = readStack s.tstack) (hitems : s'.items = s.items) :
     StItems g s' blocks := by
-  obtain ⟨roots, nodup, bounded, chLt, chNodup, closed⟩ := h
+  obtain ⟨roots, nodup, bounded, chLt, chNodup, closed, finished⟩ := h
   exact ⟨by rw [hread, hitems]; exact roots, by rw [hread]; exact nodup,
     by rw [hread, hitems]; exact bounded, by rw [hitems]; exact chLt, by rw [hitems]; exact chNodup,
-    by rw [hread, hitems]; exact closed⟩
+    by rw [hread, hitems]; exact closed, by rw [hitems]; exact finished⟩
 
 /-- `L1Unwrap` read before `finishEdge` holds at an iteration state `st = c :: R` whose entries `R` are
 kept (`L1Keep`) and whose top items are roots or on the original stack. -/

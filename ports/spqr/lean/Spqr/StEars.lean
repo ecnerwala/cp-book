@@ -62,7 +62,7 @@ theorem StItems.modify_root {g : Graph} {s : WalkState} {blocks : List StBlock} 
     (hr : ∀ p, ¬ Items.IsParent s.items p j)
     (hj : ¬ (Items.type s.items j = .S ∨ Items.type s.items j = .P ∨ Items.type s.items j = .R))
     (h : StItems g s blocks) : StItems g { s with items := s.items.modify j f } blocks := by
-  obtain ⟨roots, nodup, bounded, chLt, chNodup, closed⟩ := h
+  obtain ⟨roots, nodup, bounded, chLt, chNodup, closed, finished⟩ := h
   have hch : ∀ p, Items.ch (s.items.modify j f) p = Items.ch s.items p :=
     Items.ch_modify_ch_eq j f hfc
   have hpar : ∀ p c, Items.IsParent (s.items.modify j f) p c ↔ Items.IsParent s.items p c :=
@@ -74,21 +74,25 @@ theorem StItems.modify_root {g : Graph} {s : WalkState} {blocks : List StBlock} 
   have hsz : (s.items.modify j f).size = s.items.size := Array.size_modify
   refine ⟨fun x hx p hp => roots x hx p ((hpar p x).1 hp), nodup,
     fun x hx y hy => hsz ▸ bounded x hx y ((hbel x y).1 hy),
-    fun p c hp => hsz ▸ chLt p c ((hpar p c).1 hp), fun p => hch p ▸ chNodup p, fun i hi hty' => ?_⟩
-  rw [hsz] at hi
-  rw [hty] at hty'
-  rcases closed i hi hty' with ⟨x, hx, hb⟩ | ⟨b, hb, hB⟩
-  · exact Or.inl ⟨x, hx, (hbel x i).2 hb⟩
-  · exact Or.inr ⟨b, hb, hB.modify_root f hr fun e => hj (e ▸ hty')⟩
+    fun p c hp => hsz ▸ chLt p c ((hpar p c).1 hp), fun p => hch p ▸ chNodup p, fun i hi hty' => ?_,
+    fun x i hVQ hb hsp => ?_⟩
+  · rw [hsz] at hi
+    rw [hty] at hty'
+    rcases closed i hi hty' with ⟨x, hx, hb⟩ | ⟨b, hb, hB⟩
+    · exact Or.inl ⟨x, hx, (hbel x i).2 hb⟩
+    · exact Or.inr ⟨b, hb, hB.modify_root f hr fun e => hj (e ▸ hty')⟩
+  · rw [hty] at hVQ hsp
+    obtain ⟨b, hb', hB⟩ := finished x i hVQ ((hbel x i).1 hb) hsp
+    exact ⟨b, hb', hB.modify_root f hr fun e => hj (e ▸ hsp)⟩
 
 theorem StItems.pushEntry {g : Graph} {s : WalkState} {blocks : List StBlock} (v d idx : Nat)
     (dir : Bool) (q : ItemId) (hq : q < s.items.size) (hr : ∀ p, ¬ Items.IsParent s.items p q)
     (hfree : q ∉ readStack s.tstack) (h : StItems g s blocks) :
     StItems g { s with tstack := ⟨v, d, idx, setSides dir [q] []⟩ :: s.tstack } blocks := by
-  obtain ⟨roots, nodup, bounded, chLt, chNodup, closed⟩ := h
+  obtain ⟨roots, nodup, bounded, chLt, chNodup, closed, finished⟩ := h
   have hmem := mem_readStack_push v d idx dir q s.tstack
   refine ⟨fun x hx => ?_, nodup_readStack_push v d idx dir q s.tstack hfree nodup,
-    fun x hx y hy => ?_, chLt, chNodup, fun i hi hty => ?_⟩
+    fun x hx y hy => ?_, chLt, chNodup, fun i hi hty => ?_, finished⟩
   · rcases (hmem x).1 hx with rfl | hx
     · exact hr
     · exact roots x hx

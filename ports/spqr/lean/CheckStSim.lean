@@ -79,7 +79,13 @@ def stItemsB (g : Graph) (s : WalkState) (blocks : List StBlock) : List String :
     else ["chLt: a child is out of range"]
   let m6 := if (List.range items.size).all (fun p => decide (Items.ch items p).Nodup) then []
     else ["chNodup: a child list repeats"]
-  m1 ++ m2 ++ m4 ++ m5 ++ m6 ++ m3
+  let m7 := (List.range items.size).filterMap fun x =>
+    if !(Items.type items x == .V || Items.type items x == .Q) then none
+    else match (descOf items items.size x).find? fun i =>
+        isSPR items i && !blocks.any (inBlockB g items · i) with
+      | none => none
+      | some i => some s!"finished: item {i} below the leaf-type item {x} is in no block"
+  m1 ++ m2 ++ m4 ++ m5 ++ m6 ++ m3 ++ m7
 
 def report (st : IO.Ref Stats) (ok : Bool) (msg : String) : IO Unit := do
   st.modify fun x => { x with checks := x.checks + 1, bad := if ok then x.bad else x.bad + 1 }
