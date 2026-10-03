@@ -264,22 +264,23 @@ theorem StItems.bdPop {g : Graph} {s s' : WalkState} {sub base : List TEntry} {q
       · unfold Items.IsParent at hc; rw [hP.fresh_ch x (Nat.le_of_not_lt hxlt)] at hc; simp at hc
 
 /-- The open-block invariant (sim-4 candidate; `check_stsim` m8 on seeds 0..1000): every S / P / R
-item below a span item of the stack segment `new` is `InBlock` of the block `b` — for the walk, `b` is
+item below a span item of the stack segment `new` whose leaves form a segment of `b.items` (i.e. not in
+a block hanging under a V / Q item of the segment) is `InBlock` of the block `b` — for the walk, `b` is
 the block of the *truncated* reference (`refBlocks g (prev ++ [truncTree fs t])`) that the segment
 belongs to. At a boundary edge it is exactly the orientation content of the new block
 (`StLive.vsOrientedAt`). -/
 def StLive (g : Graph) (items : Items) (new : List TEntry) (b : StBlock) : Prop :=
   ∀ x ∈ readStack new, ∀ i, Items.Below items x i →
     (Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R) →
-    InBlock g items b i
+    ∀ L, Expands items i L → (∃ A B, b.items = A ++ L ++ B) → InBlock g items b i
 
 theorem StLive.vsOrientedAt {g : Graph} {items : Items} {new : List TEntry} {b : StBlock}
     (h : StLive g items new b) {i : ItemId} {L : List ItemId}
     (hx : ∃ x ∈ readStack new, Items.Below items x i)
     (hty : Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R)
-    (hL : Expands items i L) : VsOrientedAt g items b i L := by
+    (hL : Expands items i L) (hseg : ∃ A B, b.items = A ++ L ++ B) : VsOrientedAt g items b i L := by
   obtain ⟨x, hx, hb⟩ := hx
-  obtain ⟨L', hL', -, hV⟩ := h x hx i hb hty
+  obtain ⟨L', hL', -, hV⟩ := h x hx i hb hty L hL hseg
   rwa [ExpandsList.unique hL hL']
 
 /-- A member of an expanded list owns a contiguous segment of the expansion. -/
@@ -323,7 +324,7 @@ theorem StRead.complete {g : Graph} {items : Items} {sub : List TEntry} {ps : Li
       ∃ b ∈ blocks, InBlock g items b i)
     (hor : ∀ i L, (∃ x ∈ readStack sub, Items.Below items x i) →
       Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R →
-      Expands items i L → VsOrientedAt g items B i L)
+      Expands items i L → (∃ A' B', B.items = A' ++ L ++ B') → VsOrientedAt g items B i L)
     {i : ItemId} (hx : ∃ x ∈ readStack sub, Items.Below items x i)
     (hty : Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R) :
     ∃ b ∈ blocks ++ [B], InBlock g items b i := by
@@ -335,9 +336,10 @@ theorem StRead.complete {g : Graph} {items : Items} {sub : List TEntry} {ps : Li
     rcases hxi.expands_cases h hxm with ⟨y, _, hy, hyi⟩ | ⟨L, hL, A, Bb, hLeq⟩
     · obtain ⟨b, hb, hbi⟩ := hfin y i hy hyi hty
       exact ⟨b, List.mem_append_left _ hb, hbi⟩
-    · refine ⟨B, List.mem_append_right _ (List.mem_singleton_self _), L, hL, ⟨A' ++ A, Bb ++ B', ?_⟩,
-        hor i L ⟨x, hxs, hxi⟩ hty hL⟩
-      rw [hB, hM, hLeq]; simp only [List.append_assoc]
+    · have hseg : B.items = (A' ++ A) ++ L ++ (Bb ++ B') := by
+        rw [hB, hM, hLeq]; simp only [List.append_assoc]
+      exact ⟨B, List.mem_append_right _ (List.mem_singleton_self _), L, hL, ⟨_, _, hseg⟩,
+        hor i L ⟨x, hxs, hxi⟩ hty hL ⟨_, _, hseg⟩⟩
   rcases List.mem_append.1 (show x ∈ readL sub ++ readR sub from hxs) with hxs' | hxs'
   · exact key hR.1 hxs' ⟨[], stNestR ps, by simp [stNest]⟩
   · exact key hR.2 hxs' ⟨stNestL ps, [], by simp [stNest]⟩

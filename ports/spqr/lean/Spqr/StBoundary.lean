@@ -60,9 +60,9 @@ theorem finishBoundary_vsOrientedAt {D curV d : Nat} {o : DfsOut} {hasVert : Boo
     (hR : StRead s.items sub ps) (hI : StItems g s blocks) (i : ItemId) (L : List ItemId)
     (hx : ∃ x ∈ readStack sub, Items.Below s.items x i)
     (hty : Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R)
-    (hL : Expands s.items i L) :
+    (hL : Expands s.items i L) (hseg : ∃ A B, stNest ps = A ++ L ++ B) :
     VsOrientedAt g s.items ⟨some (curV, o.dest), stNest ps⟩ i L := by
-  exact (finishBoundary_stLive hE hi hs hD hok hb hge ht hg hR hI).vsOrientedAt hx hty hL
+  exact (finishBoundary_stLive hE hi hs hD hok hb hge ht hg hR hI).vsOrientedAt hx hty hL hseg
 
 /-- `finishEdge` at a block boundary. The popped entries `sub` read as the pieces `ps` of the
 child's subtree (`[]` for a back edge; `[t]` at a bridge, `[t₁, t₂]` at a component edge:
@@ -118,7 +118,7 @@ theorem finishBoundary_st {D curV d : Nat} {o : DfsOut} {hasVert : Bool} {s : Wa
         Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R →
         ∃ b ∈ blocks ++ [⟨some (curV, o.dest), stNest ps⟩], InBlock g s.items b i :=
       fun i hx hty => hR.complete rfl hI.finished
-        (fun i L hx hty hL => finishBoundary_vsOrientedAt hE hi hs hD hok hb hge ht hg hR hI i L hx hty hL)
+        (fun i L hx hty hL hseg => finishBoundary_vsOrientedAt hE hi hs hD hok hb hge ht hg hR hI i L hx hty hL hseg)
         hx hty
     by_cases hl : o.cls.lowval d = d + 1
     · obtain ⟨t, rfl, -, -⟩ := hE.bd_bridge ht hl
