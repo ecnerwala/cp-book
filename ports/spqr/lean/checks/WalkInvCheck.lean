@@ -4,6 +4,7 @@ import WalkInvCheck.R
 import WalkInvCheck.RContent
 import WalkInvCheck.St
 import WalkInvCheck.Extra
+import WalkInvCheck.Content
 import WalkInvCheck.E3False
 import WalkInvCheck.Planar
 /-!
@@ -109,7 +110,8 @@ def liveLower (c : Ctx) (site : String) (fs : List Frame) (s : WalkState) : List
 
 /-- The fields stated at every site. -/
 def everySite (c : Ctx) (site : String) (D : Nat) (s : WalkState) : List Viol :=
-  Extra.invCheck c.seed site D s ++ Extra.rskelCheck c.seed site s ++ Extra.e4Check c.seed site s
+  Extra.invCheck c.seed site D s ++ Extra.rskelCheck c.seed site s ++ Extra.e4Check c.seed site s ++
+    Content.check c.seed site D s
 
 mutual
 partial def iTree (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n : Nat) (t : DfsTree) (d : Nat)

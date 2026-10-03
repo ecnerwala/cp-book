@@ -132,6 +132,7 @@ import Spqr.Proofs.PlanarRGlue
 import Spqr.RangesStep
 import Spqr.RangesTree
 import Spqr.RangesFinal
+import Spqr.WalkContent
 import Spqr.WalkBackbone
 import Spqr.WalkBackboneStep
 import Spqr.WalkBackboneRoot

@@ -2383,6 +2383,34 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   loop1,loop1_side,loop1_touch,loops,lower}`, `tree_ret_frame`, `treeSite_wf`; Ranges
   `closeBase_content`, `closeBase_canon`, `closeBase_piece`; R `rSide_vertFree_site`,
   `closeBase_rContent`, `entry_rContent`; ST `walkOut_stLive`.
+* **Stage 3b — the content layer, checker first (`Spqr/WalkContent.lean`,
+  `checks/WalkInvCheck/Content.lean`).** The five remaining Ranges/R producers (`closeBase_content`,
+  `closeBase_canon`, `closeBase_piece`, `closeBase_rContent`, `entry_rContent`) all ask what the
+  span items of the open entries *are*, which nothing in the conjunction says. Candidates were
+  tested as `content.*` fields on every open entry at every site. What is **false** (counterexamples
+  from the checker, seeds ≤ 300): terminals of a span item lie in `{vStart, stackVerts[topDepth]}`
+  (an entry whose `topDepth` is stale — a sub-ear left open by a type-2 first edge — has
+  `stackVerts[topDepth]` pointing at the current path; its top vertex is the `vStart` of an entry
+  above it); a vertex item's vertex is interior to its entry (a finished vertex `x` whose V item sits
+  in an ear below while `x`'s own back edges are still separate entries above it, merged only by a
+  later loop 2/3); any S/P chain order on the entry's items (type-2 ears hold their pieces in merge
+  order, not path order). What **holds** over seeds 0..3000, both modes, and is now the statement
+  `EntryContent D s above t` (for `s.tstack = above ++ t :: below`, the same context as `Inv'`):
+  `kinds` (span items are S/P/R/Q/V, Q leaves), `two` (non-V items have two distinct terminals),
+  `root` (no parent), `ends` (each terminal of a non-V item is touched by the item's edges and is a
+  `Term'` vertex of `t` — `vStart`, open path at depths `topDepth..D`, `vStart` of an entry above —
+  or one of `t`'s vertex items), `vtouch`/`vabove` (a non-`Term'` vertex item is touched by `t` and
+  all its edges lie in `t` or the entries above `t`), `vinner` (a vertex interior to `t` but to no
+  single span item is a vertex item of `t`). `ContentInv D s` is the stack-wide form. Not yet a
+  field. What the producers need beyond it, by site: P closes (`feRest`, loop-1 P) — singleness of
+  `nxt` (`EarAt.p_entry`/`L1Unwrap .P`) + `ends`/touch ⇒ `PContent`; V closes (`cvS₅`, loop-1 S) —
+  `kinds`/`two`/`vinner` directly, `s_order` from the unwrapped S node's `Shapes.s_order` + the merge
+  side arithmetic (§4.4) + `cur` being a single item after loop 1, `r_shape` from the R layer
+  (`EntryR`, maximality — this is `closeBase_rContent`'s content, not `EntryContent`'s);
+  `FinishCanon`/`FinishPiece` from `kinds`/`ends` + `CanonInv`. Next: carry `ContentInv` in
+  `WalkInv`/`WalkInvOut`/`PreOut`/`WalkInvEnd` with per-primitive preservation (`pushTstack`,
+  `mergeTstackTops`, `maybeUnwrapNxt`, `finishTstackTop`, `stackVerts.set!`, `modifyItem`) and
+  derive the site records from it.
 
 ## 5. Phase 3: relabel
 
