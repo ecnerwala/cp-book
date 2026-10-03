@@ -6,6 +6,7 @@ import Spqr.Correctness
 import Spqr.PlanarInv
 import Spqr.PlanarEmbedSteps
 import Spqr.PlanarEmbedFold
+import Spqr.PlanarEmbedFacesFold
 import Spqr.PlanarEmbedRoot
 import Spqr.WalkPieceSep
 import Spqr.RelabelChildShape
@@ -225,8 +226,8 @@ theorem glued_root (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder edgeOrd
 
 /-- Soundness of the glued embedding: it is a planar embedding of `g` (Euler's formula per
 component). The reverse-preorder fold is `forM_reverse_range_inv` with the invariant `GluedUpTo`
-(`gluedUpTo_init` proved); Q and node steps remain admitted (plan in PROOF.md §8.5: `twoSum_planar` for S/P/R with
-`nodePlanar_sound`, `oneSum_planar` for V/Q, `disjointUnion_planar` for F). The tree's `WF` comes
+strengthened to `GluedFaces` (same-witness cofacial caps, PROOF.md §8.6); leaf, F, V and Q steps
+are proved, the S/P/R step remains the admission `embedItem_step_node_faces`. The tree's `WF` comes
 from `spqrTree_wf'`, hence the `g.WF` / `OrderOK` hypotheses. -/
 theorem planarEmbed_sound (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
     (hvo : OrderOK g.nv vertOrder) (heo : OrderOK g.ne edgeOrder)
@@ -246,7 +247,8 @@ theorem planarEmbed_sound (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder 
     have hsep : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.PieceSep g := by
       rw [planarRelabel_proj]; exact spqrTree_pieceSep g hg ternarize vertOrder edgeOrder hvo heo
     exact glued_root g hg ternarize vertOrder edgeOrder hvo heo hwf _
-      ((g.planarTree ternarize vertOrder edgeOrder).gluedUpTo_planarEmbed g hwf hsh hrep hsep hall)
+      ((g.planarTree ternarize vertOrder edgeOrder).gluedFaces_planarEmbed g hg hwf hsh hrep hsep
+        hall).toGluedUpTo
   · cases h
 
 /-- The eventual target: the planar SPQR tree yields an embedding iff `g` is planar. `→` is
