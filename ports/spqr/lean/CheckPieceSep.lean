@@ -109,6 +109,9 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
             if a != b && touches t g a v && touches t g b v && t.origId[i]! != some v then
               bad := bad + 1
               IO.println s!"v_attach: i={i} a={a} b={b} v={v}"
+    if t.hasCap i && t.type i != .I && t.type i != .O && !((List.range g.ne).any fun e => edgeIn t i e) then
+      bad := bad + 1
+      IO.println s!"cap_nonempty: i={i} type={repr (t.type i)} children={t.children i} parent={t.parent i}"
     if t.type i == .Q then
       match t.children i, t.origId[i]! with
       | [_, w], some e =>
@@ -119,6 +122,43 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
                 bad := bad + 1
                 IO.println s!"q_root_attach: i={i} e={e} v={v} outside={e'}"
       | _, _ => pure ()
+      let lower (e : Nat) : Nat :=
+        if t.edgeFlipped[e]! then (g.edges[e]!).1 else (g.edges[e]!).2
+      let orient (e : Nat) : Nat × Nat :=
+        if t.edgeFlipped[e]! then ((g.edges[e]!).2, (g.edges[e]!).1) else g.edges[e]!
+      let shapeOk := match t.children i with
+        | [] => true
+        | [c] => t.type c == .O
+        | [c, w] => t.type c != .V && t.type c != .O && t.hasCap c && t.type w == .V
+        | _ => false
+      if !shapeOk then
+        bad := bad + 1
+        IO.println s!"q_shape: i={i} children={t.children i}"
+      if let some e := t.origId[i]! then
+        let upper := if t.edgeFlipped[e]! then (g.edges[e]!).2 else (g.edges[e]!).1
+        let isLoop := (g.edges[e]!).1 == (g.edges[e]!).2
+        if isLoop != (t.children i).any (fun c => t.type c == .O) then
+          bad := bad + 1
+          IO.println s!"q_loop: i={i} e={e}"
+        if let some p := t.parent i then
+          if t.type p == .V && t.origId[p]! != some upper then
+            bad := bad + 1
+            IO.println s!"q_upper: i={i} p={p}"
+        match t.children i with
+        | [c, w] =>
+          if t.origId[w]! != some (lower e) then
+            bad := bad + 1
+            IO.println s!"q_lower: i={i} w={w}"
+          for v in [0:g.nv] do
+            if (touches t g c v || incident g v e) && touches t g w v && v != lower e then
+              bad := bad + 1
+              IO.println s!"q_lower_attach: i={i} c={c} w={w} v={v}"
+        | _ => pure ()
+        for c in t.children i do
+          if let some ne := t.capNe c then
+            if t.neOrig ne != some (orient e) then
+              bad := bad + 1
+              IO.println s!"q_cap_orient: i={i} c={c}"
   let pt := g.planarSpqrTree tern vo eo
   let mut s := pt.initState
   bad := bad + (← checkOuter g pt pt.size s)
