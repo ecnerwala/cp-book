@@ -33,6 +33,7 @@ import Spqr.EarSpec
 import Spqr.EarShape
 import Spqr.EarCtx
 import Spqr.EarCtxAt
+import Spqr.EarFalse
 import Spqr.EarInv
 import Spqr.SepPair
 import Spqr.Proofs.PlanarMap

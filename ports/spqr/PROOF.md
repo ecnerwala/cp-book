@@ -778,6 +778,22 @@ two more side conditions (`stackVerts[lowval] = dest` for returning outs, via `D
 remaining tree outs' subtrees, via `endsOut_wf` + the tree's nodup vertices), both discharged in
 `cOut`.
 
+**`walkTree_ear`/`walkTree_book` are false without edge completeness (`EarFalse.lean`).** Trying
+`ctx_step_tree` for a boundary tree out exposed that the parent's `vert_book` cannot be
+re-established: the hypotheses of `walkTree_ear` (`t.WF []`, `t.Ends g`, bounds, nodup, the start
+state, freshness) say nothing about graph edges that are incident to a vertex of `t` but are not
+edges of `t` (`WF` only classifies the tree's own edges), and `VertBook`'s `TwoAttached` is then
+false. Kernel-checked counterexample `walkTree_ear_false`/`walkTree_book_false` (standard axioms;
+`decide +kernel` runs the walk on the concrete state): the path `0 - 1 - 2` (two bridges) with an
+extra edge `2 - 3` outside the tree, `nv = 4`; after the bridge `1 - 2` is finished the edge set
+below `V 1` is `{1 - 2}`, attached at vertex `2` by the edge `2 - 3`, which is neither terminal
+(`1`, `1`). The same gap is why `EarFinish.dest_edges` had to become `base_touch`. The correction
+is the per-tree edge completeness hypothesis `hcomp : ∀ e < ne, ∀ x, Inc e x → x ∈ t.verts → e ∈
+t.edges` on `walkTree_ear`, `walkTree_book`, `walkTree_guards` and `walk_sides` (as the forest's
+`hecov`, which `walk_tree` already takes: an edge of another tree of the forest has both endpoints
+in that tree by `Ends`/`WF`, disjoint from `t.verts` by `ForestOK.verts_nodup`); `walk_tree`'s
+statement is unchanged.
+
 **Acyclicity (`ItemAcyc.lean`, `WalkState.Full.acyc`).** Exact placement plus coverage say every
 non-root item has exactly one parent but not that `Items.IsParent` is well-founded, so `Full`
 also carries
