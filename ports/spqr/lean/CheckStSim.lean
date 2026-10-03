@@ -144,7 +144,11 @@ partial def chkOut (st : IO.Ref Stats) (g : Graph) (prev : List DfsTree) (fs : L
     s!"read before finishEdge {o.e} of {v} d={d}: {(readStack (above s orig)).flatMap (leavesB s.items)} vs {stNest psChild}"
   for m in stItemsB g s (simBlocks g prev fs (DirsOf s d) ++ (refOuts g v d (DirsOf s d) done false).2.1 ++ blChild) do
     report st false s!"items before finishEdge {o.e} of {v} d={d}: {m}"
-  return (finishEdge v d o orig.length hasVert).run s
+  let (hv', s') := (finishEdge v d o orig.length hasVert).run s
+  if d ≤ lowval then
+    report st (s'.tstack == orig && hv' == hasVert && s'.stackDir == s.stackDir)
+      s!"boundary finishEdge {o.e} of {v} d={d}: tstack/hasVert/stackDir changed"
+  return (hv', s')
 end
 
 def main : IO Unit := do
@@ -173,6 +177,9 @@ def main : IO Unit := do
     s ← chkTree st g prev [] t 0 s
     s := ((do let top ← popTstack; modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 } : WalkM Unit).run s).2
     prev := prev ++ [t]
+    report st (s.tstack == []) s!"tstack not empty after tree {t.v}"
+    for m in stItemsB g s (simBlocks g prev [] []) do
+      report st false s!"items after root pop of {t.v}: {m}"
   let real := g.walk (tern != 0) forest
   report st (toString (repr s.items) == toString (repr real.items)) "mirrored walk differs from g.walk"
   let stats ← st.get
