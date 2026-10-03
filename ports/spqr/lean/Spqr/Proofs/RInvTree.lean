@@ -1,4 +1,5 @@
 import Spqr.Proofs.RInvBack
+import Spqr.Proofs.RSiteContent
 
 /-!
 # `RInvTop` across the tree-edge branch of `finishEdge`
@@ -728,9 +729,6 @@ theorem RInvH.finishRest {D v d k lowval : Nat} {isType1 hasVert isSingle : Bool
 
 /-! ### The tree-edge branch -/
 
-/-- The state after the P-check of the tree-edge branch. -/
-def feP (curV d : Nat) (o : DfsOut) (s : WalkState) : WalkState :=
-  after (Spqr.finishP curV (o.cls.lowval d) o.cls.isType1) (feS₂ d o s)
 
 /-- What the tree-edge branch of `finishEdge` needs beyond `Frontier`: the tree edge is not yet
 owned; after loop 1 every frontier entry below the top is settled (loop 1 runs while
@@ -749,6 +747,8 @@ structure FinishRShape (dfs : DfsData) (curV d : Nat) (o : DfsOut) (origTstack :
   /-- The ear contract at the site (`EarFinish` over some split `sub ++ base` of the stack with
   `base.length = origTstack`), as `FinishBook.ear` provides it at the `walkOut` call site. -/
   ear : s.EarAt curV d o origTstack hasVert
+  /-- The R content of the site (`RSiteContent.lean`). -/
+  content : s.RCloseContent dfs curV d o origTstack hasVert
 
 /-- The top entry (if any) starts at `v`. -/
 def TopStart (v : Nat) (s : WalkState) : Prop := ∀ t rest, s.tstack = t :: rest → t.vStart = v
@@ -947,8 +947,8 @@ theorem feS₂_top_entryR {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsO
     (hR : s.RInvFront dfs curV d origTstack)
     (c : TEntry) (rest : List TEntry) (hts : (feS₂ d o s).tstack = c :: rest)
     (htop : c.topDepth = d) (hne : c.vStart ≠ curV) :
-    (feS₂ d o s).EntryR dfs c := by
-  sorry
+    (feS₂ d o s).EntryR dfs c :=
+  hshape.content.s2_top rfl c (by rw [hts]; exact rfl) htop hne
 
 /-- (Lemma 4.3, first-edge case) the entry the tree-edge branch builds on top of the stack is
 settled after the P-check (`feP`) and in the output. The content is `feS₂_top_entryR` (the `feS₂`

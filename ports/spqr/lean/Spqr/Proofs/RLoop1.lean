@@ -1,4 +1,4 @@
-import Spqr.Proofs.RInvFrame
+import Spqr.Proofs.RSiteContent
 import Spqr.EarLoop1
 
 /-!
@@ -24,10 +24,6 @@ open WalkM
 namespace WalkState
 variable {s : WalkState} {dfs : DfsData}
 
-/-- The `k`-th loop-1 iterate of the tree edge `o` finished at depth `d` from the site state `s`. -/
-abbrev rl1Iter (d : Nat) (o : DfsOut) (s : WalkState) (k : Nat) : WalkState :=
-  iter (loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s))
-
 /-- At an `.R` iterate under the ear context the head is the `L1Piece`: it tops out at `d` and
 holds the tree edge. -/
 theorem loop1_r_shape_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TEntry} {v₀ : Nat}
@@ -47,18 +43,6 @@ theorem loop1_r_shape_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TEntry} {v
     exact (List.cons.inj h).1.symm
   subst hcur
   exact ⟨c, nxt, rest, hts, hP.top, hnt, hne, o.e, he, (hP.edges o.e he).2 (.inl rfl)⟩
-
-/-- The `RBranch` fields beyond the shape, `mid`, `interior` and `cur_ne`. -/
-structure RBranchFields (s : WalkState) (d : Nat) (cur nxt : TEntry) : Prop where
-  cur_piece : ∃ i, i ∈ s.entryPieceItems cur
-  cur_vs : ∀ i ∈ s.entryPieceItems cur,
-    Items.vs s.items i = (some cur.vStart, some s.stackVerts[d]!) ∨
-      Items.vs s.items i = (some s.stackVerts[d]!, some cur.vStart)
-  nxt_ne : ∃ e, e < s.g.ne ∧ nxt.edges s.g s.items e
-  proper : ∃ e, e < s.g.ne ∧ ¬s.rU cur nxt e
-  nxt_touch_top : s.g.Touches (nxt.edges s.g s.items) s.stackVerts[d]!
-  nxt_touch_bot : s.g.Touches (nxt.edges s.g s.items) nxt.vStart
-  nxt_no_cu : ∀ e, nxt.edges s.g s.items e → ¬s.g.Joins e cur.vStart s.stackVerts[d]!
 
 /-- At an `.R` iterate the piece bottom `cur.vStart = l1Bot o done` is interior to `rU cur nxt`:
 `Loop1Spec` gives `L1Close` for `nxt` (the next entry of `hi`, at depth `d`), whose `bottom` puts
@@ -155,7 +139,8 @@ theorem loop1_rBranch_mid_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TEntry
     (hok : CloseEarsOk D o.dest d o.e s.stackDir[d]! (feS₀ d o s))
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hchild : o.dest = s.stackVerts[d + 1]!) {origTstack : Nat}
-    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
+    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) {curV : Nat} {hasVert : Bool}
+    (hrc : s.RCloseContent dfs curV d o origTstack hasVert) (k : Nat)
     (hk : ∀ j, j ≤ k → result (loop1Cond d) (rl1Iter d o s j) = true)
     (hty : l1Ty d s.stackDir[d]! (rl1Iter d o s k) = .R)
     (cur nxt : TEntry) (rest : List TEntry)
@@ -164,8 +149,8 @@ theorem loop1_rBranch_mid_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TEntry
     (hce : ∃ e, e < s.g.ne ∧ cur.edges s.g (rl1Iter d o s k).items e) :
     (rl1Iter d o s k).stackVerts[d + 1]! = cur.vStart ∨
       (rl1Iter d o s k).g.Interior (cur.edges (rl1Iter d o s k).g (rl1Iter d o s k).items)
-        (rl1Iter d o s k).stackVerts[d + 1]! := by
-  sorry
+        (rl1Iter d o s k).stackVerts[d + 1]! :=
+  hrc.l1_mid k hk hty cur nxt rest hts
 
 /-- **Named admission** (Lemma 4.3 at the R branch, interval/saturation fields). Exact obligation:
 `RBranchFields` at the iterate — `cur_piece`/`cur_vs` (`cur`'s closed items are
@@ -180,15 +165,16 @@ theorem loop1_rBranch_fields_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TEn
     (hok : CloseEarsOk D o.dest d o.e s.stackDir[d]! (feS₀ d o s))
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hchild : o.dest = s.stackVerts[d + 1]!) {origTstack : Nat}
-    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
+    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) {curV : Nat} {hasVert : Bool}
+    (hrc : s.RCloseContent dfs curV d o origTstack hasVert) (k : Nat)
     (hk : ∀ j, j ≤ k → result (loop1Cond d) (rl1Iter d o s j) = true)
     (hty : l1Ty d s.stackDir[d]! (rl1Iter d o s k) = .R)
     (cur nxt : TEntry) (rest : List TEntry)
     (hts : (rl1Iter d o s k).tstack = cur :: nxt :: rest)
     (hct : cur.topDepth = d) (hnt : nxt.topDepth = d) (hne : nxt.vStart ≠ cur.vStart)
     (hce : ∃ e, e < s.g.ne ∧ cur.edges s.g (rl1Iter d o s k).items e) :
-    (rl1Iter d o s k).RBranchFields d cur nxt := by
-  sorry
+    (rl1Iter d o s k).RBranchFields d cur nxt :=
+  hrc.l1_fields k hk hty cur nxt rest hts
 
 /-- **Named admission** (Lemma 4.3 at the R branch, `RTop`). Exact obligation: `cur`/`nxt` are
 `EntryR` and edge-disjoint at the iterate — `nxt` is a frontier entry topping out at `d` not
@@ -202,15 +188,16 @@ theorem loop1_rTop_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TEntry} {v₀
     (hok : CloseEarsOk D o.dest d o.e s.stackDir[d]! (feS₀ d o s))
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hchild : o.dest = s.stackVerts[d + 1]!) {origTstack : Nat}
-    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
+    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) {curV : Nat} {hasVert : Bool}
+    (hrc : s.RCloseContent dfs curV d o origTstack hasVert) (k : Nat)
     (hk : ∀ j, j ≤ k → result (loop1Cond d) (rl1Iter d o s j) = true)
     (hty : l1Ty d s.stackDir[d]! (rl1Iter d o s k) = .R)
     (cur nxt : TEntry) (rest : List TEntry)
     (hts : (rl1Iter d o s k).tstack = cur :: nxt :: rest)
     (hct : cur.topDepth = d) (hnt : nxt.topDepth = d) (hne : nxt.vStart ≠ cur.vStart)
     (hce : ∃ e, e < s.g.ne ∧ cur.edges s.g (rl1Iter d o s k).items e) :
-    (rl1Iter d o s k).RTop dfs cur nxt := by
-  sorry
+    (rl1Iter d o s k).RTop dfs cur nxt :=
+  hrc.l1_top k hk hty cur nxt rest hts
 
 /-- Lemma 4.3 at the R branch, ear-context form: the shape (`loop1_r_shape_ctx`) plus `mid`
 (`loop1_rBranch_mid_ctx`), `interior` (`loop1_r_interior_ctx`), the interval/saturation fields
@@ -224,7 +211,8 @@ theorem loop1_rBranch_content_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TE
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hchild : o.dest = s.stackVerts[d + 1]!)
     (hhb : ∀ t ∈ hi, t.vStart ≠ s.stackVerts[d]!) (hdb : o.dest ≠ s.stackVerts[d]!) {origTstack : Nat}
-    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
+    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) {curV : Nat} {hasVert : Bool}
+    (hrc : s.RCloseContent dfs curV d o origTstack hasVert) (k : Nat)
     (hk : ∀ j, j ≤ k → result (loop1Cond d) (rl1Iter d o s j) = true)
     (hty : l1Ty d s.stackDir[d]! (rl1Iter d o s k) = .R)
     (cur nxt : TEntry) (rest : List TEntry)
@@ -232,12 +220,12 @@ theorem loop1_rBranch_content_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TE
     (hct : cur.topDepth = d) (hnt : nxt.topDepth = d) (hne : nxt.vStart ≠ cur.vStart)
     (hce : ∃ e, e < s.g.ne ∧ cur.edges s.g (rl1Iter d o s k).items e) :
     (rl1Iter d o s k).RBranch d cur nxt rest ∧ (rl1Iter d o s k).RTop dfs cur nxt := by
-  have hmid := loop1_rBranch_mid_ctx hc h0 hv hi₀ hs₀ hok h2 hsp hrt hchild hR k hk hty
+  have hmid := loop1_rBranch_mid_ctx hc h0 hv hi₀ hs₀ hok h2 hsp hrt hchild hR hrc k hk hty
     cur nxt rest hts hct hnt hne hce
-  have hf := loop1_rBranch_fields_ctx hc h0 hv hi₀ hs₀ hok h2 hsp hrt hchild hR k hk hty
+  have hf := loop1_rBranch_fields_ctx hc h0 hv hi₀ hs₀ hok h2 hsp hrt hchild hR hrc k hk hty
     cur nxt rest hts hct hnt hne hce
   obtain ⟨-, -, -, -, -, -, hF⟩ := l1_iter hc h0 hv k fun j hj => hk j (Nat.le_of_lt hj)
-  refine ⟨?_, loop1_rTop_ctx hc h0 hv hi₀ hs₀ hok h2 hsp hrt hchild hR k hk hty cur nxt rest hts
+  refine ⟨?_, loop1_rTop_ctx hc h0 hv hi₀ hs₀ hok h2 hsp hrt hchild hR hrc k hk hty cur nxt rest hts
     hct hnt hne hce⟩
   have hce' : ∃ e, e < (rl1Iter d o s k).g.ne ∧ cur.edges (rl1Iter d o s k).g (rl1Iter d o s k).items e := by
     rw [hF.g]; exact hce
@@ -268,13 +256,14 @@ theorem loop1_rBranch_ctx {D d : Nat} {o : DfsOut} {hi lo base : List TEntry} {v
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hchild : o.dest = s.stackVerts[d + 1]!)
     (hhb : ∀ t ∈ hi, t.vStart ≠ s.stackVerts[d]!) (hdb : o.dest ≠ s.stackVerts[d]!) {origTstack : Nat}
-    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
+    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) {curV : Nat} {hasVert : Bool}
+    (hrc : s.RCloseContent dfs curV d o origTstack hasVert) (k : Nat)
     (hk : ∀ j, j ≤ k → result (loop1Cond d) (rl1Iter d o s j) = true)
     (hty : l1Ty d s.stackDir[d]! (rl1Iter d o s k) = .R) :
     ∃ cur nxt rest, (rl1Iter d o s k).RBranch d cur nxt rest ∧ (rl1Iter d o s k).RTop dfs cur nxt := by
   obtain ⟨cur, nxt, rest, hts, hct, hnt, hne, hce⟩ := loop1_r_shape_ctx hc h0 hv he k hk hty
   exact ⟨cur, nxt, rest, loop1_rBranch_content_ctx hc h0 hv hi₀ hs₀ hok h2 hsp hrt hchild hhb hdb hR
-    k hk hty cur nxt rest hts hct hnt hne hce⟩
+    hrc k hk hty cur nxt rest hts hct hnt hne hce⟩
 
 end WalkState
 end Spqr

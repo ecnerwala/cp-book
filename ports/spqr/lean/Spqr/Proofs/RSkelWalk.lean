@@ -90,13 +90,14 @@ theorem loop1_r_keepsR' {D v d : Nat} {o : DfsOut} {hi lo base : List TEntry}
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hchild : o.dest = s.stackVerts[d + 1]!)
     (hhb : ∀ t ∈ hi, t.vStart ≠ s.stackVerts[d]!) (hdb : o.dest ≠ s.stackVerts[d]!) {origTstack : Nat}
-    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
+    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) {curV : Nat} {hasVert : Bool}
+    (hrc : s.RCloseContent dfs curV d o origTstack hasVert) (k : Nat)
     (hk : ∀ j, j ≤ k → result (loop1Cond d) (rl1Iter d o s j) = true)
     (hty : l1Ty d s.stackDir[d]! (rl1Iter d o s k) = .R) :
     KeepsR (loop1Body d s.stackDir[d]!) (rl1Iter d o s k) := by
   subst hD
   obtain ⟨cur, nxt, rest, hb, hR'⟩ := loop1_rBranch_ctx hc h0 hv he hi₀ hs₀ hok h2 hsp hrt hchild hhb hdb
-    hR k hk hty
+    hR hrc k hk hty
   have st := closeEars_iter_step (v := v) hi₀ hs₀ hv hok k hk
   set sk := rl1Iter d o s k with hsk
   have hg : sk.g = s.g := st.g
@@ -220,7 +221,7 @@ theorem keepsR_finishEdge_site {D : Nat} (curV d lv : Nat) (kind : RetKind) (o :
       (fun t ht' => by
         rw [hE.sv_d]; exact hE.sub_bot t (by rw [hrange]; exact List.mem_append_left _ ht'))
       (hE.path_child ht d le_rfl).symm
-      (by rw [st₀.sv] at R₀; exact R₀) k hk' hty
+      (by rw [st₀.sv] at R₀; exact R₀) hshape.content k hk' hty
   · intro ht hhv h1 hsingle
     subst hhv
     exact closeVert_type1_rSkel3 curV d lv kind o origTstack ho (hk ht) hlow hv hi hs hok hfront

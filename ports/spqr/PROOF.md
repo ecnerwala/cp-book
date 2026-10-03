@@ -1470,6 +1470,33 @@ Pure R content with no export (R-5 proves it from the above): the `entry_cur` sa
 R iterate, `feS₂_top_entryR`'s class saturation, `closeVert_type1_rCloseShape`'s HT fields,
 `settled`.
 
+**R-side content records (`Proofs/RSiteContent.lean`).** The block-content facts the R site
+theorems need and no record exports are stated as two records, each field mirrored by a
+`check_walkinv` field (`rc.<field>`, `checks/WalkInvCheck/RContent.lean`; seeds 0..3000 × both
+modes, 0 violations): `RCloseContent dfs curV d o origTstack hasVert s` at the pre-state of a
+returning tree-edge `finishEdge` (`settled`: the `feS₁` frontier entries above `origTstack` with
+`topDepth ≥ d`, `vStart ≠ curV` are `EntryR`; `s2_top`: `hasVert = false` → the `feS₂` top with
+`topDepth = d`, `vStart ≠ curV` is `EntryR`; `vert_own`: `hasVert = false` → `VertFree curV` after
+the P-check `feP`; `l1_mid`/`l1_fields`/`l1_top`: `RBranch.mid`, `RBranchFields`, `RTop` at every
+`.R` iterate `rl1Iter d o s k`; `v_close`: `hasVert`, type 1, `feSingle = false` → `EntryR` of
+`c`, `py` at `feS₂` and the HT record `RHT` (= `RCloseShape`'s `single`/`maximal`/`type1`/`bond`/
+`type2`) of `vU c py vy` at `(curV, stackVerts[lv])`), and `REntryContent dfs d c s` at a child
+entry `walkTree c (d + 1)` (`stab`: an `EntryR` entry with `topDepth = d + 1` stays `EntryR` under
+`stackVerts.set! (d + 1) c`; `parent_top`: entries starting at the parent top out at `≤ d`). The
+records are supplied by the named hypotheses `closeBase_rContent : CloseBase … → RCloseContent …`
+and `entry_rContent : … → REntryContent …` (`Proofs/RSide.lean`; the backbone proves them at the
+sites), threaded from the Ranges site record `CbTree`/`CbOut` (`RangesSites.lean`) through
+`rsTree`/`rsOuts`/`rsOut` and `walkTree_rSide` (so `rkRootOut`/`rkForest`/`walk_rSkelInv` carry
+`CbForest` from `walk_closeBase`). From them: `rSide_entry_site` (`stab` + `EntryR.set_stackVerts`
+for `topDepth ≠ d + 1`, `parent_top`), `rSide_finish_content_site` (`settled`/`vert_own` fields,
+`unwrap` from `EarClose.py_top`), `feS₂_top_entryR` (`s2_top`), `loop1_rBranch_mid_ctx`/
+`loop1_rBranch_fields_ctx`/`loop1_rTop_ctx` (`l1_*`) — all `#print axioms` standard or `propext`
+only. Still admitted: `rSide_vertFree_site` (`VertFree v` at the `walkOut` entries / end of
+`walkOuts` with `VertBook v false` — a site with no Ranges record; checked as `rc.vert_free`) and
+`closeVert_type1_rCloseShape` (its HT fields are `v_close`'s `RHT`; the structural fields `wf`/
+`sub`/`conn`/`attached`/`touch_*`/`ne`/`proper` of the 3-entry union remain). The list below is the
+earlier per-admission analysis, kept for the discharge routes.
+
 **R site obligations (R-5 handoff to the backbone induction).** The remaining named R admissions,
 each with the site it sits at and the `EarCtx`/`CtxEntry`/`EarFinish`/`RangesInv`/`CloseInv`
 fields that discharge it once one induction carries them together with `RInvTop`/`RInvFront`/
@@ -2213,9 +2240,9 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   ear `ctx_step_tree_ret`, `walkTree_below_kept`, `walkTree_items_kept`, `ends_of_wf_boundary`,
   `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,bottom,close,late,late_fo,loop1,loop1_side,
   loop1_touch,loops,lower,of_ctx}`, `tree_comp_shape`; Ranges `closeCtx_{bd_node,bd_vert,l1_site,
-  p_site,v_site}`, `finishEdge_ownedD`, `finishEdge_vertCover`; R `rSide_{entry,vertFree,
-  finish_content}_site`, `loop1_rBranch_fields_ctx`, `loop1_rBranch_mid_ctx`, `loop1_rTop_ctx`,
-  `feS₂_top_entryR`, `closeVert_type1_rCloseShape`; ST `finishBoundary_stLive`. Not reachable:
+  p_site,v_site}`, `finishEdge_ownedD`, `finishEdge_vertCover`; R `closeBase_rContent`,
+  `entry_rContent`, `rSide_vertFree_site`, `closeVert_type1_rCloseShape` (the other R site
+  theorems are proved from `RCloseContent`/`REntryContent`, §4.5); ST `finishBoundary_stLive`. Not reachable:
   `loop1_rBranch_content`, `walkTree_rSide_spec`, `walk_items_rThreeConnected` (R-layer glue
   outside the tree theorems), the final-items hypotheses of `spqrTree_pieceSep`
   (`walk_pieceInv`, §4.6), `walk_canonInv`/`walk_ternarize`
@@ -2451,7 +2478,8 @@ mirroring `rrTree` (it runs `rrOut`/`rrTree` alongside for the `RWalk` at the ne
 is `ancChain_child` with `d + 1 < stackVerts.size` from `ancChain_lt_size` (the `d + 2` distinct
 vertices `stackVerts[0..d], c` of `g`), `ret` is `DfsData.Spec.outs_lowval_lt` with the parent of
 `v` from `AncChain.parent`, the children's `dfs.outs` come from `DfsTree.Sub` (`ofForest_outs`).
-The R content is isolated as three named site admissions: `rSide_entry_site` (`EntryR` stability
+The R content is isolated as three named site theorems (now proved from `REntryContent`/
+`RCloseContent` except `rSide_vertFree_site`, see the records paragraph in §4.5): `rSide_entry_site` (`EntryR` stability
 after `stackVerts.set! (d+1) c` and the parent-start top bound `≤ d`, at a child entry with the
 parent's `RInvTop`), `rSide_vertFree_site` (`VertFree v` under `VertBook v false` + `RWalk`), and
 `rSide_finish_content_site` (`FinishRShape`'s `settled`/`unwrap`/`vert_own` at a tree-edge site

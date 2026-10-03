@@ -1,6 +1,7 @@
 import WalkInvCheck.Ear
 import WalkInvCheck.Ranges
 import WalkInvCheck.R
+import WalkInvCheck.RContent
 import WalkInvCheck.St
 import WalkInvCheck.Extra
 import WalkInvCheck.E3False
@@ -70,6 +71,10 @@ def ofRanges (l : List Ranges.V) : List Viol :=
 def ofStrs (c : Ctx) (tern : Bool) (field : String) (site : String) (l : List String) : List Viol :=
   l.filterMap fun b => if b.startsWith "stat:" then none else some ⟨c.seed, tern, field, s!"{site} {b}"⟩
 
+/-- The `(field, info)` pairs of `RC` as `rc.<field>`. -/
+def ofRC (c : Ctx) (tern : Bool) (site : String) (l : List (String × String)) : List Viol :=
+  l.map fun (f, b) => ⟨c.seed, tern, s!"rc.{f}", s!"{site} {b}"⟩
+
 /-- The R strings of `loop1Emu` carry their field as a prefix. -/
 def ofEmu (c : Ctx) (tern : Bool) (site : String) (l : List String) : List Viol :=
   l.filterMap fun b =>
@@ -126,6 +131,7 @@ partial def iTree (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n : Nat) (t
       let a := s'.stackVerts[k]!
       if c.D.depth[a]! == k && R.ancP c.D.parent a v then [] else
         [⟨c.seed, tern, "r.anc", s!"v={v} d={d} k={k} sv[k]={a} depth={c.D.depth[a]!}"⟩])
+    let vs := vs ++ (if !c.block || d = 0 then [] else ofRC c tern s!"entry v={v} d={d}" (RC.entryContent c.D d v s s'))
     let s := s'
     let base₀ := s.tstack
     let bE₀ := s.tstack.map (Ear.entryEdges s)
@@ -144,7 +150,8 @@ partial def iTree (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n : Nat) (t
     let nEnd := n + t.edgePostorder.length
     let vs := vs ++ ofRanges (Ranges.checkOwned c.seed c.σ own nEnd v d "end" s ++ Ranges.checkPieceInv c.seed "end" d s)
     let vs := vs ++ (if hv then ofRanges (Ranges.checkVCover c.seed v "end" s)
-      else ofRanges (Ranges.checkVertPast c.seed c.σ v nEnd s) ++ Extra.e2Check c.seed "tail" v s)
+      else ofRanges (Ranges.checkVertPast c.seed c.σ v nEnd s) ++ Extra.e2Check c.seed "tail" v s ++
+        (if !c.block then [] else ofRC c tern s!"tail v={v} d={d}" (RC.vertFree v s)))
     let s := if hv then s else ((setStackDir d true *> pushVertTstack v d).run s).2
     let vs := vs ++ ofRanges (Ranges.checkPieceInv c.seed "tail" d s)
     let vs := vs ++ (Ear.ctxCheck c.seed v d done [] true base₀ bE₀ sv₀ sd₀ s true ++ Ear.leftCheck c.seed v d t s₀ s).map (ofEar tern)
@@ -201,7 +208,8 @@ partial def iOut (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n v d : Nat)
   let σ := c.σ
   let lowval := o.cls.lowval d
   let pushNow := !hv && lowval < d && o.cls.isType1
-  let vs := if hv then [] else ofRanges (Ranges.checkVertPast c.seed σ v (σ.idxOf o.block.head!) s)
+  let vs := if hv then [] else ofRanges (Ranges.checkVertPast c.seed σ v (σ.idxOf o.block.head!) s) ++
+    (if !c.block then [] else ofRC c tern s!"out-entry v={v} d={d} e={o.e}" (RC.vertFree v s))
   let vs := vs ++ (if d = 0 && !(s.tstack.isEmpty && !hv) then
     [⟨c.seed, tern, "r.root", s!"v={v} d=0 e={o.e} tstack={s.tstack.length} hv={hv}"⟩] else [])
   let vs := vs ++ (if pushNow then Extra.e2Check c.seed s!"pre-push e={o.e}" v s else [])
@@ -257,6 +265,7 @@ partial def iOut (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n v d : Nat)
       (if o.isTree && orig + 3 > (WalkState.feS₂ d o s).tstack.length then
         [⟨c.seed, tern, "r.base_pre", s!"{site} p={p} dp={dp} close: orig+3 > len(feS₂)"⟩] else []) ++
       ofStrs c tern "r.base_pre" s!"{site} p={p} dp={dp} n0={n0}" (bot.flatMap fun t => R.settledEntry c.D p dp s t "pre")))
+  let vs := vs ++ (if !c.block || !rsite || !o.isTree then [] else ofRC c tern site (RC.closeContent c.D v d o orig hv s))
   -- St, before `finishEdge`
   let dirs := DirsOf s d
   let (psChild, blChild) := match o with

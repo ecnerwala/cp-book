@@ -260,12 +260,11 @@ theorem sites (h : WalkInv G t d s) : Sites G t d s := by
   have hcv := h.coverTree hg hb hf hc
   have hr : RgTree G.σ G.n t d s :=
     scheduleTree G.σ G.n t d s h.ranges' h.shape h.σ_nodup h.σ_lt hg hb hf hcv.1 h.post
-  refine ⟨hE.1, hb, hg, hf, hc, hcv.1, hr,
-    cbTree G.σ G.n t d s h.ranges' h.shape h.σ_nodup h.σ_lt hg hb hf hr hc h.close,
-    fun h2 dp hd => ?_⟩
+  have hcb := cbTree G.σ G.n t d s h.ranges' h.shape h.σ_nodup h.σ_lt hg hb hf hr hc h.close
+  refine ⟨hE.1, hb, hg, hf, hc, hcv.1, hr, hcb, fun h2 dp hd => ?_⟩
   have R := h.r h2
   have P := R.par dp hd
-  exact rsTree t d s dp hd P.inv_par h.shape hg hb h2 R.wf R.spec R.rooted
+  exact rsTree t d s G.σ G.n dp hd P.inv_par h.shape hg hb hcb h2 R.wf R.spec R.rooted
     (by rw [h.g_eq]; exact h.sv_size) P.parent R.outs P.chain P.top
 
 end WalkInv
@@ -520,10 +519,10 @@ theorem sites : OutSites G v d o hasVert n s := by
   have hcv := h.coverOut hg hb hf hc
   have hr : RgOut G.σ n v d o hasVert s :=
     scheduleOut G.σ n v d o hasVert s h.rgs h.σ_nodup hg hb hf hcv.1 h.post_o
-  refine ⟨hE.1, hb, hg, hf, hc, hcv.1, hr,
-    cbOut G.σ n v d o hasVert s h.rgs h.σ_nodup hg hb hf hr hc h.close, fun h2 dp hd => ?_⟩
+  have hcb := cbOut G.σ n v d o hasVert s h.rgs h.σ_nodup hg hb hf hr hc h.close
+  refine ⟨hE.1, hb, hg, hf, hc, hcv.1, hr, hcb, fun h2 dp hd => ?_⟩
   have R := h.r h2
-  exact rsOut v d o hasVert s G.F B dp hd h.inv h.shape hg hb h2 R.wf R.spec R.rooted
+  exact rsOut v d o hasVert s G.σ n G.F B dp hd h.inv h.shape hg hb hcb h2 R.wf R.spec R.rooted
     (by rw [h.g_eq]; exact h.sv_size) (by rw [R.outs_v]; exact h.mem)
     (fun e cls child ho => R.sub e cls child (ho ▸ h.mem)) R.chain R.rwalk R.fB R.B_le R.hvB
 

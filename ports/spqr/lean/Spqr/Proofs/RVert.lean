@@ -19,19 +19,6 @@ namespace WalkState
 
 variable {s : WalkState} {dfs : DfsData}
 
-/-- The children of the type-1 vertex close: the spans of `c`, `py`, `vy` as the two
-`mergeTstackTops` and the `retarget` concatenate them. -/
-def vItems (c py vy : TEntry) : List ItemId :=
-  ((c.spans.1 ++ py.spans.1) ++ vy.spans.1) ++ (vy.spans.2 ++ (py.spans.2 ++ c.spans.2))
-
-/-- The edges closed by the type-1 vertex close. -/
-def vU (s : WalkState) (c py vy : TEntry) (e : Nat) : Prop :=
-  c.edges s.g s.items e ∨ py.edges s.g s.items e ∨ vy.edges s.g s.items e
-
-/-- The sub-pieces of the type-1 vertex close: the merged items other than vertex items. -/
-def vPieceItems (s : WalkState) (c py vy : TEntry) : List ItemId :=
-  (vItems c py vy).filter fun i => decide (Items.type s.items i ≠ .V)
-
 /-- The merged, retargeted top entry of the type-1 vertex close (`cvS₅`). -/
 def vMerged (curV : Nat) (edgeDir : Bool) (c py vy : TEntry) : TEntry :=
   { TEntry.mergeInto (TEntry.mergeInto c py) vy with
