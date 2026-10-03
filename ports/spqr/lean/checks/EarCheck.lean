@@ -571,6 +571,24 @@ def leftCheck (seed y D : Nat) (t : DfsTree) (s₀ s : WalkState) : List V := Id
       out := bad "fresh_root" s!"i={i}" :: out
   return out
 
+/-- Frame facts of the child's walk used by the assembly: `edgeItem e` and `vertItem v` stay roots,
+and the edges below `vertItem v` are unchanged. -/
+def keptCheck (seed v d : Nat) (o : DfsOut) (hv : Bool) (s₂ s : WalkState) : List V :=
+  match o with
+  | .back .. => []
+  | .tree e cls child => Id.run do
+    let mut out : List V := []
+    let bad (k : String) (info : String) : V := ⟨seed, v, d, s!"tree e={e}", hv, s!"kept_{k}", info⟩
+    if d ≤ cls.lowval d then
+      for e' in e :: child.edges do
+        let (a, b) := s.g.edges[e']!
+        if !(v :: child.verts).contains a || !(v :: child.verts).contains b then
+          out := bad "ends" s!"e'={e'}" :: out
+    if hasParent s (edgeItem s.g e) then out := bad "q_root" "" :: out
+    if hasParent s (vertItem v) then out := bad "v_root" "" :: out
+    if edgesBelow s (vertItem v) ≠ edgesBelow s₂ (vertItem v) then out := bad "v_below" "" :: out
+    return out
+
 mutual
 partial def iTree (seed : Nat) (t : DfsTree) (d : Nat) (eb : EB) (s : WalkState) : WalkState × EB × List V :=
   match t with
@@ -606,9 +624,11 @@ partial def iOut (seed v d : Nat) (o : DfsOut) (hv : Bool) (eb : EB) (s : WalkSt
   let s := ((do let lowDir ← stackDir lowval; setStackDir d (if lowval ≥ d then false else !lowDir) : WalkM Unit).run s).2
   let (hv, s) := if !hv && lowval < d && o.cls.isType1 then (true, ((pushVertTstack v d).run s).2) else (hv, s)
   let orig := s.tstack.length
+  let s₂ := s
   let (s, eb, vs) := match o with
     | .tree _ _ child => iTree seed child (d+1) eb { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
     | .back .. => (s, eb, [])
+  let vs := vs ++ keptCheck seed v d o hv s₂ s
   let vs := vs ++ earCheck seed v d o orig hv s ++ ebCheck seed v d o orig hv eb s ++ specCheck seed v d o orig hv s ++ closeCheck seed v d o orig hv s
   let (hv', s) := (finishEdge v d o orig hv).run s
   (hv', s, eb, vs)

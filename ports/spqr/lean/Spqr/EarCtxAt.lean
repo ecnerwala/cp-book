@@ -1,5 +1,4 @@
 import Spqr.EarCtx
-import Spqr.WalkInv
 
 /-!
 # `earAt_of_ctx`: the site contract `EarAt` from the between-edges invariant `EarCtx`
@@ -58,6 +57,11 @@ theorem getElem!_set!_self' {α : Type} [Inhabited α] (a : Array α) (i : Nat) 
 
 namespace WalkState
 
+theorem ret_of_lowval_lt' {o : DfsOut} {d : Nat} (h : o.cls.lowval d < d) :
+    ∃ lv kind, o.cls = .ret lv kind ∧ lv < d := by
+  cases hc : o.cls <;> simp only [OutClass.lowval, hc] at h
+  all_goals first | omega | exact ⟨_, _, rfl, h⟩
+
 theorem mem_subEdges_edgesList {outs : List DfsOut} {e : Nat} :
     e ∈ DfsOut.edgesList outs ↔ ∃ o ∈ outs, subEdges o e := by
   induction outs with
@@ -99,13 +103,13 @@ theorem allType1_of_rank {d : Nat} {done : List (DfsOut × Bool)} {cls : OutClas
     allType1 d (cls.lowval d) done := by
   intro o ho hl
   have hr := hrank _ (mem_afterVert ho)
-  obtain ⟨lv, k, hc, _⟩ := ret_of_lowval_lt (hret o ho)
+  obtain ⟨lv, k, hc, _⟩ := ret_of_lowval_lt' (hret o ho)
   simp only at hr
   cases hc' : cls <;> simp only [hc', OutClass.lowval] at hlt hl ht1 hr <;> try omega
   rw [hc] at hl hr; simp only [OutClass.rank] at hl hr
   subst hl
   rw [hc]
-  cases k <;> cases ‹RetKind› <;> simp_all [RetKind.rank, OutClass.isType1]
+  cases k <;> cases ‹RetKind› <;> simp_all [RetKind.rank, OutClass.isType1] <;> omega
 
 /-- Rank-sorted outs: no returning out is finished before a boundary one (`hcls`: a `ret` class
 returns below `d`, as `classify` guarantees). -/
@@ -115,7 +119,7 @@ theorem no_ret_before_boundary {d : Nat} {done : List (DfsOut × Bool)} {cls : O
     ¬ ∃ o ∈ done, o.1.cls.lowval d < d := by
   rintro ⟨o, ho, hlt⟩
   have hr := hrank o ho
-  obtain ⟨lv, k, hc, hlv⟩ := ret_of_lowval_lt hlt
+  obtain ⟨lv, k, hc, hlv⟩ := ret_of_lowval_lt' hlt
   rw [hc] at hr
   have hk : 0 ≤ k.rank := Nat.zero_le _
   cases cls with
@@ -140,7 +144,7 @@ theorem earAt_back_of_ctx {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
     (hnd : ∀ o' ∈ done, ∀ e', subEdges o'.1 e' → e' ≠ e)
     (hb : cls.isTree = false) (hcls : ∀ lv k, cls = .ret lv k → lv < d)
     (L : List TEntry) (push : Bool)
-    (hpush : push = true ↔ hasVert = false ∧ cls.lowval d < d)
+    (hpush : push = true ↔ hasVert = false ∧ cls.lowval d < d ∧ cls.isType1 = true)
     (hL : L = if push then
       [⟨v, d, s.nxtEdgeIdx, setSides (s.stackDir.set! d (if cls.lowval d ≥ d then false
         else !s.stackDir[cls.lowval d]!))[d]! [vertItem v] []⟩] else []) :
@@ -161,7 +165,7 @@ theorem earAt_back_of_ctx {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
     fun e' => TEntry.edges_single_entry _ _ _ _ _ _
   have hVspan : ∀ i, i ∈ V.spans.1 ++ V.spans.2 ↔ i = vertItem v :=
     fun i => setSides_mem_single_iff _ _ _
-  have hpushV : push = true → hasVert = false ∧ cls.lowval d < d := hpush.1
+  have hpushV : push = true → hasVert = false ∧ cls.lowval d < d ∧ cls.isType1 = true := hpush.1
   have hsdk : ∀ k, k ≠ d → (s.stackDir.set! d b)[k]! = s.stackDir[k]! :=
     fun k hk => getElem!_set!_ne' _ _ _ _ hk
   have hsdd : (s.stackDir.set! d b)[d]! = b := getElem!_set!_self' _ _ _ hsd
@@ -295,7 +299,7 @@ theorem earAt_back_of_ctx {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
     have hp : push = false := by
       cases hp : push
       · rfl
-      · exact absurd (hpushV hp).2 (by omega)
+      · exact absurd (hpushV hp).2.1 (by omega)
     rw [hp, Bool.or_false]
     cases hhv : hasVert
     · rfl
@@ -341,9 +345,9 @@ structure TreeSite (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOu
   cls_ret : ∀ lv k, cls = .ret lv k → lv < d
   v_nc : v ∉ (DfsTree.node y outs).verts
   e_ne : e ∉ (DfsTree.node y outs).edges
-  ends : ∀ e', subEdges (.tree e cls (.node y outs)) e' → e' < s.g.ne → ∀ x, s.g.Inc e' x →
-    x = v ∨ x ∈ (DfsTree.node y outs).verts
-  hpush : push = true ↔ hasVert = false ∧ cls.lowval d < d
+  ends : d ≤ cls.lowval d → ∀ e', subEdges (.tree e cls (.node y outs)) e' → e' < s.g.ne →
+    ∀ x, s.g.Inc e' x → x = v ∨ x ∈ (DfsTree.node y outs).verts
+  hpush : push = true ↔ hasVert = false ∧ cls.lowval d < d ∧ cls.isType1 = true
   hL : L = if push then
     [⟨v, d, s.nxtEdgeIdx, setSides (s.stackDir.set! d (if cls.lowval d ≥ d then false
       else !s.stackDir[cls.lowval d]!))[d]! [vertItem v] []⟩] else []
@@ -725,11 +729,12 @@ theorem earAt_tree_of_ctx :
       H.sdlo _ (Nat.le_of_lt hlt), hsdd, hsdk _ (by omega), hb_def]
     simp [Nat.not_le.2 hlt]
   case boundary =>
-    intro _ t ht u hu x htx hux
+    intro hge t ht u hu x htx hux
+    simp only [ho, DfsOut.cls] at hge
     obtain ⟨e', he', hte, hix⟩ := htx
     have he's : e' < s.g.ne := by rw [← hne]; exact he'
     have hix' : s.g.Inc e' x := by rw [← hgE]; exact hix
-    rcases H.ends e' (hsubE t ht e' he' hte) he's x hix' with rfl | hx
+    rcases H.ends hge e' (hsubE t ht e' he' hte) he's x hix' with rfl | hx
     · rfl
     · exfalso
       have hux' : sE.g.Touches (u.edges sE.g sE.items) x := hux
@@ -746,7 +751,7 @@ theorem earAt_tree_of_ctx :
     have hp : push = false := by
       cases hp : push
       · rfl
-      · exact absurd (hpushV hp).2 (by omega)
+      · exact absurd (hpushV hp).2.1 (by omega)
     rw [hp, Bool.or_false]
     cases hhv : hasVert
     · rfl
