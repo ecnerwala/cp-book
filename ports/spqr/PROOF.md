@@ -1404,27 +1404,38 @@ the 6414 finishEdge sites of `checks/RFinishEdgeCheck.lean` (`shape` lines, 0 fa
 `finishEdge_tree_rInvTop` and the dispatcher depend on `sorryAx` only through
 `finishEdge_tree_top_settled`.
 
-**`WalkTreeRReturnSpec`: induction design (not proved).** The walk induction (`rgTree`/`rgOuts`/
-`rgOut` style, `RangesTree.lean`) must carry two facts through the child's walk from `s` with
-`n₀ = s.tstack.length` and parent `p = stackVerts[d]`: the parent's base positionally settled,
-`RInvG s' dfs p d n₀` (bottom `n₀` entries unchanged as `TEntry`s and `EntryR` at `(p, d)`,
-whole stack disjoint), and the child's own `RInvTop s' dfs c (d+1)` (vacuous on the base, whose
-entries top out at depth `≤ d`). At the child's `finishEdge` sites the second fact is
-`finishEdge_rInvTop` (with `RReturn` of the grandchild giving `RInvFront`); the first is a frame
-statement still to be proved, `finishEdge_rInvG_base`: a `finishEdge` at `(c, d+1)` with
-`n₀ ≤ origTstack` preserves `RInvG dfs p d n₀`. Its content is purely positional — the
-`RInvG.*` primitive lemmas of `Proofs/RInvTree.lean` take their exemption hypotheses only when
-the touched entry lies in the bottom `n₀`, so what is needed per primitive is a stack-length
-bound (`n₀ + 2 ≤ length` for merges, `n₀ + 1` for top-only steps): loops 1–3 from
-`Frontier.loop1/2/3` (`origTstack ≥ n₀`), the `closeVert` merges/unwrap and the P-check from
-`FinishGuards` (`3 ≤ length` after loop 2 when `hasVert`, `origTstack + 3` when type 2) together
-with `hasVert = true → n₀ + 1 ≤ origTstack` (the vertex entry `(c, d+1)` was pushed after the
-descent). `Sim.walkTree` cannot be used for the base directly: its precondition `GuardsTree` is
-on the unlifted run. Two side facts enter as hypotheses, not admissions: every out-edge inside a
-non-root subtree of a block returns (`∀ u ≠ dfs.root, ∀ o ∈ dfs.outs u, o.cls.lowval (dfs.depth u)
-< dfs.depth u`; `finishEdge_rInvTop` covers returning edges only, the boundary branch
-`finishBoundary` runs at the root), and the ancestor chain `hanc` is re-established at each
-`walkTree` entry from `stackVerts.set! (d+1) c` and `dfs.Spec.depth_parent`.
+**`WalkTreeRReturnSpec`: induction design (frame proved, induction not yet).** The walk induction
+(`rgTree`/`rgOuts`/`rgOut` style, `RangesTree.lean`) must carry two facts through the child's walk
+from `s` with `n₀ = s.tstack.length` and parent `p = stackVerts[d]`: the parent's base positionally
+settled, `RInvG s' dfs p d n₀` (bottom `n₀` entries unchanged as `TEntry`s and `EntryR` at
+`(p, d)`, whole stack disjoint), and the child's own `RInvTop s' dfs c (d+1)` (vacuous on the
+base, whose entries top out at depth `≤ d`). At the child's `finishEdge` sites the second fact is
+`finishEdge_rInvTop` (with `RReturn` of the grandchild giving `RInvFront`); the first is the frame
+statement `finishEdge_rInvG_base` (`Proofs/RInvBase.lean`, proved, standard axioms): a
+`finishEdge` at `(curV, d)` with `n₀ ≤ origTstack` preserves `RInvG dfs p dp n₀` for any
+`(p, dp)`. Its content is purely positional — the `RInvG.*` primitive lemmas of
+`Proofs/RInvTree.lean` take their exemption hypotheses only when the touched entry lies in the
+bottom `n₀`, so what is needed per primitive is a stack-length bound (`n₀ + 2 ≤ length` for
+merges, `n₀ + 1` for top-only steps): loops 1–2 from `Frontier.loop1/2` (`origTstack ≥ n₀`),
+loop 3 from its own guard (it fires only above `origTstack + 3`, `loop3_iter_len`), the
+`closeVert` unwrap/merges/retarget/close and the P-check from `hclose : origTstack + 3 ≤ length`
+after loop 2 (the child's `c :: mid ++ [py, vy]`; `FinishGuards` gives this only for type-2
+edges with `hasVert`, so it is a separate hypothesis of the frame, discharged at the call site
+from the ear layer) together with `hasVert = true → n₀ + 1 ≤ origTstack` (the vertex entry
+`(c, d+1)` was pushed after the descent); on the back-edge branch `hback` (the vertex entry is on
+top of the whole base) puts the push and the P-check above `n₀ + 1`. The positional primitives
+(`RInvG.pushVert_pos`, `mergeTop_pos`, `retarget_pos`, `mergeLoop`, `mergeLate_pos`,
+`closeVert_pos`, `finishP_pos`, `finishTail_pos`, `finishRest_pos`) are the `RInvH.*` lemmas
+with the exemptions replaced by length bounds. The contract was dump-checked before the proof
+(`checks/RFinishEdgeCheck.lean`, `base` lines: at every `finishEdge` site, for every ancestor
+frame `(p, dp, n₀)`, bottom `n₀` unchanged, non-exempt `EntryR` before and after, and the three
+side conditions; seeds 0..300 × both modes + 6000 random multigraphs, 19058 frame checks,
+0 failures). `Sim.walkTree` cannot be used for the base directly: its precondition `GuardsTree`
+is on the unlifted run. Two side facts enter as hypotheses, not admissions: every out-edge inside
+a non-root subtree of a block returns (`∀ u ≠ dfs.root, ∀ o ∈ dfs.outs u, o.cls.lowval
+(dfs.depth u) < dfs.depth u`; `finishEdge_rInvTop` covers returning edges only, the boundary
+branch `finishBoundary` runs at the root), and the ancestor chain `hanc` is re-established at
+each `walkTree` entry from `stackVerts.set! (d+1) c` and `dfs.Spec.depth_parent`.
 
 Two facts about the inputs that `Items.WF` does *not* give, found while stating this:
 
@@ -1626,6 +1637,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | R coverage and laminarity edge domain | `RInv.lean`, `RClose.lean`, `RMax.lean`, `Proofs/RunSaturation.lean`, `checks/REdgeDomainCheck.lean` | restricted containment and coverage to `e < g.ne`; kernel-checked K4 failure of unrestricted coverage and success of bounded coverage; affected transport proofs audited (standard axioms) |
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |
 | 4.5 Depth-bounded settling `RInvTop`/`RInvFront`; `finishEdge_rInvTop` (replaces `finishEdge_rInvAt`): back-edge branch proved (`finishEdge_back_rInvTop`), tree-edge branch proved up to the top entry's `EntryR` (`finishEdge_tree_rInvTop_of_top`; admitted `finishEdge_tree_top_settled`) | `RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RInvBack.lean`, `Proofs/RInvTree.lean`, `checks/RFinishEdgeCounter.lean`, `checks/RFinishEdgeCheck.lean` | two kernel-checked counterexamples to the parent-only exemption (standard axioms); contract B checked on 6414 sites, 0 failures; frame lemmas, the back-edge branch (`RInvTop.pushEdge/finishP/unwrapNxt_exempt/mergeTop_exempt/finishTop_exempt`) and the tree-edge branch below the top (`RInvG.closeEars`, `RInvH.mergeLate/closeVert'/finishRest`) proved, standard axioms; `FinishRShape` checked on 6414 sites |
+| 4.5 Parent-base frame `finishEdge_rInvG_base` (any `finishEdge` with `n₀ ≤ origTstack` preserves `RInvG dfs p dp n₀`; positional `RInvG.*_pos` primitives, `loop3_iter_len`) | `Proofs/RInvBase.lean`, `checks/RFinishEdgeCheck.lean` (`base` lines) | proved (standard axioms); contract dump-checked on every ancestor frame of every `finishEdge` site, seeds 0..300 × both modes + 6000 random, 0 failures |
 | 4.5 Child-return settling diagnostic and provisional contract | `Proofs/RInvFrame.lean`, `checks/RInvReturnCheck.lean` | `RReturn`/`WalkTreeRReturnSpec` stated without an admission; legacy conclusion still refuted; fixed base/settled-entry clauses kernel-checked (standard axioms); seeds 0..300 × both modes pass shape/disjointness, with content frames checked on the 65 block inputs; preservation proof remains open |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean`, `EarFrontier.lean` | stated and threaded into `finishEdge_rInvTop`; ear export proved: `finishEdge_frontier` (from `FinishBook.ear` + `Inv'`/`Shape`), `walkTree_frontiers` (`FrontiersTree` under the `walkTree_inv'` hypotheses), standard axioms; R interval/saturation preservation remains open |
 | 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge_rangesInv` (`RangesStep.lean`, under `FinishAdj`) and `walkTree_rangesInv` (`RangesTree.lean`, under `GuardsTree`/`BookTree`/`RgTree`) proved; `finishBoundary_rangesInv`, `walk_rangesInv`, `walk_closeFacts` (`WalkWF.lean`) admitted; `ranges_of_rangesInv` (`RangesFinal.lean`) derives `convex` + node `att_vs` from `RangesInv`, the rest is `Items.CloseFacts`; saturation not a field (attachment-count forms false, §4.6) |
