@@ -3148,6 +3148,18 @@ first conjunct restated as `¬rs.SameFaceOrbit 0 2`. Checked beforehand (`delFir
 `checks/PlanarGenusCheck.lean`: embedding, Euler, components, neighbour pairing, cofaciality of the
 neighbours; 410 deletions, 0 failures — gating on connectivity in `es`, not on non-isolation,
 is essential: bridges fail).
+Node-fold bookkeeping (towards `nodeFold_capped_S/P/R`): `PieceSep` gains the checked structural
+facts `node_child_cap` (a non-`V` child of an S/P/R node is a capped non-`I`/`O` item),
+`nv_orig_inj` (distinct node-vertices of an S/P/R node have distinct original vertices),
+`node_touch` (a child touches the original vertex of a node-vertex only where it is attached,
+`NvInc`: it is that node-vertex's `V` item, or its cap's twin is a node-edge at that node-vertex)
+and `node_attach` (two distinct children meet only at original vertices of node-vertices); all
+checked by `check_piece_sep` on seeds 0..300 and the tiny cases, 0 violations.
+`Proofs/PiecePerm.lean` (standard axioms): `Piece.Capped.perm` transports a `Capped` certificate
+across a permutation of `ves` (the children are glued in skeleton order, `edgesBelow` lists them in
+children order), via `glob`/`loc` inverse maps, `IsPlanarEmbedding.reindex` and
+`sameFaceOrbit_of_map` (face orbits pull back along a quarter-edge map commuting with `get` and
+`^^^ 3`).
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through `walk_items_wf`,
 `spqrTree_r_three_connected`, `spqrTree_pieceSep`, `nodePlanar_sound_R` and
 `nodeFold_capped`.

@@ -190,6 +190,39 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
           | none =>
             bad := bad + 1
             IO.println s!"node_twin_node: i={i} ne={ne} tw={tw}"
+  for i in [0:t.size] do
+    if t.type i == .S || t.type i == .P || t.type i == .R then
+      let (neSt, neEn) := t.neRange i
+      let (nvSt, nvEn) := t.nvRange i
+      for nv in [nvSt:nvEn] do
+        for nv' in [nvSt:nv] do
+          if t.nvOrig nv == t.nvOrig nv' then
+            bad := bad + 1
+            IO.println s!"nv_orig_inj: i={i} nv={nv} nv'={nv'}"
+      let nvInc (c nv : Nat) : Bool :=
+        (t.nodeVerts[nv]!).vert == c ||
+          (List.range (neEn - neSt)).any fun k =>
+            let ne := neSt + k
+            t.twin ne == t.capNe c && t.capNe c != none &&
+              ((t.nodeEdges[ne]!).nvs.1 == nv || (t.nodeEdges[ne]!).nvs.2 == nv)
+      for c in t.children i do
+        if t.type c != .V && (!t.hasCap c || t.type c == .I || t.type c == .O) then
+          bad := bad + 1
+          IO.println s!"node_child_cap: i={i} c={c} type={repr (t.type c)}"
+        for w in [0:g.nv] do
+          if touches t g c w then
+            for nv in [nvSt:nvEn] do
+              if t.nvOrig nv == some w && !nvInc c nv then
+                bad := bad + 1
+                IO.println s!"node_touch: i={i} c={c} w={w} nv={nv}"
+      for a in t.children i do
+        for b in t.children i do
+          if a != b then
+            for w in [0:g.nv] do
+              if touches t g a w && touches t g b w then
+                if !((List.range (nvEn - nvSt)).any fun k => t.nvOrig (nvSt + k) == some w) then
+                  bad := bad + 1
+                  IO.println s!"node_attach: i={i} a={a} b={b} w={w}"
   let pt := g.planarSpqrTree tern vo eo
   for i in [0:pt.size] do
     let ty := pt.toSpqrTree.type i

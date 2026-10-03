@@ -15,6 +15,13 @@ def CapEnd (i nv : Nat) : Prop :=
 /-- `nv` is a node-vertex of item `i`. -/
 def NvOf (i nv : Nat) : Prop := (t.nvRange i).1 ≤ nv ∧ nv < (t.nvRange i).2
 
+/-- Child `c` of node `i` is attached at node-vertex `nv`: `c` is the `V` item of `nv`, or the twin
+of `c`'s cap is a node-edge of `i` with endpoint `nv`. -/
+def NvInc (i c nv : Nat) : Prop :=
+  (∃ d, t.nodeVerts[nv]? = some d ∧ d.vert = c) ∨
+    ∃ ne tw d, t.nodeOfNe ne = some i ∧ t.twin ne = some tw ∧ t.capNe c = some tw ∧
+      t.nodeEdges[ne]? = some d ∧ (d.nvs.1 = nv ∨ d.nvs.2 = nv)
+
 /-- Separation of the uncapped pieces used in the F/V/Q gluing steps. -/
 structure PieceSep : Prop where
   root_disjoint : ∀ a ∈ t.children 0, ∀ b ∈ t.children 0, a ≠ b →
@@ -80,5 +87,19 @@ structure PieceSep : Prop where
   nv_vert_inj : ∀ i nv nv' d d', i < t.size → (t.type i = .S ∨ t.type i = .P ∨ t.type i = .R) →
     t.NvOf i nv → t.NvOf i nv' → t.nodeVerts[nv]? = some d → t.nodeVerts[nv']? = some d' →
     d.vert = d'.vert → nv = nv'
+  /-- Every non-`V` child of an S/P/R node is a capped item that is not an `I`/`O` leaf. -/
+  node_child_cap : ∀ i c, i < t.size → (t.type i = .S ∨ t.type i = .P ∨ t.type i = .R) →
+    c ∈ t.children i → t.type c ≠ .V → t.hasCap c = true ∧ t.type c ≠ .I ∧ t.type c ≠ .O
+  /-- Distinct node-vertices of an S/P/R node have distinct original vertices. -/
+  nv_orig_inj : ∀ i nv nv', i < t.size → (t.type i = .S ∨ t.type i = .P ∨ t.type i = .R) →
+    t.NvOf i nv → t.NvOf i nv' → t.nvOrig nv = t.nvOrig nv' → nv = nv'
+  /-- A child of an S/P/R node touches the original vertex of a node-vertex only where it is
+  attached (`NvInc`). -/
+  node_touch : ∀ i c w nv, i < t.size → (t.type i = .S ∨ t.type i = .P ∨ t.type i = .R) →
+    c ∈ t.children i → t.Touches g c w → t.NvOf i nv → t.nvOrig nv = some w → t.NvInc i c nv
+  /-- Two distinct children of an S/P/R node meet only at original vertices of its node-vertices. -/
+  node_attach : ∀ i a b w, i < t.size → (t.type i = .S ∨ t.type i = .P ∨ t.type i = .R) →
+    a ∈ t.children i → b ∈ t.children i → a ≠ b → t.Touches g a w → t.Touches g b w →
+    ∃ nv, t.NvOf i nv ∧ t.nvOrig nv = some w
 
 end Spqr.SpqrTree

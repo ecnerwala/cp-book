@@ -119,6 +119,7 @@ import Spqr.PlanarGlue
 import Spqr.Proofs.Orbits
 import Spqr.Proofs.PlanarGlue
 import Spqr.Proofs.PieceParJoin
+import Spqr.Proofs.PiecePerm
 import Spqr.Proofs.PlanarUninsert
 import Spqr.RangesStep
 import Spqr.RangesTree
