@@ -175,4 +175,109 @@ theorem finishTree_st {D d lv : Nat} {kind : RetKind} {o : DfsOut} {s : WalkStat
     simp only [↓reduceIte] at hR₅ ⊢
     exact hR₅
 
+/-- A back edge with `lowval < d`: the entry `⟨curV, lv, [Q e]⟩` is pushed on `pre` (reading as
+`qs`), then `finishP`/`finishTail` run as for a tree edge. -/
+theorem finishBack_st {D d lv : Nat} {kind : RetKind} {o : DfsOut} {s : WalkState} {curV : Nat}
+    {hasVert : Bool} {sub pre B : List TEntry} {g : Graph} {qs : List StPiece} {blocks : List StBlock}
+    (hE : s.EarFinish curV d o hasVert sub (pre ++ B)) (hi : s.Inv' D) (hs : Shape s) (hD : D = d)
+    (hok : FinishOk D curV d lv o (pre ++ B).length hasVert s)
+    (ho : o.cls = .ret lv kind) (hlow : lv < d) (hb : o.cls.isTree = false)
+    (hv : curV < s.g.nv) (he : o.e < s.g.ne) (hq : Items.ch s.items (edgeItem s.g o.e) = [])
+    (hends : Items.PairEq (curV, s.stackVerts[lv]!) s.g.edges[o.e]!)
+    (hqty : Items.type s.items (edgeItem s.g o.e) = .Q)
+    (hB : ∀ t ∈ B, t.vStart ≠ curV)
+    (hvf : hasVert = false →
+      (∀ p, ¬ Items.IsParent (after (finishP curV lv o.cls.isType1) (feBack curV lv d o s)).items p
+        (vertItem curV)) ∧
+      vertItem curV ∉ readStack (after (finishP curV lv o.cls.isType1) (feBack curV lv d o s)).tstack)
+    (hRq : StRead s.items pre qs) (hI : StItems g s blocks) :
+    let r := (finishBack curV d o hasVert).run (feS₀ d o s)
+    r.1 = true ∧ r.2.g = s.g ∧ r.2.stackDir = s.stackDir ∧
+    ∃ new', r.2.tstack = new' ++ B ∧
+      StRead r.2.items new' ((qs ++ [⟨s.stackDir[lv]!, [edgeItem s.g o.e]⟩]) ++
+        if hasVert then [] else [⟨s.stackDir[d]!, [vertItem curV]⟩]) ∧
+      StItems g r.2 blocks := by
+  dsimp only
+  have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
+  have hts : s.tstack = pre ++ B := by rw [hE.tstack, hE.back_nil hb]; rfl
+  have hr : (finishBack curV d o hasVert).run (feS₀ d o s) =
+      (finishTail curV d hasVert true).run
+        ((finishP curV lv o.cls.isType1).run (feBack curV lv d o s)).2 := by
+    simp only [finishBack, finishRest, WalkM.run_bind, hlv]; rfl
+  rw [hr]
+  set f : Item → Item :=
+    fun it => { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) } with hf
+  set E : TEntry := ⟨curV, lv, s.nxtEdgeIdx, setSides s.stackDir[lv]! [edgeItem s.g o.e] []⟩ with hEdef
+  have hqS : ¬ (Items.type s.items (edgeItem s.g o.e) = .S ∨ Items.type s.items (edgeItem s.g o.e) = .P ∨
+      Items.type s.items (edgeItem s.g o.e) = .R) := by rw [hqty]; decide
+  have hI₀ : StItems g { s with items := s.items.modify (edgeItem s.g o.e) f } blocks :=
+    StItems.modify_root _ f (fun _ => rfl) (fun _ => rfl) hE.q_root hqS hI
+  have hty₀ : Items.type (s.items.modify (edgeItem s.g o.e) f) (edgeItem s.g o.e) = .Q := by
+    rw [Items.type_modify s.items _ _ f (fun _ => rfl)]; exact hqty
+  have hch₀ : Items.ch (s.items.modify (edgeItem s.g o.e) f) (edgeItem s.g o.e) = [] := by
+    rw [Items.ch_modify_ch_eq _ f (fun _ => rfl)]; exact hq
+  have hroot₀ : ∀ p, ¬ Items.IsParent (s.items.modify (edgeItem s.g o.e) f) p (edgeItem s.g o.e) := by
+    intro p hp
+    unfold Items.IsParent at hp
+    rw [Items.ch_modify_ch_eq _ f (fun _ => rfl)] at hp
+    exact hE.q_root p hp
+  have hfree : edgeItem s.g o.e ∉ readStack s.tstack := fun hm => by
+    obtain ⟨u, hu, hmu⟩ := mem_readStack_exists hm
+    exact hE.q_free u hu hmu
+  have hqlt : edgeItem s.g o.e < (s.items.modify (edgeItem s.g o.e) f).size := by
+    rw [Array.size_modify]; have := hs.size; show 1 + s.g.nv + o.e < _; omega
+  have hR₀ : StRead (s.items.modify (edgeItem s.g o.e) f) pre qs :=
+    hRq.congr fun x _ y _ =>
+      ⟨Items.type_modify s.items _ _ f (fun _ => rfl), Items.ch_modify_ch_eq _ f (fun _ => rfl) y⟩
+  have hR₁ : StRead (feBack curV lv d o s).items (E :: pre) (qs ++ [⟨s.stackDir[lv]!, [edgeItem s.g o.e]⟩]) :=
+    StRead.pushEntry _ _ _ _ _ (Or.inr hty₀) hR₀
+  have hI₁ : StItems g (feBack curV lv d o s) blocks :=
+    StItems.perm (StItems.pushEntry (s := { s with items := s.items.modify (edgeItem s.g o.e) f }) curV lv
+      s.nxtEdgeIdx s.stackDir[lv]! (edgeItem s.g o.e) hqlt hroot₀ hfree hI₀) (List.Perm.refl _) rfl
+  have hts₁ : (feBack curV lv d o s).tstack = E :: (pre ++ B) := by show E :: s.tstack = _; rw [hts]
+  have st₀ : Step D curV s (feS₀ d o s) :=
+    Step.modifyVs hi hs (edgeItem s.g o.e) _ (by show 1 + s.g.nv + o.e < _; omega)
+  have st₁ : Step D curV _ (after (pushEdgeTstack curV lv o.e) (feS₀ d o s)) :=
+    Step.pushEdge st₀.inv st₀.shape curV lv o.e he hch₀ hends (by rw [hD]; omega)
+  have st₂ : Step D curV _ (feBack curV lv d o s) := st₁.trans (Step.frame st₁.inv st₁.shape rfl rfl rfl rfl)
+  have hv₂ : curV < (feBack curV lv d o s).g.nv := hv
+  have hP := finishP_st (feBack curV lv d o s) curV lv o.cls.isType1 E pre B
+    (qs ++ [⟨s.stackDir[lv]!, [edgeItem s.g o.e]⟩]) blocks hts₁ hB
+    (fun h1' t htm hvs htd => by
+      obtain ⟨⟨i, hspans, -⟩, -⟩ :=
+        hE.p_entry (by rw [hlv]; exact hlow) h1' t (List.mem_append_left B htm) hvs (by rw [hlv]; exact htd)
+      rw [htd] at hspans
+      refine ⟨getSide_setSides_other _ _ _, Nat.le_refl _, by rw [hspans]; exact getSide_setSides_other _ _ _, ?_⟩
+      have hmem : i ∈ readStack (feBack curV lv d o s).tstack :=
+        mem_readStack_of_mem (by rw [hts₁]; exact List.mem_cons_of_mem _ (List.mem_append_left _ htm))
+          (by rw [hspans]; exact mem_spans_setSides_single _ i)
+      intro dir h hh hty
+      by_cases hdir : dir = s.stackDir[lv]!
+      · subst hdir
+        rw [hspans, getSide_setSides] at hh ⊢
+        simp only [List.head!_cons] at hh
+        subst hh
+        exact ⟨rfl, hI₁.roots i hmem, fun c hc u hu hcu => hI₁.roots c (mem_readStack_of_mem hu hcu) i hc⟩
+      · have hdir' : dir = !s.stackDir[lv]! := by
+          cases dir <;> cases hsl : s.stackDir[lv]! <;> simp_all
+        rw [hspans, hdir', getSide_setSides_other] at hh
+        exfalso
+        have hh' : h = rootItem := by rw [← hh]; rfl
+        rw [hh', st₂.shape.root] at hty
+        cases hty)
+    hR₁ hI₁
+  dsimp only at hP
+  obtain ⟨new₄, -, hts₄, hsd₄, hg₄, -, hR₄, hI₄⟩ := hP
+  set s₄ := ((finishP curV lv o.cls.isType1).run (feBack curV lv d o s)).2 with hs₄
+  have st₄ : Step D curV _ s₄ := Step.finishP (v := curV) st₂.inv st₂.shape hv₂ (hok.rest_back hb).p
+  have hv₄ : curV < s₄.g.nv := by rw [st₄.g]; exact hv₂
+  have hT := finishTail_st s₄ curV d hasVert true new₄ B _ blocks hts₄ (fun _ h => by cases h)
+    (fun hh => ⟨by have := st₄.shape.size; show 1 + curV < _; omega, st₄.shape.vert curV hv₄,
+      (hvf hh).1, (hvf hh).2⟩) hR₄ hI₄
+  dsimp only at hT
+  obtain ⟨hr1, hsd₅, hg₅, -, new₅, hts₅, hR₅, hI₅⟩ := hT
+  have hd₄ : s₄.stackDir[d]! = s.stackDir[d]! := by rw [hsd₄]; rfl
+  refine ⟨hr1, by rw [hg₅, hg₄]; rfl, by rw [hsd₅, hsd₄]; rfl, new₅, hts₅, ?_, hI₅⟩
+  cases hasVert <;> simp only [Bool.false_eq_true, ↓reduceIte, hd₄, List.append_nil] at hR₅ ⊢ <;> exact hR₅
+
 end Spqr
