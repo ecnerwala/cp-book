@@ -2139,8 +2139,9 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `WalkInvOut … (.tree e cls child :: rest) → WalkInv G' child (d + 1)` (the per-layer child-entry
   derivations currently inside `invOut`/`dsOut`/`cvOut`/`scheduleOut`/`rsOut`/`stOut_step`/
   `rrOut`), then `finishEdge` from its primitives consuming `WalkInvEnd` of the child.
-* Admissions reachable from `walkTree_inv` (direct `sorry` bodies in its dependency closure, 36 =
-  the 35 below + `walkOut_stLive`):
+* Admissions reachable from `walkTree_inv` at stage 2d (historical — ear-5/Ranges-3 have since
+  proved several of these; the current set is in stage 2g below; 36 = the 35 below +
+  `walkOut_stLive`):
   ear `ctx_step_tree_ret`, `walkTree_below_kept`, `walkTree_items_kept`, `ends_of_wf_boundary`,
   `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,bottom,close,late,late_fo,loop1,loop1_side,
   loop1_touch,loops,lower,of_ctx}`, `tree_comp_shape`; Ranges `closeCtx_{bd_node,bd_vert,l1_site,
@@ -2186,6 +2187,39 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `live_cur`). `#print axioms`: `PreOut.child` standard; `walkOutPre_out` reaches `sorryAx` only
   through `rSide_vertFree_site`. Not yet wired into `bbOut_step` (next: the `.back` finish and the
   child `WalkInvEnd` → `finishEdge` composition).
+
+* **Stage 2g — `bbOut_step` from the `finishEdge` primitives (`Spqr/WalkBackboneStep.lean`).**
+  `bbOut_step` no longer delegates to the out-level composition `walkOut_inv`: it opens `walkOut`
+  (`walkOut_eq`, `WalkInvOut.walkOutPre_out` → `PreOut`, `walkOutRest`), and at the `finishEdge`
+  site assembles the post-state `WalkInvOut` from the per-primitive lemmas. Shared helper
+  `finish_core` (`CloseBase` + `Inv'` + `Full` + `OwnedD` + `Keep` in, one `wp (finishEdge …)` out):
+  `finishEdge_step` (`Inv'`/`Shape`), `finishEdge_ranges`, `finishEdge_closeInv` with the `CloseCtx`
+  from `CloseCtx.of_exports` + `closeBase_content`, `finishEdge_ownedD`, `finishEdge_vertCover`,
+  `finishEdge_full`, `keep_finishEdge`. **Back edge**: `PreOut` normalised, `EarFinish` from
+  `BookOut`, then `d ≤ lowval` (boundary: `ear_boundary`/`finishBoundary_st`/`keepsR_finishBoundary`,
+  root frame `ROutCtx.root`) vs `lowval < d` (`ret_of_lowval_lt`, `finishOk_of_guards`,
+  `finishEdge_frontier`, `earFinish_close_len`, `stRet_finish`, `finishEdge_rInvG_base` per frame,
+  `finishEdge_rInvTop`, `finishEdge_bot_keep`, `keepsR_finishEdge_site`). **Tree edge**: child entry
+  `PreOut.child`, the induction hypothesis `BbTree child (d+1)` gives the child's `WalkInvEnd`
+  (`inv`/`shape`/`ranges`/`owned.exit`/`full`/`vertCover`/`r`/`st`/`segRead`/`vStart`/`live`/`keep`),
+  `walk_keepsBelow` for `DirsOf`, the per-segment `live` at the boundary gives `finishBoundary_st`'s
+  `StLive` (`openBlockP_snoc_bd`), and the same finish-site lemmas as the back edge. New frame
+  field `WalkInvEnd.keep : Keep d 0 s s'` (and `Keep (d+1) 0` in the `BbOuts`/`BbOut` posts), used
+  for all `stackVerts`/sizes/item-type facts below the site. `pushed_back_iff`/`pushed_tree_iff`
+  re-shape `Full`'s predicate to `Pushed … o.verts o.edges`. `backbone`/`walkTree_inv`/`walkOuts_inv`
+  moved to the new file; the out-level `walkOut_inv` stays (unused by the backbone) until stage 3.
+  Still composed, not primitive: the ear conjunct (`earOut` = ear-5's `cOut`), the R export
+  `WalkInvOut.rshape` (`FinishRShape` at the site, via `rrOut`), and `sites.rside` inside
+  `WalkInv.toOut`; `walkOut_stLive` is still the `live_cur`/`live_lower` admission. Not yet carried:
+  `CanonInv`/`CloseCanon`, `PieceInv`/`ClosePiece`, `CloseContent` as a field (it is produced inside
+  `finish_core` through `closeBase_content`), the `ternarize` frame, ear-5's
+  `OutFrame`/`CtxShape`/`TreeEndS`. `#print axioms`: `pushed_back_iff`/`pushed_tree_iff`
+  `[propext]`; `PreOut.child` standard; `finish_core` reaches only `closeBase_content`;
+  `walkOutPre_out` only `rSide_vertFree_site`; `bbOut_step`/`backbone` reach exactly 25
+  admissions: ear `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,bottom,close,late,late_fo,loop1,
+  loop1_side,loop1_touch,loops,lower,of_ctx}`, `tree_ret_shape`; Ranges `closeBase_content`; R
+  `rSide_{entry,finish_content,vertFree}_site`, `loop1_rBranch_{fields,mid}_ctx`, `loop1_rTop_ctx`,
+  `feS₂_top_entryR`, `closeVert_type1_rCloseShape`; ST `walkOut_stLive`.
 
 ## 5. Phase 3: relabel
 

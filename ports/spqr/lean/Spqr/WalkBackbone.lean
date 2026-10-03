@@ -172,11 +172,12 @@ structure WalkInv (G : TreeGhost) (t : DfsTree) (d : Nat) (s : WalkState) : Prop
 /-- The backbone conclusion at the exit of `walkTree t d` started from `s`. -/
 structure WalkInvEnd (G : TreeGhost) (t : DfsTree) (d : Nat) (s s' : WalkState) : Prop where
   treeEnd : TreeEnd t.v d t.outs G.base G.bE G.sv G.sd s'
+  keep : Keep d 0 s s'
   inv : s'.Inv' d
   shape : Shape s'
   ranges : RgS G.σ (G.n + t.edgePostorder.length) d s'
   close : s'.CloseInv
-  place : s'.Place G.g (WalkM.Pushed G.g G.P t.verts t.edges) G.X
+  full : s'.Full G.g (WalkM.Pushed G.g G.P t.verts t.edges) G.X
   owned : OwnedD G.σ (G.sts ++ [G.n]) (G.origs ++ [s.tstack.length]) (WalkM.Pushed G.g G.P t.verts t.edges) d
     (G.n + t.edgePostorder.length) s'
   sv_v : s'.stackVerts[d]! = t.v
@@ -1244,7 +1245,8 @@ theorem exit_true (hW : WalkInv G (.node v outs) d s)
     (h : WalkInvOut { G with sts := G.sts ++ [G.n], origs := G.origs ++ [s.tstack.length] }
       s.tstack.length v d outs done' [] true (G.n + (DfsOut.edgePostorderList outs).length)
       (Pushed G.g (fun i => G.P i ∨ (true = true ∧ i = vertItem v))
-        (DfsOut.vertsList outs) (DfsOut.edgesList outs)) s₂) :
+        (DfsOut.vertsList outs) (DfsOut.edgesList outs)) s₂)
+    (hK : Keep d 0 s s₂) :
     WalkInvEnd G (.node v outs) d s s₂ := by
   have hmap : done'.map (·.1) = outs := by simpa using h.split
   obtain ⟨new, hts₂, hR₂, -⟩ := h.stPre.read
@@ -1254,13 +1256,20 @@ theorem exit_true (hW : WalkInv G (.node v outs) d s)
   have hlc := h.live_cur true new hts₂
   rw [hmap] at hhv hR₂ hI hvs hlc
   exact {
+    keep := hK
     treeEnd := ⟨done', true, s₂, false, [], false, s₂.stackDir, rfl, h.ear, hmap, by simp, rfl,
       fun _ _ => rfl, fun h => absurd h Bool.false_ne_true⟩
     inv := h.inv
     shape := h.shape
     ranges := h.rgs
     close := h.close
-    place := h.full.place.mono (fun i hi => Pushed.vert i hi) (fun _ h => h)
+    full := h.full.monoP fun i => ⟨Pushed.vert i, fun hi => by
+      rcases hi with hi | ⟨w, hw, rfl⟩ | hi
+      · exact Or.inl (Or.inl hi)
+      · rcases List.mem_cons.1 hw with rfl | hw
+        · exact Or.inl (Or.inr ⟨rfl, rfl⟩)
+        · exact Or.inr (Or.inl ⟨w, hw, rfl⟩)
+      · exact Or.inr (Or.inr hi)⟩
     owned := h.owned.mono fun i hi => Pushed.vert i hi
     sv_v := h.sv_d
     vertCover := h.vcover rfl
@@ -1287,7 +1296,8 @@ theorem exit_false (hW : WalkInv G (.node v outs) d s)
     (h : WalkInvOut { G with sts := G.sts ++ [G.n], origs := G.origs ++ [s.tstack.length] }
       s.tstack.length v d outs done' [] false (G.n + (DfsOut.edgePostorderList outs).length)
       (Pushed G.g (fun i => G.P i ∨ (false = true ∧ i = vertItem v))
-        (DfsOut.vertsList outs) (DfsOut.edgesList outs)) s₂) :
+        (DfsOut.vertsList outs) (DfsOut.edgesList outs)) s₂)
+    (hK : Keep d 0 s s₂) :
     WalkInvEnd G (.node v outs) d s
       { s₂ with
         stackDir := s₂.stackDir.set! d true,
@@ -1328,6 +1338,7 @@ theorem exit_false (hW : WalkInv G (.node v outs) d s)
     ⟨v, d, s₂.nxtEdgeIdx, setSides (getElem! (s₂.stackDir.set! d true) d) [vertItem v] []⟩
   have hd : d = G.fs.length := h.d_fs
   exact {
+    keep := hK.trans ((Keep.setStackDir d true).trans (Keep.tstack _))
     treeEnd := ⟨done', false, s₂, (s₂.stackDir.set! d true)[d]!, _, true, s₂.stackDir.set! d true, rfl,
       h.ear, hmap, by simp, rfl, fun k hk => getElem!_set!_ne' s₂.stackDir d k true (Nat.ne_of_lt hk),
       fun _ hd => getElem!_set!_self' _ _ _ (by simpa using hd)⟩
@@ -1336,8 +1347,14 @@ theorem exit_false (hW : WalkInv G (.node v outs) d s)
     ranges := ⟨hRg.ranges, hSt.shape, h.σ_lt⟩
     close := (h.close.frame (s' := { s₂ with stackDir := s₂.stackDir.set! d true }) rfl rfl
       (fun _ h => h)).pushVert v d hv (by have := h.shape.size; show s₂.g.nv < s₂.items.size; omega)
-    place := ((h.full.place.set_stackDir (s₂.stackDir.set! d true)).cons_fixed hv0 hvlt hnP v d
-      s₂.nxtEdgeIdx (s₂.stackDir.set! d true)[d]!).mono hpush (fun _ h => h)
+    full := ((h.full.set_stackDir (s₂.stackDir.set! d true)).cons hv0 hvlt hnP v d
+      s₂.nxtEdgeIdx (s₂.stackDir.set! d true)[d]!).monoP fun i => ⟨hpush i, fun hi => by
+      rcases hi with hi | ⟨w, hw, rfl⟩ | hi
+      · exact Or.inl (Or.inl (Or.inl hi))
+      · rcases List.mem_cons.1 hw with rfl | hw
+        · exact Or.inr rfl
+        · exact Or.inl (Or.inr (Or.inl ⟨w, hw, rfl⟩))
+      · exact Or.inl (Or.inr (Or.inr hi))⟩
     owned := (h.owned.pushVert (s' := { s₂ with
           stackDir := s₂.stackDir.set! d true,
           tstack := ⟨v, d, s₂.nxtEdgeIdx, setSides (getElem! (s₂.stackDir.set! d true) d) [vertItem v] []⟩ :: s₂.tstack })
@@ -1401,8 +1418,8 @@ abbrev BbTree (t : DfsTree) (d : Nat) : Prop :=
 abbrev BbOuts (v d : Nat) (rest : List DfsOut) (hasVert : Bool) : Prop :=
   ∀ (G : TreeGhost) (B : Nat) (outs₀ : List DfsOut) (done : List (DfsOut × Bool)) (n : Nat)
     (P : ItemId → Prop) (s : WalkState), WalkInvOut G B v d outs₀ done rest hasVert n P s →
-    wp (walkOuts v d rest hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧ ∃ done',
-      WalkInvOut G B v d outs₀ done' [] hv' (n + (DfsOut.edgePostorderList rest).length)
+    wp (walkOuts v d rest hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧ Keep (d + 1) 0 s s' ∧
+      ∃ done', WalkInvOut G B v d outs₀ done' [] hv' (n + (DfsOut.edgePostorderList rest).length)
         (Pushed G.g (fun i => P i ∨ (hv' = true ∧ i = vertItem v))
           (DfsOut.vertsList rest) (DfsOut.edgesList rest)) s') s
 
@@ -1411,9 +1428,12 @@ abbrev BbOut (v d : Nat) (o : DfsOut) (hasVert : Bool) : Prop :=
   ∀ (G : TreeGhost) (B : Nat) (outs₀ : List DfsOut) (done : List (DfsOut × Bool)) (rest : List DfsOut)
     (n : Nat) (P : ItemId → Prop) (s : WalkState),
     WalkInvOut G B v d outs₀ done (o :: rest) hasVert n P s →
-    wp (walkOut v d o hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧ ∃ hvF,
-      WalkInvOut G B v d outs₀ (done ++ [(o, hvF)]) rest hv' (n + o.block.length)
+    wp (walkOut v d o hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧ Keep (d + 1) 0 s s' ∧
+      ∃ hvF, WalkInvOut G B v d outs₀ (done ++ [(o, hvF)]) rest hv' (n + o.block.length)
         (Pushed G.g (fun i => P i ∨ (hv' = true ∧ i = vertItem v)) o.verts o.edges) s') s
+
+theorem Keep.mono {D' D j : Nat} {s s' : WalkState} (hD : D' ≤ D) (h : Keep D j s s') : Keep D' j s s' :=
+  ⟨h.g, h.sv, h.sd, h.fo, fun k hk => h.svlo k (Nat.lt_of_lt_of_le hk hD), h.size, h.type, h.ch⟩
 
 /-- Site `walkTree (.node v outs) d`: entry glue, the out-list induction hypothesis, exit glue. -/
 theorem bbTree_node (v : Nat) (outs : List DfsOut) (d : Nat) (ih : BbOuts v d outs false) :
@@ -1421,18 +1441,22 @@ theorem bbTree_node (v : Nat) (outs : List DfsOut) (d : Nat) (ih : BbOuts v d ou
   intro G s h
   unfold walkTree
   simp only [wp_bind, wp_modify]
-  refine wp_mono _ (ih _ _ _ _ _ _ _ h.toOut) fun hv' s₂ ⟨_, done', h₂⟩ => ?_
+  have hK₀ : Keep d 0 s { s with stackVerts := s.stackVerts.set! d v } :=
+    ⟨rfl, by simp, rfl, rfl, fun k hk => Array.getElem!_set!_ne _ _ _ _ (Nat.ne_of_gt hk), Nat.le_refl _,
+      fun _ _ => rfl, rfl⟩
+  refine wp_mono _ (ih _ _ _ _ _ _ _ h.toOut) fun hv' s₂ ⟨_, hK, done', h₂⟩ => ?_
+  have hK' := hK₀.trans (hK.mono (Nat.le_succ d))
   cases hv'
   · simp only [Bool.false_eq_true, ↓reduceIte, wp_bind, wp_setStackDir, wp_pushVertTstack]
-    exact h₂.exit_false h
+    exact h₂.exit_false h hK'
   · simp only [↓reduceIte, wp_pure]
-    exact h₂.exit_true h
+    exact h₂.exit_true h hK'
 
 /-- Site `walkOuts v d [] hasVert`. -/
 theorem bbOuts_nil (v d : Nat) (hasVert : Bool) : BbOuts v d [] hasVert := by
   intro G B outs₀ done n P s h
   unfold walkOuts; simp only [wp_pure]
-  refine ⟨fun h => h, done, h.congr (by simp [DfsOut.edgePostorderList]) fun i => ?_⟩
+  refine ⟨fun h => h, Keep.refl, done, h.congr (by simp [DfsOut.edgePostorderList]) fun i => ?_⟩
   constructor
   · exact fun hp => Or.inl (Or.inl hp)
   · rintro ((hp | ⟨h1, rfl⟩) | ⟨w, hw, _⟩ | ⟨e, he, _⟩)
@@ -1447,9 +1471,9 @@ theorem bbOuts_cons (v d : Nat) (hasVert : Bool) (o : DfsOut) (rest : List DfsOu
     BbOuts v d (o :: rest) hasVert := by
   intro G B outs₀ done n P s h
   unfold walkOuts; simp only [wp_bind]
-  refine wp_mono _ (ih₁ G B outs₀ done rest n P s h) fun hv₁ s₁ ⟨hhv₁, hvF, h₁⟩ => ?_
-  refine wp_mono _ (ih₂ hv₁ G B outs₀ _ _ _ s₁ h₁) fun hv' s' ⟨hhv', done', h'⟩ =>
-    ⟨fun h0 => hhv' (hhv₁ h0), done', h'.congr ?_ fun i => ?_⟩
+  refine wp_mono _ (ih₁ G B outs₀ done rest n P s h) fun hv₁ s₁ ⟨hhv₁, hK₁, hvF, h₁⟩ => ?_
+  refine wp_mono _ (ih₂ hv₁ G B outs₀ _ _ _ s₁ h₁) fun hv' s' ⟨hhv', hK', done', h'⟩ =>
+    ⟨fun h0 => hhv' (hhv₁ h0), hK₁.trans hK', done', h'.congr ?_ fun i => ?_⟩
   · rw [DfsOut.edgePostorderList_cons, List.length_append, Nat.add_assoc]
   · rw [DfsOut.vertsList_cons, DfsOut.vertsList_single, DfsOut.edgesList_cons, DfsOut.edgesList_single]
     constructor
@@ -1463,39 +1487,6 @@ theorem bbOuts_cons (v d : Nat) (hasVert : Bool) (o : DfsOut) (rest : List DfsOu
       · rcases List.mem_append.1 he with he | he
         · exact Or.inl (Or.inl (Or.inr (Or.inr ⟨e, he, rfl⟩)))
         · exact Or.inr (Or.inr ⟨e, he, rfl⟩)
-
-/-- Site `walkOut v d o hasVert`. In this stage the body is the out-level composition
-`walkOut_inv` and the child induction hypothesis is unused; the next stage opens `walkOut`
-(`walkOutPre` site, child entry `WalkInvOut → WalkInv`, `finishEdge` from its primitives) and
-consumes `ih`. -/
-theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
-    (_ih : match o with
-      | .tree _ _ child => BbTree child (d + 1)
-      | .back .. => True) :
-    BbOut v d o hasVert := fun _ _ _ _ _ _ _ _ h => walkOut_inv h
-
-/-- **The backbone induction.** -/
-theorem backbone :
-    (∀ (t : DfsTree) (d : Nat), BbTree t d) ∧
-    (∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool), BbOuts v d outs hasVert) ∧
-    (∀ (v d : Nat) (o : DfsOut) (hasVert : Bool), BbOut v d o hasVert) :=
-  walkTree.mutual_induct _ _ _
-    (fun d v outs ih => bbTree_node v outs d ih)
-    bbOut_step
-    bbOuts_nil
-    bbOuts_cons
-
-/-- **The backbone theorem**: the conjunction at the entry gives the conjunction at the exit. -/
-theorem walkTree_inv (h : WalkInv G t d s) :
-    wp (walkTree t d) (fun _ s' => WalkInvEnd G t d s s') s :=
-  backbone.1 t d G s h
-
-theorem walkOuts_inv (h : WalkInvOut G B v d outs₀ done rest hasVert n P s) :
-    wp (walkOuts v d rest hasVert) (fun hv' s' => (hasVert = true → hv' = true) ∧ ∃ done',
-      WalkInvOut G B v d outs₀ done' [] hv' (n + (DfsOut.edgePostorderList rest).length)
-        (Pushed G.g (fun i => P i ∨ (hv' = true ∧ i = vertItem v))
-          (DfsOut.vertsList rest) (DfsOut.edgesList rest)) s') s :=
-  backbone.2.1 v d rest hasVert G B outs₀ done n P s h
 
 end WalkState
 end Spqr
