@@ -60,6 +60,7 @@ structure Fr (U : ItemId → Prop) (s₀ s : WalkState) : Prop where
   size : s₀.items.size ≤ s.items.size
   type : ∀ y : Nat, U y → Items.type s.items y = Items.type s₀.items y
   ch : ∀ y : Nat, U y → Items.ch s.items y = Items.ch s₀.items y
+  vs : ∀ y : Nat, U y → Items.vs s.items y = Items.vs s₀.items y
   out : ∀ i : Nat, ¬ U i → ∀ c ∈ Items.ch s.items i, ¬ U c
 
 /-- The stack is `above ++ B` with no protected id in `above`. -/
@@ -73,15 +74,15 @@ structure FrO (U : ItemId → Prop) (B : List TEntry) (s₀ s : WalkState) : Pro
 variable {U : ItemId → Prop} {B : List TEntry} {s₀ s s' : WalkState}
 
 theorem Fr.refl (h : ∀ i : Nat, ¬ U i → ∀ c ∈ Items.ch s₀.items i, ¬ U c) : Fr U s₀ s₀ :=
-  ⟨Nat.le_refl _, fun _ _ => rfl, fun _ _ => rfl, h⟩
+  ⟨Nat.le_refl _, fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl, h⟩
 
 theorem Fr.of_items (h : Fr U s₀ s) (he : s'.items = s.items) : Fr U s₀ s' := by
-  refine ⟨?_, ?_, ?_, ?_⟩ <;> rw [he]
-  exacts [h.size, h.type, h.ch, h.out]
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩ <;> rw [he]
+  exacts [h.size, h.type, h.ch, h.vs, h.out]
 
 theorem Fr.push (hU : UOk U s₀) (h : Fr U s₀ s) (x : Item) (hx : x.ch = []) :
     Fr U s₀ { s with items := s.items.push x } := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · show s₀.items.size ≤ (s.items.push x).size
     simp only [Array.size_push]; exact Nat.le_succ_of_le h.size
   · intro y hy
@@ -94,6 +95,11 @@ theorem Fr.push (hU : UOk U s₀) (h : Fr U s₀ s) (x : Item) (hx : x.ch = []) 
     show Items.ch (s.items.push x) y = _
     rw [Items.ch_push, if_neg hne]
     exact h.ch y hy
+  · intro y hy
+    have hne : y ≠ s.items.size := by have h1 := hU.lt y hy; have h2 := h.size; omega
+    show Items.vs (s.items.push x) y = _
+    rw [Items.vs_push, if_neg hne]
+    exact h.vs y hy
   · intro i hi c hc
     change c ∈ Items.ch (s.items.push x) i at hc
     rw [Items.ch_push] at hc
@@ -102,22 +108,24 @@ theorem Fr.push (hU : UOk U s₀) (h : Fr U s₀ s) (x : Item) (hx : x.ch = []) 
     · exact h.out i hi c hc
 
 theorem Fr.modify_keep (h : Fr U s₀ s) (j : ItemId) (f : Item → Item)
-    (ht : ∀ it, (f it).type = it.type) (hc : ∀ it, (f it).ch = it.ch) :
+    (ht : ∀ it, (f it).type = it.type) (hc : ∀ it, (f it).ch = it.ch) (hj : ¬ U j) :
     Fr U s₀ { s with items := s.items.modify j f } := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · show s₀.items.size ≤ (s.items.modify j f).size
     simp only [Array.size_modify]; exact h.size
   · intro y hy; show Items.type (s.items.modify j f) y = _
     rw [Items.type_modify _ _ _ _ ht]; exact h.type y hy
   · intro y hy; show Items.ch (s.items.modify j f) y = _
     rw [Items.ch_modify_of_ch _ _ _ _ hc]; exact h.ch y hy
+  · intro y hy; show Items.vs (s.items.modify j f) y = _
+    rw [Items.vs_modify_ne _ _ _ _ (by rintro rfl; exact hj hy)]; exact h.vs y hy
   · intro i hi c hc'; change c ∈ Items.ch (s.items.modify j f) i at hc'
     rw [Items.ch_modify_of_ch _ _ _ _ hc] at hc'; exact h.out i hi c hc'
 
 theorem Fr.modify_ch (h : Fr U s₀ s) (j : ItemId) (f : Item → Item) (ht : ∀ it, (f it).type = it.type)
     (hj : ¬ U j) (hnew : ∀ c ∈ (f s.items[j]!).ch, ¬ U c) :
     Fr U s₀ { s with items := s.items.modify j f } := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · show s₀.items.size ≤ (s.items.modify j f).size
     simp only [Array.size_modify]; exact h.size
   · intro y hy; show Items.type (s.items.modify j f) y = _
@@ -125,6 +133,8 @@ theorem Fr.modify_ch (h : Fr U s₀ s) (j : ItemId) (f : Item → Item) (ht : �
   · intro y hy; show Items.ch (s.items.modify j f) y = _
     rw [Items.ch_modify_ne _ _ _ _ (by rintro rfl; exact hj hy)]
     exact h.ch y hy
+  · intro y hy; show Items.vs (s.items.modify j f) y = _
+    rw [Items.vs_modify_ne _ _ _ _ (by rintro rfl; exact hj hy)]; exact h.vs y hy
   · intro i hi c hc
     change c ∈ Items.ch (s.items.modify j f) i at hc
     rcases Items.IsParent_modify hc with hc | ⟨rfl, hlt, hc⟩
@@ -532,7 +542,7 @@ theorem FrO.finishEdge_ret {d lv : Nat} {kind : RetKind} {o : DfsOut} {curV : Na
   have hlenB : B.length ≤ s.tstack.length := h.out.length
   have hfr₀ : Fr U s { s with items := s.items.modify (edgeItem s.g o.e) fun it =>
       { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) } } :=
-    h.fr.modify_keep _ _ (fun _ => rfl) (fun _ => rfl)
+    h.fr.modify_keep _ _ (fun _ => rfl) (fun _ => rfl) hq
   have h₀ : FrO U B s (feS₀ d o s) := ⟨hfr₀.of_items rfl, h.out.of_tstack rfl⟩
   by_cases ht : o.cls.isTree = true
   · rw [if_pos ht]
@@ -603,7 +613,8 @@ theorem finishRet_frame {g : Graph} {P X : ItemId → Prop} {blocks : List StBlo
       vertItem curV ∉ readStack (fePState curV lv d o s).tstack) ∧
     ∀ x ∈ readStack B, ∀ y, Items.Below s.items x y →
       Items.type ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.type s.items y ∧
-      Items.ch ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.ch s.items y := by
+      Items.ch ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.ch s.items y ∧
+      Items.vs ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.vs s.items y := by
   have hts : s.tstack = (sub ++ pre) ++ B := by rw [hE.tstack, List.append_assoc]
   have hBsub : ∀ t ∈ B, t ∈ s.tstack := fun t ht => by rw [hts]; exact List.mem_append_right _ ht
   have hAsub : ∀ t ∈ sub ++ pre, t ∈ s.tstack := fun t ht => by rw [hts]; exact List.mem_append_left _ ht
@@ -654,7 +665,8 @@ theorem finishRet_frame {g : Graph} {P X : ItemId → Prop} {blocks : List StBlo
         exact hE.q_free t (hBsub t ht) hi)
       fun ⟨p, _, hp⟩ => hE.q_root p hp)
     hB
-  refine ⟨fun hhv => ?_, fun x hx y hb => ⟨(hmainU.2 hvU).fr.type y ⟨x, hx, hb⟩, (hmainU.2 hvU).fr.ch y ⟨x, hx, hb⟩⟩⟩
+  refine ⟨fun hhv => ?_, fun x hx y hb => ⟨(hmainU.2 hvU).fr.type y ⟨x, hx, hb⟩, (hmainU.2 hvU).fr.ch y ⟨x, hx, hb⟩,
+    (hmainU.2 hvU).fr.vs y ⟨x, hx, hb⟩⟩⟩
   have hmainV := FrO.finishEdge_ret (U := fun i => i = vertItem curV) (B := B)
     ⟨fun y hy => by
         have h1 := hfull.place.size; have h2 := hfull.place.g_eq

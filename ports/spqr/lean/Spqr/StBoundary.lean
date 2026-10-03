@@ -32,14 +32,14 @@ theorem Place.fresh {g : Graph} {P X : ItemId → Prop} {s : WalkState} (h : s.P
   simp only [WalkState.cnt] at hc; omega
 
 /-- Admitted: the open-block invariant `StLive` (StBdPop.lean) at a boundary tree edge, on the
-pre-state: every S / P / R item below a span item of the popped entries `sub` is `InBlock` of the
-block `⟨some (curV, o.dest), stNest ps⟩` closed there — its leaves are a segment of `stNest ps`
-(trivial from `StRead`), and the orientation clauses `VsOrientedAt` hold: `vs i` is oriented in the
-block's st-order `curV :: (vertices of stNest ps)`, the V children of `i` lie between its endpoints,
-the non-V children are oriented, and the block edges below a non-V child lie between its endpoints.
-This is the invariant `check_stsim` checks as m8 (against the blocks of the truncated reference
-`refBlocks g (prev ++ [truncTree fs t])`, seeds 0..1000, 0 violations) and whose preservation along
-the walk is what remains (PROOF.md §7.6 (c)). -/
+pre-state: every S / P / R item below a span item of the popped entries `sub` (not hanging under a
+V / Q item, i.e. not in an already completed block) is `InBlock` of the block
+`⟨some (curV, o.dest), stNest ps⟩` closed there — its leaves are a segment of `stNest ps` (trivial
+from `StRead`), and the orientation clauses `VsOrientedAt` hold. This is what `check_stsim` checks
+as m8 (against the blocks of the truncated reference `refBlocks g (prev ++ [truncTree fs t])`,
+seeds 0..1000, 0 violations); it is the live hypothesis `hlive` of `finishBoundary_st`, to be
+supplied by the backbone induction carrying `StLive` per open segment (PROOF.md §7 "StLive
+obligations"). -/
 theorem finishBoundary_stLive {D curV d : Nat} {o : DfsOut} {hasVert : Bool} {s : WalkState}
     {sub base : List TEntry} {g : Graph} {ps : List StPiece} {blocks : List StBlock}
     (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s)
@@ -49,20 +49,6 @@ theorem finishBoundary_stLive {D curV d : Nat} {o : DfsOut} {hasVert : Bool} {s 
     (hR : StRead s.items sub ps) (hI : StItems g s blocks) :
     StLive g s.items sub ⟨some (curV, o.dest), stNest ps⟩ := by
   sorry
-
-/-- The orientation clauses of the block closed at a boundary tree edge, from `finishBoundary_stLive`. -/
-theorem finishBoundary_vsOrientedAt {D curV d : Nat} {o : DfsOut} {hasVert : Bool} {s : WalkState}
-    {sub base : List TEntry} {g : Graph} {ps : List StPiece} {blocks : List StBlock}
-    (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s)
-    (hD : D = if o.cls.isTree then d + 1 else d) (hok : BoundaryOk D curV d o s)
-    (hb : FinishBook curV d o base.length hasVert s) (hge : d ≤ o.cls.lowval d)
-    (ht : o.cls.isTree = true) (hg : s.g = g)
-    (hR : StRead s.items sub ps) (hI : StItems g s blocks) (i : ItemId) (L : List ItemId)
-    (hx : ∃ x ∈ readStack sub, Items.Below s.items x i)
-    (hty : Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R)
-    (hL : Expands s.items i L) (hseg : ∃ A B, stNest ps = A ++ L ++ B) :
-    VsOrientedAt g s.items ⟨some (curV, o.dest), stNest ps⟩ i L := by
-  exact (finishBoundary_stLive hE hi hs hD hok hb hge ht hg hR hI).vsOrientedAt hx hty hL hseg
 
 /-- `finishEdge` at a block boundary. The popped entries `sub` read as the pieces `ps` of the
 child's subtree (`[]` for a back edge; `[t]` at a bridge, `[t₁, t₂]` at a component edge:
@@ -76,12 +62,14 @@ theorem finishBoundary_st {D curV d : Nat} {o : DfsOut} {hasVert : Bool} {s : Wa
     (hE : s.EarFinish curV d o hasVert sub base) (hi : s.Inv' D) (hs : Shape s)
     (hD : D = if o.cls.isTree then d + 1 else d) (hok : BoundaryOk D curV d o s)
     (hb : FinishBook curV d o base.length hasVert s) (hge : d ≤ o.cls.lowval d) (hg : s.g = g)
-    (hR : StRead s.items sub ps) (hI : StItems g s blocks) :
+    (hR : StRead s.items sub ps) (hI : StItems g s blocks)
+    (hlive : o.cls.isTree = true → StLive g s.items sub ⟨some (curV, o.dest), stNest ps⟩) :
     let r := (finishEdge curV d o base.length hasVert).run s
     r.1 = hasVert ∧ r.2.g = s.g ∧ r.2.stackDir = s.stackDir ∧ r.2.tstack = base ∧
     StItems g r.2 (blocks ++ (if o.cls.isTree then [⟨some (curV, o.dest), stNest ps⟩] else [])) ∧
     ∀ x ∈ readStack base, ∀ y, Items.Below s.items x y →
-      Items.type r.2.items y = Items.type s.items y ∧ Items.ch r.2.items y = Items.ch s.items y := by
+      Items.type r.2.items y = Items.type s.items y ∧ Items.ch r.2.items y = Items.ch s.items y ∧
+      Items.vs r.2.items y = Items.vs s.items y := by
   have hq_root := hok.q_root
   have hv_root := hok.v_root
   have hq_free : edgeItem s.g o.e ∉ readStack s.tstack := fun h => by
@@ -97,20 +85,22 @@ theorem finishBoundary_st {D curV d : Nat} {o : DfsOut} {hasVert : Bool} {s : Wa
   have hqv : edgeItem s.g o.e ≠ vertItem curV := fun e => by rw [e, hv_ty] at hq_ty; cases hq_ty
   have hframe : ∀ {items' : Items}, BdPop s sub (edgeItem s.g o.e) (vertItem curV) items' →
       ∀ x ∈ readStack base, ∀ y, Items.Below s.items x y →
-      Items.type items' y = Items.type s.items y ∧ Items.ch items' y = Items.ch s.items y := by
+      Items.type items' y = Items.type s.items y ∧ Items.ch items' y = Items.ch s.items y ∧
+      Items.vs items' y = Items.vs s.items y := by
     intro items' hP x hx y hy
     have hxs : x ∈ readStack s.tstack := by rw [hE.tstack]; exact mem_readStack_append.2 (.inr hx)
     have hyq : y ≠ edgeItem s.g o.e := fun e =>
       Items.not_below_root_of_ne hq_root (fun e' => hq_free (e' ▸ hxs)) (e ▸ hy)
     have hyv : y ≠ vertItem curV := fun e =>
       Items.not_below_root_of_ne hv_root (fun e' => hv_free (e' ▸ hxs)) (e ▸ hy)
-    exact ⟨(hP.frame y hyq hyv (hI.bounded x hxs y hy)).1, (hP.frame y hyq hyv (hI.bounded x hxs y hy)).2.1⟩
+    exact hP.frame y hyq hyv (hI.bounded x hxs y hy)
   have hge' : o.cls.lowval d ≥ d := hge
   show wp (finishEdge curV d o base.length hasVert) (fun r s' => r = hasVert ∧ s'.g = s.g ∧
     s'.stackDir = s.stackDir ∧ s'.tstack = base ∧
     StItems g s' (blocks ++ (if o.cls.isTree then [⟨some (curV, o.dest), stNest ps⟩] else [])) ∧
     ∀ x ∈ readStack base, ∀ y, Items.Below s.items x y →
-      Items.type s'.items y = Items.type s.items y ∧ Items.ch s'.items y = Items.ch s.items y) s
+      Items.type s'.items y = Items.type s.items y ∧ Items.ch s'.items y = Items.ch s.items y ∧
+      Items.vs s'.items y = Items.vs s.items y) s
   simp only [finishEdge_eq, finishEdge', wp_bind, wp_get, wp_stackDir, hge', ↓reduceIte]
   unfold finishBoundary
   by_cases ht : o.cls.isTree = true
@@ -118,7 +108,7 @@ theorem finishBoundary_st {D curV d : Nat} {o : DfsOut} {hasVert : Bool} {s : Wa
         Items.type s.items i = .S ∨ Items.type s.items i = .P ∨ Items.type s.items i = .R →
         ∃ b ∈ blocks ++ [⟨some (curV, o.dest), stNest ps⟩], InBlock g s.items b i :=
       fun i hx hty => hR.complete rfl hI.finished
-        (fun i L hx hty hL hseg => finishBoundary_vsOrientedAt hE hi hs hD hok hb hge ht hg hR hI i L hx hty hL hseg)
+        (fun i L hx hty hL => (hlive ht).vsOrientedAt hx hty hL)
         hx hty
     by_cases hl : o.cls.lowval d = d + 1
     · obtain ⟨t, rfl, -, -⟩ := hE.bd_bridge ht hl
@@ -244,7 +234,8 @@ theorem finishRet_frame_st {g : Graph} {P X : ItemId → Prop} {blocks : List St
       vertItem curV ∉ readStack (fePState curV lv d o s).tstack) ∧
     ∀ x ∈ readStack B, ∀ y, Items.Below s.items x y →
       Items.type ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.type s.items y ∧
-      Items.ch ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.ch s.items y :=
+      Items.ch ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.ch s.items y ∧
+      Items.vs ((finishEdge curV d o (pre ++ B).length hasVert).run s).2.items y = Items.vs s.items y :=
   finishRet_frame hE hfull hI hv ho hlow hB
 
 /-- Popping the root entry of a tree of the forest onto `rootItem` closes the root block

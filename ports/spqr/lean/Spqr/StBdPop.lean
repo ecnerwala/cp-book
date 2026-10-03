@@ -269,18 +269,22 @@ a block hanging under a V / Q item of the segment) is `InBlock` of the block `b`
 the block of the *truncated* reference (`refBlocks g (prev ++ [truncTree fs t])`) that the segment
 belongs to. At a boundary edge it is exactly the orientation content of the new block
 (`StLive.vsOrientedAt`). -/
+def HangingUnder (items : Items) (x i : ItemId) : Prop :=
+  ∃ y, Items.Below items x y ∧ y ≠ i ∧
+    (Items.type items y = .V ∨ Items.type items y = .Q) ∧ Items.Below items y i
+
 def StLive (g : Graph) (items : Items) (new : List TEntry) (b : StBlock) : Prop :=
   ∀ x ∈ readStack new, ∀ i, Items.Below items x i →
     (Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R) →
-    ∀ L, Expands items i L → (∃ A B, b.items = A ++ L ++ B) → InBlock g items b i
+    ¬ HangingUnder items x i → InBlock g items b i
 
 theorem StLive.vsOrientedAt {g : Graph} {items : Items} {new : List TEntry} {b : StBlock}
     (h : StLive g items new b) {i : ItemId} {L : List ItemId}
-    (hx : ∃ x ∈ readStack new, Items.Below items x i)
+    (hx : ∃ x ∈ readStack new, Items.Below items x i ∧ ¬ HangingUnder items x i)
     (hty : Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R)
-    (hL : Expands items i L) (hseg : ∃ A B, b.items = A ++ L ++ B) : VsOrientedAt g items b i L := by
-  obtain ⟨x, hx, hb⟩ := hx
-  obtain ⟨L', hL', -, hV⟩ := h x hx i hb hty L hL hseg
+    (hL : Expands items i L) : VsOrientedAt g items b i L := by
+  obtain ⟨x, hx, hb, hnh⟩ := hx
+  obtain ⟨L', hL', -, hV⟩ := h x hx i hb hty hnh
   rwa [ExpandsList.unique hL hL']
 
 /-- A member of an expanded list owns a contiguous segment of the expansion. -/
@@ -295,7 +299,7 @@ theorem ExpandsList.segment_of_mem {items : Items} {xs M : List ItemId} (h : Exp
 `Expands` does not enter) or owns a segment of the expansion. -/
 theorem Items.Below.expands_cases {items : Items} {x i : ItemId} (hb : Items.Below items x i) :
     ∀ {xs M : List ItemId}, ExpandsList items xs M → x ∈ xs →
-    (∃ y, y ≠ i ∧ (Items.type items y = .V ∨ Items.type items y = .Q) ∧ Items.Below items y i) ∨
+    HangingUnder items x i ∨
     (∃ L, Expands items i L ∧ ∃ A B, M = A ++ L ++ B) := by
   induction hb using Relation.ReflTransGen.head_induction_on with
   | refl =>
@@ -308,9 +312,9 @@ theorem Items.Below.expands_cases {items : Items} {x i : ItemId} (hb : Items.Bel
     by_cases hai : a = i
     · subst hai; exact .inr ⟨L, hL, A, B, hM⟩
     by_cases hleaf : Items.type items a = .V ∨ Items.type items a = .Q
-    · exact .inl ⟨a, hai, hleaf, .head hac hcb⟩
-    rcases ih (hL.node_inv hleaf) (show c ∈ _ from hac) with h' | ⟨L', hL', A', B', hLeq⟩
-    · exact .inl h'
+    · exact .inl ⟨a, .refl, hai, hleaf, .head hac hcb⟩
+    rcases ih (hL.node_inv hleaf) (show c ∈ _ from hac) with ⟨y, h1, h2, h3, h4⟩ | ⟨L', hL', A', B', hLeq⟩
+    · exact .inl ⟨y, .head hac h1, h2, h3, h4⟩
     · refine .inr ⟨L', hL', A ++ A', B' ++ B, ?_⟩
       rw [hM, hLeq]; simp only [List.append_assoc]
 
@@ -322,24 +326,27 @@ theorem StRead.complete {g : Graph} {items : Items} {sub : List TEntry} {ps : Li
     (hfin : ∀ x i, (Items.type items x = .V ∨ Items.type items x = .Q) → Items.Below items x i →
       Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R →
       ∃ b ∈ blocks, InBlock g items b i)
-    (hor : ∀ i L, (∃ x ∈ readStack sub, Items.Below items x i) →
+    (hor : ∀ i L, (∃ x ∈ readStack sub, Items.Below items x i ∧ ¬ HangingUnder items x i) →
       Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R →
-      Expands items i L → (∃ A' B', B.items = A' ++ L ++ B') → VsOrientedAt g items B i L)
+      Expands items i L → VsOrientedAt g items B i L)
     {i : ItemId} (hx : ∃ x ∈ readStack sub, Items.Below items x i)
     (hty : Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R) :
     ∃ b ∈ blocks ++ [B], InBlock g items b i := by
   obtain ⟨x, hxs, hxi⟩ := hx
+  by_cases hnh : HangingUnder items x i
+  · obtain ⟨y, -, -, hy, hyi⟩ := hnh
+    obtain ⟨b, hb, hbi⟩ := hfin y i hy hyi hty
+    exact ⟨b, List.mem_append_left _ hb, hbi⟩
   have key : ∀ {xs M : List ItemId}, ExpandsList items xs M → x ∈ xs →
       (∃ A' B', stNest ps = A' ++ M ++ B') → ∃ b ∈ blocks ++ [B], InBlock g items b i := by
     intro xs M h hxm hM
     obtain ⟨A', B', hM⟩ := hM
-    rcases hxi.expands_cases h hxm with ⟨y, _, hy, hyi⟩ | ⟨L, hL, A, Bb, hLeq⟩
-    · obtain ⟨b, hb, hbi⟩ := hfin y i hy hyi hty
-      exact ⟨b, List.mem_append_left _ hb, hbi⟩
+    rcases hxi.expands_cases h hxm with hh | ⟨L, hL, A, Bb, hLeq⟩
+    · exact absurd hh hnh
     · have hseg : B.items = (A' ++ A) ++ L ++ (Bb ++ B') := by
         rw [hB, hM, hLeq]; simp only [List.append_assoc]
       exact ⟨B, List.mem_append_right _ (List.mem_singleton_self _), L, hL, ⟨_, _, hseg⟩,
-        hor i L ⟨x, hxs, hxi⟩ hty hL ⟨_, _, hseg⟩⟩
+        hor i L ⟨x, hxs, hxi, hnh⟩ hty hL⟩
   rcases List.mem_append.1 (show x ∈ readL sub ++ readR sub from hxs) with hxs' | hxs'
   · exact key hR.1 hxs' ⟨[], stNestR ps, by simp [stNest]⟩
   · exact key hR.2 hxs' ⟨stNestL ps, [], by simp [stNest]⟩
