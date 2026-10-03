@@ -86,7 +86,7 @@ theorem finishEdge_frontier {D curV d : Nat} {o : DfsOut} {origTstack : Nat} {ha
     obtain ⟨hi', lo, hsplit, hc⟩ := L1Ctx.ofEar hE hs hD' ht hlow
     have hends : Items.PairEq (o.dest, s.stackVerts[d]!) s.g.edges[o.e]! := by
       obtain ⟨lv, kind, ho⟩ : ∃ lv kind, o.cls = .ret lv kind := by
-        cases h : o.cls <;> simp [OutClass.lowval, h] at hlow ⊢; omega
+        cases h : o.cls <;> simp [OutClass.lowval, h] at hlow ⊢ <;> omega
       simpa [ht] using hb.ends lv kind ho
     obtain ⟨done, rest, c, hreach, hP, hK, hF⟩ :=
       l1_iter hc (l1_init hE hi hs hD' hb.e_lt hb.q hends hsplit) hb.v_lt k hk
