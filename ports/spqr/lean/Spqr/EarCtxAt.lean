@@ -367,6 +367,10 @@ structure TreeSite (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOu
   hpush' : push' = true ↔ hv' = false
   hL' : L' = if push' then [⟨y, d + 1, sE.nxtEdgeIdx, setSides dir' [vertItem y] []⟩] else []
   sd₃ : ∀ k, k ≤ d → D₃[k]! = sE.stackDir[k]!
+  hdir' : push' = true → dir' = true
+  bridge_bd : cls = .bridge → ∀ o' ∈ done', d + 1 ≤ o'.1.cls.lowval (d + 1)
+  comp_ret : cls = .component → ∀ o' ∈ done', o'.1.cls.lowval (d + 1) < d + 1 →
+    o'.1.cls.lowval (d + 1) = d
 
 section
 variable {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut} {hasVert : Bool}

@@ -18,6 +18,91 @@ facts `ear_*` below, which `FinishGuards` does not provide and are left to the e
 -/
 
 namespace Spqr
+
+/-! Lowval / return-depth facts about a well-formed out-edge (the class of a tree out is determined
+by the return depths of its subtree). -/
+namespace EarDfs
+
+theorem lowval_classify_tree {d : Nat} {n : Lowvals} (h : n.1 ≤ d + 1) :
+    (classify d true n).lowval d = n.1 := by
+  unfold classify
+  split
+  · next h1 =>
+    split
+    · next h2 => simp at h2; simp [h2, OutClass.lowval]
+    · next h2 => simp at h1 h2; simp [OutClass.lowval]; omega
+  · rfl
+
+/-- The lowval of a well-formed out-edge at depth `d` is the least depth its piece returns to
+(`d + 1` for a bridge). -/
+theorem lowval_eq_lmin {anc : List Nat} {v : Nat} {o : DfsOut} (hwf : o.WF anc v) :
+    o.cls.lowval anc.length = lmin (anc.length + 1) (o.retDepths anc.length) := by
+  cases o with
+  | back e dest cls =>
+    rw [DfsOut.WF] at hwf
+    obtain ⟨i, hi, rfl⟩ := hwf
+    have hi' : i ≤ anc.length := by
+      have := (List.getElem?_eq_some_iff.1 hi).1; simp at this; omega
+    simp only [DfsOut.cls, DfsOut.retDepths, lmin_cons, lmin_nil, lowval_classify_back hi']
+    omega
+  | tree e cls child =>
+    rw [DfsOut.WF] at hwf
+    obtain ⟨-, rfl⟩ := hwf
+    simp only [DfsOut.cls, DfsOut.retDepths]
+    exact lowval_classify_tree (lmin_le _ _)
+
+theorem lowval_mem_retDepths {anc : List Nat} {v : Nat} {o : DfsOut} (hwf : o.WF anc v)
+    (hret : o.cls.lowval anc.length < anc.length) :
+    o.cls.lowval anc.length ∈ o.retDepths anc.length := by
+  rw [lowval_eq_lmin hwf] at hret ⊢
+  rcases lmin_eq_or_mem (anc.length + 1) (o.retDepths anc.length) with h | h
+  · omega
+  · exact h
+
+theorem retDepths_sub {d y : Nat} {outs : List DfsOut} {o : DfsOut} (ho : o ∈ outs) :
+    ∀ x ∈ o.retDepths d, x ∈ (DfsTree.node y outs).retDepths d := by
+  intro x hx
+  show x ∈ DfsOut.retDepthsList d outs
+  rw [DfsOut.retDepthsList_eq]
+  exact List.mem_flatMap.2 ⟨o, ho, hx⟩
+
+/-- A bridge's child has only boundary outs. -/
+theorem bridge_outs_bd {anc : List Nat} {v y : Nat} {cls : OutClass} {outs : List DfsOut}
+    (hwf : (DfsTree.node y outs).WF (anc ++ [v]))
+    (hcls : cls = classify anc.length true
+      (low2 (anc.length + 1) ((DfsTree.node y outs).retDepths (anc.length + 1))))
+    (hb : cls = .bridge) : ∀ o ∈ outs, anc.length + 1 ≤ o.cls.lowval (anc.length + 1) := by
+  intro o ho
+  rw [DfsTree.WF] at hwf
+  have hwo := hwf.2 o ho
+  have hlen : (anc ++ [v]).length = anc.length + 1 := by simp
+  rw [hcls, classify_eq_bridge_iff, low2_fst] at hb
+  by_contra hlt
+  rw [Nat.not_le] at hlt
+  have hm := lowval_mem_retDepths hwo
+  rw [hlen] at hm
+  have := lmin_le_of_mem (d := anc.length + 1) (retDepths_sub (y := y) ho _ (hm hlt))
+  omega
+
+/-- A component's child returns exactly to the parent depth. -/
+theorem comp_outs_ret {anc : List Nat} {v y : Nat} {cls : OutClass} {outs : List DfsOut}
+    (hwf : (DfsTree.node y outs).WF (anc ++ [v]))
+    (hcls : cls = classify anc.length true
+      (low2 (anc.length + 1) ((DfsTree.node y outs).retDepths (anc.length + 1))))
+    (hc : cls = .component) : ∀ o ∈ outs, o.cls.lowval (anc.length + 1) < anc.length + 1 →
+      o.cls.lowval (anc.length + 1) = anc.length := by
+  intro o ho hlt
+  rw [DfsTree.WF] at hwf
+  have hwo := hwf.2 o ho
+  have hlen : (anc ++ [v]).length = anc.length + 1 := by simp
+  rw [hcls, classify_eq_component_iff, low2_fst] at hc
+  have hm := lowval_mem_retDepths hwo
+  rw [hlen] at hm
+  have := lmin_le_of_mem (d := anc.length + 1) (retDepths_sub (y := y) ho _ (hm hlt))
+  omega
+
+end EarDfs
+
 open WalkM
 
 namespace WalkState
@@ -2806,7 +2891,8 @@ def TreeEnd (y d : Nat) (outs : List DfsOut) (base : List TEntry) (bE : List (Na
     s' = pushEnd sE D₃ L' ∧ EarCtx y d done' [] hv' base bE sv sd sE ∧ done'.map (·.1) = outs ∧
     (push' = true ↔ hv' = false) ∧
     L' = (if push' then [⟨y, d, sE.nxtEdgeIdx, setSides dir' [vertItem y] []⟩] else []) ∧
-    ∀ k, k < d → D₃[k]! = sE.stackDir[k]!
+    (∀ k, k < d → D₃[k]! = sE.stackDir[k]!) ∧
+    (push' = true → d < D₃.size → dir' = true)
 
 /-- The per-out part of `EarOut` after `walkOutPre` (literally its inner match). -/
 def OutMid (v d : Nat) (o : DfsOut) (hasVert' : Bool) (s₁ : WalkState) : Prop :=
@@ -2882,9 +2968,10 @@ theorem cTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), CTree t d s
     cases hv'
     · simp only [Bool.false_eq_true, ↓reduceIte, wp_bind, wp_setStackDir, wp_pushVertTstack]
       exact ⟨done', false, s', (s'.stackDir.set! d true)[d]!, _, true, s'.stackDir.set! d true, rfl,
-        hC', hmap, by simp, rfl, fun k hk => getElem!_set!_ne' s'.stackDir d k true (Nat.ne_of_lt hk)⟩
+        hC', hmap, by simp, rfl, fun k hk => getElem!_set!_ne' s'.stackDir d k true (Nat.ne_of_lt hk),
+        fun _ hd => getElem!_set!_self' _ _ _ (by simpa using hd)⟩
     · exact ⟨done', true, s', false, [], false, s'.stackDir, rfl, hC', hmap, by simp, rfl,
-        fun _ _ => rfl⟩
+        fun _ _ => rfl, fun h => absurd h Bool.false_ne_true⟩
 
 theorem cOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState),
     COuts v d outs hasVert s
@@ -3177,7 +3264,7 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
               (fun hv' s' => ∃ hvF', EarCtx v anc.length
                 (done ++ [(.tree e cls (.node y outs'), hvF')]) rest hv' base bE sv sd s') s₃) S₂ := by
           refine wp_mono _ (wp_and hend (wp_and hK (wp_and hsdb (wp_and hq (wp_and hvr hbel))))) ?_
-          rintro _ s₃ ⟨⟨done', hv'', sE, dir', L', push', D₃, rfl, hC', hdone', hpush', hL', hsd₃⟩,
+          rintro _ s₃ ⟨⟨done', hv'', sE, dir', L', push', D₃, rfl, hC', hdone', hpush', hL', hsd₃, hdir₃⟩,
             hK3, hsdb3, hq3, hvr3, hbel3⟩
           have H : TreeSite v anc.length done rest hasVert base bE sv sd s e cls y outs' L push done'
               hv'' _ sv' sd' sE dir' L' push' D₃ :=
@@ -3205,7 +3292,15 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
                 ((hsdb3 k (Nat.lt_succ_of_le hk)).trans (by rw [hS₂]))
               q_root := by rw [hS₂] at hq3; exact hq3
               v_root := hvr3, hpush' := hpush', hL' := hL'
-              sd₃ := fun k hk => hsd₃ k (Nat.lt_succ_of_le hk) }
+              sd₃ := fun k hk => hsd₃ k (Nat.lt_succ_of_le hk)
+              hdir' := fun hp => hdir₃ hp (by
+                have h1 := hK3.sd
+                simp only [pushEnd, hS₂, Array.size_set!] at h1
+                rw [h1, hsdz]; omega)
+              bridge_bd := fun hb o' ho' => EarDfs.bridge_outs_bd hwf_c.1 hwf_c.2 hb o'.1
+                (by have h := List.mem_map_of_mem (f := (·.1)) ho'; rw [hdone'] at h; exact h)
+              comp_ret := fun hc o' ho' => EarDfs.comp_outs_ret hwf_c.1 hwf_c.2 hc o'.1
+                (by have h := List.mem_map_of_mem (f := (·.1)) ho'; rw [hdone'] at h; exact h) }
           refine ⟨⟨fun h => ?_, earAt_tree_of_ctx H⟩, wp_mono _ (ctx_step_tree H) fun _ _ h => ⟨_, h⟩⟩
           have h0 : hasVert = false := (Bool.or_eq_false_iff.1 h).1
           obtain ⟨h1, h2⟩ := hC.vert_book h0
