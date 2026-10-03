@@ -3111,8 +3111,26 @@ neighbours, the two sides merge into one face) — a dual lemma `IsPlanarEmbeddi
 to be written. Its hypothesis "the cap's two sides are distinct faces" is the classical
 edge-on-a-cycle fact, which needs the genus inequality
 `numFaceOrbits + 2·numNonIsolated ≤ 2·(2·numComponents + es.length)` for arbitrary valid rotation
-systems; the repo does not have it (`twoSum_planar` assumes `face ∨ conn`). The S/P routes via
-`join`/`parJoin` do not need it.
+systems (`twoSum_planar` assumes `face ∨ conn`). The S/P routes via `join`/`parJoin` do not
+need it.
+Genus inequality (`RotationSystem.genus_le`, `Proofs/PlanarGenus.lean`, standard axioms): for every
+`IsEmbedding es n rs`, `rs.numFaceOrbits + 2·numNonIsolated es n ≤ 2·(2·numComponents es n +
+es.length)`. Induction on `es`, deleting the first edge `p` of `p :: es`: each end of `p` whose
+rotation leaves the edge is detached by one `conj` (`DetachAt`: pairs `p`'s two quarter-edges at
+that end with each other and its two former neighbours with each other; `+2` vertex orbits via
+`conj_orbitCount_split`, `±2` face orbits via `conj_numFaceOrbits_split`/`_merge`), after which the
+system is literally `single.union ρ` or `loop.union ρ` (`eq_union_shrink`) with `ρ = shrink _` an
+`IsEmbedding` of `es` (`isEmbedding_of_union`); the inductive bound for `ρ` transfers
+(`genus_cons_bound`). Graph side (`Proofs/PlanarCompCons.lean`, via the component minima of
+`ccCount`): `numNonIsolated_cons_eq` (exact count of endpoints isolated in `es`),
+`numComponents_cons_le_succ` (`C(es) ≤ C(p :: es) + 1`), `numComponents_cons_succ_le` (both
+endpoints isolated: `+1`), `numComponents_cons_le_of_isolated`/`_of_loop` (no drop), and the
+bridge fact `edgesConn_of_not_cofacial`: if the two sides of `p` are not cofacial, the face walk
+along one side connects `p.1` to `p.2` inside `es` (`edgesConn_tail_across`), so
+`numComponents_cons` applies. Case split: an end whose rotation stays inside `p` is isolated in
+`es` (`not_hasEdge_of_pair`, from the vertex-orbit labelling), both ends detached gives the
+`detach_both` dichotomy "`F + 4` or (`F` and sides not cofacial)". Checked beforehand on 4000
+random embeddings by `checks/PlanarGenusCheck.lean`.
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through `walk_items_wf`,
 `spqrTree_r_three_connected`, `spqrTree_pieceSep`, `nodePlanar_sound_R` and
 `nodeFold_capped`.
@@ -3193,6 +3211,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `Capped.join` (1-sum of two capped pieces at a shared cap endpoint, node-step link order) | `Proofs/PieceJoin.lean` | **proved** (standard axioms) |
 | `Capped.attachOpen` (open `V` piece hung at a capped end by the corner link), `capped_child` (child certificate from `GluedFaces`) | `Proofs/PieceJoin.lean`, `PlanarEmbedNode.lean` | **proved** (standard axioms) |
 | `IsPlanarEmbedding.ident_conj` (identify two connected vertices by a `conj` of two cofacial pairs), `IsPlanarEmbedding.splice2` (2-sum on the common vertex space by two `conj`s), `iterate_eq_of_eqOn`, `IsPermOn.exists_first_hit`, `RotationSystem.sameOrbit_stepC3_rot`, `Capped.parJoin` (P-node step: two capped pieces with the same cap endpoints, node-step link order, cofaciality of `c0`/`d2` kept) | `Proofs/PlanarIdent.lean`, `Proofs/PlanarSplice2.lean`, `Proofs/OrbitSegment.lean`, `Proofs/PieceParJoin.lean` | **proved** (standard axioms) |
+| `RotationSystem.genus_le` (genus inequality `F + 2V ≤ 2(2C + E)` for every `IsEmbedding`, by first-edge deletion: `DetachAt` conjugations, `detach_one`/`detach_both`, `eq_union_shrink`/`isEmbedding_of_union`, `genus_cons_bound`), `edgesConn_of_not_cofacial` (non-cofacial sides ⇒ endpoints connected in the tail), `numNonIsolated_cons_eq`, `numComponents_cons_le_succ`/`_succ_le`/`_le_of_isolated`/`_le_of_loop` | `Proofs/PlanarGenus.lean`, `Proofs/PlanarCompCons.lean` | **proved** (standard axioms) |
 | `embedItem_Q_nil`, `embedItem_Q_O`, `embedItem_Q_cons`, `qUpper`, `qLower`, `setOuter4` | `PlanarEmbedQExec.lean` | **proved** (exact unfolding of the executable `Q` branch) |
 | `q_edge_not_below`, `q_fresh`, `q_lower_boundary`, `q_capped_child`, `q_open_glued`, `q_leaf_glued`, `q_loop_glued`, `q_block_glued`, `embedItem_step_Q_faces` | `PlanarEmbedQ.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `treeQe`, `nodeStep`, `embedItem_node`, `forIn_state_foldl`, `nodeStep_outerE_ne`/`_outerE_size`/`_rotAdj_size`/`_exposedAt_ne`, `nodeFold_*` | `PlanarEmbedNodeExec.lean` | **proved** (exact unfolding of the executable `S`/`P`/`R` branch + frame lemmas) |
