@@ -152,6 +152,24 @@ theorem CloseAt.frame {g : Graph} {items items' : Items} {i : ItemId}
   · simpa only [f.type, f.vs, f.vchildren, f.virtualEdges] using h.s_order
   · simpa only [f.type, f.vs, f.vchildren, f.virtualEdges] using h.r_shape
 
+theorem CloseAt.modify_of_not_below {g : Graph} {items : Items} {i j : ItemId}
+    (h : CloseAt g items i) (f : Item → Item) (hj : ¬ items.Below i j) :
+    CloseAt g (items.modify j f) i := by
+  have hne : i ≠ j := fun hij => hj (by subst j; exact .refl)
+  have hn : ∀ c, items.IsParent i c → ¬ items.Below c j :=
+    fun c hc hb => hj ((Relation.ReflTransGen.single hc).trans hb)
+  have hcn : ∀ c, items.IsParent i c → c ≠ j := fun c hc hcj => hn c hc (by subst j; exact .refl)
+  apply h.frame
+  refine ⟨?_, vs_modify_of_ne _ _ hne, ch_modify_of_ne _ _ hne,
+    ?_, (fun c hc => vs_modify_of_ne _ _ (hcn c hc)),
+    (fun c hc => ch_modify_of_ne _ _ (hcn c hc)), ?_⟩
+  · simp [type, Array.getElem?_modify, Ne.symm hne]
+  · intro c hc; simp [type, Array.getElem?_modify, Ne.symm (hcn c hc)]
+  · intro k hk e
+    rcases hk with rfl | hk
+    · exact Below_modify_of_not_below _ _ hj
+    · exact Below_modify_of_not_below _ _ (hn k hk)
+
 end Items
 
 namespace WalkState
@@ -204,6 +222,72 @@ theorem CloseInv.push {s : WalkState} (h : s.CloseInv) (v d i : Nat)
       change 0 < spansCount (_ :: s.tstack) j + chCount s.items j at hl
       rw [spansCount_cons, count_setSides] at hl
       simpa [List.count_singleton, Ne.symm hji, cnt] using hl
+
+theorem CloseInv.alloc {s : WalkState} {P X : ItemId → Prop} (h : s.CloseInv)
+    (hp : s.Place s.g P X) (ty : NodeType) : (after (allocItem ty) s).CloseInv := by
+  change ({ s with items := s.items.push { type := ty } } : WalkState).CloseInv
+  constructor
+  intro i hi hc
+  have hc' : i = rootItem ∨ 0 < s.cnt i := by
+    simpa only [cnt, Items.chCount_push s.items { type := ty } rfl] using hc
+  have hi' : i < s.items.size := by
+    rcases hc' with rfl | hc'
+    · have := hp.size; dsimp [rootItem]; omega
+    · exact hp.alloc i hc'
+  have hchild : ∀ c, Items.IsParent s.items i c → c < s.items.size := by
+    intro c hc
+    have hpos := List.count_pos_iff.mpr hc
+    have hle := Items.count_le_chCount s.items hi' c
+    apply hp.alloc c
+    dsimp [cnt]; omega
+  apply (h.closed i hi' hc').frame
+  refine ⟨Items.type_push_of_ne _ (Nat.ne_of_lt hi'), Items.vs_push_of_ne _ (Nat.ne_of_lt hi'),
+    Items.ch_push_nil _ rfl _, ?_, ?_, ?_, ?_⟩
+  · intro c hc; exact Items.type_push_of_ne _ (Nat.ne_of_lt (hchild c hc))
+  · intro c hc; exact Items.vs_push_of_ne _ (Nat.ne_of_lt (hchild c hc))
+  · intro c _; exact Items.ch_push_nil _ rfl _
+  · intro j _ e; exact Items.Below_push_nil _ rfl
+
+theorem CloseInv.finishTop {s : WalkState} (h : s.CloseInv) {x : ItemId}
+    (hx : x < s.items.size) (hz : s.cnt x = 0) (dir : Bool) (vs : Option Nat × Option Nat)
+    (hnew : Items.CloseAt s.g
+      (s.items.modify x fun it => { it with vs := vs, ch := getSide s.tstack.head!.spans dir }) x) :
+    ({ s with
+        items := s.items.modify x fun it => { it with vs := vs, ch := getSide s.tstack.head!.spans dir },
+        tstack := match s.tstack with
+          | a :: rest => { a with spans := setSides dir [x] [] } :: rest
+          | [] => [] } : WalkState).CloseInv := by
+  have hn : ∀ p, ¬ Items.IsParent s.items p x := by
+    intro p hp
+    have hpos := List.count_pos_iff.mpr hp
+    have hle := Items.count_le_chCount s.items (Items.parent_lt hp) x
+    dsimp [cnt] at hz; omega
+  constructor
+  intro i hi hc
+  by_cases hix : i = x
+  · subst i; exact hnew
+  · have hle : spansCount (match s.tstack with
+          | a :: rest => { a with spans := setSides dir [x] [] } :: rest
+          | [] => []) i +
+        chCount (s.items.modify x fun it => { it with vs := vs, ch := getSide s.tstack.head!.spans dir }) i
+          ≤ s.cnt i := by
+      have h1 := Items.chCount_modify s.items hx
+        (fun it => { it with vs := vs, ch := getSide s.tstack.head!.spans dir }) i
+      have h2 := count_getSide_le s.tstack.head!.spans dir i
+      dsimp [cnt]
+      cases ht : s.tstack with
+      | nil =>
+        have hs : getSide ([] : List TEntry).head!.spans dir = [] := by cases dir <;> rfl
+        simp only [ht, hs, spansCount_nil, List.count_nil] at h1 ⊢
+        omega
+      | cons a rest =>
+        simp only [ht, head!_cons, spansCount_cons, count_setSides, List.append_nil,
+          List.count_singleton, beq_iff_eq, Ne.symm hix, ite_false, Nat.zero_add] at h1 h2 ⊢
+        omega
+    have hc' : i = rootItem ∨ 0 < s.cnt i := hc.imp_right fun hpos => lt_of_lt_of_le hpos hle
+    exact (h.closed i (by simpa using hi) hc').modify_of_not_below
+      (fun it => { it with vs := vs, ch := getSide s.tstack.head!.spans dir })
+      fun hb => hix (Items.Below.eq_of_no_parent hn hb)
 
 theorem CloseInv.of_tree {s : WalkState} (h : s.CloseInv) (ht : Items.Tree s.g s.items)
     (hty : WalkTyping s.g s.items) : Items.CloseFacts s.g s.items := by
