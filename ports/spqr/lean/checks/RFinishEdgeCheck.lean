@@ -260,7 +260,8 @@ def settledEntry (D : Dfs) (v d : Nat) (s : WalkState) (t : TEntry) (tag : Strin
   if exempt v d t then [] else (entryR D s t).map fun b => s!"{tag} {showT t}: {b}"
 
 /-- `FinishRShape dfs v d o orig hv s` (`Proofs/RInvTree.lean`) plus the admitted
-`finishEdge_tree_top_settled_first` (the top after the P-check, first-edge case), computed on the
+`feS₂_top_entryR` (`s2top`: the `feS₂` top with `topDepth = d`, `vStart ≠ v` is `EntryR`, first-edge
+case) and `finishEdge_tree_top_settled_first` (`ptop`: the top after the P-check), computed on the
 library's `feS₁`, `feS₂`, `feP`. -/
 def shapeCheck (D : Dfs) (v d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
     List String := Id.run do
@@ -277,6 +278,11 @@ def shapeCheck (D : Dfs) (v d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : 
     | _ :: b :: _ => if !exempt v d b then bad := s!"unwrap nonexempt nxt={showT b}" :: bad
     | _ => pure ()
   if !hv then
+    match s₂.tstack with
+    | c :: _ =>
+      if c.topDepth == d && c.vStart != v then
+        bad := "stat:s2top-nonexempt" :: (entryR D s₂ c).map (fun b => s!"s2top {showT c}: {b}") ++ bad
+    | [] => pure ()
     let sP := WalkState.feP v d o s
     let vE := belowList sP (vertItem v)
     for t in sP.tstack do
