@@ -74,6 +74,20 @@ theorem returned_not_rInvAt (dfs : DfsData) : ¬returned.RInvAt dfs 1 := by
   exact not_sepClass (hmax 1 0 (by decide) (by decide)
     (pending_outside (.inr rfl)) (pending_outside (.inl rfl)))
 
+theorem returned_base :
+    returned.tstack.drop (returned.tstack.length - before.tstack.length) = before.tstack := by
+  cbv
+
+theorem returned_base_entries (dfs : DfsData) :
+    ∀ t ∈ returned.tstack.drop (returned.tstack.length - before.tstack.length),
+      t.vStart ≠ 1 → returned.EntryR dfs t := by
+  rw [returned_base]
+  intro t ht hne
+  change t ∈ [⟨1, 1, 0, ([], [2])⟩] at ht
+  have ht' : t = ⟨1, 1, 0, ([], [2])⟩ := by simpa using ht
+  subst t
+  exact False.elim (hne rfl)
+
 #print axioms pEntry_mem
 #print axioms dfsForest_eq
 #print axioms pEntry_piece
@@ -82,5 +96,129 @@ theorem returned_not_rInvAt (dfs : DfsData) : ¬returned.RInvAt dfs 1 := by
 #print axioms pending_outside
 #print axioms not_sepClass
 #print axioms returned_not_rInvAt
+#print axioms returned_base
+#print axioms returned_base_entries
 
 end Spqr.RInvReturnCheck
+
+open Spqr WalkM
+
+namespace RReturnCheck
+
+def entryKey (t : TEntry) := (t.vStart, t.topDepth, t.firstIdx, t.spans)
+
+def descendants (items : Items) : Nat → Nat → List Nat
+  | 0, i => [i]
+  | fuel + 1, i => i :: (items.ch i).flatMap (descendants items fuel)
+
+def below (s : WalkState) (i : Nat) : List Nat :=
+  ((descendants s.items s.items.size i).filter (1 + s.g.nv ≤ ·)).mergeSort
+
+def entryBelow (s : WalkState) (t : TEntry) : List Nat :=
+  (t.spans.1 ++ t.spans.2).flatMap (below s)
+
+def isBlock (g : Graph) : Bool := (List.range g.nv).all fun v => Id.run do
+  let mut seen := if g.ne == 0 then [] else [0]
+  for _ in List.range g.ne do
+    seen := (List.range g.ne).filter fun e => seen.contains e || seen.any fun f =>
+      [g.edges[e]!.1, g.edges[e]!.2].any fun u =>
+        u != v && (g.edges[f]!.1 == u || g.edges[f]!.2 == u)
+  return seen.length == g.ne
+
+/-- Check return shape/disjointness on every graph, and the `EntryR` observation frame on blocks.
+The frame check assumes the input's settled-base obligations; empty entries need no terminal. -/
+def checkReturn (parent : Nat) (s s' : WalkState) : List String := Id.run do
+  let mut bad := []
+  let base := s'.tstack.drop (s'.tstack.length - s.tstack.length)
+  if s.tstack.length > s'.tstack.length then bad := "size" :: bad
+  if base.map entryKey != s.tstack.map entryKey then bad := "base" :: bad
+  if s.g.nv != s'.g.nv || s.g.edges != s'.g.edges then bad := "graph" :: bad
+  for t in base do
+    if isBlock s.g && t.vStart != parent then
+      if !(entryBelow s t).isEmpty && s.stackVerts[t.topDepth]! != s'.stackVerts[t.topDepth]! then
+        bad := "base terminal" :: bad
+      for i in t.spans.1 ++ t.spans.2 do
+        if Items.type s.items i != Items.type s'.items i || Items.vs s.items i != Items.vs s'.items i ||
+            below s i != below s' i then bad := "base item frame" :: bad
+  for i in List.range s'.tstack.length do
+    for j in List.range i do
+      if (entryBelow s' s'.tstack[i]!).any ((entryBelow s' s'.tstack[j]!).contains) then
+        bad := "disjointness" :: bad
+  return bad
+
+mutual
+partial def tree (t : DfsTree) (d : Nat) (s : WalkState) : WalkState × List String :=
+  match t with
+  | .node v os =>
+    let s := { s with stackVerts := s.stackVerts.set! d v }
+    let (hv, s, bad) := outs v d os false s
+    let s := if hv then s else (setStackDir d true *> pushVertTstack v d).run s |>.2
+    (s, bad)
+
+partial def outs (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkState) :
+    Bool × WalkState × List String :=
+  match os with
+  | [] => (hv, s, [])
+  | o :: rest =>
+    let (hv, s) := (walkOutPre v d o hv).run s
+    let orig := s.tstack.length
+    let (s, bad) := match o with
+      | .back .. => (s, [])
+      | .tree _ _ child =>
+        let before := { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
+        let (after, bad) := tree child (d + 1) before
+        (after, bad ++ (checkReturn v before after).map (s!"v={v} e={o.e} " ++ ·))
+    let (hv, s) := (finishEdge v d o orig hv).run s
+    let (hv, s, bad') := outs v d rest hv s
+    (hv, s, bad ++ bad')
+end
+
+def runGraph (g : Graph) (vo eo : List Nat) (tern : Bool) : List String := Id.run do
+  let forest := g.dfsForest vo eo
+  let mut s := WalkState.init g tern
+  let mut bad := []
+  for t in forest do
+    let (s', bs) := tree t 0 s
+    bad := bad ++ bs
+    s := (do
+      let top ← popTstack
+      modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }).run s' |>.2
+  let ref := g.walk tern forest
+  if s.items.toList.map (fun i => (i.type, i.vs, i.ch)) !=
+      ref.items.toList.map (fun i => (i.type, i.vs, i.ch)) ||
+      s.tstack.map entryKey != ref.tstack.map entryKey then
+    bad := "instrumented walk differs" :: bad
+  return bad
+
+end RReturnCheck
+
+/-- Input is concatenated `gen.py` cases, prefixed by the number of cases. -/
+def main : IO UInt32 := do
+  let input ← (← IO.getStdin).readToEnd
+  let toks := ((input.splitOn " ").flatMap (·.splitOn "\n") |>.filter (· != "") |>.map String.toNat!).toArray
+  let mut p := 1
+  let mut fails := 0
+  let mut blocks := 0
+  for seed in [0:toks[0]!] do
+    let nv := toks[p]!; let ne := toks[p+1]!
+    p := p + 3
+    let edges := (List.range ne).map fun i => (toks[p+2*i]!, toks[p+2*i+1]!)
+    p := p + 2*ne
+    let k := toks[p]!; p := p + 1
+    let vo := (List.range k).map fun i => toks[p+i]!
+    p := p + k
+    let k := toks[p]!; p := p + 1
+    let eo := (List.range k).map fun i => toks[p+i]!
+    p := p + k
+    if RReturnCheck.isBlock ⟨nv, edges.toArray⟩ then blocks := blocks + 1
+    for tern in [false, true] do
+      let bad := RReturnCheck.runGraph ⟨nv, edges.toArray⟩ vo eo tern
+      if !bad.isEmpty then
+        fails := fails + 1
+        IO.println s!"seed={seed} tern={tern}: {bad}"
+  let fixed := RReturnCheck.checkReturn 1 Spqr.RInvReturnCheck.before Spqr.RInvReturnCheck.returned
+  if !fixed.isEmpty then
+    fails := fails + 1
+    IO.println s!"fixed counterexample: {fixed}"
+  IO.println s!"cases={toks[0]!} x both ternarize modes; block cases={blocks}; fixed regression; failures={fails}"
+  return if fails == 0 then 0 else 1

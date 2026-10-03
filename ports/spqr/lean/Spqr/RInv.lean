@@ -101,8 +101,8 @@ structure RTop (s : WalkState) (dfs : DfsData) (cur nxt : TEntry) : Prop where
 /-- `RInv` settled at the vertex `v` being walked. An entry with bottom `v` is still collecting
 `v`'s classes at its top: a `(v, l)` entry's complement contains the `(v, l)` classes of `v`'s
 later out-edges until the P-check merges them (two parallel back edges `v → stackVerts[l]`: after
-the first is pushed its single-edge entry is not `maximal`), so such entries are exempt until `v`
-is finished (`walkTree_rInvAt`). -/
+the first is pushed its single-edge entry is not `maximal`), so such entries are exempt while `v`
+is being walked. Child return needs a separate provisional-frontier contract. -/
 structure RInvAt (s : WalkState) (dfs : DfsData) (v : Nat) : Prop where
   entries : ∀ t ∈ s.tstack, t.vStart ≠ v → s.EntryR dfs t
   disj : s.tstack.Pairwise fun t t' => ∀ e, t.edges s.g s.items e → ¬t'.edges s.g s.items e

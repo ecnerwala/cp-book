@@ -14,8 +14,9 @@ entry has no edges and no pieces: `EntryR.vert`).
 
 The content-carrying blocks are admitted: `finishEdge_rInvAt` (Loop 1's closes, Loop 2,
 `closeVert`, the P-check, the back-edge push keep the invariant settled at `curV`),
-`walkTree_rInvAt` (finishing a child settles its entries), and `loop1_rBranch` (the stack shape at
-Loop 1's R branch). `loop1_r_threeConnected` combines the last with `RBranch.threeConnected`.
+the legacy `walkTree_rInvAt` (its settled-return conclusion is false), and `loop1_rBranch`
+(the stack shape at Loop 1's R branch). `WalkTreeRReturnSpec` states the provisional-return
+obligation. `loop1_r_threeConnected` combines the last admission with `RBranch.threeConnected`.
 -/
 
 namespace Spqr
@@ -79,6 +80,26 @@ def FrontiersOut (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Pro
 end
 
 variable {s s' : WalkState} {dfs : DfsData} {t : TEntry}
+
+/-- A child return keeps the old stack as a settled base, except at the parent vertex.
+Entries above that base remain provisional until the pending parent edge is processed. -/
+structure RReturn (before after : WalkState) (dfs : DfsData) (parent : Nat) : Prop where
+  size : before.tstack.length ≤ after.tstack.length
+  base : after.tstack.drop (after.tstack.length - before.tstack.length) = before.tstack
+  entries : ∀ t ∈ after.tstack.drop (after.tstack.length - before.tstack.length),
+    t.vStart ≠ parent → after.EntryR dfs t
+  disj : after.tstack.Pairwise fun t t' => ∀ e,
+    t.edges after.g after.items e → ¬t'.edges after.g after.items e
+
+/-- Preservation obligation at the child-return boundary, before the parent's `finishEdge`.
+This is a proposition naming the contract, not an admitted proof of preservation. -/
+def WalkTreeRReturnSpec (dfs : DfsData) : Prop :=
+  ∀ (s : WalkState) (D d c : Nat) (outs : List DfsOut),
+    s.Inv' D → Shape s → GuardsTree (.node c outs) (d + 1) s →
+    FrontiersTree (.node c outs) (d + 1) s → s.g.TwoConnected →
+    dfs.Spec s.g → dfs.Rooted s.g → dfs.IsParent s.stackVerts[d]! c →
+    outs = dfs.outs c → s.RInvAt dfs s.stackVerts[d]! →
+    RReturn s (after (walkTree (.node c outs) (d + 1)) s) dfs s.stackVerts[d]!
 
 theorem mem_spans_of_entryPieceItems {i : ItemId} (hi : i ∈ s.entryPieceItems t) :
     i ∈ t.spans.1 ++ t.spans.2 :=
@@ -303,10 +324,8 @@ theorem finishEdge_rInvAt {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsO
     (after (finishEdge curV d o origTstack hasVert) s).RInvAt dfs curV := by
   sorry
 
-/-- Admitted (Lemma 4.3, ascend): walking the subtree of the child `c = stackVerts[d+1]` from a
-state settled at `c` (no entry has bottom `c` yet) leaves a state settled at its parent
-`stackVerts[d]`: once `c`'s out-edges are done every `(c, l)` class has been P-merged into the single
-`(c, l)` entry, which is then `maximal`. -/
+/-- Legacy admitted ascend statement; its settled return conclusion is refuted by
+`checks/RInvReturnCheck.lean`. The provisional return contract is `WalkTreeRReturnSpec`. -/
 theorem walkTree_rInvAt {D : Nat} (d : Nat) (c : Nat) (outs : List DfsOut) (hi : s.Inv' D) (hs : Shape s)
     (hg : GuardsTree (.node c outs) (d + 1) s)
     (hfront : FrontiersTree (.node c outs) (d + 1) s)

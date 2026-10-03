@@ -797,6 +797,32 @@ It is not a field of `Items.WF`: `Shapes.q_leaf_of_node` only forces Q children 
 non-F/V parents to be leaves. Exporting the placement fact from the walk, and the
 block-local version for an arbitrary input graph, remain open.
 
+`Ranges.q_root` and `Ranges.q_leaf` condition on nonempty/empty Q children without
+constraining their parent; `Items.Typing.v_children` in `WalkTyping.lean` only supplies the Q type.
+Missing range/typing clause (proposal, not an admission): `v_child_root : ∀ v c, v < g.nv → items.IsParent (vertItem v) c → items.ch c ≠ []`.
+
+`WalkState.RReturn before after dfs parent` is the provisional child-return postcondition:
+the bottom `before.tstack.length` entries equal the original stack; only entries in that
+preserved base, except those starting at `parent`, must satisfy `EntryR`; the entire stack
+remains edge-disjoint. The prefix above the base is provisional until the parent's pending
+tree edge is incorporated by `finishEdge`. `WalkTreeRReturnSpec` names the preservation
+obligation as a `Prop` definition, not a theorem/admission. It starts settled at the parent
+and relates the walked out-list to `dfs.outs c`. The old `walkTree_rInvAt` statement and
+`returned_not_rInvAt` counterexample are retained; no preservation proof is claimed.
+`checks/RInvReturnCheck.lean` kernel-checks the fixed example's preserved base and its
+settled-entry clause. Its executable checks the base split, disjointness (including item IDs
+beyond physical edges), and preservation of every state observation read by `EntryR` on
+non-parent base entries, on both ternarize modes of seeds 0..300 from `gen.py`.
+Base shape/disjointness and instrumentation agreement pass all 602 runs; the content-frame
+check applies to the 65 graphs satisfying edge-based `TwoConnected` (130 runs), as required
+by the contract. The fixed regression also passes. This checks conditional preservation,
+not all `EntryR` premises at arbitrary walk states. Empty vertex entries have vacuous
+`EntryR` content and need no terminal-value frame: stale depth slots may be overwritten
+while walking another subtree. An initial stronger terminal-frame check flagged 78
+seed/mode runs: 38 involved empty entries, and the other 40 were outside `TwoConnected`.
+Reproduce with `lake env lean --run checks/RInvReturnCheck.lean`, supplying the concatenated
+outputs of `python3 ../gen.py 0` through `python3 ../gen.py 300`, prefixed by `301`.
+
 ### 4.6 Ranges: `Endpoints`/`Shapes` without the tstack (`Ranges.lean`, `RangesWF.lean`)
 
 Almost all of `Items.Endpoints`/`Items.Shapes` is a consequence of the *final* item tree alone, read
@@ -1147,7 +1173,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
 | 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge`/`walkTree` induction and `walk_ranges` admitted; saturation not a field (attachment-count forms false, §4.6) |
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |
-| 4.5 Child-return settling diagnostic | `checks/RInvReturnCheck.lean` | `dfsForest_eq`, `returned_not_rInvAt` proved with standard axioms; parent-settled conclusion fails before the pending tree edge is processed; preservation contracts need correction |
+| 4.5 Child-return settling diagnostic and provisional contract | `Proofs/RInvFrame.lean`, `checks/RInvReturnCheck.lean` | `RReturn`/`WalkTreeRReturnSpec` stated without an admission; legacy conclusion still refuted; fixed base/settled-entry clauses kernel-checked (standard axioms); seeds 0..300 × both modes pass shape/disjointness, with content frames checked on the 65 block inputs; preservation proof remains open |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
