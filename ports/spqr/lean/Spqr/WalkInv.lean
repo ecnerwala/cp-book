@@ -3925,7 +3925,68 @@ theorem ctx_step_tree_comp {v d : Nat} {done : List (DfsOut × Bool)} {rest : Li
       simp [hgE, h1, hvq, Array.getElem?_eq_getElem hqlt]
     · simp [hgE, h1, h2, Ne.symm h1, Ne.symm h2]
 
-/-- Admitted: the tree-edge step for a returning child (`lowval < d`): loops 1–3 of `finishEdge` (dump-checked, `ctxCheck`). -/
+/-- `finishEdge` at a returning tree edge, block by block: `finishRest` runs from `feS₃` (vertex
+entry pushed) or from `feS₂`. -/
+theorem wp_finishEdge_tree (curV d : Nat) (o : DfsOut) (orig : Nat) (hasVert : Bool)
+    (s : WalkState) (Q : Bool → WalkState → Prop) (ht : o.cls.isTree = true)
+    (hr : o.cls.lowval d < d) :
+    wp (finishEdge curV d o orig hasVert) Q s ↔
+      if hasVert then
+        wp (finishRest curV d (o.cls.lowval d) o.cls.isType1 true (feB₃ curV d o orig s)) Q
+          (feS₃ curV d o orig s)
+      else wp (finishRest curV d (o.cls.lowval d) o.cls.isType1 false (feSingle d o s)) Q
+        (feS₂ d o s) := by
+  have hge : ¬ (o.cls.lowval d ≥ d) := Nat.not_le.2 hr
+  rw [finishEdge_eq]
+  cases hasVert <;>
+    simp only [finishEdge', finishTree, wp_bind, wp_get, wp_stackDir, hge, ↓reduceIte, ht,
+      closeVert_eq, Bool.false_eq_true, wp_makeVs, wp_modifyItem] <;>
+    exact Iff.rfl
+
+/-- Admitted: the P-merge at a returning tree edge with the vertex entry (`condP` fires: the
+`(v, lowval)` entry of `R` merges into the enclosing `(v, lowval)` entry below it). -/
+theorem ctx_step_tree_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
+    {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
+    {s : WalkState} {e : Nat} {cls : OutClass} {y : Nat} {outs : List DfsOut} {L : List TEntry}
+    {push : Bool} {done' : List (DfsOut × Bool)} {hv' : Bool} {bE' : List (Nat → Prop)}
+    {sv' : List Nat} {sd' : List Bool} {sE : WalkState} {dir' : Bool} {L' : List TEntry}
+    {push' : Bool} {D₃ : Array Bool}
+    (H : TreeSite v d done rest hasVert base bE sv sd s e cls y outs L push done' hv' bE' sv' sd'
+      sE dir' L' push' D₃)
+    (hr : cls.lowval d < d) {sX : WalkState} {R : List TEntry}
+    (HR : RetTop v d s e cls y outs L true sX R) (b : Bool)
+    (hc : result (condP v (cls.lowval d) cls.isType1) sX = true) :
+    wp (finishRest v d (cls.lowval d) cls.isType1 true b)
+      (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), true)]) rest hv''
+        base bE sv sd s') sX := by
+  sorry
+
+/-- The parent context after a returning tree out from `RetTop` and the final top `T`: `R` itself
+(the vertex entry was already pushed), or `V v` pushed above `R` (`isSingle`), or merged into `R`'s
+top entry. -/
+theorem earCtx_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
+    {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
+    {s : WalkState} {e : Nat} {cls : OutClass} {y : Nat} {outs : List DfsOut} {L : List TEntry}
+    {push : Bool} {done' : List (DfsOut × Bool)} {hv' : Bool} {bE' : List (Nat → Prop)}
+    {sv' : List Nat} {sd' : List Bool} {sE : WalkState} {dir' : Bool} {L' : List TEntry}
+    {push' : Bool} {D₃ : Array Bool}
+    (H : TreeSite v d done rest hasVert base bE sv sd s e cls y outs L push done' hv' bE' sv' sd'
+      sE dir' L' push' D₃)
+    (hr : cls.lowval d < d) {hv₀ : Bool}
+    (hb : (hasVert || push) = hv₀) {sX : WalkState} {R : List TEntry}
+    (HR : RetTop v d s e cls y outs L hv₀ sX R) (T : List TEntry) {s' : WalkState}
+    (hT : (hv₀ = true ∧ T = R) ∨ (hv₀ = false ∧ ∃ f dir,
+      T = ⟨v, d, f, setSides dir [vertItem v] []⟩ :: R ∨
+      ∃ c R', R = c :: R' ∧ T = TEntry.mergeInto ⟨v, d, f, setSides dir [vertItem v] []⟩ c :: R'))
+    (hts : s'.tstack = T ++ (L ++ s.tstack)) (hg : s'.g = sX.g) (hit : s'.items = sX.items)
+    (hsv : s'.stackVerts = sX.stackVerts) (hsd : ∀ k, k < d → s'.stackDir[k]! = sX.stackDir[k]!)
+    (hnx : s'.nxtEdgeIdx = sX.nxtEdgeIdx) :
+    EarCtx v d (done ++ [(.tree e cls (.node y outs), hv₀)]) rest true base bE sv sd s' := by
+  sorry
+
+/-- The tree-edge step for a returning child (`lowval < d`): `tree_ret_shape` after loops 1–3, then
+the P-check (`ctx_step_tree_ret_P`) and the first-edge vertex push, `earCtx_ret` over the final
+top. -/
 theorem ctx_step_tree_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
     {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
     {s : WalkState} {e : Nat} {cls : OutClass} {y : Nat} {outs : List DfsOut} {L : List TEntry}
@@ -3935,11 +3996,50 @@ theorem ctx_step_tree_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : Lis
     (H : TreeSite v d done rest hasVert base bE sv sd s e cls y outs L push done' hv' bE' sv' sd'
       sE dir' L' push' D₃)
     (hr : cls.lowval d < d) :
-    wp (finishEdge v d (.tree e cls (.node y outs)) (L ++ s.tstack).length (hasVert || push))
-      (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), hasVert || push)]) rest hv''
-        base bE sv sd s')
+    wp (finishEdge v d (.tree e cls (.node y outs))
+      (L ++ s.tstack).length (hasVert || push))
+      (fun hv'' s' =>
+        EarCtx v d
+          (done ++ [(.tree e cls (.node y outs), hasVert || push)])
+          rest hv'' base bE sv sd s')
       (pushEnd sE D₃ L') := by
-  sorry
+  obtain ⟨R, HR⟩ := tree_ret_shape H hr
+  rw [wp_finishEdge_tree v d (.tree e cls (.node y outs)) _ _ _ _ H.tree hr]
+  generalize hb : (hasVert || push) = hv₀ at HR ⊢
+  cases hv₀
+  · simp only [Bool.false_eq_true, ↓reduceIte] at HR ⊢
+    have hhp := Bool.or_eq_false_iff.1 hb
+    have ht1 : cls.isType1 = false := by
+      cases h : cls.isType1
+      · rfl
+      · exact absurd (H.hpush.2 ⟨hhp.1, hr, h⟩) (by rw [hhp.2]; decide)
+    set sX := feS₂ d (.tree e cls (.node y outs)) (pushEnd sE D₃ L') with hsX
+    unfold finishRest finishP finishTail condP
+    simp only [wp_bind, wp_tstackSize, wp_nxt, wp_pure, wp_ite, DfsOut.cls, ht1, Bool.false_and,
+      Bool.false_eq_true, ↓reduceIte, Bool.not_false, wp_pushVertTstack, wp_mergeTstackTops]
+    split
+    · obtain ⟨⟨c, R', hR, -⟩, -⟩ := HR.noVert rfl
+      refine earCtx_ret H hr hb HR
+        (TEntry.mergeInto ⟨v, d, sX.nxtEdgeIdx, setSides sX.stackDir[d]! [vertItem v] []⟩ c :: R')
+        (Or.inr ⟨rfl, sX.nxtEdgeIdx, sX.stackDir[d]!, Or.inr ⟨c, R', hR, rfl⟩⟩) ?_ rfl rfl rfl
+        (fun _ _ => rfl) rfl
+      simp only [HR.tstack, hR, List.cons_append]
+      rfl
+    · refine earCtx_ret H hr hb HR (⟨v, d, sX.nxtEdgeIdx, setSides sX.stackDir[d]! [vertItem v] []⟩ :: R)
+        (Or.inr ⟨rfl, sX.nxtEdgeIdx, sX.stackDir[d]!, Or.inl rfl⟩) ?_ rfl rfl rfl
+        (fun _ _ => rfl) rfl
+      simp only [HR.tstack, List.cons_append]
+  · simp only [↓reduceIte] at HR ⊢
+    set sX := feS₃ v d (.tree e cls (.node y outs)) (L ++ s.tstack).length (pushEnd sE D₃ L')
+      with hsX
+    by_cases hc : result (condP v (cls.lowval d) cls.isType1) sX = true
+    · exact ctx_step_tree_ret_P H hr HR _ hc
+    · have hc' : (cls.isType1 && decide (sX.tstack.length ≥ 2) && (sX.tstack.tail.head!.vStart == v) &&
+          (sX.tstack.tail.head!.topDepth == cls.lowval d)) = false := Bool.eq_false_iff.2 hc
+      unfold finishRest finishP finishTail condP
+      simp only [wp_bind, wp_tstackSize, wp_nxt, wp_pure, wp_ite, DfsOut.cls, hc',
+        Bool.false_eq_true, ↓reduceIte, Bool.not_true]
+      exact earCtx_ret H hr hb HR R (Or.inl ⟨rfl, rfl⟩) HR.tstack rfl rfl rfl (fun _ _ => rfl) rfl
 
 /-- `finishEdge` at a tree-edge site re-establishes the context with the out appended to `done`,
 from the `TreeSite` data of `earAt_tree_of_ctx`: a case split on the class (bridge / component /

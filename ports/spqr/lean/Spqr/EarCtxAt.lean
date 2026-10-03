@@ -390,6 +390,56 @@ structure TreeSite (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOu
     ∀ e' ∈ (DfsTree.node y outs).edges, Relation.ReflTransGen (s.g.AdjIn E) y (s.g.edges[e']!).1
   edges_lt : ∀ e' ∈ (DfsTree.node y outs).edges, e' < s.g.ne
 
+/-- The stack shape after loops 1–3 of `finishEdge` at a returning tree edge (`retCheck`): relative
+to the parent's pre-push state `s`, the state `sX` (after `mergeLate`, or after `closeVert'` when
+the vertex entry is pushed) has `R ++ L ++ s.tstack`, the items of `L ++ s.tstack` untouched (except
+the child's and `Q e`); the entries of `R` are root-spanned by the child's, `Q e` or fresh items, own
+exactly the out's edges, start at `v` or in the child, and touch only `v`, the child and the path at
+depths `[lowval, d]`. With the vertex entry (`hv`) `R` is one entry `(v, lowval)` (one item if type
+1); without it (type 2) its entries start in the child and the top one holds `e`. -/
+structure RetTop (v d : Nat) (s : WalkState) (e : Nat) (cls : OutClass) (y : Nat)
+    (outs : List DfsOut) (L : List TEntry) (hv : Bool) (sX : WalkState) (R : List TEntry) :
+    Prop where
+  tstack : sX.tstack = R ++ (L ++ s.tstack)
+  g : sX.g = s.g
+  sv : ∀ k, k ≤ d → sX.stackVerts[k]! = s.stackVerts[k]!
+  sd : ∀ k, k < d → sX.stackDir[k]! = s.stackDir[k]!
+  size : s.items.size ≤ sX.items.size
+  nxt : s.nxtEdgeIdx ≤ sX.nxtEdgeIdx
+  kept : ∀ j, j < s.items.size → (∀ x ∈ (DfsTree.node y outs).verts, j ≠ vertItem x) →
+    (∀ e' ∈ (DfsTree.node y outs).edges, j ≠ edgeItem s.g e') → j ≠ edgeItem s.g e →
+    Items.ch sX.items j = Items.ch s.items j ∧
+    ∀ p, Items.IsParent sX.items p j ↔ Items.IsParent s.items p j
+  ch_lt : ∀ p c, Items.IsParent sX.items p c → c < sX.items.size
+  span_lt : ∀ t ∈ R, ∀ i ∈ t.spans.1 ++ t.spans.2, i < sX.items.size
+  span_root : ∀ t ∈ R, ∀ i ∈ t.spans.1 ++ t.spans.2, ∀ p, ¬ Items.IsParent sX.items p i
+  span_new : ∀ t ∈ R, ∀ i ∈ t.spans.1 ++ t.spans.2,
+    (∀ t' ∈ L ++ s.tstack, i ∉ t'.spans.1 ++ t'.spans.2) ∧
+    (i < s.items.size → (∃ x ∈ (DfsTree.node y outs).verts, i = vertItem x) ∨
+      (∃ e' ∈ (DfsTree.node y outs).edges, i = edgeItem s.g e') ∨ i = edgeItem s.g e)
+  touch_bot : ∀ t ∈ R, (∃ e', e' < s.g.ne ∧ t.edges s.g sX.items e') →
+    s.g.Touches (t.edges s.g sX.items) t.vStart
+  edges : ∀ e', e' < s.g.ne →
+    ((∃ t ∈ R, t.edges s.g sX.items e') ↔ subEdges (.tree e cls (.node y outs)) e')
+  touch : ∀ t ∈ R, ∀ x, s.g.Touches (t.edges s.g sX.items) x →
+    x = v ∨ x ∈ (DfsTree.node y outs).verts ∨ ∃ k, cls.lowval d ≤ k ∧ k ≤ d ∧ x = s.stackVerts[k]!
+  disj : R.Pairwise fun t t' => ∀ e', e' < s.g.ne → t.edges s.g sX.items e' →
+    ¬ t'.edges s.g sX.items e'
+  span_disj : R.Pairwise fun t t' => ∀ i ∈ t.spans.1 ++ t.spans.2, i ∉ t'.spans.1 ++ t'.spans.2
+  vstart : ∀ t ∈ R, t.vStart = v ∨ t.vStart ∈ (DfsTree.node y outs).verts
+  vert : hv = true → ∃ x, R = [x] ∧ x.vStart = v ∧ x.topDepth = cls.lowval d ∧
+    getSide x.spans (!s.stackDir[cls.lowval d]!) = [] ∧
+    s.nxtEdgeIdx ≤ x.firstIdx ∧ x.firstIdx < sX.nxtEdgeIdx ∧
+    s.g.Touches (x.edges s.g sX.items) s.stackVerts[cls.lowval d]! ∧
+    (∀ w, s.g.Touches (x.edges s.g sX.items) w → w ≠ v →
+      ¬ s.g.Interior (x.edges s.g sX.items) w →
+      ∃ k, cls.lowval d ≤ k ∧ k ≤ d ∧ w = s.stackVerts[k]!) ∧
+    (cls.isType1 = true → (∃ i, x.spans = setSides s.stackDir[cls.lowval d]! [i] []) ∧
+      ∀ w, s.g.Touches (x.edges s.g sX.items) w →
+        w = v ∨ w = s.stackVerts[cls.lowval d]! ∨ s.g.Interior (x.edges s.g sX.items) w)
+  noVert : hv = false → (∃ c R', R = c :: R' ∧ c.edges s.g sX.items e) ∧
+    ∀ t ∈ R, t.vStart ≠ v ∧ ∀ k, k ≤ d → s.stackVerts[k]! ≠ t.vStart
+
 section
 variable {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut} {hasVert : Bool}
   {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool} {s : WalkState}
@@ -410,6 +460,13 @@ local notation "s₃" => pushEnd sE D₃ L'
 theorem tree_comp_shape : cls = .component → hv' = true ∧ ∃ t₁ f₂,
     sE.tstack = t₁ :: ⟨y, d + 1, f₂, ([], [vertItem y])⟩ :: (L ++ s.tstack) ∧
     t₁.vStart = y ∧ t₁.topDepth = d ∧ t₁.spans.2 = [] := by
+  sorry
+
+/-- Admitted (dump-checked, `retCheck`): the stack shape after loops 1–3 at a returning tree edge
+(`RetTop`), at the state `finishRest` runs from. -/
+theorem tree_ret_shape (hr : cls.lowval d < d) : ∃ R,
+    RetTop v d s e cls y outs L (hasVert || push)
+      (if hasVert || push then feS₃ v d o₀ (L ++ s.tstack).length s₃ else feS₂ d o₀ s₃) R := by
   sorry
 
 /-! ### Named admissions (PROOF.md §4.2b): the `EarFinish` fields at a tree-edge site not yet

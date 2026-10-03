@@ -608,6 +608,96 @@ def keptCheck (seed v d : Nat) (o : DfsOut) (hv : Bool) (s₂ s : WalkState) : L
         if parents s j ≠ parents s₂ j then out := bad "items_par" s!"j={j}" :: out
     return out
 
+/-- The returning tree-edge admissions (`TreeSite.tree_ret_vert`/`tree_ret_noVert`): relative to
+the pre-child state `s₂` (after the first-edge push), the state `sX` after loops 1–2 (and, with a
+vertex entry, after `closeVert'`) is `R ++ s₂.tstack` with `s₂.tstack` untouched; the items of `R`
+are the child's, `Q e` or fresh, roots, and own exactly the out's edges; the out's edges touch only
+`v`, the child's vertices and the path at depths `[lowval, d]`. With a vertex entry `R` is the single
+`(v, lowval)` entry (one item if type 1); without (type 2) its entries start at child vertices. -/
+def retCheck (seed v d : Nat) (o : DfsOut) (hv : Bool) (s₂ s : WalkState) : List V :=
+  match o with
+  | .back .. => []
+  | .tree e cls child => Id.run do
+    let lowval := cls.lowval d
+    if d ≤ lowval then return []
+    let mut out : List V := []
+    let bad (k : String) (info : String) : V :=
+      ⟨seed, v, d, s!"tree e={e} lv={lowval} t1={cls.isType1}", hv, s!"ret_{k}", info⟩
+    let orig := s₂.tstack.length
+    let sX := if hv then
+        WalkState.after (WalkState.closeVert' v s.stackDir[d]! cls.isType1 orig (WalkState.feSingle d o s))
+          (WalkState.feS₂ d o s)
+      else WalkState.feS₂ d o s
+    let n := sX.tstack.length
+    if n < orig then return [bad "short" ""]
+    let R := sX.tstack.take (n - orig)
+    let baseX := sX.tstack.drop (n - orig)
+    let info := s!"R={R.map showT} base={s₂.tstack.map showT}"
+    if !(baseX.length == orig && (List.zip baseX s₂.tstack).all fun (a, b) => sameT a b) then
+      out := bad "base" info :: out
+    if sX.g.edges ≠ s₂.g.edges || sX.g.nv ≠ s₂.g.nv then out := bad "g" "" :: out
+    if (List.range (d+1)).any (fun k => sX.stackVerts[k]! ≠ s₂.stackVerts[k]!) then out := bad "sv" "" :: out
+    if (List.range d).any (fun k => sX.stackDir[k]! ≠ s₂.stackDir[k]!) then out := bad "sd" "" :: out
+    if sX.items.size < s₂.items.size then out := bad "size" "" :: out
+    if sX.nxtEdgeIdx < s₂.nxtEdgeIdx then out := bad "nxt" "" :: out
+    let childItem (j : Nat) : Bool :=
+      child.verts.any (fun w => vertItem w == j) || child.edges.any (fun e' => edgeItem s₂.g e' == j) ||
+        edgeItem s₂.g e == j
+    let parents (s : WalkState) (j : Nat) : List Nat := (List.range s.items.size).filter (isParent s · j)
+    for j in List.range s₂.items.size do
+      if !childItem j then
+        if sX.items[j]!.ch ≠ s₂.items[j]!.ch then out := bad "keep_ch" s!"j={j}" :: out
+        if parents sX j ≠ parents s₂ j then out := bad "keep_par" s!"j={j}" :: out
+    for j in List.range sX.items.size do
+      for c in sX.items[j]!.ch do
+        if c ≥ sX.items.size then out := bad "ch_lt" s!"{j}" :: out
+    let oldSpans := s₂.tstack.flatMap spanItems
+    let subE := subEdgesL o
+    for t in R do
+      for i in spanItems t do
+        if sX.items.size ≤ i then out := bad "span_lt" s!"i={i}" :: out
+        if hasParent sX i then out := bad "span_root" s!"i={i}" :: out
+        if oldSpans.contains i then out := bad "span_old" s!"i={i}" :: out
+        if i < s₂.items.size && !childItem i then out := bad "span_owned" s!"i={i}" :: out
+      let E := entryEdges sX t
+      if E ≠ [] && !touches sX E t.vStart then out := bad "touch_bot" (showT t) :: out
+    let ER := R.flatMap (entryEdges sX)
+    if !sameEdges ER subE then out := bad "edges" s!"ER={ER} sub={subE} {info}" :: out
+    if !pairwiseDisjB sX R then out := bad "disj" info :: out
+    if !pairwiseSpanDisjB R then out := bad "span_disj" info :: out
+    for t in R do
+      if t.vStart ≠ v && !child.verts.contains t.vStart then out := bad "vstart" (showT t) :: out
+    for x in List.range s₂.g.nv do
+      if touches sX ER x && x ≠ v && !child.verts.contains x &&
+          !(List.range (d+1)).any (fun k => lowval ≤ k && s₂.stackVerts[k]! == x) then
+        out := bad "touch" s!"x={x}" :: out
+    if hv then
+      match R with
+      | [x] =>
+        if x.vStart ≠ v || x.topDepth ≠ lowval then out := bad "x" (showT x) :: out
+        if !onSide x s₂.stackDir[lowval]! then out := bad "x_side" (showT x) :: out
+        if x.firstIdx < s₂.nxtEdgeIdx || sX.nxtEdgeIdx ≤ x.firstIdx then out := bad "x_first" (showT x) :: out
+        if cls.isType1 && (spanItems x).length ≠ 1 then out := bad "x_single" (showT x) :: out
+        if !touches sX ER sX.stackVerts[lowval]! then out := bad "x_touch_top" (showT x) :: out
+        for w in List.range s₂.g.nv do
+          if touches sX ER w && w ≠ v && !interiorB sX ER w &&
+              !(List.range (d+1)).any (fun k => lowval ≤ k && sX.stackVerts[k]! == w) then
+            out := bad "x_att" s!"w={w} {showT x}" :: out
+          if cls.isType1 && touches sX ER w && w ≠ v && w ≠ sX.stackVerts[lowval]! && !interiorB sX ER w then
+            out := bad "x_single_att" s!"w={w} {showT x}" :: out
+      | _ => out := bad "vert_shape" info :: out
+    else
+      if cls.isType1 then out := bad "noVert_t1" "" :: out
+      if R.isEmpty then out := bad "noVert_empty" info :: out
+      match R with
+      | c :: _ => if !(entryEdges sX c).contains e then out := bad "noVert_head_e" info :: out
+      | [] => pure ()
+      for t in R do
+        if t.vStart == v then out := bad "noVert_v" (showT t) :: out
+        if (List.range (d+1)).any (fun k => s₂.stackVerts[k]! == t.vStart) then
+          out := bad "noVert_path" (showT t) :: out
+    return out
+
 /-- The child's end-of-outs stack at a component edge (`TreeSite.comp_shape`): `hasVert`, and exactly
 `[(y, d-1), V y]` above the parent's stack, the `(y, d-1)` entry on side 1, `V y` on side 2. -/
 def compEndCheck (seed v d : Nat) (hv : Bool) (top : List TEntry) : List V := Id.run do
@@ -664,6 +754,7 @@ partial def iOut (seed v d : Nat) (o : DfsOut) (hv : Bool) (eb : EB) (s : WalkSt
     | .tree _ cls child => iTree seed child (d+1) eb { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne } (some cls)
     | .back .. => (s, eb, [])
   let vs := vs ++ keptCheck seed v d o hv s₂ s
+  let vs := vs ++ retCheck seed v d o hv s₂ s
   let vs := vs ++ earCheck seed v d o orig hv s ++ ebCheck seed v d o orig hv eb s ++ specCheck seed v d o orig hv s ++ closeCheck seed v d o orig hv s
   let (hv', s) := (finishEdge v d o orig hv).run s
   (hv', s, eb, vs)
