@@ -420,12 +420,12 @@ theorem cvOuts : ∀ (g : Graph) (σ : List Nat) (n v d : Nat) (outs : List DfsO
     (anc sts origs : List Nat) (P X : ItemId → Prop) (s : WalkState),
     CvOuts g σ n v d outs hasVert anc sts origs P X s
   | g, σ, n, v, d, [], hasVert, anc, sts, origs, P, X, s =>
-    fun _ _ _ _ _ _ hpl hP ho _ _ _ _ _ _ _ _ hv _ _ _ _ _ _ _ _ _ hsvd hvc => by
+    fun _ _ _ _ _ _ hpl hP ho _ _ _ _ _ _ _ _ hv _ _ _ _ _ hPf _ _ _ hsvd hvc => by
     unfold walkOuts
     simp only [wp_pure]
     unfold CoverOuts
     rw [show (DfsOut.edgePostorderList []).length = 0 by simp [DfsOut.edgePostorderList]]
-    exact ⟨fun _ => hpl.pushVertR hv hP,
+    exact ⟨⟨fun _ => hpl.pushVertR hv hP, fun h0 => hpl.vertFree hv (hPf h0)⟩,
       hpl.mono (fun i h => Or.inl (Or.inl h)) fun _ h => h, ho.mono fun i h => Or.inl (Or.inl h), hsvd, hvc,
       fun h => h⟩
   | g, σ, n, v, d, o :: rest, hasVert, anc, sts, origs, P, X, s =>

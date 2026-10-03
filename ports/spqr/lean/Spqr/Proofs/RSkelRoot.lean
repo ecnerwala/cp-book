@@ -49,6 +49,7 @@ theorem rootOut (v : Nat) (o : DfsOut) (s : WalkState) (hb : BookOut v 0 o false
 
 theorem rkRootOut (dfs : DfsData) (v : Nat) (o : DfsOut) (s : WalkState) (σ : List Nat) (n : Nat)
     (hi : s.Inv' 0) (hs : Shape s) (hb : BookOut v 0 o false s) (hcb : CbOut σ n v 0 o false s)
+    (hcv : CoverOut σ n v 0 o false s)
     (hts : s.tstack = [])
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hwf : s.g.WF) (hsv : s.stackVerts.size = s.g.nv)
@@ -61,9 +62,11 @@ theorem rkRootOut (dfs : DfsData) (v : Nat) (o : DfsOut) (s : WalkState) (σ : L
   unfold GuardsOut at hg
   unfold BookOut at hb
   unfold CbOut at hcb
+  unfold CoverOut at hcv
+  have hcv := hcv.2.2
   have hb₁ := hb.2
   rw [walkOut_eq, wp_bind]
-  rw [walkOutPre_root] at hb₁ hg hcb ⊢
+  rw [walkOutPre_root] at hb₁ hg hcb hcv ⊢
   unfold walkOutRest
   rw [wp_bind, wp_tstackSize]
   have hlen : ({ s with stackDir := s.stackDir.set! 0 false } : WalkState).tstack.length = 0 := by
@@ -82,7 +85,7 @@ theorem rkRootOut (dfs : DfsData) (v : Nat) (o : DfsOut) (s : WalkState) (σ : L
     exact keepsR_finishBoundary v 0 _ 0 false (Nat.zero_le _) hs.frame' hb₁.v_lt hb₁.e_lt hok hinv
   | tree e cls child =>
     obtain ⟨c, couts⟩ := child
-    try simp only [wp_modify] at hg hb₁ hcb
+    try simp only [wp_modify] at hg hb₁ hcb hcv
     simp only [wp_bind, wp_modify]
     set s₂ : WalkState := { s with stackDir := s.stackDir.set! 0 false, firstOccurrence := s.firstOccurrence.set! 0 s.g.ne } with hs₂
     have hi₂ : s₂.Inv' 0 := hi.frame'
@@ -97,7 +100,8 @@ theorem rkRootOut (dfs : DfsData) (v : Nat) (o : DfsOut) (s : WalkState) (σ : L
         dfs.depth s₂.stackVerts[k]! = k := fun k hk => by
       obtain rfl : k = 0 := Nat.le_zero.1 hk
       exact ⟨Relation.ReflTransGen.refl, hd0⟩
-    have hr := walkTree_rSide s₂ 0 c couts σ n hi₂ hs₂' hg.1 hb₁.1 hcb.1 h2 hwf hsp hrt hsv hpc.1 hpc.2 hchain hpar
+    have hr := walkTree_rSide s₂ 0 c couts σ n hi₂ hs₂' hg.1 hb₁.1 hcb.1 hcv.1 h2 hwf hsp hrt hsv hpc.1 hpc.2 hchain
+      hpar
     have hT : Types s₂.g s₂ := ⟨rfl, hs₂'.size, hs₂'.root, hs₂'.vert, hs₂'.edge⟩
     refine wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun _ s₃ ⟨hg₃, hb₃⟩ ⟨hi₃, hs₃⟩ hinv₃
         ⟨hg₃', _, _, _, _⟩ => ?_)
@@ -116,30 +120,31 @@ theorem rkRootOut (dfs : DfsData) (v : Nat) (o : DfsOut) (s : WalkState) (σ : L
 
 theorem rkRootOuts (dfs : DfsData) : ∀ (v : Nat) (outs : List DfsOut) (s : WalkState) (σ : List Nat)
     (n : Nat), s.Inv' 0 → Shape s → BookOuts v 0 outs false s → CbOuts σ n v 0 outs false s →
-    s.tstack = [] →
+    CoverOuts σ n v 0 outs false s → s.tstack = [] →
     s.g.TwoConnected → dfs.Spec s.g → dfs.Rooted s.g → s.g.WF → s.stackVerts.size = s.g.nv →
     (∀ o ∈ outs, ∀ e cls c couts, o = .tree e cls (.node c couts) →
       dfs.IsParent s.stackVerts[0]! c ∧ ∀ t : DfsTree, t.Sub (.node c couts) → dfs.outs t.v = t.outs) →
     dfs.depth s.stackVerts[0]! = 0 →
     Items.RSkelInv s.g s.items →
     wp (walkOuts v 0 outs false) (fun _ s' => Items.RSkelInv s.g s'.items) s
-  | v, [], s, _, _, _, _, _, _, _, _, _, _, _, _, _, _, hinv => by unfold walkOuts; simpa [wp_pure] using hinv
-  | v, o :: rest, s, σ, n, hi, hs, hb, hcb, hts, h2, hsp, hrt, hwf, hsv, hp, hd0, hinv => by
-    unfold BookOuts at hb; unfold CbOuts at hcb
+  | v, [], s, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, hinv => by unfold walkOuts; simpa [wp_pure] using hinv
+  | v, o :: rest, s, σ, n, hi, hs, hb, hcb, hcv, hts, h2, hsp, hrt, hwf, hsv, hp, hd0, hinv => by
+    unfold BookOuts at hb; unfold CbOuts at hcb; unfold CoverOuts at hcv
     have hg := gbOut v 0 o false s hb.1
     have hT : Types s.g s := ⟨rfl, hs.size, hs.root, hs.vert, hs.edge⟩
     have hk := kOut v 0 o false s s.g 1 rootItem s hT (Nat.le_refl _) (by show 0 < 1 + _ + _; omega)
       (by show 1 + v ≠ 0; omega) (fun w _ => by show 1 + w ≠ 0; omega)
       (fun e _ => by show 1 + s.g.nv + e ≠ 0; omega) Keep.refl
-    have hout := rkRootOut dfs v o s σ n hi hs hb.1 hcb.1 hts h2 hsp hrt hwf hsv (hp o (List.mem_cons_self ..)) hd0 hinv
+    have hout := rkRootOut dfs v o s σ n hi hs hb.1 hcb.1 hcv.1 hts h2 hsp hrt hwf hsv (hp o (List.mem_cons_self ..))
+      hd0 hinv
     unfold walkOuts
     simp only [wp_bind]
-    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv' s' ⟨hi', hs'⟩ ⟨hv0, hts'⟩ hk'
-        hinv' hb' hcb' => ?_)
-      (invOut v 0 o false s hi hs hg hb.1)) (rootOut v o s hb.1 hts)) hk) hout) hb.2) hcb.2
+    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv' s' ⟨hi', hs'⟩ ⟨hv0, hts'⟩ hk'
+        hinv' hb' hcb' hcv' => ?_)
+      (invOut v 0 o false s hi hs hg hb.1)) (rootOut v o s hb.1 hts)) hk) hout) hb.2) hcb.2) hcv.2
     subst hv0
     have hg' := hk'.g
-    refine wp_mono _ (rkRootOuts dfs v rest s' σ _ hi' hs' hb' hcb' hts' (by rw [hg']; exact h2)
+    refine wp_mono _ (rkRootOuts dfs v rest s' σ _ hi' hs' hb' hcb' hcv' hts' (by rw [hg']; exact h2)
       (by rw [hg']; exact hsp) (by rw [hg']; exact hrt) (by rw [hg']; exact hwf)
       (by rw [hk'.sv, hg']; exact hsv) ?_ (by rw [hk'.svlo 0 (by omega)]; exact hd0)
       (by rw [hg']; exact hinv'))
@@ -150,7 +155,7 @@ theorem rkRootOuts (dfs : DfsData) : ∀ (v : Nat) (outs : List DfsOut) (s : Wal
 
 theorem rkRootTree (dfs : DfsData) (t : DfsTree) (s : WalkState) (σ : List Nat) (n : Nat)
     (hi : s.Inv' 0) (hs : Shape s) (hb : BookTree t 0 s) (hcb : CbTree σ n t 0 s)
-    (hts : s.tstack = []) (hsz : 0 < s.stackVerts.size)
+    (hcv : CoverTree σ n t 0 s) (hts : s.tstack = []) (hsz : 0 < s.stackVerts.size)
     (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
     (hwf : s.g.WF) (hsv : s.stackVerts.size = s.g.nv)
     (hp : ∀ v outs, t = .node v outs → ∀ o ∈ outs, ∀ e cls c couts,
@@ -161,9 +166,9 @@ theorem rkRootTree (dfs : DfsData) (t : DfsTree) (s : WalkState) (σ : List Nat)
   obtain ⟨v, outs⟩ := t
   unfold walkTree
   simp only [wp_bind, wp_modify]
-  unfold BookTree at hb; unfold CbTree at hcb
+  unfold BookTree at hb; unfold CbTree at hcb; unfold CoverTree at hcv
   have h₁ := rkRootOuts dfs v outs { s with stackVerts := s.stackVerts.set! 0 v } σ n
-    (hi.stackVerts_of_nil hts _) hs.frame' hb hcb hts h2 hsp hrt hwf
+    (hi.stackVerts_of_nil hts _) hs.frame' hb hcb hcv hts h2 hsp hrt hwf
     (by show (s.stackVerts.set! 0 v).size = s.g.nv; rw [Array.size_set!]; exact hsv)
     (fun o ho e cls c couts heq => by
       rw [show ({ s with stackVerts := s.stackVerts.set! 0 v } : WalkState).stackVerts[0]! = v from
@@ -181,7 +186,8 @@ theorem rkRootTree (dfs : DfsData) (t : DfsTree) (s : WalkState) (σ : List Nat)
 
 theorem rkForest (g : Graph) (dfs : DfsData) (σ : List Nat) :
     ∀ (forest pre : List DfsTree) (n : Nat) (s : WalkState),
-    RootState g pre s → CbForest σ n forest s → ForestOK g (pre ++ forest) → (∀ t ∈ forest, t.WF []) →
+    RootState g pre s → CbForest σ n forest s → RootsCover σ n forest s → ForestOK g (pre ++ forest) →
+    (∀ t ∈ forest, t.WF []) →
     (∀ t ∈ forest, t.Ends g) →
     (∀ t ∈ forest, ∀ e, e < g.ne → ∀ x, g.Inc e x → x ∈ t.verts → e ∈ t.edges) →
     g.TwoConnected → g.WF → dfs.Spec g → dfs.Rooted g →
@@ -189,11 +195,14 @@ theorem rkForest (g : Graph) (dfs : DfsData) (σ : List Nat) :
       o = .tree e cls (.node c couts) → dfs.IsParent v c ∧ ∀ t : DfsTree, t.Sub (.node c couts) → dfs.outs t.v = t.outs) →
     (∀ t ∈ forest, dfs.depth t.v = 0) →
     Items.RSkelInv g s.items → wp (walkForest forest) (fun _ s' => Items.RSkelInv g s'.items) s
-  | [], _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, hinv => hinv
-  | t :: rest, pre, n, s, h, hcb, hf, hwf, hends, hcomp, h2, hgw, hsp, hrt, hp, hd0, hinv => by
+  | [], _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, hinv => hinv
+  | t :: rest, pre, n, s, h, hcb, hcv, hf, hwf, hends, hcomp, h2, hgw, hsp, hrt, hp, hd0, hinv => by
     have hcb' : CbTree σ n t 0 s ∧ wp (walkTree t 0) (fun _ s₁ =>
         wp (popTstack >>= fun top => modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 })
           (fun _ s₂ => CbForest σ (n + t.edgePostorder.length) rest s₂) s₁) s := hcb
+    have hcv' : CoverTree σ n t 0 s ∧ wp (walkTree t 0) (fun _ s₁ =>
+        wp (popTstack >>= fun top => modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 })
+          (fun _ s₂ => RootsCover σ (n + t.edgePostorder.length) rest s₂) s₁) s := hcv
     have hb := h.book hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     have hg := gbTree t 0 s hb
     have hi' : ∀ v outs, t = .node v outs →
@@ -205,7 +214,7 @@ theorem rkForest (g : Graph) (dfs : DfsData) (σ : List Nat) :
     have hstep := h.step hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     have hplace := (walk_place_aux g).1 t 0 _ _ s h.place (RootState.hvlt hf) (RootState.helt hf)
       (RootState.hvn hf).1 (RootState.hen hf).1 (RootState.hPv hf) (RootState.hPe hf)
-    have hinv₁ := rkRootTree dfs t s σ n h.inv h.shape hb hcb'.1 h.tstack (by rw [h.sv]; exact hnv)
+    have hinv₁ := rkRootTree dfs t s σ n h.inv h.shape hb hcb'.1 hcv'.1 h.tstack (by rw [h.sv]; exact hnv)
       (by rw [h.g_eq]; exact h2) (by rw [h.g_eq]; exact hsp) (by rw [h.g_eq]; exact hrt)
       (by rw [h.g_eq]; exact hgw) (by rw [h.sv, h.g_eq])
       (hp t (by simp)) (fun v outs htv => by subst htv; exact hd0 (.node v outs) (List.mem_cons_self ..))
@@ -216,17 +225,18 @@ theorem rkForest (g : Graph) (dfs : DfsData) (σ : List Nat) :
     show wp ((walkTree t 0 >>= fun _ => popTstack >>= fun top =>
       modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }) >>= fun _ => walkForest rest) _ s
     rw [wp_bind, wp_bind]
-    refine wp_mono _ (wp_and hcb'.2 (wp_and hstep (wp_and hplace (wp_and hinv₁ (wp_and hinvT hrk)))))
-      fun _ s₁ ⟨hcb₁, hst₁, hp₁, hinv₁, ⟨_, hs₁⟩, hrk₁⟩ => ?_
+    refine wp_mono _ (wp_and hcb'.2 (wp_and hcv'.2 (wp_and hstep (wp_and hplace
+        (wp_and hinv₁ (wp_and hinvT hrk))))))
+      fun _ s₁ ⟨hcb₁, hcv₁, hst₁, hp₁, hinv₁, ⟨_, hs₁⟩, hrk₁⟩ => ?_
     obtain ⟨tt, hts₁, -, -⟩ := hrk₁
-    simp only [wp_bind, wp_popTstack, wp_modifyItem] at hst₁ hcb₁ ⊢
+    simp only [wp_bind, wp_popTstack, wp_modifyItem] at hst₁ hcb₁ hcv₁ ⊢
     have hroot : ∀ p, ¬ Items.IsParent s₁.items p rootItem := noParent_of_cnt_eq_zero hp₁.root
     have hrootT : Items.type s₁.items rootItem ≠ .R := by rw [hs₁.root]; decide
     rw [h.g_eq] at hinv₁
     have hinv₂ : Items.RSkelInv g (s₁.items.modify rootItem fun it =>
         { it with ch := it.ch ++ s₁.tstack.head!.spans.2 }) :=
       hinv₁.modify_root_of_ne hroot _ (fun _ => rfl) hrootT
-    exact rkForest g dfs σ rest (pre ++ [t]) _ _ hst₁ hcb₁ (by simpa using hf)
+    exact rkForest g dfs σ rest (pre ++ [t]) _ _ hst₁ hcb₁ hcv₁ (by simpa using hf)
       (fun t' ht' => hwf t' (by simp [ht'])) (fun t' ht' => hends t' (by simp [ht']))
       (fun t' ht' => hcomp t' (by simp [ht'])) h2 hgw hsp hrt
       (fun t' ht' => hp t' (by simp [ht'])) (fun t' ht' => hd0 t' (by simp [ht'])) hinv₂
@@ -340,7 +350,9 @@ theorem walk_rSkelInv (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     exact ⟨⟨_, by rw [h1]; exact ho, rfl, rfl⟩,
       fun t' hsub => DfsData.ofForest_outs hnd ht (DfsTree.Sub.step hsub ho)⟩
   exact rkForest g _ _ (g.dfsForest vo eo) [] 0 (WalkState.init g tern) (rootState_init g tern)
-    (Spqr.walk_closeBase g tern vo eo hg hvo heo) hf
+    (Spqr.walk_closeBase g tern vo eo hg hvo heo)
+    (WalkState.walk_rootsCover' g tern _ hf (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo)
+      (fun e he => hep.mem_iff.2 (List.mem_range.2 he))) hf
     (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo)
     (fun t ht => comp_of_forest hf (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo)
       (fun e he => hep.mem_iff.2 (List.mem_range.2 he)) ht) h2 hg hsp' hrt hp

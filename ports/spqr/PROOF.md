@@ -1505,9 +1505,16 @@ sites), threaded from the Ranges site record `CbTree`/`CbOut` (`RangesSites.lean
 for `topDepth ≠ d + 1`, `parent_top`), `rSide_finish_content_site` (`settled`/`vert_own` fields,
 `unwrap` from `EarClose.py_top`), `feS₂_top_entryR` (`s2_top`), `loop1_rBranch_mid_ctx`/
 `loop1_rBranch_fields_ctx`/`loop1_rTop_ctx` (`l1_*`) — all `#print axioms` standard or `propext`
-only; `closeVert_type1_rCloseShape` is proved as well (item 8 below). Still admitted:
-`rSide_vertFree_site` (`VertFree v` at the `walkOut` entries / end of `walkOuts` with
-`VertBook v false` — a site with no Ranges record; checked as `rc.vert_free`). The list below is the
+only; `closeVert_type1_rCloseShape` is proved as well (item 8 below). `rSide_vertFree_site` is
+gone: `VertFree v` at the `walkOut` entries / end of `walkOuts` is span discipline, not R content —
+`Place.vertFree` (`WalkPlace.lean`, standard axioms): a spanned item has no parent (`Place.le`:
+`cnt ≤ 1`), parents are unique (`Items.parent_eq_of_chCount_le`), and the unpushed `vertItem v`
+(`¬P`, so `cnt = 0`) is parentless, so no spanned item and `vertItem v` can both lie above an edge
+item (`Items.root_eq_of_below`). It is carried as the new conjunct `hasVert = false → VertFree v s`
+of `CoverOut`/`CoverOuts []` (proved in `cvOut`/`cvOuts` from the `Place` they already hold), and
+`rsTree`/`rsOuts`/`rsOut` (and `walkTree_rSide`, `rkRootOut`/`rkRootOuts`/`rkRootTree`/`rkForest`
+via `RootsCover`) take `CoverTree`/`CoverOuts`/`CoverOut` next to `CbTree`/`CbOuts`/`CbOut`; the
+backbone's two vertex-push sites use `h.full.place.vertFree` directly. The list below is the
 earlier per-admission analysis, kept for the discharge routes.
 
 **R site obligations (R-5 handoff to the backbone induction).** The remaining named R admissions,
@@ -1569,7 +1576,9 @@ dump-checked on seeds 0..400 × both modes + 6000 random multigraphs (`checks/RF
    for `topDepth = d + 1` the field E3 (`stab_single`: `EntryR.single` in the updated state — the
    only field reading `stackVerts[topDepth]`; the original `buried_vacuous` candidate is refuted,
    see E3 above).
-6. `rSide_vertFree_site` (`Proofs/RSide.lean`): `VertFree v s` at a vertex site with `VertBook v
+6. `rSide_vertFree_site` (`Proofs/RSide.lean`): discharged by `Place.vertFree` (see above; the
+   `e ≥ ne` residue E4 is exactly the span-rootness + unique-parent argument it uses). Earlier
+   analysis: `VertFree v s` at a vertex site with `VertBook v
    false`, `RWalk`. `e < ne`: `EarCtx.vert_edges` (edges under `vertItem v` = `subEdges` of the
    `done` outs with `d ≤ lowval`) + field E2 `bd_free` (no open entry owns one). `e ≥ ne`: E4
    (span items are roots; unique parent) with `EarCtx.v_root`/`vert_free` — not in `RangesInv`/
@@ -2226,7 +2235,7 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   reasoning when the mutual induction lands); `WalkInvOut.exit_true` (no vertex entry pushed) and
   `WalkInvOut.exit_false` (`setStackDir d true; pushVertTstack v d`, per primitive: `Step.pushVert`,
   `RgStep.pushVert`, `CloseInv.pushVert`, `Place.cons_fixed`/`Place.fresh`, `OwnedD.pushVert`,
-  `vertCover_pushVert`, `RWalk.pushVert` under `rSide_vertFree_site`, `botKeep_cons`,
+  `vertCover_pushVert`, `RWalk.pushVert` under `Place.vertFree`, `botKeep_cons`,
   `StRead.pushEntry`/`StItems.pushEntry`/`DirsOf_push`, and the new `StLive.cons_vert`: pushing a
   `V` entry keeps a segment live since everything strictly below a `V` item hangs under it) are the
   exit glue. To make the glue close, `WalkInv` gained `segs_len` and the lower-segment pairing
@@ -2234,7 +2243,8 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   (DirsOf s' d) (refTree g t d …).1` — the `live_end` field `finishBoundary_stLive` needs at the
   child's boundary) and `live_lower`. `#print axioms`: `StLive.cons_vert`, `WalkInv.d_lt`,
   `WalkInvOut.exit_true` standard; `WalkInv.toOut`, `WalkInvOut.exit_false`, `walkTree_inv` reach
-  `sorryAx` (`exit_false` only through `rSide_vertFree_site`; `toOut` through `sites.rside`).
+  `sorryAx` (`exit_false` only through `rSide_vertFree_site`, since discharged by `Place.vertFree` —
+  `exit_false` is now standard; `toOut` through `sites.rside`).
 * **Stage 2d — the induction skeleton.** `backbone : (∀ t d, BbTree t d) ∧ (∀ v d outs hv, BbOuts
   v d outs hv) ∧ (∀ v d o hv, BbOut v d o hv)` is one `walkTree.mutual_induct` with the three
   motives `BbTree t d` (`∀ G s, WalkInv G t d s → wp (walkTree t d) (WalkInvEnd G t d s)`),
@@ -2255,8 +2265,8 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,close,late,late_fo,loop1,loop1_side,
   loop1_touch,loops,lower,of_ctx}`, `tree_comp_shape`; Ranges `closeCtx_{bd_node,bd_vert,l1_site,
   p_site,v_site}`, `finishEdge_ownedD`, `finishEdge_vertCover`; R `closeBase_rContent`,
-  `entry_rContent`, `rSide_vertFree_site` (the other R site
-  theorems are proved from `RCloseContent`/`REntryContent`, §4.5); ST `finishBoundary_stLive`. Not reachable:
+  `entry_rContent` (the R site
+  theorems are proved from `RCloseContent`/`REntryContent` or `Place.vertFree`, §4.5); ST `finishBoundary_stLive`. Not reachable:
   `loop1_rBranch_content`, `walkTree_rSide_spec`, `walk_items_rThreeConnected` (R-layer glue
   outside the tree theorems), the final-items hypotheses of `spqrTree_pieceSep`
   (`walk_pieceInv`, §4.6), `walk_canonInv`/`walk_ternarize`
@@ -2282,8 +2292,8 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `WalkInvOut.walkOutPre_out : WalkInvOut … (o :: rest) … → wp (walkOutPre v d o hasVert) (fun hv₁
   s₁ => ∃ push, PreOut … push hv₁ s₁)` is the conjunction of `wp_walkOutPre`, `walkOutPre_inv`,
   `walkOutPre_ranges`, `walkOutPre_closeInv'`, `walkOutPre_full`, `walkOutPre_ownedD`,
-  `walkOutPre_r` (its `VertFree` hypothesis from `rSide_vertFree_site`, the only admission it
-  reaches), `walkOutPre_pre`, `keep_walkOutPre`. **Child entry** `PreOut.child`: for a tree edge
+  `walkOutPre_r` (its `VertFree` hypothesis from `Place.vertFree`), `walkOutPre_pre`,
+  `keep_walkOutPre`. **Child entry** `PreOut.child`: for a tree edge
   `.tree e cls (.node c couts)`, after `firstOccurrence[d] := ne`, `WalkInv G' (.node c couts) (d +
   1) s₂` with the child ghost `G' = {G with anc := G.anc ++ [v], base/bE := the new tstack, pe := (·
   = e), n, F := (v, d, |tstack|) :: F, P := P ∨ vertItem v, fs := fs ++ [frame v done o], segs :=
@@ -2293,8 +2303,9 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   |tstack|)` by `RInvTop.toG`), `StPre` from `PreSpec.read`/`tstack`, and the per-segment
   `StLive`: the new current segment is `live_lower 0`, obtained from `live_cur` at side
   `s₁.stackDir[d]!` + `StLive.cons_vert` when the vertex piece was pushed (hence the `∀ b` in
-  `live_cur`). `#print axioms`: `PreOut.child` standard; `walkOutPre_out` reaches `sorryAx` only
-  through `rSide_vertFree_site`. Not yet wired into `bbOut_step` (next: the `.back` finish and the
+  `live_cur`). `#print axioms`: `PreOut.child` standard; `walkOutPre_out` standard (it reached
+  `sorryAx` only through `rSide_vertFree_site` until `Place.vertFree` replaced it). Not yet wired
+  into `bbOut_step` (next: the `.back` finish and the
   child `WalkInvEnd` → `finishEdge` composition).
 
 * **Stage 2g — `bbOut_step` from the `finishEdge` primitives (`Spqr/WalkBackboneStep.lean`).**
@@ -2324,11 +2335,11 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `finish_core` through `closeBase_content`), the `ternarize` frame, ear-5's
   `OutFrame`/`CtxShape`/`TreeEndS`. `#print axioms`: `pushed_back_iff`/`pushed_tree_iff`
   `[propext]`; `PreOut.child` standard; `finish_core` reaches only `closeBase_content`;
-  `walkOutPre_out` only `rSide_vertFree_site`; `bbOut_step`/`backbone` reach exactly 24
+  `walkOutPre_out` standard; `bbOut_step`/`backbone` reach exactly 23
   admissions: ear `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,bottom,close,late,late_fo,loop1,
   loop1_side,loop1_touch,loops,lower,of_ctx}`, `tree_ret_shape`; Ranges `closeBase_content`; R
-  `rSide_{entry,finish_content,vertFree}_site`, `loop1_rBranch_{fields,mid}_ctx`, `loop1_rTop_ctx`,
-  `feS₂_top_entryR`; ST `walkOut_stLive`.
+  `rSide_{entry,finish_content}_site`, `loop1_rBranch_{fields,mid}_ctx`, `loop1_rTop_ctx`,
+  `feS₂_top_entryR`; ST `walkOut_stLive` (`rSide_vertFree_site` was the 24th, now `Place.vertFree`).
 
 * **Stage 2h — `CanonInv` and the `ternarize` frame as backbone fields
   (`Spqr/WalkTernFrame.lean`).** `TreeGhost.tern : Bool`; `WalkInv`/`WalkInvOut`/`PreOut`/`WalkInvEnd`
@@ -2590,9 +2601,10 @@ is `ancChain_child` with `d + 1 < stackVerts.size` from `ancChain_lt_size` (the 
 vertices `stackVerts[0..d], c` of `g`), `ret` is `DfsData.Spec.outs_lowval_lt` with the parent of
 `v` from `AncChain.parent`, the children's `dfs.outs` come from `DfsTree.Sub` (`ofForest_outs`).
 The R content is isolated as three named site theorems (now proved from `REntryContent`/
-`RCloseContent` except `rSide_vertFree_site`, see the records paragraph in §4.5): `rSide_entry_site` (`EntryR` stability
+`RCloseContent`, or replaced by `Place.vertFree`, see the records paragraph in §4.5): `rSide_entry_site` (`EntryR` stability
 after `stackVerts.set! (d+1) c` and the parent-start top bound `≤ d`, at a child entry with the
-parent's `RInvTop`), `rSide_vertFree_site` (`VertFree v` under `VertBook v false` + `RWalk`), and
+parent's `RInvTop`), `rSide_vertFree_site` (`VertFree v` under `VertBook v false` + `RWalk`; now the
+`CoverOut`/`CoverOuts []` conjunct from `Place.vertFree`), and
 `rSide_finish_content_site` (`FinishRShape`'s `settled`/`unwrap`/`vert_own` at a tree-edge site
 given the child's `RWalk` with the parent frame, `FinishGuards`/`FinishBook`/`Frontier` and the
 parent chain; `rSide_finish_site` proves `pend` from `EarFinish.q_root`/`q_free` via

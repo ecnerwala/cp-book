@@ -2,6 +2,7 @@ import Spqr.Proofs.RInvBase
 import Spqr.Proofs.Blocks
 import Spqr.EarFrontier
 import Spqr.EarFrame
+import Spqr.WalkPlace
 
 /-!
 # The child-return contract `RReturn` by the walk induction
@@ -361,10 +362,6 @@ theorem earFinish_close_len {curV d lv : Nat} {kind : RetKind} {o : DfsOut} {ori
     | type2Child => rfl
   obtain ⟨c, mid, py, vy, hC⟩ := hE.close ht hlow'
   rw [hC.tstack]; simp only [List.length_cons, List.length_append, hl]; omega
-
-/-- No stack entry owns an edge below `vertItem v`. -/
-def VertFree (v : Nat) (s : WalkState) : Prop :=
-  ∀ t ∈ s.tstack, ∀ e, t.edges s.g s.items e → ¬ Items.EdgeBelow s.g s.items (vertItem v) e
 
 /-- The ancestor chain at `(v, d)`: `stackVerts[d] = v` and `stackVerts[k]` is the depth-`k`
 ancestor of `v` for `k ≤ d`. -/

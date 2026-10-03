@@ -177,12 +177,13 @@ def CoverTree (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState) 
 
 def CoverOuts (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
   match outs with
-  | [] => hasVert = false → PushVertR σ n v s
+  | [] => (hasVert = false → PushVertR σ n v s) ∧ (hasVert = false → VertFree v s)
   | o :: rest => CoverOut σ n v d o hasVert s ∧
       wp (walkOut v d o hasVert) (fun hasVert' s' => CoverOuts σ (n + o.block.length) v d rest hasVert' s') s
 
 def CoverOut (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
   (hasVert = false → PushVertR σ n v s) ∧
+  (hasVert = false → VertFree v s) ∧
   wp (walkOutPre v d o hasVert) (fun hasVert' s₁ =>
     match o with
     | .tree _ _ child =>
@@ -222,7 +223,7 @@ theorem coverOut_back {g : Graph} {P X : ItemId → Prop} {s : WalkState} {σ : 
     (hc : wp (walkOutPre v d (.back e dest cls) hasVert) (fun hv' s' =>
       FinishPOwnership σ n v d (.back e dest cls) s'.tstack.length hv' s') s) :
     CoverOut σ n v d (.back e dest cls) hasVert s := by
-  refine ⟨fun _ => h.pushVertR hv hP, ?_⟩
+  refine ⟨fun _ => h.pushVertR hv hP, fun h0 => h.vertFree hv (hf h0), ?_⟩
   refine wp_imp (wp_imp (wp_of_forall fun hv' s' hp hc' => ?_)
     (walkOutPre_past h hv hf hP)) hc
   exact { hc' with vert := fun _ => hp v hv }
@@ -241,7 +242,7 @@ theorem coverOut_tree {g : Graph} {P X : ItemId → Prop} {s : WalkState} {σ : 
           FinishPOwnership σ (n + child.edgePostorder.length) v d (.tree e cls child)
             s₁.tstack.length hv' s₃) s₂) s₁) s) :
     CoverOut σ n v d (.tree e cls child) hasVert s := by
-  refine ⟨fun _ => h.pushVertR hv hP, ?_⟩
+  refine ⟨fun _ => h.pushVertR hv hP, fun h0 => h.vertFree hv (hf h0), ?_⟩
   refine wp_imp (wp_imp (wp_of_forall fun hv' s₁ hp hc' => ?_)
     (walkOutPre_place h hv hf)) hc
   simp only [wp_modify] at hc' ⊢
@@ -289,7 +290,7 @@ theorem scheduleTree : ∀ σ n t d s, ScheduleTree σ n t d s
     exact scheduleOuts σ n v d outs false _ ⟨hi v outs rfl, hs.frame', hσ⟩ hnd hg hb hf hc hp
 
 theorem scheduleOuts : ∀ σ n v d outs hasVert s, ScheduleOuts σ n v d outs hasVert s
-  | _, _, _, _, [], _, _ => fun _ _ _ _ _ hc _ => hc
+  | _, _, _, _, [], _, _ => fun _ _ _ _ _ hc _ => hc.1
   | σ, n, v, d, o :: rest, hasVert, s => fun hrs hnd hg hb hf hc hp => by
     unfold GuardsOuts at hg; unfold BookOuts at hb; unfold FrontiersOuts at hf; unfold CoverOuts at hc
     rw [DfsOut.edgePostorderList_cons] at hp
@@ -305,7 +306,7 @@ theorem scheduleOut : ∀ σ n v d o hasVert s, ScheduleOut σ n v d o hasVert s
     unfold GuardsOut at hg; unfold BookOut at hb; unfold FrontiersOut at hf; unfold CoverOut at hc
     refine ⟨hc.1, ?_⟩
     refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv' s₁ ⟨hi₁, hs₁, hσ₁⟩ hg₁ hb₁ hf₁ hc₁ => ?_)
-      (walkOutPre_ranges hi hs hσ hb.1 hc.1)) hg) hb.2) hf) hc.2
+      (walkOutPre_ranges hi hs hσ hb.1 hc.1)) hg) hb.2) hf) hc.2.2
     cases o with
     | back e cls dest =>
       exact finishR_of_cover (D := d)
