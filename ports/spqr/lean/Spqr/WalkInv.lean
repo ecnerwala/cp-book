@@ -2041,18 +2041,16 @@ replaced by a single entry whose side is `[p]`, where `p` (fresh or the reused `
 children `S` (`Q e` plus the old side / its children). All `EarCtx` clauses are transported. -/
 theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
     {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
-    {s s' : WalkState} {e dest : Nat} {c a : TEntry} {tl : List TEntry} {p q i : ItemId}
+    {s s' : WalkState} {c a : TEntry} {tl : List TEntry} {p q i : ItemId}
     {S : List ItemId}
     (hC : EarCtx v d done rest true base bE sv sd s)
-    (hv : v < s.g.nv) (he : e < s.g.ne) (hlt : lv < d)
+    (hv : v < s.g.nv) (hlt : lv < d)
     (hsz : 1 + s.g.nv + s.g.ne ≤ s.items.size)
     (hts : s.tstack = c :: a :: tl)
-    (hcd : c.topDepth = lv) (hcs : c.spans.1 ++ c.spans.2 = [q])
-    (hq : q = edgeItem s.g e) (hqch : Items.ch s.items q = [])
+    (hcd : c.topDepth = lv) (hcs : c.spans.1 ++ c.spans.2 = [q]) (hcv : c.vStart = v)
     (hav : a.vStart = v) (had : a.topDepth = lv)
     (hai : a.spans = setSides s.stackDir[lv]! [i] [])
     (hA1 : allType1 d lv done)
-    (hend : Items.PairEq (v, dest) s.g.edges[e]!) (hdest : s.stackVerts[lv]! = dest)
     (hrest_e : ∀ o' ∈ rest, ∀ e', subEdges o' e' → e' < s.g.ne)
     (hrest_v : ∀ o' ∈ rest, ∀ e₁ cls₁ child, o' = .tree e₁ cls₁ child →
       ∀ y ∈ child.verts, y < s.g.nv)
@@ -2081,7 +2079,7 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
     rw [hcs] at hj; exact List.mem_singleton.1 hj
   have hqm : q ∈ c.spans.1 ++ c.spans.2 := by rw [hcs]; exact List.mem_singleton_self _
   have him : i ∈ a.spans.1 ++ a.spans.2 := by rw [has]; exact List.mem_singleton_self _
-  have hqlt : q < s.items.size := by rw [hq]; show 1 + s.g.nv + e < _; omega
+  have hqlt : q < s.items.size := hC.span_lt c hcm q hqm
   have hilt : i < s.items.size := hC.span_lt a ham i him
   have hvlt : vertItem v < s.items.size := by show 1 + v < _; omega
   have hdisj := hC.disj
@@ -2122,13 +2120,12 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
   obtain ⟨above, below, hsp, hCE, hCS, hPW, hLow, hEdg, hBel⟩ := hCT.split
   rw [if_pos rfl] at hsp
   obtain ⟨vt, htv, hvt1, hvt2, hvt3, hvt4, hvt5, hvt6⟩ := hsp
-  have hvq : vertItem v ≠ q := by rw [hq]; exact vertItem_ne_edgeItem' hv
   obtain ⟨above'', hab⟩ : ∃ above'', above = c :: a :: above'' := by
     have h := htop
     rw [hts, htv] at h
     rcases above with _ | ⟨x, _ | ⟨y, r⟩⟩
     · simp only [List.nil_append, List.cons_append, List.cons.injEq] at h
-      rw [← h.1] at hvt2; exact absurd (hcspan _ hvt2) hvq
+      rw [← h.1] at hvt3; exact absurd (hvt3 hcv).1 (by rw [hcd]; exact Nat.ne_of_lt hlt)
     · simp only [List.cons_append, List.nil_append, List.cons.injEq] at h
       obtain ⟨-, h2, -⟩ := h
       rw [← h2] at hvt3
@@ -2158,6 +2155,7 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
     · exact List.mem_append_right _ ht
   have hcmT : c ∈ top := by rw [htv]; exact List.mem_append_left _ hcmA
   have hamT : a ∈ top := by rw [htv]; exact List.mem_append_left _ hamA
+  have hvq : vertItem v ≠ q := fun h => hvt4 c hcmA (h ▸ hqm)
   have hva : vertItem v ∉ a.spans.1 ++ a.spans.2 := hvt4 a hamA
   have hpv : p ≠ vertItem v := by
     rcases hpa with hpi | hp
@@ -2199,21 +2197,18 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
     · rintro ⟨j, hj, h⟩; exact ⟨j, hj, hm h⟩
   have hedgesTF : ∀ t ∈ tl, TEntry.edges s'.g s'.items t = TEntry.edges s.g s.items t :=
     fun t ht => funext fun e' => propext (hedgesT t ht e')
-  have hce : ∀ e', TEntry.edges s.g s.items c e' ↔ e' = e := by
-    intro e'
-    rw [TEntry.edges, hcs]
+  have hce : ∀ e', TEntry.edges s.g s.items c e' ↔ Items.Below s.items q (edgeItem s.g e') := by
+    intro e'; rw [TEntry.edges, hcs]
     constructor
-    · rintro ⟨j, hj, hb⟩
-      rw [List.mem_singleton] at hj; subst hj
-      exact edgeItem_inj ((below_of_ch_nil hqch hb).trans hq)
-    · rintro rfl; exact ⟨q, List.mem_singleton_self _, by rw [hq]; exact .refl⟩
+    · rintro ⟨j, hj, h⟩; rw [List.mem_singleton] at hj; subst hj; exact h
+    · intro h; exact ⟨q, List.mem_singleton_self _, h⟩
   have hae : ∀ e', TEntry.edges s.g s.items a e' ↔ Items.Below s.items i (edgeItem s.g e') := by
     intro e'; rw [TEntry.edges, has]
     constructor
     · rintro ⟨j, hj, h⟩; rw [List.mem_singleton] at hj; subst hj; exact h
     · intro h; exact ⟨i, List.mem_singleton_self _, h⟩
   have hce' : ∀ e', e' < s.g.ne → (TEntry.edges s'.g s'.items a₃ e' ↔
-      TEntry.edges s.g s.items a e' ∨ e' = e) := by
+      TEntry.edges s.g s.items a e' ∨ TEntry.edges s.g s.items c e') := by
     intro e' he'
     have hq'lt : edgeItem s.g e' < s.items.size := by show 1 + s.g.nv + e' < _; omega
     rw [TEntry.edges, ha₃s, hae]
@@ -2226,46 +2221,35 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
         · rw [hpi] at h; exact .inl h
         · exact absurd hq'lt (by rw [hpch hp _ h]; exact Nat.not_lt.2 hp)
       · rcases hS r hr with hrq | ⟨hri, -⟩ | hpr
-        · rw [hrq] at h; exact .inr (edgeItem_inj ((below_of_ch_nil hqch h).trans hq))
+        · rw [hrq] at h; exact .inr ((hce e').2 h)
         · rw [hri] at h; exact .inl h
         · rcases hpa with hpi | hp
           · rw [hpi] at hpr; exact .inl (Relation.ReflTransGen.head hpr h)
           · exact absurd hpr (by rw [Items.IsParent, ch_of_ge hp]; simp)
-    · rintro (h | rfl)
+    · rintro (h | h)
       · refine ⟨p, List.mem_singleton_self _, ?_⟩
         rw [Items.EdgeBelow, hg, hBpj]
         rcases hpa with hpi | hp
         · rw [hpi]; exact .inl h
         · exact .inr ⟨i, hSi (fun h' => absurd hilt (by rw [h']; exact Nat.not_lt.2 hp)), h⟩
       · exact ⟨p, List.mem_singleton_self _, by
-          rw [Items.EdgeBelow, hg, hBpj]; exact .inr ⟨q, hSq, by rw [hq]; exact .refl⟩⟩
-  have hinc_e : ∀ x, s.g.Inc e x → x = v ∨ x = dest := by
-    intro x hx
-    rcases hend with h | h
-    · rw [Graph.Inc, ← h] at hx; exact hx.imp Eq.symm Eq.symm
-    · obtain ⟨h1, h2⟩ := Prod.mk.inj h
-      rcases hx with h' | h'
-      · exact .inr (h'.symm.trans h2.symm)
-      · exact .inl (h'.symm.trans h1.symm)
-  have hIv : s.g.Inc e v := by
-    rcases hend with h | h
-    · exact .inl (by rw [← h])
-    · exact .inr (Prod.mk.inj h).1.symm
-  have hId : s.g.Inc e dest := by
-    rcases hend with h | h
-    · exact .inr (by rw [← h])
-    · exact .inl (Prod.mk.inj h).2.symm
+          rw [Items.EdgeBelow, hg, hBpj]; exact .inr ⟨q, hSq, (hce e').1 h⟩⟩
   have hTa₃ : ∀ x, s'.g.Touches (TEntry.edges s'.g s'.items a₃) x →
-      s.g.Touches (TEntry.edges s.g s.items a) x ∨ x = v ∨ x = dest := by
+      s.g.Touches (TEntry.edges s.g s.items a) x ∨ s.g.Touches (TEntry.edges s.g s.items c) x := by
     rintro x ⟨e', he', hte, hx⟩
     rw [hg] at he' hx
-    rcases (hce' e' he').1 hte with h | rfl
+    rcases (hce' e' he').1 hte with h | h
     · exact .inl ⟨e', he', h, hx⟩
-    · exact .inr (hinc_e x hx)
-  have hTa₃v : s'.g.Touches (TEntry.edges s'.g s'.items a₃) v :=
-    ⟨e, by rw [hg]; exact he, (hce' e he).2 (.inr rfl), by rw [hg]; exact hIv⟩
-  have hTa₃d : s'.g.Touches (TEntry.edges s'.g s'.items a₃) dest :=
-    ⟨e, by rw [hg]; exact he, (hce' e he).2 (.inr rfl), by rw [hg]; exact hId⟩
+    · exact .inr ⟨e', he', h, hx⟩
+  have hTc : ∀ x, s.g.Touches (TEntry.edges s.g s.items c) x →
+      s'.g.Touches (TEntry.edges s'.g s'.items a₃) x := by
+    rintro x ⟨e', he', hte, hx⟩
+    exact ⟨e', by rw [hg]; exact he', (hce' e' he').2 (.inr hte), by rw [hg]; exact hx⟩
+  have hIntc : ∀ x, s.g.Interior (TEntry.edges s.g s.items c) x →
+      s'.g.Interior (TEntry.edges s'.g s'.items a₃) x := by
+    intro x h e' he' hx
+    rw [hg] at he' hx
+    exact (hce' e' he').2 (.inr (h e' he' hx))
   have hInt : ∀ x, s.g.Interior (TEntry.edges s.g s.items a) x →
       s'.g.Interior (TEntry.edges s'.g s'.items a₃) x := by
     intro x h e' he' hx
@@ -2274,6 +2258,8 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
   have hCEa := hCE a hamA
   have hA1a : allType1 d a.topDepth done := by rw [had]; exact hA1
   have hCSa := hCS a hamA hA1a
+  have hCEc := hCE c hcmA
+  have hCSc := hCS c hcmA (by rw [hcd]; exact hA1)
   have hCE' : ∀ t ∈ tl, CtxEntry v d s t → CtxEntry v d s' t := by
     intro t ht h
     obtain ⟨e', h1, h2⟩ := h.nonempty
@@ -2308,30 +2294,35 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
   have hCEa₃ : CtxEntry v d s' a₃ :=
     { vStart := rfl
       depth := hlt
-      nonempty := ⟨e, by rw [hg]; exact he, (hce' e he).2 (.inr rfl)⟩
-      touch_bot := hTa₃v
-      touch_top := by show s'.g.Touches _ s'.stackVerts[lv]!; rw [hsv, hdest]; exact hTa₃d
+      nonempty := by
+        obtain ⟨e', h1, h2⟩ := hCEc.nonempty
+        exact ⟨e', by rw [hg]; exact h1, (hce' e' h1).2 (.inr h2)⟩
+      touch_bot := hTc v hCEc.touch_bot
+      touch_top := by
+        show s'.g.Touches _ s'.stackVerts[lv]!; rw [hsv, ← hcd]; exact hTc _ hCEc.touch_top
       side := by
         show getSide (setSides s.stackDir[lv]! [p] []) (!s'.stackDir[lv]!) = []
         rw [hsd]; unfold setSides getSide; cases s.stackDir[lv]! <;> rfl
       att := fun x hx hxv hxi => by
-        rcases hTa₃ x hx with h | h | h
+        rcases hTa₃ x hx with h | h
         · obtain ⟨k, hk1, hk2, hk3⟩ := hCEa.att x h hxv (fun hI => hxi (hInt x hI))
           exact ⟨k, by rw [had] at hk1; exact hk1, hk2, by rw [hsv]; exact hk3⟩
-        · exact absurd h hxv
-        · exact ⟨lv, Nat.le_refl _, hlt.le, by rw [hsv, hdest]; exact h⟩ }
+        · obtain ⟨k, hk1, hk2, hk3⟩ := hCEc.att x h hxv (fun hI => hxi (hIntc x hI))
+          exact ⟨k, by rw [hcd] at hk1; exact hk1, hk2, by rw [hsv]; exact hk3⟩ }
   have hCSa₃ : CtxSingle v s' a₃ :=
     { item := ⟨p, by
         show setSides s.stackDir[lv]! [p] [] = setSides s'.stackDir[lv]! [p] []
         rw [hsd], hproot'⟩
       att := fun x hx => by
-        rcases hTa₃ x hx with h | h | h
+        rcases hTa₃ x hx with h | h
         · rcases hCSa.att x h with h | h | h
           · exact .inl h
           · exact .inr (.inl (by show x = s'.stackVerts[lv]!; rw [hsv, ← had]; exact h))
           · exact .inr (.inr (hInt x h))
-        · exact .inl h
-        · exact .inr (.inl (by show x = s'.stackVerts[lv]!; rw [hsv, hdest]; exact h)) }
+        · rcases hCSc.att x h with h | h | h
+          · exact .inl h
+          · exact .inr (.inl (by show x = s'.stackVerts[lv]!; rw [hsv, ← hcd]; exact h))
+          · exact .inr (.inr (hIntc x h)) }
   have hvd : s.stackVerts[d]! = v := hC.sv_d
   have hvne : ∀ k, k < d → v ≠ s.stackVerts[k]! := fun k hk h =>
     hC.path k d hk (Nat.le_refl _) (by rw [hvd, h])
@@ -2368,7 +2359,7 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
             rcases List.mem_cons.1 ht with rfl | ht
             · rcases (hce' e' he').1 hte with h | h
               · exact hCT.edges a hamT e' he' h
-              · exact hCT.edges c hcmT e' he' ((hce e').2 h)
+              · exact hCT.edges c hcmT e' he' h
             · exact hCT.edges t (hmemTop t ht) e' he' ((hedgesT t (hmemT' t ht) e').1 hte)
           cover := fun o' ho' hl e' he' hs => by
             rw [hg] at he'
@@ -2376,7 +2367,7 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
             rw [htv, hab, List.cons_append, List.cons_append] at ht
             rcases List.mem_cons.1 ht with h | ht
             · rw [h] at hte
-              exact ⟨a₃, List.mem_cons_self .., (hce' e' he').2 (.inr ((hce e').1 hte))⟩
+              exact ⟨a₃, List.mem_cons_self .., (hce' e' he').2 (.inr hte)⟩
             rcases List.mem_cons.1 ht with h | ht
             · rw [h] at hte
               exact ⟨a₃, List.mem_cons_self .., (hce' e' he').2 (.inl hte)⟩
@@ -2411,7 +2402,7 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
       vert_edges := fun e' he' => by rw [hg] at he'; rw [hEBv]; exact hC.vert_edges e' he'
       touch_bot := fun t ht hne => by
         rcases hmem' t ht with rfl | ht
-        · exact hTa₃v
+        · exact hTc v hCEc.touch_bot
         · rw [hedgesTF t ht, hg]
           rw [hedgesTF t ht, hg] at hne
           exact hC.touch_bot t (htlm t ht) hne
@@ -2437,9 +2428,9 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
         refine List.pairwise_cons.2 ⟨fun t' ht' e' he' h1 h2 => ?_, ?_⟩
         · rw [hg] at he'
           rw [hedgesT t' ht'] at h2
-          rcases (hce' e' he').1 h1 with h | rfl
+          rcases (hce' e' he').1 h1 with h | h
           · exact hat_d t' ht' e' he' h h2
-          · exact hct_d t' ht' e' he' ((hce e').2 rfl) h2
+          · exact hct_d t' ht' e' he' h h2
         · refine List.Pairwise.imp_of_mem (fun {t t'} ht ht' h e' he' h1 h2 => ?_) htl_d
           rw [hg] at he'
           exact h e' he' ((hedgesT t ht e').1 h1) ((hedgesT t' ht' e').1 h2)
@@ -2491,10 +2482,9 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
           · exact hyne
           · exact h5 t (htlm t ht)
         · rcases hmem' t ht with rfl | ht
-          · rcases hTa₃ y hT with hh | hh | hh
+          · rcases hTa₃ y hT with hh | hh
             · exact h6 a ham hh
-            · exact hyne hh.symm
-            · exact h4 lv hlt.le (hdest.trans hh.symm)
+            · exact h6 c hcm hh
           · rw [hedgesTF t ht, hg] at hT
             exact h6 t (htlm t ht) hT }
   · rw [if_pos rfl]
@@ -2516,7 +2506,7 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
       · rw [hab] at ht
         rcases List.mem_cons.1 ht with h' | ht
         · rw [h'] at h
-          exact .inl ⟨a₃, List.mem_cons_self .., (hce' e' he').2 (.inr ((hce e').1 h))⟩
+          exact .inl ⟨a₃, List.mem_cons_self .., (hce' e' he').2 (.inr h)⟩
         rcases List.mem_cons.1 ht with h' | ht
         · rw [h'] at h
           exact .inl ⟨a₃, List.mem_cons_self .., (hce' e' he').2 (.inl h)⟩
@@ -2544,9 +2534,9 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
   · intro t ht e' he' hte
     rw [hg] at he'
     rcases List.mem_cons.1 ht with rfl | ht
-    · rcases (hce' e' he').1 hte with h | rfl
+    · rcases (hce' e' he').1 hte with h | h
       · exact hEdg a hamA e' he' h
-      · exact hEdg c hcmA e' he' ((hce e').2 rfl)
+      · exact hEdg c hcmA e' he' h
     · exact hEdg t (habA t ht) e' he' ((hedgesT t (hab_tl t ht) e').1 hte)
 
 /-- After a returning back-edge out whose P-check fires: from the state after the `Q e` push
@@ -2614,9 +2604,6 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
   have hcs : c.spans.1 ++ c.spans.2 = [q] := by
     show (setSides s.stackDir[lv]! [q] []).1 ++ (setSides s.stackDir[lv]! [q] []).2 = [q]
     unfold setSides; split <;> rfl
-  have hqch : Items.ch s₂.items q = [] := by
-    rw [hch]
-    exact (hC.q_fresh (.back e dest cls) (List.mem_cons_self ..) e (Or.inl rfl)).2.1
   have hA1 : allType1 d lv (done ++ [(.back e dest cls, true)]) := by
     intro o ho hol
     unfold afterVert at ho
@@ -2645,11 +2632,7 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
     show setSides s.stackDir[lv]! [q] [] = _
     rw [hsdl]
   have hv₂ : v < s₂.g.nv := by rw [hg]; exact hv
-  have he₂ : e < s₂.g.ne := by rw [hg]; exact he
   have hsz₂ : 1 + s₂.g.nv + s₂.g.ne ≤ s₂.items.size := by rw [hg, hsz']; exact hsz
-  have hq₂ : q = edgeItem s₂.g e := by rw [hg]
-  have hend₂ : Items.PairEq (v, dest) s₂.g.edges[e]! := by rw [hg]; exact hend
-  have hdest₂ : s₂.stackVerts[lv]! = dest := by rw [hsv]; exact hdest
   have hrest_e₂ : ∀ o' ∈ rest, ∀ e', subEdges o' e' → e' < s₂.g.ne :=
     fun o' ho' e' h => by rw [hg]; exact (hrest_e o' ho' e' h).2
   have hrest_v₂ : ∀ o' ∈ rest, ∀ e₁ cls₁ child, o' = .tree e₁ cls₁ child →
@@ -2673,7 +2656,7 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
     have hSmem : ∀ r, r ∈ S ↔ r = q ∨ r ∈ Items.ch s₂.items i := by
       intro r; rw [hSdef, hcsp]; unfold setSides getSide
       cases s₂.stackDir[lv]! <;> simp <;> tauto
-    refine earCtx_mergeP hC₂ hv₂ he₂ hlt hsz₂ hts₂ hcd hcs hq₂ hqch hnv hnd hai hA1 hend₂ hdest₂
+    refine earCtx_mergeP hC₂ hv₂ hlt hsz₂ hts₂ hcd hcs rfl hnv hnd hai hA1
       hrest_e₂ hrest_v₂ (p := i) (S := S) (.inl rfl) ?_ ((hSmem q).2 (.inl rfl))
       (fun h => absurd rfl h) ?_ (fun j hj => Items.ch_modify_of_ne _ _ hj)
       (by simp) (by rw [Array.size_modify]; exact hilt) rfl rfl rfl rfl rfl
@@ -2695,7 +2678,7 @@ theorem ctx_step_back_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
     have hSmem : ∀ r, r ∈ S ↔ r = q ∨ r = i := by
       intro r; rw [hSdef, hcsp, hai]; unfold setSides getSide
       cases s₂.stackDir[lv]! <;> simp <;> tauto
-    refine earCtx_mergeP hC₂ hv₂ he₂ hlt hsz₂ hts₂ hcd hcs hq₂ hqch hnv hnd hai hA1 hend₂ hdest₂
+    refine earCtx_mergeP hC₂ hv₂ hlt hsz₂ hts₂ hcd hcs rfl hnv hnd hai hA1
       hrest_e₂ hrest_v₂ (p := s₂.items.size) (S := S) (.inr (Nat.le_refl _)) ?_
       ((hSmem q).2 (.inl rfl)) (fun _ => (hSmem i).2 (.inr rfl)) ?_
       (fun j hj => by rw [Items.ch_modify_of_ne _ _ hj, Items.ch_push, if_neg hj])
@@ -3943,24 +3926,6 @@ theorem wp_finishEdge_tree (curV d : Nat) (o : DfsOut) (orig : Nat) (hasVert : B
       closeVert_eq, Bool.false_eq_true, wp_makeVs, wp_modifyItem] <;>
     exact Iff.rfl
 
-/-- Admitted: the P-merge at a returning tree edge with the vertex entry (`condP` fires: the
-`(v, lowval)` entry of `R` merges into the enclosing `(v, lowval)` entry below it). -/
-theorem ctx_step_tree_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
-    {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
-    {s : WalkState} {e : Nat} {cls : OutClass} {y : Nat} {outs : List DfsOut} {L : List TEntry}
-    {push : Bool} {done' : List (DfsOut × Bool)} {hv' : Bool} {bE' : List (Nat → Prop)}
-    {sv' : List Nat} {sd' : List Bool} {sE : WalkState} {dir' : Bool} {L' : List TEntry}
-    {push' : Bool} {D₃ : Array Bool}
-    (H : TreeSite v d done rest hasVert base bE sv sd s e cls y outs L push done' hv' bE' sv' sd'
-      sE dir' L' push' D₃)
-    (hr : cls.lowval d < d) {sX : WalkState} {R : List TEntry}
-    (HR : RetTop v d s e cls y outs L true sX R) (b : Bool)
-    (hc : result (condP v (cls.lowval d) cls.isType1) sX = true) :
-    wp (finishRest v d (cls.lowval d) cls.isType1 true b)
-      (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), true)]) rest hv''
-        base bE sv sd s') sX := by
-  sorry
-
 theorem spans_setSides_single (dir : Bool) (i : ItemId) :
     (setSides dir [i] []).1 ++ (setSides dir [i] []).2 = [i] := by
   unfold setSides; cases dir <;> rfl
@@ -4667,6 +4632,174 @@ theorem earCtx_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOu
       rcases List.mem_append.1 ht with h | h
       · exact hRnv' t (List.mem_cons_of_mem _ h)
       · exact hBel t (htb ▸ h)
+
+/-- The P-merge at a returning tree edge with the vertex entry (`condP` fires): `condP` forces
+`push = false` (a pushed `V v` entry would sit at depth `d ≠ lowval`), hence `hasVert = true` and
+`L = []`, and the entry below the retained `(v, lowval)` entry is the enclosing parallel ear.
+`earCtx_ret` (with `T = R`) gives the context at `sX`, `mergeP_single` the merged side,
+`earCtx_mergeP` the post-state. -/
+theorem ctx_step_tree_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut}
+    {hasVert : Bool} {base : List TEntry} {bE : List (Nat → Prop)} {sv : List Nat} {sd : List Bool}
+    {s : WalkState} {e : Nat} {cls : OutClass} {y : Nat} {outs : List DfsOut} {L : List TEntry}
+    {push : Bool} {done' : List (DfsOut × Bool)} {hv' : Bool} {bE' : List (Nat → Prop)}
+    {sv' : List Nat} {sd' : List Bool} {sE : WalkState} {dir' : Bool} {L' : List TEntry}
+    {push' : Bool} {D₃ : Array Bool}
+    (H : TreeSite v d done rest hasVert base bE sv sd s e cls y outs L push done' hv' bE' sv' sd'
+      sE dir' L' push' D₃)
+    (hr : cls.lowval d < d) {sX : WalkState} {R : List TEntry}
+    (HR : RetTop v d s e cls y outs L true sX R) (b : Bool)
+    (hc : result (condP v (cls.lowval d) cls.isType1) sX = true) :
+    wp (finishRest v d (cls.lowval d) cls.isType1 true b)
+      (fun hv'' s' => EarCtx v d (done ++ [(.tree e cls (.node y outs), true)]) rest hv''
+        base bE sv sd s') sX := by
+  have hc' : (cls.isType1 && decide (sX.tstack.length ≥ 2) && (sX.tstack.tail.head!.vStart == v) &&
+      (sX.tstack.tail.head!.topDepth == cls.lowval d)) = true := by
+    rw [result, run_condP] at hc; exact hc
+  have hc2 := hc'
+  simp only [Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hc2
+  obtain ⟨⟨⟨ht1, hlen⟩, hnv⟩, hnd⟩ := hc2
+  set lv := cls.lowval d with hlv
+  obtain ⟨x, hR, hxv, hxd, -, -, -, -, -, hxt1⟩ := HR.vert rfl
+  obtain ⟨⟨q, hxq⟩, -⟩ := hxt1 ht1
+  have hts₀ := HR.tstack
+  rw [hR] at hts₀
+  have hL0 : L = [] := by
+    have hL := H.hL
+    cases hp : push
+    · rw [hp] at hL; exact hL
+    · exfalso
+      simp only [hp, ↓reduceIte] at hL
+      rw [hL] at hts₀
+      rw [hts₀] at hnd
+      simp only [List.cons_append, List.tail_cons] at hnd
+      exact absurd hnd (Nat.ne_of_gt hr)
+  have hp0 : push = false := by
+    cases hp : push
+    · rfl
+    · exfalso
+      have hL := H.hL
+      simp [hp, hL0] at hL
+  have hb : (hasVert || push) = true := by
+    cases hhv : hasVert
+    · exact absurd (H.hpush.2 ⟨hhv, hr, ht1⟩) (by rw [hp0]; decide)
+    · rfl
+  rw [hL0, List.nil_append] at hts₀
+  cases hst : s.tstack with
+  | nil =>
+    exfalso
+    rw [hts₀, hst] at hlen
+    simp at hlen
+  | cons a tl =>
+  rw [hst] at hts₀
+  have hts₂ : sX.tstack = x :: a :: tl := hts₀
+  rw [hts₂] at hnv hnd
+  simp only [List.tail_cons, List.head!_cons] at hnv hnd
+  have hC : EarCtx v d (done ++ [(.tree e cls (.node y outs), true)]) rest true base bE sv sd sX :=
+    earCtx_ret H hr hb HR R (Or.inl ⟨rfl, rfl⟩) HR.tstack rfl rfl rfl (fun _ _ => rfl) rfl
+  have hsdl : sX.stackDir[lv]! = s.stackDir[lv]! := HR.sd lv hr
+  have hcsp : x.spans = setSides sX.stackDir[lv]! [q] [] := by rw [hsdl]; exact hxq
+  have hcs : x.spans.1 ++ x.spans.2 = [q] := by rw [hxq]; exact spans_setSides_single _ _
+  have hA1 : allType1 d lv (done ++ [(.tree e cls (.node y outs), true)]) := by
+    intro o ho hol
+    unfold afterVert at ho
+    rw [List.filter_append, List.map_append] at ho
+    rcases List.mem_append.1 ho with ho | ho
+    · have hrk := H.rank (o, true) (mem_afterVert ho)
+      obtain ⟨lv', k', hk', -⟩ := ret_of_lowval_lt (o := o) (d := d) (by rw [hol]; exact hr)
+      obtain ⟨lv'', k'', hk'', -⟩ :=
+        ret_of_lowval_lt (o := DfsOut.tree e cls (.node y outs)) (d := d) hr
+      simp only [DfsOut.cls] at hk''
+      rw [hk'] at hol hrk ⊢
+      rw [hk''] at hrk hlv ht1
+      simp only [OutClass.lowval] at hol hlv
+      simp only [OutClass.rank] at hrk
+      cases k' <;> cases k'' <;> simp only [RetKind.rank, OutClass.isType1] at hrk ht1 ⊢ <;> omega
+    · simp at ho
+      rw [ho]; exact ht1
+  have hcV : vertItem v ∉ x.spans.1 ++ x.spans.2 := by
+    obtain ⟨top, htop, hCT⟩ := hC.top
+    obtain ⟨above, below, hsp, -, -, -, -, -, -⟩ := hCT.split
+    rw [if_pos rfl] at hsp
+    obtain ⟨vt, htv, -, -, hvt3, hvt4, -, -⟩ := hsp
+    have h := htop
+    rw [hts₂, htv] at h
+    rcases above with _ | ⟨x', r⟩
+    · simp only [List.nil_append, List.cons_append, List.cons.injEq] at h
+      rw [← h.1] at hvt3
+      exact absurd (hvt3 hxv).1 (by rw [hxd]; exact Nat.ne_of_lt hr)
+    · simp only [List.cons_append, List.cons.injEq] at h
+      rw [← h.1] at hvt4
+      exact hvt4 x (List.mem_cons_self ..)
+  have hv₂ : v < sX.g.nv := by rw [HR.g]; exact H.hv
+  have hsz₂ : 1 + sX.g.nv + sX.g.ne ≤ sX.items.size := by
+    rw [HR.g]; exact Nat.le_trans H.hsz HR.size
+  have hrest_e₂ : ∀ o' ∈ rest, ∀ e', subEdges o' e' → e' < sX.g.ne :=
+    fun o' ho' e' h => by rw [HR.g]; exact (H.rest_nd o' ho' e' h).2
+  have hrest_v₂ : ∀ o' ∈ rest, ∀ e₁ cls₁ child, o' = .tree e₁ cls₁ child →
+      ∀ w ∈ child.verts, w < sX.g.nv :=
+    fun o' ho' e₁ cls₁ child h w hw => by
+      rw [HR.g]; exact (H.rest_nv o' ho' e₁ cls₁ child h w hw).2
+  have ham : a ∈ sX.tstack := by rw [hts₂]; exact List.mem_cons_of_mem _ (List.mem_cons_self ..)
+  unfold finishRest finishP finishTail condP maybeUnwrapNxt finishTstackTop
+  simp only [wp_bind, wp_tstackSize, wp_nxt, wp_pure, wp_ite, hc', ↓reduceIte, Bool.not_true,
+    Bool.false_eq_true, wp_get, wp_allocItem, wp_stackDir, wp_getItem, wp_modifyNxt,
+    wp_mergeTstackTops, wp_cur, wp_makeVs, wp_modifyItem, wp_modifyCur]
+  rw [hts₂]
+  simp only [mergeTop, List.tail_cons, List.head!_cons, hnd, hnv, hxd, ← hlv, Nat.min_self]
+  split_ifs with h1 h2 <;>
+    (obtain ⟨i, hai, hiroot⟩ := mergeP_single hC hts₂ hcV hnv hnd hr hA1
+     have hilt : i < sX.items.size :=
+       hC.span_lt a ham i (by rw [hai]; unfold setSides; split <;> simp)
+     have hhead : (getSide a.spans sX.stackDir[lv]!).head! = i := by
+       rw [hai]; unfold setSides getSide; cases sX.stackDir[lv]! <;> rfl
+     have hchi : sX.items[i]!.ch = Items.ch sX.items i := by
+       rw [Items.ch_eq_getElem hilt, getElem!_pos sX.items i hilt])
+  on_goal 2 =>
+    rw [hhead, hchi]
+    set S := getSide (x.spans.1 ++ (setSides sX.stackDir[lv]! (Items.ch sX.items i) []).1,
+      (setSides sX.stackDir[lv]! (Items.ch sX.items i) []).2 ++ x.spans.2) sX.stackDir[lv]! with hSdef
+    have hSmem : ∀ r, r ∈ S ↔ r = q ∨ r ∈ Items.ch sX.items i := by
+      intro r; rw [hSdef, hcsp]; unfold setSides getSide
+      cases sX.stackDir[lv]! <;> simp <;> tauto
+    refine earCtx_mergeP hC hv₂ hr hsz₂ hts₂ hxd hcs hxv hnv hnd hai hA1
+      hrest_e₂ hrest_v₂ (p := i) (S := S) (.inl rfl) ?_ ((hSmem q).2 (.inl rfl))
+      (fun h => absurd rfl h) ?_ (fun j hj => Items.ch_modify_of_ne _ _ hj)
+      (by simp) (by rw [Array.size_modify]; exact hilt) rfl rfl rfl rfl rfl
+    · intro r hrS
+      rcases (hSmem r).1 hrS with h | h
+      · exact .inl h
+      · exact .inr (.inr h)
+    · intro p' c'
+      unfold Items.IsParent
+      by_cases hp' : p' = i
+      · subst hp'
+        rw [Items.ch_modify_at _ _ hilt]
+        simp only [hSmem, true_and]
+        tauto
+      · rw [Items.ch_modify_of_ne _ _ hp']
+        simp [hp']
+  all_goals
+    set S := getSide (x.spans.1 ++ a.spans.1, a.spans.2 ++ x.spans.2) sX.stackDir[lv]! with hSdef
+    have hSmem : ∀ r, r ∈ S ↔ r = q ∨ r = i := by
+      intro r; rw [hSdef, hcsp, hai]; unfold setSides getSide
+      cases sX.stackDir[lv]! <;> simp <;> tauto
+    refine earCtx_mergeP hC hv₂ hr hsz₂ hts₂ hxd hcs hxv hnv hnd hai hA1
+      hrest_e₂ hrest_v₂ (p := sX.items.size) (S := S) (.inr (Nat.le_refl _)) ?_
+      ((hSmem q).2 (.inl rfl)) (fun _ => (hSmem i).2 (.inr rfl)) ?_
+      (fun j hj => by rw [Items.ch_modify_of_ne _ _ hj, Items.ch_push, if_neg hj])
+      (by simp) (by simp) rfl rfl rfl rfl rfl
+    · intro r hrS
+      rcases (hSmem r).1 hrS with h | h
+      · exact .inl h
+      · exact .inr (.inl ⟨h, Nat.ne_of_lt hilt⟩)
+    · intro p' c'
+      unfold Items.IsParent
+      by_cases hp' : p' = sX.items.size
+      · subst hp'
+        rw [Items.ch_modify_at _ _ (by simp), ch_of_ge (Nat.le_refl _), Array.getElem_push_eq]
+        simp
+      · rw [Items.ch_modify_of_ne _ _ hp', Items.ch_push, if_neg hp']
+        simp [hp']
 
 /-- The tree-edge step for a returning child (`lowval < d`): `tree_ret_shape` after loops 1–3, then
 the P-check (`ctx_step_tree_ret_P`) and the first-edge vertex push, `earCtx_ret` over the final
