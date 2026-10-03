@@ -136,3 +136,5 @@ import Spqr.WalkBackbone
 import Spqr.WalkBackboneStep
 import Spqr.PlanarEmbedNodeR
 import Spqr.Proofs.PlanarWalkFacts
+import Spqr.PlanarRelabelNodeR
+import Spqr.PlanarSoundR

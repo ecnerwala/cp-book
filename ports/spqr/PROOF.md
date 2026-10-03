@@ -3882,7 +3882,9 @@ permutation is needed. `nodeFold_capped` (`PlanarEmbedNodeFold.lean`) dispatches
 `R` case is `nodeFold_capped_R` (proved below via `main_R`; it takes the extra hypotheses
 `hclosed : NodeRotClosed` and `hcor : NodeCorners`).
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through the walk/R-side admissions,
-`spqrTree_pieceSep`'s final-items hypothesis `walk_pieceInv`, `nodePlanar_sound_R`, `planarTree_nodeRotClosed` and
+`spqrTree_pieceSep`'s final-items hypothesis `walk_pieceInv`, `planarWalk_planarFinish`,
+`planarRelabelTree_relabelNodeR`, `planarWalk_items_wf` (the three ingredients of `nodePlanar_sound_R`),
+`planarTree_nodeRotClosed` and
 `planarTree_nodeCorners`.
 
 **R node.** Route: the hybrid system. `hloc` is the local skeleton `localSkeleton i` with rotation
@@ -3973,7 +3975,10 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `planarRelabel_rot_spec` (`neRotAdj` has four entries per node-edge; node `n`'s entries `4 neSt + j` are those of `layoutRot (type n) (nVerts n) neSt neEn edgeVes mapRot (2 g.ne)`, `mapRot` four entries each, `|edgeVes| + 1 = nEdges n` for R) | `PlanarRotSpec.lean` | **proved** from `planarRelabel_rotInv` (`rot_spec_of_inv`); the size clause uses `layoutRot_size`, hence `WF.shape` via `spqrTree_wf` (admitted in `relabelTree_wf`) |
 | `layoutRot_size` (every type's `layoutRot` has `4 · nEdges` entries, from `WF.shape`/`Twins.cap_none`), `neRotAdj_segment` (relabel bookkeeping: node `i`'s `neRotAdj` segment is its `layoutRot`) | `PlanarRotSpec.lean`, `PlanarSpec.lean` | **proved** modulo `spqrTree_wf` (through `planarRelabel_proj`) |
 | `nodePlanar_sound_S`, `nodePlanar_sound_P` | `PlanarSpec.lean` | proved modulo `Shape` (via `spqrTree_wf`, itself admitted in `relabelTree_wf`) |
-| `nodePlanar_sound_R` (Invariant P at finish, mapped by `mapRot`) | `PlanarSpec.lean` | sorry |
+| `PlanarFinish` (walk-side record, kept apart from `WalkInv`: a node recorded `.planar m` has `m` = four exposed ends of its edge children (`match_ends`), children in range (`ch_lt`), the `qem` after `capLinked` (= `setupNode`'s cap links) and `flipped` (= `applyFlips`) closed on the node's virtual edges (`closed`), and `readRot` of it is a planar embedding of `nodeSkel` (`embedded`)), `planarWalk_planarFinish` | `Proofs/PlanarWalkFacts.lean` | def / sorry (checked as separate fields by `checks/WalkInvCheck/Planar.lean`, seeds 0..3000 both modes, 0 violations; the variant without the flips fails at seed 6) |
+| `RelabelNodeR` (relabel-side record for an R node `n`: its item `it`, `children = Items.ordered`, `PosOK`, `nvEn = nvSt + |nvList|`, `neEn = neSt + |edgeVes| + 1`, skeleton `(nvSt, nvEn - 1) :: edgeChildren`, rows `neRotAdj[4 neSt + l] = some (4 (neSt + idxOf) + (o &&& 2) + (1 - l % 2))` read off `Q = flipped (capLinked qem m)`), `planarRelabelTree_relabelNodeR` | `PlanarRelabelNodeR.lean` | def / sorry (the `mapRot`/`setupNode → nodeRot` bridge, via `planarRelabel_rotInv`/`relabel_node_spec`; in progress) |
+| `readRot_perm` (`readRot` along a permutation of `ves`, by `IsPlanarEmbedding.reindex`), `nodePlanar_sound_R_of` (`PlanarFinish` + `RelabelNodeR` + `Items.WF` ⇒ `nodeRot n` is a planar embedding of `localSkeleton n`: reorder to `Items.ordered`, relabel vertices by `pos - nvSt` with `IsPlanarEmbedding.map`, injective by `PosOK`/`nv_nodup`), `planarWalk_items_wf'` (from `walk_items_wf`), `planarWalk_items_wf` (hypothesis-free form) | `PlanarSoundR.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) / proved / sorry (cf. `spqrTree_wf`) |
+| `nodePlanar_sound_R` | `PlanarSpec.lean` | proved from `nodePlanar_sound_R_of` modulo the three admissions above |
 | `nodePlanar_sound` = S ∨ P ∨ R cases | `PlanarSpec.lean` | proved from the three |
 | `nodePlanar_complete` (Kuratowski-style certificate from the §8.3 crossing) | `PlanarSpec.lean` | sorry, hard |
 | `IsPlanarEmbedding.map`, `Planar.map` (relabelling the vertices by a map injective on the non-isolated ones; `numNonIsolated`/`ccCount` are transported) | `Proofs/PlanarMap.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
@@ -4024,7 +4029,8 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `spqrTree_planar` (`→` from `planarEmbed_sound`; `←` needs completeness + skeletons are minors of `g`) | `PlanarSpec.lean` | sorry |
 
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): `spqrTree_wf` (inherited by `planarRelabel_rot_spec`, `neRotAdj_segment`);
-`nodePlanar_sound_R`; the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
+`planarWalk_planarFinish`, `planarRelabelTree_relabelNodeR`, `planarWalk_items_wf` (hence
+`nodePlanar_sound_R`); the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
 `planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`'s final-items hypothesis
 `walk_pieceInv` (§4.6), `planarTree_nodeRotClosed`, `planarTree_nodeCorners` (hence `planarEmbed_sound`; the old `GluedUpTo`-level
 `embedItem_step_Q`/`embedItem_step_node` and the unattempted `TwoSum.planar_left` converse have
@@ -4048,8 +4054,10 @@ Work packages:
   `planarRelabel_rot_spec` is `rot_spec_of_inv` at the final state; only its `neRotAdj.size`
   clause and the per-node `j`-range go through `layoutRot_size`, i.e. `WF.shape` (`spqrTree_wf`).
   `neRotAdj_segment` is derived from it (`PlanarRotSpec.lean`).
-* **Local embeddings**: S and P done; R (`nodePlanar_sound_R`) from Invariant P at the finish of
-  the R item via `planarRelabel`'s `mapRot`.
+* **Local embeddings**: S and P done; R reduced (`nodePlanar_sound_R_of`) to the walk-side
+  record `PlanarFinish` (checked; its proof is `finishTstackTop` + Invariant P, i.e. the nine
+  `*_inv` lemmas) and the relabel-side record `RelabelNodeR` (to be proved from
+  `planarRelabel_rotInv` / `relabel_node_spec`).
 * **Gluing**: `twoSum_planar` (explicit splice, `PlanarGlue`, under `TwoSum.WF`'s
   `deg`/`face`/`conn`), `oneSum_planar` (`RotationSystem.conj` on `RotationSystem.union`),
   `disjointUnion_planar` (`RotationSystem.union`) are proved; the bottom-up induction over

@@ -10,6 +10,7 @@ import Spqr.PlanarEmbedFacesFold
 import Spqr.PlanarNodeSpec
 import Spqr.PlanarEmbedRoot
 import Spqr.WalkPieceSep
+import Spqr.PlanarSoundR
 import Spqr.RelabelChildShape
 import Spqr.Spec
 
@@ -154,11 +155,10 @@ theorem nodePlanar_sound_P (g : Graph) (ternarize : Bool) (vertOrder edgeOrder :
   rw [hsk', hrot, hnv']
   exact bondRot_isPlanarEmbedding _ (by omega)
 
-/-- The R case of `nodePlanar_sound`. Admitted; plan: when the R item is finished, Invariant P
-(`InvariantP`, maintained by `planarWalkOut_stackInv`) gives a planar embedding of its piece whose
-exposed ends are the four recorded cap matches (`finishMatches`); `planarRelabel` maps it through
-`mapRot` into the node's `neRotAdj` segment (`neRotAdj_segment`), and the piece with its cap is
-the node's skeleton. -/
+/-- The R case of `nodePlanar_sound`: from the walk-side record `PlanarFinish`
+(`planarWalk_planarFinish`) and the relabel-side record `RelabelNodeR`
+(`planarRelabelTree_relabelNodeR`) by `nodePlanar_sound_R_of` (reorder the piece's edges to
+`Items.ordered` order, relabel its vertices to node-vertex positions). -/
 theorem nodePlanar_sound_R (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) (i : Nat)
     (hi : i < (g.planarTree ternarize vertOrder edgeOrder).size)
     (hR : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.type i = .R)
@@ -166,7 +166,10 @@ theorem nodePlanar_sound_R (g : Graph) (ternarize : Bool) (vertOrder edgeOrder :
     IsPlanarEmbedding ((g.planarTree ternarize vertOrder edgeOrder).localSkeleton i)
       ((g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.nVerts i)
       ((g.planarTree ternarize vertOrder edgeOrder).nodeRot i) := by
-  sorry
+  simp only [Graph.planarTree, Graph.planarSpqrTree] at hi hR h ⊢
+  have hwf := planarWalk_items_wf g ternarize vertOrder edgeOrder
+  exact nodePlanar_sound_R_of g _ _ hwf (planarWalk_planarFinish g ternarize _) i
+    (planarRelabelTree_relabelNodeR g _ hwf i hi hR h)
 
 /-- Soundness of the per-node flag: a planar S/P/R node's local rotation system is a planar
 embedding of its skeleton. S and P are `nodePlanar_sound_S` / `nodePlanar_sound_P` (proved modulo

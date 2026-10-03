@@ -44,11 +44,12 @@ def flipped (g : Graph) (ch : List ItemId) (flips : List Bool) (qem : Qem) : Qem
 
 /-- The local rotation system `mapRot` reads for the piece `P` off `qem`: local quarter-edge
 `4 k + z` of `P.ves[k]` faces the local quarter-edge of `qem[4 P.ves[k] + z]`, on the same side
-and with the opposite direction. -/
+and with the opposite direction (`idxOf` of an edge outside `P.ves` is `P.ves.length`, i.e. out of
+range; `PlanarFinish.closed` excludes it). -/
 def readRot (P : Piece) (qem : Qem) : RotationSystem :=
   ⟨(Array.range (4 * P.ves.length)).map fun l =>
-    (qem[4 * P.ves[l / 4]! + l % 4]!).bind fun o =>
-      (P.ves.findIdx? (· == QE.edge o)).map fun k => 4 * k + (o &&& 2) + (1 - l % 2)⟩
+    (qem[4 * P.ves[l / 4]! + l % 4]!).map fun o =>
+      4 * P.ves.idxOf (QE.edge o) + (o &&& 2) + (1 - l % 2)⟩
 
 /-- The rotation system `planarRelabel` reads for the closed node `it` with matches `m`, from the
 final walk state `w`: cap links, the children's flips, then `readRot`. -/
@@ -82,5 +83,17 @@ structure PlanarFinish (g : Graph) (w : PlanarWalkState) : Prop where
     let it := 1 + g.nv + g.ne + k
     w.base.items[it]!.type ∈ [NodeType.S, .P, .R] →
     IsPlanarEmbedding (nodeSkel g w.base.items it).es g.nv (finishRot g w it m)
+
+/-- `PlanarFinish` holds for the planar walk. Admitted; the walk-side counterpart of
+`nodePlanar_sound_R` (PROOF.md §8.4): `finishTstackTop` records `.planar (finishMatches …)` from
+an entry carrying Invariant P (`InvariantP`, maintained by `planarWalkOut_stackInv` through the
+nine admitted step lemmas of `PlanarInvSteps.lean`), whose `embedded`/`agree`/`exposed` fields
+give exactly the planar embedding `readRot` reconstructs once the cap is linked to the exposed
+ends and the children's flips are applied; the backbone induction (`Spqr/WalkBackbone.lean`)
+carries the record to the final state. Checked by `checks/WalkInvCheck/Planar.lean`
+(seeds 0..3000, both modes, 0 violations). -/
+theorem planarWalk_planarFinish (g : Graph) (ternarize : Bool) (forest : List DfsTree) :
+    PlanarFinish g (g.planarWalk ternarize forest) := by
+  sorry
 
 end Spqr
