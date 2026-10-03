@@ -25,7 +25,7 @@ theorem nodeFold_capped_R (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTre
     (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g) {i : Nat} (hi : i < t.size)
     (hR : t.toSpqrTree.type i = .R)
     (hloc : IsPlanarEmbedding (t.localSkeleton i) (t.toSpqrTree.nVerts i) (t.nodeRot i))
-    (hlay : t.LayoutAt i)
+    (hlay : t.LayoutAt i) (hclosed : t.NodeRotClosed) (hcor : t.NodeCorners)
     {ne : Nat} (hcne : t.toSpqrTree.capNe i = some ne) {p : Nat × Nat}
     (hp : t.toSpqrTree.neOrig ne = some p)
     (s : EmbedState) (h : t.GluedFaces g (i + 1) s) :
@@ -45,7 +45,7 @@ theorem nodeFold_capped (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.
     (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g) {i : Nat} (hi : i < t.size)
     (hty : t.toSpqrTree.type i = .S ∨ t.toSpqrTree.type i = .P ∨ t.toSpqrTree.type i = .R)
     (hloc : IsPlanarEmbedding (t.localSkeleton i) (t.toSpqrTree.nVerts i) (t.nodeRot i))
-    (hlay : t.LayoutAt i)
+    (hlay : t.LayoutAt i) (hclosed : t.NodeRotClosed) (hcor : t.NodeCorners)
     {ne : Nat} (hcne : t.toSpqrTree.capNe i = some ne) {p : Nat × Nat}
     (hp : t.toSpqrTree.neOrig ne = some p)
     (s : EmbedState) (h : t.GluedFaces g (i + 1) s) :
@@ -57,7 +57,7 @@ theorem nodeFold_capped (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.
   rcases hty with hS | hP | hR
   · exact t.nodeFold_capped_S g hwf hsh hrep hsep hi hS hlay hcne hp s h
   · exact t.nodeFold_capped_P g hwf hsh hrep hsep hi hP hlay hcne hp s h
-  · exact t.nodeFold_capped_R g hwf hsh hrep hsep hi hR hloc hlay hcne hp s h
+  · exact t.nodeFold_capped_R g hwf hsh hrep hsep hi hR hloc hlay hclosed hcor hcne hp s h
 
 /-- `S`/`P`/`R` step over `GluedFaces`: `embedItem_node` + `nodeFold_capped` + `node_capped_glued`. -/
 theorem embedItem_step_node_faces (g : Graph) (hwf : t.toSpqrTree.WF)
@@ -65,7 +65,7 @@ theorem embedItem_step_node_faces (g : Graph) (hwf : t.toSpqrTree.WF)
     (hsep : t.toSpqrTree.PieceSep g) (i : Nat) (hi : i < t.size)
     (hty : t.types[i]! = .S ∨ t.types[i]! = .P ∨ t.types[i]! = .R)
     (hloc : IsPlanarEmbedding (t.localSkeleton i) (t.toSpqrTree.nVerts i) (t.nodeRot i))
-    (hlay : t.LayoutAt i)
+    (hlay : t.LayoutAt i) (hclosed : t.NodeRotClosed) (hcor : t.NodeCorners)
     (s : EmbedState) (h : t.GluedFaces g (i + 1) s) :
     t.GluedFaces g i ((t.embedItem i).run s).2 := by
   have ht : t.toSpqrTree.type i = .S ∨ t.toSpqrTree.type i = .P ∨ t.toSpqrTree.type i = .R := by
@@ -75,7 +75,7 @@ theorem embedItem_step_node_faces (g : Graph) (hwf : t.toSpqrTree.WF)
   obtain ⟨p, hp⟩ := hsep.cap_orig i _ hi hcne
   rw [t.embedItem_node i hty s]
   obtain ⟨hframe, a0, a1, a2, a3, ρ, hrow, hcap⟩ :=
-    t.nodeFold_capped g hwf hsh hrep hsep hi ht hloc hlay hcne hp s h
+    t.nodeFold_capped g hwf hsh hrep hsep hi ht hloc hlay hclosed hcor hcne hp s h
   exact t.node_capped_glued g hwf hsh hrep hsep hi ht hcne hp s _ h
     (t.nodeFold_rotAdj_size _ _ _ _) (t.nodeFold_outerE_size _ _ _ _) hframe
     (fun j hji => t.nodeFold_outerE_ne _ _ _ _ j hji) hrow hcap

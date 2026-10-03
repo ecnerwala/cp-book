@@ -202,6 +202,15 @@ theorem planarTree_nodeCorners (g : Graph) (ternarize : Bool) (vertOrder edgeOrd
     (g.planarTree ternarize vertOrder edgeOrder).NodeCorners := by
   sorry
 
+/-- The rotation entries of every `R` node stay inside the node's own segment (`NodeRotClosed`),
+under the all-planar flag. Admitted; checked empirically by `check_piece_sep` (`rot_closed`).
+Mechanical from `layoutRot .R`: `mapRot` only produces quarter-edges `4 * rotEdgeNe[..] + _` of the
+node's own edges. -/
+theorem planarTree_nodeRotClosed (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
+    (hall : (g.planarTree ternarize vertOrder edgeOrder).nodePlanar.all id = true) :
+    (g.planarTree ternarize vertOrder edgeOrder).NodeRotClosed := by
+  sorry
+
 /-- Completeness of the per-node flag: a node flagged nonplanar has a nonplanar skeleton.
 Admitted (Kuratowski-style; plan in PROOF.md §8.3: the `mergePlanarity` nesting obstruction
 exhibits a `K₅` / `K₃,₃` subdivision in the skeleton). -/
@@ -271,7 +280,8 @@ theorem planarEmbed_sound (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder 
       fun i hi => neRotAdj_segment g ternarize vertOrder edgeOrder i hi
     exact glued_root g hg ternarize vertOrder edgeOrder hvo heo hwf _
       ((g.planarTree ternarize vertOrder edgeOrder).gluedFaces_planarEmbed g hg hwf hsh hrep hsep
-        hloc hlay).toGluedUpTo
+        hloc hlay (planarTree_nodeRotClosed g ternarize vertOrder edgeOrder hall)
+        (planarTree_nodeCorners g ternarize vertOrder edgeOrder hall)).toGluedUpTo
   · cases h
 
 /-- The eventual target: the planar SPQR tree yields an embedding iff `g` is planar. `→` is

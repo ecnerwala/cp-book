@@ -230,6 +230,15 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
       let (neSt, neEn) := pt.toSpqrTree.neRange i
       let (nvSt, nvEn) := pt.toSpqrTree.nvRange i
       let cap := pt.toSpqrTree.nodeEdges[neSt]!
+      for ta in [4 * neSt:4 * neEn] do
+        match pt.neRotAdj[ta]! with
+        | none =>
+          bad := bad + 1
+          IO.println s!"rot_closed_none: i={i} ty={repr ty} ta={ta}"
+        | some tb =>
+          if tb < 4 * neSt || 4 * neEn ≤ tb then
+            bad := bad + 1
+            IO.println s!"rot_closed: i={i} ty={repr ty} ta={ta} tb={tb}"
       for nv in [nvSt:nvEn] do
         let mut cnt := 0
         let mut cntRev := 0

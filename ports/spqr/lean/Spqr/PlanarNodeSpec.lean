@@ -35,6 +35,14 @@ theorem isPlanar_of_all {t : PlanarSpqrTree} (hall : t.nodePlanar.all id = true)
   rw [Array.getElem?_eq_getElem hi]
   exact h' i hi
 
+/-- The `neRotAdj` entries of an `R` node stay inside the node's own quarter-edge segment (so
+`nodeRot i`, which subtracts `4 * neSt`, records them faithfully). -/
+def NodeRotClosed : Prop :=
+  ∀ i, i < t.size → t.toSpqrTree.type i = .R → ∀ ta tb,
+    4 * (t.toSpqrTree.neRange i).1 ≤ ta → ta < 4 * (t.toSpqrTree.neRange i).2 →
+    t.neRotAdj[ta]? = some (some tb) →
+    4 * (t.toSpqrTree.neRange i).1 ≤ tb ∧ tb < 4 * (t.toSpqrTree.neRange i).2
+
 /-- `ta` is the quarter-edge `(side 1, dir 0)` of a non-cap edge of node `i` ending at node-vertex
 `nv` whose facing quarter-edge is a `(side 0, dir 1)` quarter-edge: the corner where the executable
 node step splices the vertex item of `nv`. -/
