@@ -2501,6 +2501,25 @@ cofacial; the executable corner (`link qa outerE[v][1]`, then `link qb outerE[v]
 axioms) generalizes `q_capped_child` to any capped non-`I`/`O` child of any item: in a
 `GluedFaces g (i + 1)` state its row is filled and its piece is `Capped` at its cap's original
 endpoints (`PieceSep.cap_orig`).
+The P-node building blocks (all standard axioms): `IsPlanarEmbedding.ident_conj`
+(`Proofs/PlanarIdent.lean`) identifies two already-connected vertices of one embedding by a
+`conj` of two cofacial pairs (Euler: the face count grows by two, the vertex count drops by
+one, the edge count is unchanged); `IsPlanarEmbedding.splice2` (`Proofs/PlanarSplice2.lean`)
+is the 2-sum on the common vertex space: embeddings of `es₁`, `es₂` sharing exactly the vertices
+`u ≠ v`, both connecting `u` to `v`, glued by `(rs₁.union rs₂).conj a (rs₁.size + b)` at `u` and
+then `conj c (rs₁.size + d)` at `v`, embed `es₁ ++ es₂` provided the two `v`-pairs are cofacial
+after the first conjugation (`oneSum_conj`, then `ident_conj` on the shifted copy, then the
+relabelling `x ↦ if x < n then x else x - n`, injective on incident vertices by the separation
+hypothesis). `Proofs/OrbitSegment.lean` has the orbit bookkeeping for sequential
+conjugations: `iterate_eq_of_eqOn`, `IsPermOn.exists_first_hit` (the first iterate reaching
+`b`, with no earlier return to `a`), `RotationSystem.sameOrbit_stepC3_rot` (the face orbit of
+`rot a`, `rot b` mirrors that of `a`, `b`). `Capped.parJoin` (`Proofs/PieceParJoin.lean`) is
+the P-node step: two capped pieces with the same cap endpoints `u, v`, meeting exactly in `u`
+and `v`, glued by the node step's two links `c1 ↔ d0` (at `u`) and `c2 ↔ d3` (at `v`), form a
+capped piece with pairs `c0 d1` at `u` and `d2 c3` at `v`; `c0` and `d2` stay cofacial because
+the face walk from `l0` reaches `l3 ^^^ 3` before any point moved by either conjugation
+(`exists_first_hit` + `iterate_eq_of_eqOn`), and the second conjugation sends `l3 ^^^ 3` to
+`d2`'s slot.
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through `walk_items_wf`,
 `spqrTree_r_three_connected`, `spqrTree_pieceSep`, `nodePlanar_sound_R` and
 `nodeFold_capped`.
@@ -2580,6 +2599,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `Piece.Capped`, `Piece.Open2`, `Capped.insert`, `Open2.close`, `Open2.splice`, `single_open2` | `Proofs/PieceInsert.lean` | **proved** (standard axioms) |
 | `Capped.join` (1-sum of two capped pieces at a shared cap endpoint, node-step link order) | `Proofs/PieceJoin.lean` | **proved** (standard axioms) |
 | `Capped.attachOpen` (open `V` piece hung at a capped end by the corner link), `capped_child` (child certificate from `GluedFaces`) | `Proofs/PieceJoin.lean`, `PlanarEmbedNode.lean` | **proved** (standard axioms) |
+| `IsPlanarEmbedding.ident_conj` (identify two connected vertices by a `conj` of two cofacial pairs), `IsPlanarEmbedding.splice2` (2-sum on the common vertex space by two `conj`s), `iterate_eq_of_eqOn`, `IsPermOn.exists_first_hit`, `RotationSystem.sameOrbit_stepC3_rot`, `Capped.parJoin` (P-node step: two capped pieces with the same cap endpoints, node-step link order, cofaciality of `c0`/`d2` kept) | `Proofs/PlanarIdent.lean`, `Proofs/PlanarSplice2.lean`, `Proofs/OrbitSegment.lean`, `Proofs/PieceParJoin.lean` | **proved** (standard axioms) |
 | `embedItem_Q_nil`, `embedItem_Q_O`, `embedItem_Q_cons`, `qUpper`, `qLower`, `setOuter4` | `PlanarEmbedQExec.lean` | **proved** (exact unfolding of the executable `Q` branch) |
 | `q_edge_not_below`, `q_fresh`, `q_lower_boundary`, `q_capped_child`, `q_open_glued`, `q_leaf_glued`, `q_loop_glued`, `q_block_glued`, `embedItem_step_Q_faces` | `PlanarEmbedQ.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `treeQe`, `nodeStep`, `embedItem_node`, `forIn_state_foldl`, `nodeStep_outerE_ne`/`_outerE_size`/`_rotAdj_size`/`_exposedAt_ne`, `nodeFold_*` | `PlanarEmbedNodeExec.lean` | **proved** (exact unfolding of the executable `S`/`P`/`R` branch + frame lemmas) |
