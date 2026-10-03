@@ -506,6 +506,89 @@ def _root_.Spqr.DfsTree.Ends (g : Graph) : DfsTree → Prop
   | .node v outs => ∀ o ∈ outs, DfsOut.Ends g v o
 end
 
+theorem _root_.Spqr.dfsVisit_root_v (adj : Array (List (Nat × Nat))) :
+    ∀ (fuel v d : Nat) (prvE : Option Nat) (depth : Array (Option Nat)),
+      (dfsVisit adj fuel v d prvE depth).1.v = v
+  | 0, _, _, _, _ => rfl
+  | _ + 1, _, _, _, _ => by rw [dfsVisit_succ]; exact rfl
+
+theorem _root_.Spqr.dfsVisit_ends {g : Graph} {adj : Array (List (Nat × Nat))}
+    (hadj : ∀ x y e : Nat, (y, e) ∈ adj[x]! → Items.PairEq (x, y) g.edges[e]!) :
+    ∀ (fuel v d : Nat) (prvE : Option Nat) (depth : Array (Option Nat)),
+      (dfsVisit adj fuel v d prvE depth).1.Ends g
+  | 0, v, _, _, _ => by simp [dfsVisit, DfsTree.Ends]
+  | fuel + 1, v, d, prvE, depth => by
+    rw [dfsVisit_succ]
+    have key : ∀ (l : List (Nat × Nat)) (acc : List DfsOut × Lowvals × Array (Option Nat)),
+        (∀ p ∈ l, p ∈ adj[v]!) → (∀ o ∈ acc.1, DfsOut.Ends g v o) →
+        ∀ o ∈ (l.foldl (dfsStep adj fuel d prvE) acc).1, DfsOut.Ends g v o := by
+      intro l
+      induction l with
+      | nil => intro acc _ h; simpa using h
+      | cons p l ih =>
+        rintro ⟨outs, lv, cur⟩ hl h
+        refine ih _ (fun q hq => hl q (List.mem_cons_of_mem _ hq)) ?_
+        obtain ⟨nxt, e⟩ := p
+        have hpe : Items.PairEq (v, nxt) g.edges[e]! := hadj _ _ _ (hl _ (List.mem_cons_self ..))
+        simp only [dfsStep]
+        split
+        · exact h
+        · split
+          · obtain ⟨⟨c, n, dp⟩, hr⟩ : ∃ r, dfsVisit adj fuel nxt (d + 1) (some e) cur = r := ⟨_, rfl⟩
+            have hv := dfsVisit_root_v adj fuel nxt (d + 1) (some e) cur
+            have he := dfsVisit_ends hadj fuel nxt (d + 1) (some e) cur
+            rw [hr] at hv he ⊢
+            intro o ho
+            rcases List.mem_cons.1 ho with rfl | ho
+            · simp only [DfsOut.Ends] at hv ⊢
+              refine ⟨?_, he⟩
+              rw [hv]
+              rcases hpe with hpe | hpe
+              · exact .inr (by rw [Prod.ext_iff] at hpe ⊢; exact ⟨hpe.2, hpe.1⟩)
+              · exact .inl (by rw [Prod.ext_iff] at hpe ⊢; exact ⟨hpe.2, hpe.1⟩)
+            · exact h o ho
+          · intro o ho
+            rcases List.mem_cons.1 ho with rfl | ho
+            · simp only [DfsOut.Ends]; exact hpe
+            · exact h o ho
+    simp only [DfsTree.Ends]
+    intro o ho
+    exact key adj[v]! _ (fun _ h => h) (by simp) o
+      (List.mem_reverse.1 ((List.mergeSort_perm _ _).subset ho))
+
+set_option linter.unusedVariables false in
+/-- Every tree of `dfsForest` has the DFS endpoints (`DfsTree.Ends`): its tree edges join child
+and parent, its back edges join the vertex and the destination. -/
+theorem _root_.Spqr.dfsForest_ends (g : Graph) (hg : g.WF) {vo eo : List Nat}
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) : ∀ t ∈ g.dfsForest vo eo, t.Ends g := by
+  have hadj : ∀ x y e : Nat, (y, e) ∈ (g.adjacency eo)[x]! → Items.PairEq (x, y) g.edges[e]! :=
+    fun x y e h => by
+      rcases adjacency_ends hg heo x y e h with h | h
+      · exact .inl h.symm
+      · exact .inr (by rw [h])
+  have key : ∀ (l : List Nat) (acc : List DfsTree × Array (Option Nat)), (∀ t ∈ acc.1, t.Ends g) →
+      ∀ t ∈ (l.foldl (forestStep (g.adjacency eo) g.nv) acc).1, t.Ends g := by
+    intro l
+    induction l with
+    | nil => intro acc h; simpa using h
+    | cons rt l ih =>
+      rintro ⟨roots, depth⟩ h
+      refine ih _ ?_
+      simp only [forestStep]
+      split
+      · exact h
+      · obtain ⟨⟨t', n, depth'⟩, hr⟩ : ∃ r, dfsVisit (g.adjacency eo) g.nv rt 0 none depth = r :=
+          ⟨_, rfl⟩
+        have he := dfsVisit_ends hadj g.nv rt 0 none depth
+        rw [hr] at he ⊢
+        intro t ht
+        rcases List.mem_cons.1 ht with rfl | ht
+        · exact he
+        · exact h t ht
+  rw [dfsForest_eq]
+  intro t ht
+  exact key _ _ (by simp) t (List.mem_reverse.1 ht)
+
 /-- Admitted: the bookkeeping of a root walk — the ear contract `FinishBook.ear` (PROOF.md
 §4.1–4.3, every field 0 violations on 3000 seeds) and the endpoint/item fields at every `finishEdge`,
 from the DFS well-formedness and endpoint facts, the start state (empty tstack, `Inv' 0`, `Shape`,

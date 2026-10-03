@@ -157,14 +157,6 @@ theorem walk_ranges (g : Graph) (tern : Bool) (vo eo : List Nat) (hnv : 0 < g.nv
 
 /-! ### `Items.WF` -/
 
-/-- Admitted: every tree of the DFS forest has the DFS endpoints (`DfsTree.Ends`): a tree edge
-`.tree e _ child` joins `child.v` and the parent, a back edge `.back e dest _` joins the vertex
-and `dest`. This is the `adjacency`-level fact that `(y, e) ∈ adj[x]` means `g.edges[e]` is
-`(x, y)` or `(y, x)`, carried through `FoldInv`/`ForestInv` like `dfsForest_wf`. -/
-theorem dfsForest_ends (g : Graph) (hg : g.WF) {vo eo : List Nat} (hvo : OrderOK g.nv vo)
-    (heo : OrderOK g.ne eo) : ∀ t ∈ g.dfsForest vo eo, t.Ends g := by
-  sorry
-
 /-- Phase 2: the walk's items satisfy the item-level specification. `Tree` is `walk_tree`,
 `Endpoints`/`Shapes` are derived from `walk_ranges` by `Items.wf_of_ranges` (pure item-level
 reasoning, no tstack facts); the empty graph is handled separately since `walk_tree` needs

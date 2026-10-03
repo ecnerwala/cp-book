@@ -992,8 +992,9 @@ from `vs_att` at the child + `att_vs`/`interior` at the parent + `desc_disjoint`
 invariant (`RangesInv`, step 4) and the R/st layers consume. `walk_items_wf` (`WalkItemsWF.lean`, under
 `g.WF`/`OrderOK`) is `wf_of_ranges walk_tree.toTree walk_typing.toTypingFacts walk_ranges`: `Tree`
 comes from `EarWalk.walk_tree` (which, since `walk_sides` moved under the ear layer, also takes
-`∀ t ∈ forest, t.Ends g`, supplied by the named admission `dfsForest_ends` — the `adjacency`-level
-endpoint fact carried through `FoldInv`/`ForestInv` like `dfsForest_wf`), the `Endpoints`/`Shapes` half
+`∀ t ∈ forest, t.Ends g`, supplied by `dfsForest_ends` (`WalkInv.lean`, proved: the `adjacency`-level
+endpoint fact `adjacency_ends` — `(y, e) ∈ adj[x]` means `g.edges[e]` is `(x, y)` or `(y, x)`, from
+`AdjInv` — carried through the `dfsStep`/`forestStep` folds by `dfsVisit_ends`), the `Endpoints`/`Shapes` half
 rests on the named admission `walk_ranges` instead of the ear layer. `WalkItemsWF` sits above `WalkCover`/`WalkTyping`
 (the DFS prerequisites `Bounded`/`ForestOK`/coverage come from `dfsForest_spanning'`/`dfsForest_wf`;
 the empty graph, where `walk_tree`'s `0 < g.nv` fails, is the initial items), so the st layer
@@ -1278,7 +1279,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 `Items.RThreeConnected` as its explicit hypothesis and is `relabelTree_represents'`;
 `spqrTree_represents` (under `g.WF`/`OrderOK`) is `relabelTree_represents_of_r` on `walk_items_wf`
 and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf` (`walk_ranges`,
-`walk_sides`, `dfsForest_ends`) and `spqrTree_r_three_connected`.
+`walk_sides`) and `spqrTree_r_three_connected`.
 
 `RelabelSt.lean` proves `relabel_st : Items.StNumbered → Items.WF g → (relabelTree g items).StOrder`
 **[proved]** from the same package, see §7.3.
@@ -1291,6 +1292,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | output spec `SpqrTree.WF`, `Represents` | `Spec.lean` | def |
 | phase-2 contract `Items.WF` | `ItemSpec.lean` | def |
 | 1.1, 1.2 DFS spanning + lowpoints | `Proofs/Dfs.lean` (`dfsForest_spanning`, `dfsForest_wf`, `classify_child_*`) | proved |
+| DFS endpoints `∀ t ∈ g.dfsForest vo eo, t.Ends g` (`dfsForest_ends`: tree edges join child and parent, back edges the vertex and `dest`) | `WalkInv.lean` (`dfsVisit_v`, `dfsVisit_ends`; `adjacency_ends` in `Proofs/Dfs.lean`) | proved (standard axioms) |
 | 2.1 blocks ↔ `lowval ≥ d` branches (`sameBlock_iff`, `blockRoot_cut`, `ret_child_sameBlock`) | `Blocks.lean`, `Proofs/Blocks.lean` | proved |
 | Facts A–C (`sepPair_comparable`, type-1 class / above-between / sorted prefix-suffix, `type2_first_out`) | `SepPair.lean`, `Proofs/SepPair.lean` | proved |
 | Fact D (laminar intervals: `type1_class_interval`, `type2_class_interval`, `type2Block_laminar_block`, `type2Block_laminar_type2Block`) | `Proofs/Postorder.lean`, `Proofs/Interval.lean` | proved (S-caveat exceptions) |

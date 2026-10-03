@@ -407,6 +407,18 @@ theorem adjInv_foldl {g : Graph} (hg : g.WF) :
       (fun e' h' => hlt e' (by simp [h']))
     simpa using h
 
+/-- The adjacency entry `(y, e)` of `x` is the edge `e = {x, y}` of `g`. -/
+theorem adjacency_ends {g : Graph} (hg : g.WF) {eo : List Nat} (heo : OrderOK g.ne eo)
+    (x y e : Nat) (h : (y, e) ∈ (g.adjacency eo)[x]!) :
+    g.edges[e]! = (x, y) ∨ g.edges[e]! = (y, x) := by
+  have hperm := inOrder_perm heo
+  have hinv := adjInv_foldl hg (inOrder g.ne eo) [] _ (adjInv_nil g)
+    (by simpa using hperm.nodup_iff.2 List.nodup_range) (fun e he => by simpa using hperm.subset he)
+  simp only [List.nil_append] at hinv
+  obtain ⟨_, hmem, -⟩ := hinv
+  rw [adjacency_eq, getElem!_map' List.reverse rfl _ _, List.mem_reverse, hmem] at h
+  exact h.2.2.2
+
 theorem adjacency_ok {g : Graph} (hg : g.WF) {eo : List Nat} (heo : OrderOK g.ne eo) :
     AdjOK g (g.adjacency eo) := by
   have hperm := inOrder_perm heo
