@@ -823,12 +823,16 @@ the child's end push (`L'`/`push'`/`D₃`, `pushEnd`). Derived: `tstack`, `back_
 `boundary`, `base_touch`, `bd_noVert`. Named admissions (each the field verbatim over the site's
 `sub`, `EarCtxAt.lean`): `earAt_tree_loop1_side`, `earAt_tree_loop1_touch`, `earAt_tree_loop1`,
 `earAt_tree_bottom`, `earAt_tree_loops`, `earAt_tree_late`, `earAt_tree_late_fo`,
-`earAt_tree_close`, `earAt_tree_bd_term`, `earAt_tree_bd_side`, `earAt_tree_lower` — the
-chain-anchor clauses they need are not yet in `EarCtx`. Proved from the child's end shape:
+`earAt_tree_close`, `earAt_tree_bd_term`, `earAt_tree_lower` — the chain-anchor clauses they
+need are not yet in `EarCtx` (`bd_term` needs, for the entries a type-2 sibling left on the stack
+with `topDepth > d` — `EarClose.vy_top` — that their edges avoid `v`, a fact `RetFrame.touch` has
+at the site but no `EarCtx` clause persists). Proved from the child's end shape:
 `earAt_tree_bd_bridge` (`lowval = d + 1` forces `cls = .bridge`; `bridge_bd` ⇒ `hv' = false`, the
 child's `top` is empty by `CtxTop.ret`, so `sub = L'` is the single end push `(y, d + 1)`) and
 `earAt_tree_bd_comp` (`d ≤ lowval ≠ d + 1` on a tree class forces `cls = .component`;
-`tree_comp_shape` gives `sub = [t₁, (y, d + 1)]` with `t₁.topDepth = d = lowval`). Elaboration
+`tree_comp_shape` gives `sub = [t₁, (y, d + 1)]` with `t₁.topDepth = d = lowval`), and
+`earAt_tree_bd_side` from the two (the end push is `setSides true [V y] []`, i.e. side 2; at a
+component edge `t₁.spans.2 = []` and `(y, d + 1)` has `spans.1 = []`). Elaboration
 caveat fixed alongside: the section hypothesis `hsub` of these lemmas was written with the local
 notation `s₃` inside a `variable` binder, which Lean elaborated to `pushEnd sorry sorry sorry`
 (hygiene: the notation's identifiers do not resolve inside `variable`); the hypothesis is now the

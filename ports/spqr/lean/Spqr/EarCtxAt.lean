@@ -781,7 +781,67 @@ theorem earAt_tree_bd_term : (o₀).cls.isTree = true → d ≤ (o₀).cls.lowva
 theorem earAt_tree_bd_side : (o₀).cls.isTree = true → d ≤ (o₀).cls.lowval d →
     if (o₀).cls.lowval d = d + 1 then ∀ t ∈ (s₃).tstack.head?, t.spans.1 = []
     else (∀ b ∈ (s₃).tstack.head?, b.spans.2 = []) ∧ ∀ t ∈ (s₃).tstack.tail.head?, t.spans.1 = [] := by
-  sorry
+  intro ht hge
+  change OutClass.isTree cls = true at ht
+  change d ≤ OutClass.lowval d cls at hge
+  show (if OutClass.lowval d cls = d + 1 then _ else _)
+  split
+  · rename_i hl
+    obtain ⟨t, hsub', -, -⟩ := earAt_tree_bd_bridge H sub hsub ht hl
+    intro t' ht'
+    have h0 : L' ++ sE.tstack = sub ++ (L ++ s.tstack) := hsub
+    change t' ∈ (L' ++ sE.tstack).head? at ht'
+    rw [h0, hsub'] at ht'
+    simp only [List.cons_append, List.nil_append, List.head?_cons, Option.mem_def,
+      Option.some.injEq] at ht'
+    subst ht'
+    have hb : cls = .bridge := by
+      cases hc : cls with
+      | bridge => rfl
+      | component => rw [hc] at hl; simp [OutClass.lowval] at hl
+      | selfLoop => rw [hc] at hl; simp [OutClass.lowval] at hl
+      | ret lv k =>
+        have := H.cls_ret lv k hc
+        rw [hc] at hl; simp [OutClass.lowval] at hl; omega
+    have hv'f : hv' = false := by
+      cases hh : hv'
+      · rfl
+      · obtain ⟨o', ho', hl'⟩ := H.ctx'.hv_ret hh
+        exact absurd (H.bridge_bd hb o' ho') (Nat.not_le.2 hl')
+    have hp' : push' = true := H.hpush'.2 hv'f
+    have hdir : dir' = true := H.hdir' hp'
+    have hL' : L' = [⟨y, d + 1, sE.nxtEdgeIdx, setSides true [vertItem y] []⟩] := by
+      rw [H.hL', hp', hdir]; rfl
+    have h : L' ++ sE.tstack = [t] ++ (L ++ s.tstack) := h0.trans (by rw [hsub'])
+    rw [hL'] at h
+    have := (List.cons.inj h).1
+    rw [← this]; rfl
+  · rename_i hl
+    obtain ⟨t₁, t₂, hsub', -, -, -, -⟩ := earAt_tree_bd_comp H sub hsub ht hge hl
+    have hc : cls = .component := by
+      cases hc : cls with
+      | component => rfl
+      | bridge => rw [hc] at hl; simp [OutClass.lowval] at hl
+      | selfLoop => rw [hc] at ht; simp [OutClass.isTree] at ht
+      | ret lv k =>
+        have := H.cls_ret lv k hc
+        rw [hc] at hge; simp [OutClass.lowval] at hge; omega
+    obtain ⟨hv't, t₁', f₂, hts, -, -, hs2⟩ := tree_comp_shape H hc
+    have hp' : push' = false := by
+      cases hp : push'
+      · rfl
+      · rw [H.hpush'.1 hp] at hv't; cases hv't
+    have hL' : L' = [] := by rw [H.hL', hp']; rfl
+    have h0 : L' ++ sE.tstack = sub ++ (L ++ s.tstack) := hsub
+    have h : L' ++ sE.tstack = [t₁, t₂] ++ (L ++ s.tstack) := h0.trans (by rw [hsub'])
+    rw [hL', List.nil_append, hts] at h
+    have h1 := (List.cons.inj h).1
+    have h2 := (List.cons.inj (List.cons.inj h).2).1
+    change (∀ b ∈ (L' ++ sE.tstack).head?, b.spans.2 = []) ∧
+      ∀ t ∈ (L' ++ sE.tstack).tail.head?, t.spans.1 = []
+    rw [hL', List.nil_append, hts]
+    simp only [List.head?_cons, List.tail_cons, Option.mem_def, Option.some.injEq]
+    exact ⟨fun b hb => by rw [← hb]; exact hs2, fun t ht => by rw [← ht]⟩
 
 theorem earAt_tree_lower : (o₀).cls.isTree = true →
     (after (finishEdge v d o₀ (L ++ s.tstack).length (hasVert || push)) s₃).g = (s₃).g ∧
