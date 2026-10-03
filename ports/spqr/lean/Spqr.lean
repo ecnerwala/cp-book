@@ -91,3 +91,5 @@ import Spqr.Proofs.RItems
 import Spqr.PlanarGlue
 import Spqr.Proofs.Orbits
 import Spqr.Proofs.PlanarGlue
+import Spqr.RangesStep
+import Spqr.RangesTree
