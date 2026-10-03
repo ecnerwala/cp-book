@@ -356,7 +356,7 @@ theorem StItems.perm {g : Graph} {s s' : WalkState} {blocks : List StBlock} (h :
 
 theorem loop3_state (o fuel : Nat) (st : WalkState) :
     ∃ l, ((loop fuel (loop3Cond o) mergeTstackTops).run st).2 = { st with tstack := l } := by
-  obtain ⟨k, hk, -⟩ := loop_run_iter (loop3Cond o) mergeTstackTops (fun _ => rfl) fuel st
+  obtain ⟨k, hk, -⟩ := loop_run_iter' (loop3Cond o) mergeTstackTops (fun _ => rfl) fuel st
   exact ⟨_, by rw [hk, iter_mergeTstackTops]⟩
 
 /-! ### `closeVert'` -/

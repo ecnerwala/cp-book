@@ -88,7 +88,7 @@ theorem L1StInv.mergeLoop {g : Graph} {s : WalkState} {d : Nat} {ps : List StPie
     (fuel : Nat) {st : WalkState} (hJ : L1StInv g s d ps blocks B st)
     (hlen : B.length + 1 ≤ ((loop fuel cond mergeTstackTops).run st).2.tstack.length) :
     L1StInv g s d ps blocks B ((loop fuel cond mergeTstackTops).run st).2 := by
-  obtain ⟨k, hk, -⟩ := loop_run_iter cond mergeTstackTops hcond fuel st
+  obtain ⟨k, hk, -⟩ := loop_run_iter' cond mergeTstackTops hcond fuel st
   rw [hk] at hlen ⊢
   rw [iter_mergeTstackTops] at hlen
   dsimp only at hlen

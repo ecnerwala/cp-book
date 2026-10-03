@@ -57,7 +57,7 @@ theorem L1Unwrap.transport {s st : WalkState} {R : List TEntry} {ty : NodeType} 
   · exact hch x hx u (hR u hu) hxu
 
 /-- A fuelled loop runs some number of body iterations, each after a true condition. -/
-theorem loop_run_iter (cond : WalkM Bool) (body : WalkM Unit) (hcond : ∀ s, (cond.run s).2 = s)
+theorem loop_run_iter' (cond : WalkM Bool) (body : WalkM Unit) (hcond : ∀ s, (cond.run s).2 = s)
     (fuel : Nat) (s : WalkState) :
     ∃ k, ((loop fuel cond body).run s).2 = iter body k s ∧
       ∀ j, j < k → (cond.run (iter body j s)).1 = true := by
@@ -247,7 +247,7 @@ theorem l1St_loop {D d : Nat} {o : DfsOut} {s : WalkState} {hi lo base : List TE
     (hJ : L1StInv g s d ps blocks B st₀) (fuel : Nat) :
     L1StInv g s d ps blocks B
       ((loop fuel (loop1Cond d) (loop1Body d s.stackDir[d]!)).run st₀).2 := by
-  obtain ⟨k, hk, hj⟩ := loop_run_iter (loop1Cond d) (loop1Body d s.stackDir[d]!) (fun _ => rfl) fuel st₀
+  obtain ⟨k, hk, hj⟩ := loop_run_iter' (loop1Cond d) (loop1Body d s.stackDir[d]!) (fun _ => rfl) fuel st₀
   rw [hk]
   exact l1St_iter hc h0 hv hB hJ k fun j hj' => hj j hj'
 
