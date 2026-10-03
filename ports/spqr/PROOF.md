@@ -2379,7 +2379,10 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `walk_canonInv`, `walk_pieceInv` are gone (`stItems_init` moved from `StFinal.lean` to
   `StInduct.lean`). The old `RootState.step`/`stForest`/`walk_closeInv'` routes are untouched for now
   (their consumers switch to `walk_rootInv` when the per-layer inductions are retired). Reachable
-  from `walk_rootInv`: the same 23 as stage 2i.
+  from `walk_rootInv` on c1d90ef (`#print sorries`): 18 — ear `earAt_tree_{bottom,close,late,late_fo,
+  loop1,loop1_side,loop1_touch,loops,lower}`, `tree_ret_frame`, `treeSite_wf`; Ranges
+  `closeBase_content`, `closeBase_canon`, `closeBase_piece`; R `rSide_vertFree_site`,
+  `closeBase_rContent`, `entry_rContent`; ST `walkOut_stLive`.
 
 ## 5. Phase 3: relabel
 
