@@ -2101,14 +2101,18 @@ not yet written).
 **Status (sim-3).** (2)–(4) below are done: `stOut_step`/`stOuts_*`/`stTree_node`/`stWalk`/`stForest`
 (`StInduct.lean`) and the final step `walk_sim`/`walk_inBlock`/`restrictCh_eq` (`StFinal.lean`) make
 `walk_st'`/`walk_vsOriented` proved modulo the named admissions `finishBoundary_st` (item (1)),
-`finishRet_frame_st`, `rootPop_st` (all `StBoundary.lean`) and `walk_i_parent` (`StFinal.lean`);
+`finishRet_frame_st`, `rootPop_st` (all `StBoundary.lean`);
 `hvf` is discharged inside `stOut_step` from `Full`. **Sim-4:** `finishEdge_vStart` is proved
 (`StVStart.lean`, a `vStart`-provenance invariant `VsIn` through every `finishEdge` primitive; its
 statement gained the disjunct "`vStart = o.dest` for a returning tree edge", which the original
 statement lacked — `closeEars` pushes the child's ear with `vStart = o.dest` and nothing below it
 need absorb it — and `stRet_finish` consumes the extra case via `o.dest ∈ child.verts`), and
 `refOrder_nodup` is proved (`StNodup.lean`: `refTree_items`/`refOuts_items` — the pieces and blocks
-of a subtree hold only its vertex/edge items, each once — then `ForestOK`). The
+of a subtree hold only its vertex/edge items, each once — then `ForestOK`), and `walk_i_parent`
+is proved (`StIParent.lean`: the invariant `IOk` — vertex items are `V`, edge items are `Q`, child
+ids are in range, no stack span item is an `I`, and every `I` child has a `Q` parent — through every
+walk primitive; the only `I` allocation is the bridge branch of `finishBoundary`, whose parent is
+`edgeItem g o.e`; `walk_i_parent` now takes `g.WF`/`OrderOK`, needed for `dfsForest_bounded`). The
 boundary statement is exactly what the induction consumes and is dump-checked by `check_stsim`
 (seeds 0..1000). The original plan, for reference:
 What remains: (1) `finishBoundary` — the only place a block completes: popping the child's ear
@@ -2175,7 +2179,7 @@ Classical.choice, Quot.sound.
 | `EarsOnSide`, `finishEdge_stInv`, `walk_stInv`, `walk_st_of_stInv` | `StWalk.lean` | removed (the `StInv` preservation route; superseded by `walk_st'`, nothing depended on them) |
 | `walk_st`, `spqrTree_st` (under `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo`, like `dfsForest_spanning`) | `StFinal.lean` (moved from `StWalk.lean`: `walk_st'` is proved below `StWalk`) | proved (from `walk_st'`, `stItem_of_refOrder`, `refBlocks_st`, `walk_items_wf`, `relabel_st`); `walk_st_of_stInv` is the same from the alternative `walk_stInv` route |
 | `refTree`/`refOrder`, `restrictCh`, `check_stref` differential test (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..300 (0 mismatches) |
-| `walk_st'` (`ch i = restrictCh … (refOrder …) i` for S/P/R items; statement change: under `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo`, like `walk_st`) | `StFinal.lean` | proved modulo the named admissions `finishBoundary_st`, `finishRet_frame_st`, `rootPop_st` (`StBoundary.lean`), `walk_i_parent` (`StFinal.lean`) and the ear-side inputs (`walkTree_ear`, `dfsForest_ends`) |
+| `walk_st'` (`ch i = restrictCh … (refOrder …) i` for S/P/R items; statement change: under `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo`, like `walk_st`) | `StFinal.lean` | proved modulo the named admissions `finishBoundary_st`, `finishRet_frame_st`, `rootPop_st` (`StBoundary.lean`) and the ear-side inputs (`walkTree_ear`, `dfsForest_ends`) |
 | `StBlock`, `StBlock.seq`/`edges`/`St`, `Precedes`, `Oriented`, `VsOriented`; `check_stref` checks `VsOriented` and `StBlock.St` too (§7.6) | `StRef.lean`, `CheckStRef.lean` | def / tested seeds 0..1000 (0 mismatches) |
 | `walk_vsOriented` (`VsOriented` for the walk's items and `refBlocks`: block membership of the leaves, block edges below `i` are leaves of `i`, `vs` orientation of `i` and its non-V children, V children between `i`'s endpoints, block edges below a non-V child between its endpoints; same statement change as `walk_st'`) | `StFinal.lean` | proved modulo the same admissions as `walk_st'` |
 | `refBlocks_root_none` (a block without boundary edge is a DFS root's one-vertex block) | `StRefEt.lean` | proved (`refTree_roots`; axioms propext, Quot.sound) |
@@ -2199,7 +2203,7 @@ Classical.choice, Quot.sound.
 | `StSimLemmas.lean`: `refOuts_snoc`, `refOut_hv_false`/`refOuts_hv_false`, `DirsOf_{length, succ, take, congr}`, `frameBlocks_{append, congr}`, `simBlocks_{snoc, congr, DirsOf}`, `DfsOut.{vertsList, edgesList}_append`, `segsStack`/`SegRead`, `mem_readStack_{append, segsStack}`, `SegRead.{congr, cons}`, `StRead.nil` | `StSimLemmas.lean` | proved |
 | `StInduct.lean`: `KeepsSize`, `stOut_step` (one `walkOut`: back / boundary tree / returning tree edge via `walkOutPre_st`, `finishBoundary_st`, `finishEdge_st`), `stOuts_nil`/`stOuts_cons`, `stTree_node`, `stWalk` (the `walkOuts`/`walkTree` mutual induction, `StSimOuts` → `StSim`), `DirsOf_zero`, `refBlocks_snoc`, `stForest` (the forest: `stWalk` per tree, `rootPop_st`, `StItems` over `refBlocks g (pre ++ forest)`) | `StInduct.lean` | proved modulo the `StBoundary.lean` admissions and the ear inputs |
 | `StFinal.lean`: `no_cycle`, `chain_lt_size` (parent chains in a tree with unique parents are shorter than `items.size`), `ExpandsList.nil_inv`, `Expands.{leaf_inv, node_inv}`, `leaves_eq_of_expands`/`leaves_size_eq` (`Expands i L` ⇒ `L = Items.leaves items items.size i`), `ExpBelow`, `expandsList_ne_nil`, `spr_of_expBelow`, `spr_ch_ne_nil`, `expands_ne_nil` (an S/P/R item's expansion is nonempty), `collapseRuns_{cons_ne, replicate_append}`, `ExpandsList.expands_of_mem`, `restrict_mid`, `restrictCh_eq` (`restrictCh` of a `Nodup` order containing the expansion of `ch i` as a segment is `ch i`), `Items.WF.no_cycle`, `stItems_init`, `walk_sim` (`stForest` at `WalkState.init`), `walk_inBlock` (empty final stack ⇒ every S/P/R item is `InBlock` of a reference block) | `StFinal.lean` | proved (axioms propext, Classical.choice, Quot.sound for the generic lemmas; `walk_sim`/`walk_inBlock` modulo the admissions) |
-| `walk_i_parent` (an `I` item's parent is a `Q` item) | `StFinal.lean`, `CheckStSim.lean` | **admitted** (dump-checked by `check_stsim`) |
+| `StIParent.lean`: `SpanAll`, `IOk` (vertex items `V`, edge items `Q`, child ids in range, stack span items are not `I`, every `I` child has a `Q` parent), `IOk.{tail, pop, merge, modifyCur, modifyNxt, push, push_vert, push_edge, modify_vs, modify_ch, modify_edge_ch, …}`, `iOk_{mergeTstackTops, finishTstackTop, maybeUnwrapNxt, loop1Body, loop, finishTail, finishRest, closeVertTail, closeVert, finishTree, finishBoundary, finishEdge, walk_aux, walkForest, init}`, `walk_i_parent'`, `walk_i_parent` (`StFinal.lean`; statement change: under `g.WF`, `OrderOK g.nv vo`, `OrderOK g.ne eo`) | `StIParent.lean`, `StFinal.lean` | proved (axioms propext, Classical.choice, Quot.sound) |
 | the `vs`-position invariant of stack span items (the orientation core of `finishBoundary_st`) and the popped-ear shape at a boundary edge | — | open (§7.6 "what remains") |
 | reading a tstack as pieces: `readStack`, `stNest_append`, `readStack_pushTstack`, `readStack_mergeTstackTops`, `readStack_fold`, `readStack_finishTstackTop`, `readStack_reopen`/`readStack_modifyNxt_reopen` (per-primitive steps of the simulation relation `readStack stack = stNest pieces`, up to `expandItem` at closes and reopens) | `StRef.lean` | proved |
 
