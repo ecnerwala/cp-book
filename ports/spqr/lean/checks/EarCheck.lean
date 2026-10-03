@@ -477,6 +477,11 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
     for c in s.items[j]!.ch do
       if c ≥ s.items.size then out := bad "ch_lt" s!"{j}" :: out
   if hv && rest ≠ [] && !done.any (fun o => o.1.cls.lowval d < d) then out := bad "hv_ret" "" :: out
+  for t in above do
+    if t.firstIdx ≥ s.nxtEdgeIdx then out := bad "above_firstIdx" (showT t) :: out
+  for t in s.tstack do
+    if t.vStart == v && !isV t && t.firstIdx ≥ s.nxtEdgeIdx then out := bad "vfirst" (showT t) :: out
+  if !hv && done.any (·.2) then out := bad "noVert_after" "" :: out
   if !hv && !(connB s (edgesBelow s (vertItem v)) && twoAttB s (edgesBelow s (vertItem v)) v v) then
     out := bad "vert_book" "" :: out
   if !hv then

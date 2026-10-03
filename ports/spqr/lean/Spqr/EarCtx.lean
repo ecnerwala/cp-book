@@ -143,6 +143,12 @@ structure EarCtx (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut)
   vert_free : ∀ t ∈ s.tstack, vertItem v ∈ t.spans.1 ++ t.spans.2 → hasVert = true
   afterVert_ret : ∀ o ∈ afterVert done, o.cls.lowval d < d
   hv_ret : hasVert = true → rest ≠ [] → ∃ o ∈ done, o.1.cls.lowval d < d
+  /-- Before the vertex push no done out ran with it. -/
+  noVert_after : hasVert = false → afterVert done = []
+  /-- The entries started at `v` other than the one holding `V v` (the `above` entries) were pushed
+  by returning outs, each of which bumps `nxtEdgeIdx`. -/
+  vfirst : ∀ t ∈ s.tstack, t.vStart = v → vertItem v ∉ t.spans.1 ++ t.spans.2 →
+    t.firstIdx < s.nxtEdgeIdx
   vert_book : hasVert = false →
     s.g.ConnEdges (Items.EdgeBelow s.g s.items (vertItem v)) ∧
     s.g.TwoAttached (Items.EdgeBelow s.g s.items (vertItem v)) v v
