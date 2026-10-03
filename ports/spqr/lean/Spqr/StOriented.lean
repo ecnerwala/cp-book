@@ -1,4 +1,4 @@
-import Spqr.StWalk
+import Spqr.StFinal
 import Spqr.WalkItemsWF
 import Spqr.RelabelOwn
 

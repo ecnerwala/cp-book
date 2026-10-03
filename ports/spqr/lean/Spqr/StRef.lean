@@ -303,24 +303,4 @@ def VsOriented (g : Graph) (items : Items) (blocks : List StBlock) : Prop :=
         ∀ y, (g.edges[e]!).1 = y ∨ (g.edges[e]!).2 = y →
           (u = y ∨ Precedes (b.seq g) u y) ∧ (y = v ∨ Precedes (b.seq g) y v)
 
-/-- The walk lists the children of every S / P / R item in the reference st-order
-(differentially tested by `check_stref`). -/
-theorem walk_st' (g : Graph) (tern : Bool) (vo eo : List Nat) (i : ItemId)
-    (hi : i < (g.walk tern (g.dfsForest vo eo)).items.size)
-    (ht : Items.type (g.walk tern (g.dfsForest vo eo)).items i = .S ∨
-      Items.type (g.walk tern (g.dfsForest vo eo)).items i = .P ∨
-      Items.type (g.walk tern (g.dfsForest vo eo)).items i = .R) :
-    Items.ch (g.walk tern (g.dfsForest vo eo)).items i =
-      restrictCh (g.walk tern (g.dfsForest vo eo)).items
-        (g.walk tern (g.dfsForest vo eo)).items.size
-        (refOrder g (g.dfsForest vo eo)) i := by
-  sorry
-
-/-- The walk's `vs` are oriented along the reference blocks (proved in the same simulation as
-`walk_st'`; differentially tested by `check_stref`). -/
-theorem walk_vsOriented (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    VsOriented g (g.walk tern (g.dfsForest vo eo)).items (refBlocks g (g.dfsForest vo eo)) := by
-  sorry
-
-
 end Spqr

@@ -182,5 +182,8 @@ def main : IO Unit := do
       report st false s!"items after root pop of {t.v}: {m}"
   let real := g.walk (tern != 0) forest
   report st (toString (repr s.items) == toString (repr real.items)) "mirrored walk differs from g.walk"
+  report st ((List.range real.items.size).all fun p => (Items.ch real.items p).all fun c =>
+      Items.type real.items c != .I || Items.type real.items p == .Q)
+    "walk_i_parent: an I item under a non-Q item"
   let stats ← st.get
   IO.println s!"checks {stats.checks} bad {stats.bad}"
