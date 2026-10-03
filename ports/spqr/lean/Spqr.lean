@@ -124,6 +124,11 @@ import Spqr.Proofs.PlanarGlue
 import Spqr.Proofs.PieceParJoin
 import Spqr.Proofs.PiecePerm
 import Spqr.Proofs.PlanarUninsert
+import Spqr.Proofs.ThreeConn
+import Spqr.Proofs.PlanarSubst
+import Spqr.Proofs.PlanarSubstStep
+import Spqr.Proofs.PlanarVStep
+import Spqr.Proofs.PlanarRGlue
 import Spqr.RangesStep
 import Spqr.RangesTree
 import Spqr.RangesFinal
