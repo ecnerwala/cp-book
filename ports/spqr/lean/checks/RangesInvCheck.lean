@@ -2,6 +2,7 @@ import Spqr.Walk
 import Spqr.SepPair
 import Spqr.Ranges
 import Spqr.RangesTree
+import Spqr.RangesClose
 /-!
 # Empirical check of `WalkState.RangesInv` (`Spqr/RangesInv.lean`)
 
@@ -13,6 +14,18 @@ so far are exactly `σ.take n`), and `Saturated k s` with `k = tstack.length - o
 `Frontier` split).
 -/
 open Spqr WalkM WalkState
+
+theorem closeFacts_needs_graph_wf :
+    let g : Graph := ⟨0, #[(0, 0)]⟩
+    ¬ Items.CloseFacts g (g.walk false (g.dfsForest [] [])).items := by
+  intro g h
+  obtain ⟨a, b, hvs, -, -⟩ := h.q_leaf 0 (by decide) (by decide)
+  have hn : Items.vs (g.walk false (g.dfsForest [] [])).items (edgeItem g 0) = (none, none) := by decide
+  rw [hn] at hvs
+  cases hvs
+
+#print axioms closeFacts_needs_graph_wf
+
 instance : Inhabited Spqr.DfsTree := ⟨.node 0 []⟩
 instance : Inhabited Spqr.DfsOut := ⟨.back 0 0 .selfLoop⟩
 

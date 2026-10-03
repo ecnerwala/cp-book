@@ -6,8 +6,8 @@ import Spqr.RangesFinal
 /-!
 # Walk-phase contract
 
-The walk-side admissions behind the walk→relabel interface `Items.WF` (`PROOF.md` §3–§4):
-`walk_closeFacts` (the attachment structure, §4.6) and `walk_canonical`; `spqrTree_eq`
+The walk-side canonicity admission behind the walk→relabel interface `Items.WF`
+(`PROOF.md` §3–§4) is `walk_canonical`; `spqrTree_eq`
 identifies `Graph.spqrTree` with the reference pipeline. `walk_items_wf` itself is assembled in
 `Spqr.WalkItemsWF` (above `WalkCover`/`WalkTyping`, whose `walk_tree`/`walk_typing` it consumes);
 this module stays below the st-order layer (`StSpec`/`StWalk`/`StOriented`), which only needs
@@ -15,12 +15,6 @@ this module stays below the st-order layer (`StSpec`/`StWalk`/`StOriented`), whi
 -/
 
 namespace Spqr
-
-/-- Admitted: the attachment/shape clauses of `Items.Ranges` that `RangesInv` does not carry
-(`Items.CloseFacts`, `RangesFinal.lean`; `PROOF.md` §4.6). Checked empirically by `check_ranges`. -/
-theorem walk_closeFacts (g : Graph) (tern : Bool) (vo eo : List Nat) :
-    Items.CloseFacts g (g.walk tern (g.dfsForest vo eo)).items := by
-  sorry
 
 /-- Admitted: canonicity of the unternarized walk (`PROOF.md` §4.6; for `tern = true` P under P /
 S under S do occur, `check_ranges` seeds 0 and 386). -/

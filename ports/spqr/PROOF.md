@@ -1162,7 +1162,21 @@ freshly allocated nodes and reopened nodes are not closed records until they are
 clauses for one item. `CloseInv` requires this record for the root and for items with positive
 span/child occurrence count. Its initial-state proof is complete. `CloseInv.of_tree` recovers
 `Items.CloseFacts` when every non-root item has a parent; this uses the existing `Items.Tree`
-contract, not another reachability admission. Local close-site construction remains to prove.
+contract, not another reachability admission. `CloseAt.frame` transports a record from its
+own type/terminals/children, its children's fields, and their edge-below predicates.
+`CloseInv.alloc`, `pop`, `mergeTop`, `unwrap`, `modifyLoose`, and conditional `push`/`finishTop`
+are proved; closing a
+zero-count item preserves every other record via `CloseAt.modify_of_not_below`.
+The new record at each close/push, boundary attachment, and the walk-level reuse induction remain
+unproved, explicitly named by `walk_closeInv` in `WalkItemsWF`. `walk_closeFacts` is the proved
+tree/typing assembly from that admission, not an independent close-facts admission.
+
+The former unrestricted `walk_closeFacts` statement is false for malformed graphs:
+`nv = 0`, `edges = #[(0, 0)]`, `vo = eo = []`, `tern = false` leaves the Q item's `vs` as
+`(none, none)`, contradicting `q_leaf`. `closeFacts_needs_graph_wf` in `checks/RangesInvCheck.lean`
+is a kernel-checked counterexample (no `native_decide`). The wrapper now takes `g.WF`, `OrderOK`
+for both orders, and `0 < g.nv`; `walk_items_wf` already handles the empty valid graph separately.
+No protected proof-target definition was changed.
 All twenty-two lemmas have only standard axioms. Full `FinishAdj` still needs the P merge
 into the base; the child's frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece

@@ -1,6 +1,7 @@
 import Spqr.EarWalk
 import Spqr.WalkWF
 import Spqr.RangesWalk
+import Spqr.RangesClose
 
 /-! # `Items.WF` for the walk on a DFS forest
 
@@ -164,6 +165,33 @@ theorem walk_g (g : Graph) (tern : Bool) (forest : List DfsTree) (hnv : 0 < g.nv
     (hb : ∀ t ∈ forest, t.Bounded g.nv g.ne) : (g.walk tern forest).g = g :=
   (WalkM.walkForest_typing forest (WalkState.init_typing g tern hnv) hb).g_eq
 
+/-- Admitted: construct `CloseAt` at each vertex/edge push, node finish, and boundary/root
+attachment, and thread those records through unwrap/reuse. `CloseInv.finishTop` preserves
+the other records from the closing item's zero count, but the new record's attachment,
+interior-child, Q/I/O, and P/S/R shape clauses still need the ear-side close-site facts. -/
+theorem walk_closeInv (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
+    (g.walk tern (g.dfsForest vo eo)).CloseInv := by
+  sorry
+
+theorem walk_closeFacts (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) (hnv : 0 < g.nv) :
+    Items.CloseFacts g (g.walk tern (g.dfsForest vo eo)).items := by
+  obtain ⟨hvp, hep⟩ := dfsForest_spanning' hg hvo heo
+  have hb := dfsForest_bounded g hg hvo heo
+  have hvcov : ∀ v, v < g.nv → v ∈ (g.dfsForest vo eo).flatMap DfsTree.verts :=
+    fun v hv => hvp.mem_iff.2 (List.mem_range.2 hv)
+  have hecov : ∀ e, e < g.ne → e ∈ (g.dfsForest vo eo).flatMap DfsTree.edges :=
+    fun e he => hep.mem_iff.2 (List.mem_range.2 he)
+  have hcov : ∀ e, e < g.ne → ∃ t ∈ g.dfsForest vo eo, e ∈ t.edges :=
+    fun e he => by simpa [List.mem_flatMap] using hecov e he
+  have ht := walk_tree g tern _ hnv hb (ForestOK.of_perm hvp hep) (dfsForest_wf hg hvo heo)
+    (dfsForest_ends g hg hvo heo) hvcov hecov
+  have heq := walk_g g tern _ hnv hb
+  have hc := (walk_closeInv g tern vo eo hg hvo heo).of_tree
+    (by rw [heq]; exact ht.toTree) (by rw [heq]; exact walk_typing g tern _ hnv hb hcov)
+  rwa [heq] at hc
+
 /-- `Items.Ranges` for the walk: `convex`/node `att_vs` from the final range invariant
 (`walk_rangesInv`), the remaining attachment/shape clauses from `walk_closeFacts`. -/
 theorem walk_ranges (g : Graph) (tern : Bool) (vo eo : List Nat) (hgf : g.WF)
@@ -173,7 +201,8 @@ theorem walk_ranges (g : Graph) (tern : Bool) (vo eo : List Nat) (hgf : g.WF)
     Items.Ranges g (g.walk tern (g.dfsForest vo eo)).items (edgePostorderForest (g.dfsForest vo eo)) := by
   have hg := walk_g g tern _ hnv hb
   have key := WalkState.ranges_of_rangesInv (walk_rangesInv g tern vo eo hgf hvo heo)
-    (by rw [hg]; exact walk_typing g tern _ hnv hb hcov) (by rw [hg]; exact walk_closeFacts g tern vo eo)
+    (by rw [hg]; exact walk_typing g tern _ hnv hb hcov)
+    (by rw [hg]; exact walk_closeFacts g tern vo eo hgf hvo heo hnv)
   rwa [hg] at key
 
 /-! ### `Items.WF` -/

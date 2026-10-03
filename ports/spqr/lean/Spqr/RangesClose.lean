@@ -289,6 +289,37 @@ theorem CloseInv.finishTop {s : WalkState} (h : s.CloseInv) {x : ItemId}
       (fun it => { it with vs := vs, ch := getSide s.tstack.head!.spans dir })
       fun hb => hix (Items.Below.eq_of_no_parent hn hb)
 
+theorem CloseInv.unwrap {s : WalkState} (h : s.CloseInv) {a t : TEntry} {rest : List TEntry}
+    (hts : s.tstack = a :: t :: rest) {x : ItemId} (hx : x < s.items.size) (dir : Bool) :
+    ({ s with tstack := a :: { t with spans := setSides dir (Items.ch s.items x) [] } :: rest } : WalkState).CloseInv := by
+  apply h.frame (s' := { s with tstack := a :: { t with spans := setSides dir (Items.ch s.items x) [] } :: rest }) rfl rfl
+  intro i hi
+  have hc := Items.count_le_chCount s.items hx i
+  simp only [cnt, hts, spansCount_cons, count_setSides, List.append_nil] at hi ⊢
+  omega
+
+theorem CloseInv.modifyLoose {s : WalkState} (h : s.CloseInv) {x : ItemId}
+    (hx : x ≠ rootItem) (hz : s.cnt x = 0) (f : Item → Item) (hf : ∀ it, (f it).ch = it.ch) :
+    ({ s with items := s.items.modify x f } : WalkState).CloseInv := by
+  have hn : ∀ p, ¬ Items.IsParent s.items p x := by
+    intro p hp
+    have hpos := List.count_pos_iff.mpr hp
+    have hle := Items.count_le_chCount s.items (Items.parent_lt hp) x
+    dsimp [cnt] at hz; omega
+  have hcnt : ∀ i, ({ s with items := s.items.modify x f } : WalkState).cnt i = s.cnt i := by
+    intro i
+    simp only [cnt, Items.chCount_modify_of_ch s.items x f hf]
+  constructor
+  intro i hi hc
+  rw [hcnt] at hc
+  have hix : i ≠ x := by
+    intro heq; subst i
+    rcases hc with hc | hc
+    · exact hx hc
+    · omega
+  exact (h.closed i (by simpa using hi) hc).modify_of_not_below f
+    fun hb => hix (Items.Below.eq_of_no_parent hn hb)
+
 theorem CloseInv.of_tree {s : WalkState} (h : s.CloseInv) (ht : Items.Tree s.g s.items)
     (hty : WalkTyping s.g s.items) : Items.CloseFacts s.g s.items := by
   have hall : ∀ i, i < s.items.size → Items.CloseAt s.g s.items i := by
