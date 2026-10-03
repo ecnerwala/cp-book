@@ -117,6 +117,70 @@ def Items.RSkel3 (g : Graph) (items : Items) (i : ItemId) : Prop :=
     (((Pieces.ofItems g items ((items.ch i).filter fun c => decide (items.type c ≠ .V))).addParent g
       (items.EdgeBelow g i) s t).contract g).ThreeConnected
 
+theorem Items.WF.q_root_covers_block {g : Graph} {items : Items} (hwf : items.WF g)
+    (hg : g.WF) (h2 : g.TwoConnected) {e : Nat} (he : e < g.ne)
+    (hch : items.ch (edgeItem g e) ≠ []) :
+    ∀ f, f < g.ne → items.EdgeBelow g (edgeItem g e) f := by
+  have hi : edgeItem g e < items.size := by
+    have := hwf.tree.size
+    simp only [edgeItem, ItemId] at *
+    omega
+  obtain ⟨u, hu⟩ := hwf.vs_fst hi (by simp [hwf.tree.edge e he, NodeType.isNode])
+  have hv := (hwf.endpoints.q_vs e he u hu).2.1.2 hch
+  have hatt : g.TwoAttached (items.EdgeBelow g (edgeItem g e)) u u := by
+    intro v f f' hf hf' hE hE' hfv hf'v
+    have hvl : v < g.nv := by
+      rcases hfv with h | h
+      · exact h ▸ (hg.getElem! hf).1
+      · exact h ▸ (hg.getElem! hf).2
+    have hvs := hwf.endpoints.separation (edgeItem g e) hi
+      (by simp [hwf.tree.edge e he]) v f f' hvl hf hf' hfv hf'v hE hE'
+    exact .inl (by simpa [hu, hv, eq_comm] using hvs)
+  intro f hf
+  exact hatt.edgeConn_mem (fun h => h rfl) (fun h => h rfl)
+    Relation.ReflTransGen.refl (h2 u e f he hf)
+
+theorem Items.WF.vertex_child_leaf_of_block {g : Graph} {items : Items} (hwf : items.WF g)
+    (hg : g.WF) (h2 : g.TwoConnected) {i v : Nat} (hi : i < items.size) (hv : v < g.nv)
+    (hn : items.type i ∈ [NodeType.S, .P, .R]) (hp : items.IsParent i (vertItem v))
+    (hroot : ∀ c, items.IsParent (vertItem v) c → items.ch c ≠ []) :
+    items.ch (vertItem v) = [] := by
+  apply List.eq_nil_iff_forall_not_mem.2
+  intro c hc
+  have hQ := hwf.tree.v_children v c hv hc
+  have hid := (hwf.tree.type_Q_iff (hwf.tree.ch_lt _ _ hc)).1 hQ
+  have he : c - 1 - g.nv < g.ne := by unfold ItemId at *; omega
+  have heq : edgeItem g (c - 1 - g.nv) = c := by unfold edgeItem ItemId at *; omega
+  have hall := hwf.q_root_covers_block hg h2 he (by rw [heq]; exact hroot c hc)
+  have hnot := ((hwf.endpoints.interior i v hi hv hn).1 hp).2.2 (vertItem v) hp
+  apply hnot
+  intro e he _
+  exact Relation.ReflTransGen.head hc (heq ▸ hall e he)
+
+theorem Items.WF.nonV_child_cover_of_block {g : Graph} {items : Items} (hwf : items.WF g)
+    (hg : g.WF) (h2 : g.TwoConnected)
+    (hroot : ∀ v, v < g.nv → ∀ c, items.IsParent (vertItem v) c → items.ch c ≠ [])
+    {i : ItemId} (hi : i < items.size) (hn : items.type i ∈ [NodeType.S, .P, .R]) :
+    ∀ e, e < g.ne → items.EdgeBelow g i e →
+      ∃ c ∈ items.ch i, items.type c ≠ .V ∧ items.EdgeBelow g c e := by
+  intro e he hb
+  rcases Relation.ReflTransGen.cases_head hb with h | ⟨c, hc, hb⟩
+  · rw [h, hwf.tree.edge e he] at hn
+    simp at hn
+  · refine ⟨c, hc, ?_, hb⟩
+    intro hV
+    have hid := (hwf.tree.type_V_iff (hwf.tree.ch_lt _ _ hc)).1 hV
+    have hv : c - 1 < g.nv := by unfold ItemId at *; omega
+    have heq : vertItem (c - 1) = c := by unfold vertItem ItemId at *; omega
+    have hleaf := hwf.vertex_child_leaf_of_block hg h2 hi hv hn (by rwa [heq]) (hroot _ hv)
+    rw [heq] at hleaf
+    have hec : c = edgeItem g e := by
+      rcases Relation.ReflTransGen.cases_head hb with h | ⟨j, hj, _⟩
+      · exact h
+      · simp [Items.IsParent, hleaf] at hj
+    rw [hec, hwf.tree.edge e he] at hV
+    cases hV
+
 theorem Items.RSkel3.rThreeConnected {g : Graph} {items : Items} {i : ItemId}
     (h : Items.RSkel3 g items i) (hwf : items.WF g) (hi : i < items.size)
     (hR : items.type i = .R)
@@ -213,6 +277,13 @@ theorem Items.RSkel3.rThreeConnected {g : Graph} {items : Items} {i : ItemId}
   rcases hvs with hvs | hvs <;>
     simp only [List.map_append, Items.rSkeleton, hvs, Option.getD_some,
       List.map_cons, List.mem_append, List.mem_cons, Prod.mk.injEq] <;> tauto
+
+theorem Items.RSkel3.rThreeConnected_of_block {g : Graph} {items : Items} {i : ItemId}
+    (h : Items.RSkel3 g items i) (hwf : items.WF g) (hg : g.WF) (h2 : g.TwoConnected)
+    (hroot : ∀ v, v < g.nv → ∀ c, items.IsParent (vertItem v) c → items.ch c ≠ [])
+    (hi : i < items.size) (hR : items.type i = .R) :
+    SpqrTree.ThreeConnected (items.nvList g i).length (items.rSkeleton g i) :=
+  h.rThreeConnected hwf hi hR (hwf.nonV_child_cover_of_block hg h2 hroot hi (by simp [hR]))
 
 theorem Pieces.contract_congr {g : Graph} {P Q : Pieces} (hk : P.k = Q.k)
     (hp : ∀ e, e < g.ne → P.piece e = Q.piece e)

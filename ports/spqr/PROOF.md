@@ -779,7 +779,22 @@ It derives the active vertex list: endpoints are on the cap or a child edge; a V
 an incident edge covered by a non-V child, and the `interior`/`separation` clauses force that
 vertex to be a terminal of such a child. The bridge handles either cap orientation using
 `SpqrTree.ThreeConnected_congr_undirected`; it does not require a simplicity hypothesis.
-These lemmas have only standard axioms. Deriving coverage for completed R items, and the
+These lemmas have only standard axioms.
+
+`Items.WF.q_root_covers_block` proves that, in a 2-connected graph, every Q item with
+nonempty children contains every physical edge. Its single recorded endpoint and
+`Endpoints.separation` make its edge set 1-attached; edge connectivity after deleting that
+endpoint propagates membership from its own edge to every edge.
+`vertex_child_leaf_of_block` then proves that V children of S/P/R nodes are leaves,
+provided every Q child of such a V item has nonempty children: otherwise that Q, and hence
+the V child, contains every edge, contradicting `Endpoints.interior` for its parent.
+`nonV_child_cover_of_block` derives the required coverage from this leaf property and
+item ancestry. `RSkel3.rThreeConnected_of_block` applies the connectivity bridge with this
+derived coverage. All four lemmas have only standard axioms.
+The remaining walk placement hypothesis is exactly
+`∀ v, v < g.nv → ∀ c, items.IsParent (vertItem v) c → items.ch c ≠ []`.
+It is not a field of `Items.WF`: `Shapes.q_leaf_of_node` only forces Q children of
+non-F/V parents to be leaves. Exporting the placement fact from the walk, and the
 block-local version for an arbitrary input graph, remain open.
 
 ### 4.6 Ranges: `Endpoints`/`Shapes` without the tstack (`Ranges.lean`, `RangesWF.lean`)
@@ -1125,6 +1140,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 | 4.5 Item/contract edge correspondence: `Pieces.ofItems_addParent_edges`, `Items.rSkeleton_perm_contract` | `Proofs/RItems.lean` | proved (standard axioms), under non-V-child edge coverage; deriving coverage for completed R items remains open |
 | 4.5 HT 3-connectivity implies 2-connectivity with ≥ 3 edges: `Graph.ThreeConnected.twoConnected` | `Proofs/ThreeConnected.lean` | proved (standard axioms); no block or simplicity assumption |
 | 4.5 Item HT-to-cut bridge: `Items.RSkel3.rThreeConnected` | `Proofs/RItems.lean`, `Proofs/ThreeConnected.lean` | proved (standard axioms), including active vertices and either cap orientation; takes item WF and non-V-child edge coverage |
+| 4.5 Coverage in a 2-connected block: `WF.q_root_covers_block`, `WF.vertex_child_leaf_of_block`, `WF.nonV_child_cover_of_block`, `RSkel3.rThreeConnected_of_block` | `Proofs/RItems.lean` | proved (standard axioms); requires Q children of V items to have nonempty children, a walk placement fact not yet exported |
 | Item S/R shape minimum counts | `ItemSpec.lean`, `checks/SkeletonShapeCheck.lean` | corrected: ≥ 1 V child for S, ≥ 5 non-V children for R; kernel-checked sharp triangle/K4 outputs (standard axioms) |
 | R correctness input domain | `Correctness.lean`, `Proofs/RItems.lean`, `checks/RInvalidOrderCheck.lean` | corrected to `g.WF` + `OrderOK` for both orders; K4 with invalid edge order `[6]` kernel-checks failure of the former public target (standard axioms) |
 | R coverage and laminarity edge domain | `RInv.lean`, `RClose.lean`, `RMax.lean`, `Proofs/RunSaturation.lean`, `checks/REdgeDomainCheck.lean` | restricted containment and coverage to `e < g.ne`; kernel-checked K4 failure of unrestricted coverage and success of bounded coverage; affected transport proofs audited (standard axioms) |
