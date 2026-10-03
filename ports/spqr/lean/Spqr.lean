@@ -99,6 +99,7 @@ import Spqr.Proofs.RClose
 import Spqr.RInv
 import Spqr.Proofs.RInv
 import Spqr.Proofs.RInvFrame
+import Spqr.Proofs.RInvBack
 import Spqr.EarFrontier
 import Spqr.EarSides
 import Spqr.EarRoot

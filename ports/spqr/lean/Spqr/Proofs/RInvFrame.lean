@@ -12,10 +12,10 @@ transports them across the bookkeeping steps of `finishEdge`: `modifyItem` of a 
 (`feS₀`), `setStackDir`, the `firstOccurrence`/`nxtEdgeIdx` update, and `pushVertTstack` (a vertex
 entry has no edges and no pieces: `EntryR.vert`).
 
-The content-carrying blocks are admitted: `finishEdge_rInvAt` (Loop 1's closes, Loop 2,
-`closeVert`, the P-check, the back-edge push keep the invariant settled at `curV`),
-the legacy `walkTree_rInvAt` (its settled-return conclusion is false), and `loop1_rBranch`
-(the stack shape at Loop 1's R branch). `WalkTreeRReturnSpec` states the provisional-return
+The content-carrying blocks live in `Proofs/RInvBack.lean`: the back-edge branch of
+`finishEdge_rInvTop` is proved there, the tree-edge branch (Loop 1's closes, Loop 2, `closeVert`,
+the P-check) is the admitted `finishEdge_tree_rInvTop`, and `loop1_rBranch` below admits the
+stack shape at Loop 1's R branch. `WalkTreeRReturnSpec` states the provisional-return
 obligation. `loop1_r_threeConnected` combines the last admission with `RBranch.threeConnected`.
 -/
 
@@ -371,31 +371,6 @@ theorem closeEars_iter_step {D v nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' D
       (hok.body k fun j hj => hk j (Nat.le_succ_of_le hj)))
 
 /-! ### Admitted content lemmas (PROOF.md §4.5, walk side) -/
-
-/-- Admitted: (Lemma 4.3, R-maximality content, per `finishEdge`) with the base below the split
-`origTstack` settled at depth `d` and the frontier above it bounded by `Frontier`, `finishEdge` at
-`curV = stackVerts[d]` leaves the stack settled at depth `d`: every entry topping out at depth
-`≥ d` that does not start at `curV` is `EntryR`, and the stack is edge-disjoint. Loop 1's S/P/R
-closes build `EntryR` entries from the frontier (the merged items are the new entry's pieces; the
-complement of a closed `(nxt.vStart, d)` set is one class because all `(nxt.vStart, d)` classes
-were P-merged when `nxt.vStart` was finished and the path class is merged here); Loop 2 and
-`closeVert` glue the classes returning to `curV` into one `(curV, ·)` entry; the P-check bonds a
-type-1 class with the previous `(curV, lv)` entry; the back-edge branch pushes a `(curV, lv)`
-entry — all `(curV, ·)` entries are exempt, and so are entries topping out above `d`
-(`checks/RFinishEdgeCounter.lean`). `dfs` is the sorted DFS tree of the block `s.g` and
-`stackVerts[0..d]` its ancestor chain of `curV`. Checked on seeds 0..300 and 6000 extra
-multigraphs, both ternarize modes (`checks/RFinishEdgeCheck.lean`, contract B, 6414 sites). -/
-theorem finishEdge_rInvTop {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsOut) (origTstack : Nat)
-    (hasVert : Bool) (ho : o.cls = .ret lv kind) (hlow : lv < d) (hv : curV < s.g.nv)
-    (hi : s.Inv' D) (hs : Shape s) (hok : FinishOk D curV d lv o origTstack hasVert s)
-    (hg : FinishGuards d o origTstack hasVert s)
-    (hfront : Frontier (o := o) d origTstack s)
-    (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
-    (hd : dfs.depth curV = d) (hcur : s.stackVerts[d]! = curV)
-    (hanc : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! curV ∧ dfs.depth s.stackVerts[k]! = k)
-    (hR : s.RInvFront dfs curV d origTstack) :
-    (after (finishEdge curV d o origTstack hasVert) s).RInvTop dfs curV d := by
-  sorry
 
 /-- Admitted (Lemma 4.3 at the R branch): during `closeEars` of `finishEdge` at depth `d` for the
 tree edge `e` to the child `nxtV = stackVerts[d+1]`, every iterate of Loop 1 at which `loop1Type`
