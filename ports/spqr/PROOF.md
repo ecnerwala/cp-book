@@ -621,6 +621,34 @@ contract field bounds those below `lowval` (true for the DFS's `low`, but not de
 `d < vy.topDepth`), via `maybeUnwrapNxt_run`/`merge_run_shape`/`retarget_run_eq`/
 `finishTstackTop_run` and `finishRest_one_entry` (the P-check).
 
+**The `EarTree` induction step (next, not started).** `walkTree_ear : EarTree t 0 s` asks for
+`EarAt curV d o origTstack hasVert` at *every* `finishEdge` site, so the induction over `outs`
+needs a between-edges invariant `EarCtx v d done base s` (the state after `walkOut v d oᵢ` for the
+finished outs `done`, before `walkOutPre` of the next) from which the next site's `EarAt` follows,
+and which `walkOut` re-establishes. From the consumers above and the proved pieces its content
+is: (i) the stack is `top ++ base` with `base` the entries at entry to `v` (`FinishBook.origTstack`
+frame: `walkTree_frame`/`Sim.walkTree` give that `base` is untouched by the child's walk, and the
+`Keep` frame gives `stackVerts[k]`, `k ≤ d`, `firstOccurrence` below `d`); (ii) `top` is one entry
+per finished out of `v` with `lowval < d` (`finishEdge_one_entry` for type 1 — the type-2 case
+needs the DFS `low` fact `lowval ≤ topDepth` of every entry the child leaves, which is `Inv1`'s
+`topDepth` bound through loops 1–2 and should be added to `EarClose` as `mid_top : ∀ t ∈ mid,
+lowval ≤ t.topDepth`, 0 violations expected), each `(v, lowvalᵢ)`, pairwise edge/span-disjoint,
+holding exactly that out's `subEdges` (this is `sub_edges`/`sub_cover`/`disj`/`span_disj` of the
+*parent's* `EarAt` restricted to the entries above the parent's chain), plus, once `hasVert`, the
+vertex entry `V v` at the bottom of `top` (`vert`/`vert_free`/`v_root`, `vy_top`); (iii) the child
+site's `base`-side fields are the parent's: `p_entry` (the P-ear `(v, lowval)` below the top is the
+single-piece entry left by the *first* out with that lowval — `bottom.py` for the first child,
+`finishEdge_one_entry` after), `base_root`/`q_root`/`q_free` (freshness of the tree's own items,
+`walkTree_book`'s `hefresh`/`hvfresh` through `Keep`), `touch_bot` (every entry of `top` touches
+`v`), `base_disj` (nothing in `base` holds a `subEdges` edge: `t.edges.Nodup` + ownership); (iv)
+the loop-1/loop-2 contracts `loop1`/`late` at the next tree edge are about the *child's* entries
+after the child's walk, i.e. the child's own `EarCtx` at the end of its outs plus the first-child
+chain shape (`bottom`: the chain bottom's `V y`/`(y, lowval)` pair is never merged until the ear's
+top), which is the part with no proved piece yet; `EarCheck`'s `specWalk`/`lateWalk`/`closeCheck`
+check exactly these at the site, so the first step is to add `EarCtx` to `checks/EarCheck.lean`
+between the outs (one check per `walkOut` return) and run seeds 0..3000 before stating it in Lean.
+The leaf of the induction (back edge, `sub = []`) needs only (i)–(iii).
+
 **Acyclicity (`ItemAcyc.lean`, `WalkState.Full.acyc`).** Exact placement plus coverage say every
 non-root item has exactly one parent but not that `Items.IsParent` is well-founded, so `Full`
 also carries
