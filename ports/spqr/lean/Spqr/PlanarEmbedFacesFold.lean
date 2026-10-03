@@ -2,12 +2,13 @@ import Spqr.PlanarEmbedFacesSteps
 import Spqr.PlanarEmbedQ
 import Spqr.PlanarNodeSpec
 import Spqr.PlanarEmbedNodeExec
+import Spqr.PlanarEmbedNode
 
 /-!
 # The fold of `planarEmbed` over the same-witness invariant `GluedFaces`
 
-`embedItem_step_faces` dispatches on the item type (leaf, `F`, `V`, `Q` proved; `S`/`P`/`R`
-admitted as `embedItem_step_node_faces`) and `gluedFaces_planarEmbed` folds it over the reverse
+`embedItem_step_faces` dispatches on the item type (leaf, `F`, `V`, `Q` proved; `S`/`P`/`R` from
+`PlanarEmbedNode.lean`, admitted there as `nodeFold_capped`) and `gluedFaces_planarEmbed` folds it over the reverse
 preorder from `gluedFaces_init`.
 -/
 
@@ -16,21 +17,6 @@ namespace Spqr
 namespace PlanarSpqrTree
 
 variable (t : PlanarSpqrTree)
-
-/-- `S`/`P`/`R` step over `GluedFaces`: the node's local rotation (`nodePlanar_sound`) is 2-summed
-with each child's piece through the twin virtual edge, the cap's quarter-edges become the exposed
-ends, and the cap's two exposed pairs are cofacial in the resulting witness (they are the two
-sides of the removed cap edge). The local embedding `hloc` is supplied by `nodePlanar_sound` in
-`planarEmbed_sound`. Admitted: the executable node branch (`neRotAdj` traversal, twin lookup,
-inner `V` items) has no unfolding lemmas yet. -/
-theorem embedItem_step_node_faces (g : Graph) (hwf : t.toSpqrTree.WF)
-    (hsh : t.toSpqrTree.ChildShape) (hrep : t.toSpqrTree.Represents g)
-    (hsep : t.toSpqrTree.PieceSep g) (i : Nat) (hi : i < t.size)
-    (hty : t.types[i]! = .S ∨ t.types[i]! = .P ∨ t.types[i]! = .R)
-    (hloc : IsPlanarEmbedding (t.localSkeleton i) (t.toSpqrTree.nVerts i) (t.nodeRot i))
-    (s : EmbedState) (h : t.GluedFaces g (i + 1) s) :
-    t.GluedFaces g i ((t.embedItem i).run s).2 := by
-  sorry
 
 theorem embedItem_step_faces (g : Graph) (hg : g.WF) (hwf : t.toSpqrTree.WF)
     (hsh : t.toSpqrTree.ChildShape) (hrep : t.toSpqrTree.Represents g)
