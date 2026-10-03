@@ -263,6 +263,25 @@ theorem StItems.bdPop {g : Graph} {s s' : WalkState} {sub base : List TEntry} {q
       · exact absurd hilt (e ▸ hxlt)
       · unfold Items.IsParent at hc; rw [hP.fresh_ch x (Nat.le_of_not_lt hxlt)] at hc; simp at hc
 
+/-- The open-block invariant (sim-4 candidate; `check_stsim` m8 on seeds 0..1000): every S / P / R
+item below a span item of the stack segment `new` is `InBlock` of the block `b` — for the walk, `b` is
+the block of the *truncated* reference (`refBlocks g (prev ++ [truncTree fs t])`) that the segment
+belongs to. At a boundary edge it is exactly the orientation content of the new block
+(`StLive.vsOrientedAt`). -/
+def StLive (g : Graph) (items : Items) (new : List TEntry) (b : StBlock) : Prop :=
+  ∀ x ∈ readStack new, ∀ i, Items.Below items x i →
+    (Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R) →
+    InBlock g items b i
+
+theorem StLive.vsOrientedAt {g : Graph} {items : Items} {new : List TEntry} {b : StBlock}
+    (h : StLive g items new b) {i : ItemId} {L : List ItemId}
+    (hx : ∃ x ∈ readStack new, Items.Below items x i)
+    (hty : Items.type items i = .S ∨ Items.type items i = .P ∨ Items.type items i = .R)
+    (hL : Expands items i L) : VsOrientedAt g items b i L := by
+  obtain ⟨x, hx, hb⟩ := hx
+  obtain ⟨L', hL', -, hV⟩ := h x hx i hb hty
+  rwa [ExpandsList.unique hL hL']
+
 /-- A member of an expanded list owns a contiguous segment of the expansion. -/
 theorem ExpandsList.segment_of_mem {items : Items} {xs M : List ItemId} (h : ExpandsList items xs M)
     {x : ItemId} (hx : x ∈ xs) : ∃ L A B, Expands items x L ∧ M = A ++ L ++ B := by
