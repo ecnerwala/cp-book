@@ -531,6 +531,7 @@ def checkOwned (seed : Nat) (σ : List Nat) (c : OwnCtx) (n v d : Nat) (site : S
   let len := s.tstack.length
   if s.stackVerts[d]! != v then out := fail "own_sv" s!"d={d}" :: out
   if len < c.orig then out := fail "own_len" s!"len={len} orig={c.orig}" :: out
+  if c.n₀ < c.nR then out := fail "own_nR" s!"nR={c.nR} n₀={c.n₀}" :: out
   for b in List.range' c.nR (n - c.nR) do
     let e := σ[b]!
     if !owned.contains e &&

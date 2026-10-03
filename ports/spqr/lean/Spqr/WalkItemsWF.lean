@@ -4,6 +4,7 @@ import Spqr.RangesWalk
 import Spqr.RangesClose
 import Spqr.RangesCloseSites
 import Spqr.RangesCloseTree
+import Spqr.RangesOwned
 
 /-! # `Items.WF` for the walk on a DFS forest
 
