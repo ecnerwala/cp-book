@@ -677,6 +677,63 @@ theorem insert_get_add {y : Nat} (hy : y < ρ.size) (h0 : y ≠ a0) (h1 : y ≠ 
   simp only [Option.map_some, Equiv.swap_apply_of_ne_of_ne (show 4 + ρ.rot y ≠ 2 - x by omega)
     (show 4 + ρ.rot y ≠ 4 + a2 by omega)]
 
+/-- The two sides of the inserted edge lie on distinct faces. -/
+theorem insert_not_sameFaceOrbit (hface : SameOrbit (ρ.stepC 3) a0 a2) :
+    ¬(ρ.insert x a0 a2).SameFaceOrbit 0 2 := by
+  have hx := H.xle; have hf := H.xor_facts; have ha0 := H.ha0; have ha1 := H.a1_lt
+  have ha2 := H.ha2; have ha3 := H.a3_lt
+  have s_x : (U₁ ρ x a0).stepC 3 x = 2 - x := by
+    rw [H.U₁_stepC (by decide) (by omega), hf.1, H.U₁_rot_x3]
+  have s_x2 : (U₁ ρ x a0).stepC 3 (2 - x) = 4 + a0 := by
+    rw [H.U₁_stepC (by decide) (by omega), hf.2.2.1, H.U₁_rot_x1]
+  have s_x1 : (U₁ ρ x a0).stepC 3 (x + 1) = 3 - x := by
+    rw [H.U₁_stepC (by decide) (by omega), hf.2.1, H.U₁_rot_x2]
+  have s_x3 : (U₁ ρ x a0).stepC 3 (3 - x) = 4 + ρ.rot a0 := by
+    rw [H.U₁_stepC (by decide) (by omega), hf.2.2.2.1, H.U₁_rot_x]
+  have r1 : SameOrbit (ρ.stepC 3) (a0 ^^^ 3) (ρ.rot a0) := by
+    have : ρ.stepC 3 (a0 ^^^ 3) = ρ.rot a0 := by
+      rw [stepC_eq_rot H.total H.hs (by decide) (H.hs ▸ xor_lt_mul4 (H.hs ▸ ha0) (by decide)),
+        xor_xor_self]
+    exact sameOrbit_of_eq this
+  have r3 : SameOrbit (ρ.stepC 3) (ρ.rot a2 ^^^ 3) a2 := by
+    have : ρ.stepC 3 (ρ.rot a2 ^^^ 3) = a2 := by
+      rw [stepC_eq_rot H.total H.hs (by decide) (H.hs ▸ xor_lt_mul4 (H.hs ▸ ha3) (by decide)),
+        xor_xor_self, H.rot_a3]
+    exact sameOrbit_of_eq this
+  have h1 : SameOrbit ((U₁ ρ x a0).stepC 3) ((2 - x) ^^^ 3) ((4 + a2) ^^^ 3) := by
+    rw [hf.2.2.1, add4_xor _ (by decide)]
+    refine ((sameOrbit_of_eq s_x1).trans (sameOrbit_of_eq s_x3)).trans ?_
+    exact H.U₁_transport (r1.symm.trans (sameOrbit_stepC_xor H.total H.involution H.hs (by decide) hface))
+  have h2 : SameOrbit ((U₁ ρ x a0).stepC 3) ((U₁ ρ x a0).rot (2 - x) ^^^ 3)
+      ((U₁ ρ x a0).rot (4 + a2) ^^^ 3) := by
+    rw [H.U₁_rot_x2, H.U₁_rot_a2, hf.2.2.2.1, add4_xor _ (by decide)]
+    refine ((sameOrbit_of_eq s_x).trans (sameOrbit_of_eq s_x2)).trans ?_
+    exact H.U₁_transport (hface.trans r3.symm)
+  have hns : ¬SameOrbit ((ρ.insert x a0 a2).stepC 3) ((2 - x) ^^^ 3) ((4 + a2) ^^^ 3) :=
+    conj_not_sameOrbit_split (rs := U₁ ρ x a0) (a := 2 - x) (b := 4 + a2) H.U₁_total
+      H.U₁_involution H.U₁_oppositeDir (by rw [U₁_size]; omega) (by rw [U₁_size]; omega) (by omega)
+      (by rw [H.U₁_rot_x2]; omega) H.U₁_hs (by decide) (by decide) h1 h2
+  have hsz : (ρ.insert x a0 a2).size = 4 * (1 + ρ.size / 4) := by
+    rw [insert_size]; have := H.size4; omega
+  intro h
+  rw [sameFaceOrbit_iff H.insert_total H.insert_involution hsz (by rw [insert_size]; omega)] at h
+  have h' := sameOrbit_stepC_xor H.insert_total H.insert_involution hsz (by decide) h
+  have e0 : (0 : Nat) ^^^ 3 = 3 := by decide
+  have e2 : (2 : Nat) ^^^ 3 = 1 := by decide
+  rw [e0, e2] at h'
+  have hr : (ρ.insert x a0 a2).stepC 3 ((4 + a2) ^^^ 3) = 3 - x := by
+    rw [stepC_eq_rot H.insert_total hsz (by decide)
+      (hsz ▸ xor_lt_mul4 (hsz ▸ (by rw [insert_size]; omega)) (by decide)), xor_xor_self]
+    exact rot_eq_of_get H.insert_get_a2
+  apply hns
+  rcases H.hx with rfl | rfl
+  · have e : (2 - 0) ^^^ 3 = 1 := by decide
+    rw [e]
+    exact ((sameOrbit_of_eq hr).trans h').symm
+  · have e : (2 - 2) ^^^ 3 = 3 := by decide
+    rw [e]
+    exact h'.trans (sameOrbit_of_eq hr).symm
+
 end InsertSetting
 
 end RotationSystem
