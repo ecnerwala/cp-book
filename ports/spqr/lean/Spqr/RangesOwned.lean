@@ -500,6 +500,412 @@ theorem finishEdge_ownedD {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVer
 def VertCover (v : Nat) (s : WalkState) : Prop :=
   ∀ e, e < s.g.ne → Items.EdgeBelow s.g s.items (vertItem v) e → ∃ t ∈ s.tstack, t.edges s.g s.items e
 
+/-- `vertItem v` is spanned by an open entry or lies under one of its spanned items; implies
+`VertCover v` and is kept by every primitive of `finishEdge`. -/
+def VSpan (v : Nat) (s : WalkState) : Prop :=
+  ∃ t ∈ s.tstack, ∃ i ∈ t.spans.1 ++ t.spans.2, Items.Below s.items i (vertItem v)
+
+theorem VSpan.vertCover {v : Nat} (h : VSpan v s) : VertCover v s := by
+  obtain ⟨t, ht, i, hi, hb⟩ := h
+  intro e _ he
+  exact ⟨t, ht, i, hi, Relation.ReflTransGen.trans hb he⟩
+
+theorem VSpan.frame {v : Nat} {s s' : WalkState} (h : VSpan v s)
+    (hch : ∀ p, Items.ch s'.items p = Items.ch s.items p)
+    (hsp : ∀ t ∈ s.tstack, ∀ i ∈ t.spans.1 ++ t.spans.2,
+      ∃ t' ∈ s'.tstack, i ∈ t'.spans.1 ++ t'.spans.2) :
+    VSpan v s' := by
+  obtain ⟨t, ht, i, hi, hb⟩ := h
+  obtain ⟨t', ht', hi'⟩ := hsp t ht i hi
+  exact ⟨t', ht', i, hi', (Items.Below_congr hch).2 hb⟩
+
+theorem VSpan.frame' {v : Nat} {s s' : WalkState} (h : VSpan v s) (hi : s'.items = s.items)
+    (hts : s'.tstack = s.tstack) : VSpan v s' :=
+  h.frame (by rw [hi]; exact fun _ => rfl) (fun t ht i hi' => ⟨t, by rw [hts]; exact ht, hi'⟩)
+
+theorem VSpan.ne_nil {v : Nat} (h : VSpan v s) : s.tstack ≠ [] := by
+  obtain ⟨t, ht, -⟩ := h
+  exact List.ne_nil_of_mem ht
+
+theorem mem_spans_mergeTop {b a : TEntry} {rest : List TEntry} {t : TEntry} (ht : t ∈ b :: a :: rest)
+    {i : ItemId} (hi : i ∈ t.spans.1 ++ t.spans.2) :
+    ∃ t' ∈ WalkM.mergeTop (b :: a :: rest), i ∈ t'.spans.1 ++ t'.spans.2 := by
+  simp only [WalkM.mergeTop]
+  rcases List.mem_cons.1 ht with rfl | ht
+  · exact ⟨_, List.mem_cons_self .., by simp only [List.mem_append] at hi ⊢; tauto⟩
+  rcases List.mem_cons.1 ht with rfl | ht
+  · exact ⟨_, List.mem_cons_self .., by simp only [List.mem_append] at hi ⊢; tauto⟩
+  · exact ⟨t, List.mem_cons_of_mem _ ht, hi⟩
+
+theorem two_of_mergeTop_ne_nil {l : List TEntry} (h : WalkM.mergeTop l ≠ []) :
+    ∃ a b rest, l = a :: b :: rest := by
+  rcases l with _ | ⟨a, _ | ⟨b, rest⟩⟩
+  · exact absurd rfl h
+  · exact absurd rfl h
+  · exact ⟨a, b, rest, rfl⟩
+
+theorem VSpan.mergeTop {v : Nat} (h : VSpan v s) {a b : TEntry} {rest : List TEntry}
+    (hts : s.tstack = a :: b :: rest) : VSpan v (after mergeTstackTops s) := by
+  rw [after_mergeTstackTops]
+  refine h.frame (fun _ => rfl) (fun t ht i hi => ?_)
+  show ∃ t' ∈ WalkM.mergeTop s.tstack, _
+  rw [hts] at ht ⊢
+  exact mem_spans_mergeTop ht hi
+
+/-- A merge whose result is nonempty had two entries. -/
+theorem VSpan.mergeTop' {v : Nat} (h : VSpan v s) (hne : (after mergeTstackTops s).tstack ≠ []) :
+    VSpan v (after mergeTstackTops s) := by
+  rw [after_mergeTstackTops] at hne
+  obtain ⟨a, b, rest, hts⟩ := two_of_mergeTop_ne_nil hne
+  exact h.mergeTop hts
+
+theorem VSpan.push {v : Nat} (h : VSpan v s) (w d : Nat) (i : ItemId) :
+    VSpan v (after (pushTstack w d i) s) :=
+  h.frame (fun _ => rfl) (fun t ht _ hj => ⟨t, List.mem_cons_of_mem _ ht, hj⟩)
+
+theorem VSpan.pushEdge {v : Nat} (h : VSpan v s) (w d e : Nat) :
+    VSpan v (after (pushEdgeTstack w d e) s) :=
+  h.frame (fun _ => rfl) (fun t ht _ hj => ⟨t, List.mem_cons_of_mem _ ht, hj⟩)
+
+theorem VSpan.pushVert (v d : Nat) (s : WalkState) : VSpan v (after (pushVertTstack v d) s) :=
+  ⟨_, List.mem_cons_self .., vertItem v, (mem_setSides _ _ _).2 (List.mem_singleton.2 rfl),
+    Relation.ReflTransGen.refl⟩
+
+theorem VSpan.alloc {v : Nat} (h : VSpan v s) (ty : NodeType) : VSpan v (after (allocItem ty) s) := by
+  show VSpan v ((allocItem ty).run s).2
+  rw [run_allocItem]
+  exact h.frame (fun p => Items.ch_push_nil _ rfl p) (fun t ht i hi => ⟨t, ht, hi⟩)
+
+theorem VSpan.modifyVs {v : Nat} (h : VSpan v s) (j : ItemId) (vs : Option Nat × Option Nat) :
+    VSpan v (after (modifyItem j fun it => { it with vs := vs }) s) := by
+  show VSpan v ((modifyItem j fun it => { it with vs := vs }).run s).2
+  rw [run_modifyItem]
+  exact h.frame (fun p => by
+    show Items.ch (s.items.modify j fun it => { it with vs := vs }) p = _
+    exact Items.ch_modify_ch_eq (items := s.items) j (fun it => { it with vs := vs }) (fun _ => rfl) p) (fun t ht i hi => ⟨t, ht, hi⟩)
+
+theorem VSpan.retarget {v : Nat} (h : VSpan v s) (curV : Nat) (dir : Bool) :
+    VSpan v (after (WalkState.retarget curV dir) s) := by
+  show VSpan v ((WalkState.retarget curV dir).run s).2
+  rcases hts : s.tstack with _ | ⟨t, rest⟩
+  · exact absurd hts h.ne_nil
+  rw [retarget_run_eq curV dir s t rest hts]
+  refine h.frame (fun _ => rfl) (fun u hu i hi => ?_)
+  rw [hts] at hu
+  rcases List.mem_cons.1 hu with rfl | hu
+  · exact ⟨_, List.mem_cons_self .., by
+      show i ∈ (setSides (!dir) (u.spans.1 ++ u.spans.2) []).1 ++ (setSides (!dir) (u.spans.1 ++ u.spans.2) []).2
+      rw [mem_setSides]; exact hi⟩
+  · exact ⟨u, List.mem_cons_of_mem _ hu, hi⟩
+
+theorem VSpan.maybeUnwrap {v : Nat} (h : VSpan v s) (hs : Shape s) (hv : v < s.g.nv) {ty : NodeType}
+    (hty : ty ≠ .V) (hok : UnwrapOk ty s) {a b : TEntry} {rest : List TEntry}
+    (hts : s.tstack = a :: b :: rest) : VSpan v (after (maybeUnwrapNxt ty) s) := by
+  show VSpan v ((maybeUnwrapNxt ty).run s).2
+  rw [maybeUnwrapNxt_run_eq ty s a b rest hts _ rfl _ rfl]
+  have halloc : VSpan v ((allocItem ty).run s).2 := h.alloc ty
+  by_cases h1 : ty = .R ∨ s.ternarize = true
+  · simp only [h1, ↓reduceIte]; exact halloc
+  simp only [h1, ↓reduceIte]
+  have hn : nxtE s = b := by rw [nxtE, hts]; rfl
+  have hd : nxtDir s = s.stackDir[b.topDepth]! := by rw [nxtDir, hn]
+  have hh : nxtHead s = (getSide b.spans s.stackDir[b.topDepth]!).head! := by rw [nxtHead, hn, hd]
+  by_cases h2 : s.items[(getSide b.spans s.stackDir[b.topDepth]!).head!]!.type = ty
+  · simp only [h2, ↓reduceIte]
+    have hu : UnwrapAt s := hok.unwrap h1 (by rw [hh]; exact h2)
+    have hside := hu.side; rw [hn, hd] at hside
+    have hsingle := hu.single; rw [hn, hd, hh] at hsingle
+    generalize hi_def : (getSide b.spans s.stackDir[b.topDepth]!).head! = i at h2 hsingle ⊢
+    have hi : i < s.items.size :=
+      hs.span b (by rw [hts]; simp) i (mem_of_mem_getSide (by rw [hsingle]; simp))
+    have hch : s.items[i]!.ch = Items.ch s.items i := by simp [Items.ch_eq_getElem hi, hi]
+    have htyi : s.items[i]!.type = Items.type s.items i := by simp [Items.type_eq_getElem hi, hi]
+    obtain ⟨t, ht, j, hj, hb⟩ := h
+    rw [hts] at ht
+    rcases List.mem_cons.1 ht with ht' | ht
+    · rw [ht'] at hj; exact ⟨a, List.mem_cons_self .., j, hj, hb⟩
+    rcases List.mem_cons.1 ht with ht' | ht
+    · rw [ht'] at hj
+      have hji : j = i := by
+        have := (mem_of_getSide_nil _ b.spans hside j).1 hj
+        rw [hsingle] at this; exact List.mem_singleton.1 this
+      rw [hji] at hb
+      rcases hb.head_cases with heq | ⟨c, hc, hb⟩
+      · exfalso
+        have := hs.vert v hv
+        rw [← heq, ← htyi, h2] at this
+        exact hty this
+      · refine ⟨_, List.mem_cons_of_mem _ (List.mem_cons_self ..), c, ?_, hb⟩
+        show c ∈ (setSides _ s.items[i]!.ch []).1 ++ (setSides _ s.items[i]!.ch []).2
+        rw [mem_setSides, hch]; exact hc
+    · exact ⟨t, List.mem_cons_of_mem _ (List.mem_cons_of_mem _ ht), j, hj, hb⟩
+  · simp only [h2, ↓reduceIte]; exact halloc
+
+theorem VSpan.finishTop {v : Nat} (h : VSpan v s) {x : ItemId} (hf : ItemFree s x) {t : TEntry}
+    {rest : List TEntry} (hts : s.tstack = t :: rest)
+    (hside : getSide t.spans (!s.stackDir[t.topDepth]!) = []) :
+    VSpan v (after (finishTstackTop x) s) := by
+  show VSpan v ((finishTstackTop x).run s).2
+  rw [finishTstackTop_run_eq s x t rest hts]
+  set dir := s.stackDir[t.topDepth]! with hdir
+  set f : Item → Item := fun it =>
+    { it with vs := setSides dir (some s.stackVerts[t.topDepth]!) (some t.vStart),
+              ch := getSide t.spans dir } with hf_def
+  have hnb : ∀ i, i ≠ x → ¬ Items.Below s.items i x := fun i hi hb =>
+    hi (Items.Below.eq_of_no_parent hf.root hb)
+  have hch : Items.ch (s.items.modify x f) x = getSide t.spans dir := by
+    rw [Items.ch_modify_at x f hf.lt]
+  obtain ⟨u, hu, j, hj, hb⟩ := h
+  have hjx : j ≠ x := fun hjx => hf.free u hu (hjx ▸ hj)
+  have hb' : Items.Below (s.items.modify x f) j (vertItem v) :=
+    (Items.Below_modify_of_not_below x f (hnb j hjx)).2 hb
+  rw [hts] at hu
+  rcases List.mem_cons.1 hu with hu' | hu
+  · rw [hu'] at hj
+    refine ⟨_, List.mem_cons_self .., x, ?_, .head ?_ hb'⟩
+    · show x ∈ (setSides dir [x] []).1 ++ (setSides dir [x] []).2
+      rw [mem_setSides]; exact List.mem_singleton.2 rfl
+    · show j ∈ Items.ch (s.items.modify x f) x
+      rw [hch]; exact (mem_of_getSide_nil dir t.spans hside j).1 hj
+  · exact ⟨u, List.mem_cons_of_mem _ hu, j, hj, hb'⟩
+
+/-- A loop preserves a predicate preserved by each taken iteration. -/
+theorem loop_pred (P : WalkState → Prop) (cond : WalkM Bool) (body : WalkM Unit) (fuel : Nat)
+    (hcond : ∀ s, (cond.run s).2 = s)
+    (hbody : ∀ k, (∀ j, j ≤ k → (cond.run (iter body j s)).1 = true) →
+      P (iter body k s) → P (after body (iter body k s)))
+    (h : P s) : P (after (WalkM.loop fuel cond body) s) := by
+  induction fuel generalizing s with
+  | zero => exact h
+  | succ fuel ih =>
+    show P ((WalkM.loop (fuel + 1) cond body).run s).2
+    rw [loop_succ_run fuel cond body s (hcond s)]
+    by_cases hc : (cond.run s).1 = true
+    · simp only [hc, ↓reduceIte]
+      have h₁ := hbody 0 (fun j hj => by rw [Nat.le_zero.1 hj]; exact hc) h
+      exact ih (s := (body.run s).2) (fun k hk => hbody (k + 1) fun j hj => by
+        cases j with
+        | zero => exact hc
+        | succ j => exact hk j (Nat.le_of_succ_le_succ hj)) h₁
+    · simp only [hc]; exact h
+
+theorem mergeLoop_nil (cond : WalkM Bool) (fuel : Nat) (hcond : ∀ s, (cond.run s).2 = s)
+    (hs : s.tstack = []) : (after (WalkM.loop fuel cond mergeTstackTops) s).tstack = [] := by
+  induction fuel generalizing s with
+  | zero => exact hs
+  | succ fuel ih =>
+    show ((WalkM.loop (fuel + 1) cond mergeTstackTops).run s).2.tstack = []
+    rw [loop_succ_run fuel cond mergeTstackTops s (hcond s)]
+    by_cases hc : (cond.run s).1 = true
+    · simp only [hc, ↓reduceIte]
+      exact ih (by show (after mergeTstackTops s).tstack = []; rw [after_mergeTstackTops, hs]; rfl)
+    · simp only [hc]; exact hs
+
+/-- A merge loop ending with a nonempty stack keeps `VSpan`. -/
+theorem VSpan.mergeLoop {v : Nat} (h : VSpan v s) (cond : WalkM Bool) (fuel : Nat)
+    (hcond : ∀ s, (cond.run s).2 = s)
+    (hne : (after (WalkM.loop fuel cond mergeTstackTops) s).tstack ≠ []) :
+    VSpan v (after (WalkM.loop fuel cond mergeTstackTops) s) := by
+  induction fuel generalizing s with
+  | zero => exact h
+  | succ fuel ih =>
+    show VSpan v ((WalkM.loop (fuel + 1) cond mergeTstackTops).run s).2
+    have hl := loop_succ_run fuel cond mergeTstackTops s (hcond s)
+    rw [hl]
+    by_cases hc : (cond.run s).1 = true
+    · simp only [hc, ↓reduceIte]
+      have hne₁ : ((WalkM.loop (fuel + 1) cond mergeTstackTops).run s).2.tstack ≠ [] := hne
+      rw [hl] at hne₁; simp only [hc, ↓reduceIte] at hne₁
+      have hne' : (after mergeTstackTops s).tstack ≠ [] := fun h0 =>
+        hne₁ (mergeLoop_nil cond fuel hcond h0)
+      exact ih (h.mergeTop' hne') hne₁
+    · simp only [hc]; exact h
+
+theorem VSpan.closeTwo {v : Nat} (h : VSpan v s) {x : ItemId} (hf : ItemFree s x)
+    (hok : CloseTwoOk D s) :
+    VSpan v ((finishTstackTop x).run (mergeTstackTops.run s).2).2 := by
+  have hne := hok.finish.nonempty
+  have h₁ : VSpan v (after mergeTstackTops s) := h.mergeTop' hne
+  obtain ⟨t, rest, hts⟩ := List.exists_cons_of_ne_nil hne
+  have hside := hok.finish.side
+  rw [curE, hts, List.head!_cons] at hside
+  exact h₁.finishTop hf.merge hts hside
+
+theorem VSpan.loop1Body {v : Nat} (h : VSpan v s) (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv)
+    {d : Nat} {dir : Bool} (hok : Loop1BodyOk D d dir s) (htwo : 2 ≤ s.tstack.length) :
+    VSpan v (after (Spqr.loop1Body d dir) s) := by
+  have h₁ : VSpan v (l1S₁ d dir s) := by
+    show VSpan v ((loop1Type d dir).run s).2
+    rw [loop1Type_run]
+    split
+    · obtain ⟨a, b, rest, hts⟩ := two_entries_of_le htwo
+      exact (h.frame' (s' := { s with stackDir := s.stackDir.set! (nxtE s).topDepth dir }) rfl rfl).mergeTop
+        (a := a) (b := b) (rest := rest) hts
+    · split <;> exact h
+  have st₁ : Step D v s (l1S₁ d dir s) := Step.loop1Type hi hs hok.mergeS
+  have hv₁ : v < (l1S₁ d dir s).g.nv := by rw [st₁.g]; exact hv
+  have hty := loop1Type_result d dir s
+  have hty' : l1Ty d dir s ≠ .V := fun h => hty (by show l1Ty d dir s ∈ _; rw [h]; simp)
+  obtain ⟨a, b, rest, hts₁⟩ := two_entries_of_le hok.unwrap.two
+  have h₂ : VSpan v (l1S₂ d dir s) := h₁.maybeUnwrap st₁.shape hv₁ hty' hok.unwrap hts₁
+  have r := maybeUnwrapNxt_spec (v := v) st₁.inv st₁.shape hty hok.unwrap
+  exact h₂.closeTwo r.free hok.close
+
+/-- `Step.loop`, at each iterate. -/
+theorem Step.iter' {v : Nat} (cond : WalkM Bool) (body : WalkM Unit) (Ok : WalkState → Prop)
+    (hbody : ∀ s, v < s.g.nv → s.Inv' D → Shape s → (cond.run s).1 = true → Ok s →
+      Step D v s (body.run s).2)
+    (hv : v < s.g.nv) (hi : s.Inv' D) (hs : Shape s)
+    (hok : ∀ k, (∀ j, j ≤ k → (cond.run (iter body j s)).1 = true) → Ok (iter body k s)) :
+    ∀ k, (∀ j, j < k → (cond.run (iter body j s)).1 = true) → Step D v s (iter body k s)
+  | 0, _ => Step.refl hi hs
+  | k + 1, hk => by
+    have st := Step.iter' cond body Ok hbody hv hi hs hok k fun j hj => hk j (by omega)
+    rw [iter_succ']
+    exact st.trans (hbody _ (by rw [st.g]; exact hv) st.inv st.shape
+      (hk k (Nat.lt_succ_self k)) (hok k fun j hj => hk j (by omega)))
+
+theorem VSpan.closeEars {v : Nat} (h : VSpan v s) (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv)
+    {nxtV d e : Nat} {dir : Bool} (hok : CloseEarsOk D nxtV d e dir s) :
+    VSpan v (after (closeEars nxtV d e dir) s) := by
+  have st₁ : Step D v s (ceS₁ nxtV d e s) := Step.pushEdge hi hs nxtV d e hok.e_lt hok.q hok.ends hok.d_le
+  have hv₁ : v < (ceS₁ nxtV d e s).g.nv := by rw [st₁.g]; exact hv
+  show VSpan v (after (WalkM.loop _ (loop1Cond d) (Spqr.loop1Body d dir)) (ceS₁ nxtV d e s))
+  refine loop_pred (VSpan v) _ _ _ (fun _ => rfl) (fun k hk h => ?_) (h.pushEdge nxtV d e)
+  have st : Step D v _ (iter (Spqr.loop1Body d dir) k (ceS₁ nxtV d e s)) :=
+    Step.iter' (loop1Cond d) (Spqr.loop1Body d dir) (Loop1BodyOk D d dir)
+      (fun _ hv hi hs _ hok => Step.loop1Body hi hs hv hok) hv₁ st₁.inv st₁.shape hok.body k
+      (fun j hj => hk j (Nat.le_of_lt hj))
+  have htwo : 2 ≤ (iter (Spqr.loop1Body d dir) k (ceS₁ nxtV d e s)).tstack.length := by
+    have := hk k (Nat.le_refl k)
+    rw [run_loop1Cond] at this
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at this
+    exact this.1
+  exact h.loop1Body st.inv st.shape (by rw [st.g]; exact hv₁) (hok.body k hk) htwo
+
+theorem VSpan.mergeLate {v : Nat} (h : VSpan v s) (d : Nat)
+    (hne : (after (Spqr.mergeLate d) s).tstack ≠ []) : VSpan v (after (Spqr.mergeLate d) s) := by
+  have hne' : ((Spqr.mergeLate d).run s).2.tstack ≠ [] := hne
+  show VSpan v ((Spqr.mergeLate d).run s).2
+  rw [mergeLate_run] at hne' ⊢
+  by_cases hc : (curE s).firstIdx > s.firstOccurrence[d]!
+  · simp only [hc, ↓reduceIte] at hne' ⊢
+    exact h.mergeLoop _ _ (fun _ => rfl) hne'
+  · simp only [hc, ↓reduceIte]; exact h
+
+theorem VSpan.finishP {v : Nat} (h : VSpan v s) (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv)
+    {curV lowval : Nat} {isType1 : Bool} (hok : FinishPOk D curV lowval isType1 s) :
+    VSpan v (after (Spqr.finishP curV lowval isType1) s) := by
+  show VSpan v ((Spqr.finishP curV lowval isType1).run s).2
+  simp only [Spqr.finishP, WalkM.run_bind, run_condP]
+  by_cases hc : result (condP curV lowval isType1) s = true
+  · have hc' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == curV) &&
+        (s.tstack.tail.head!.topDepth == lowval)) = true := hc
+    simp only [hc', ↓reduceIte, WalkM.run_bind]
+    obtain ⟨hu, hcl⟩ := hok.ok hc
+    obtain ⟨a, b, rest, hts⟩ := two_entries_of_le hu.two
+    have r := maybeUnwrapNxt_spec (v := v) hi hs (by decide) hu
+    exact (h.maybeUnwrap hs hv (by decide) hu hts).closeTwo r.free hcl
+  · have hc' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == curV) &&
+        (s.tstack.tail.head!.topDepth == lowval)) = false := Bool.eq_false_iff.2 hc
+    simp only [hc', Bool.false_eq_true, ↓reduceIte]
+    exact h
+
+theorem finishP_ne_nil {curV lowval : Nat} {isType1 : Bool} (hok : FinishPOk D curV lowval isType1 s)
+    (hne : s.tstack ≠ []) : (after (Spqr.finishP curV lowval isType1) s).tstack ≠ [] := by
+  show ((Spqr.finishP curV lowval isType1).run s).2.tstack ≠ []
+  simp only [Spqr.finishP, WalkM.run_bind, run_condP]
+  by_cases hc : result (condP curV lowval isType1) s = true
+  · have hc' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == curV) &&
+        (s.tstack.tail.head!.topDepth == lowval)) = true := hc
+    simp only [hc', ↓reduceIte, WalkM.run_bind]
+    obtain ⟨hu, hcl⟩ := hok.ok hc
+    obtain ⟨t, rest, hts⟩ := List.exists_cons_of_ne_nil hcl.finish.nonempty
+    show ((finishTstackTop _).run (after mergeTstackTops (after (maybeUnwrapNxt .P) s))).2.tstack ≠ []
+    rw [finishTstackTop_run_eq _ _ t rest hts]
+    simp
+  · have hc' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == curV) &&
+        (s.tstack.tail.head!.topDepth == lowval)) = false := Bool.eq_false_iff.2 hc
+    simp only [hc', Bool.false_eq_true, ↓reduceIte]
+    exact hne
+
+/-- `Spqr.finishRest` ends with `vertItem curV` spanned whenever it reports `hasVert`. -/
+theorem VSpan.finishRest (hi : s.Inv' D) (hs : Shape s) {curV d lowval : Nat} (hv : curV < s.g.nv)
+    {isType1 hasVert isSingle : Bool}
+    (hok : FinishRestOk D curV d lowval isType1 hasVert isSingle s)
+    (h : hasVert = true → VSpan curV s) (hne : hasVert = false → s.tstack ≠ []) :
+    wp (Spqr.finishRest curV d lowval isType1 hasVert isSingle)
+      (fun hv' s' => hv' = true → VSpan curV s') s := by
+  have st₁ : Step D curV s (after (Spqr.finishP curV lowval isType1) s) := Step.finishP hi hs hv hok.p
+  show ((finishTail curV d hasVert isSingle).run (after (Spqr.finishP curV lowval isType1) s)).1 = true →
+    VSpan curV ((finishTail curV d hasVert isSingle).run (after (Spqr.finishP curV lowval isType1) s)).2
+  cases hasVert
+  · intro _
+    have hne₁ := finishP_ne_nil hok.p (hne rfl)
+    have hp := VSpan.pushVert curV d (after (Spqr.finishP curV lowval isType1) s)
+    cases isSingle
+    · show VSpan curV (after mergeTstackTops (after (pushVertTstack curV d) _))
+      obtain ⟨t, rest, hts⟩ := List.exists_cons_of_ne_nil hne₁
+      have hts' : (after (pushVertTstack curV d) (after (Spqr.finishP curV lowval isType1) s)).tstack =
+          ⟨curV, d, (after (Spqr.finishP curV lowval isType1) s).nxtEdgeIdx,
+            setSides (after (Spqr.finishP curV lowval isType1) s).stackDir[d]! [vertItem curV] []⟩ ::
+            t :: rest := by
+        show (_ :: (after (Spqr.finishP curV lowval isType1) s).tstack) = _; rw [hts]
+      exact hp.mergeTop hts'
+    · exact hp
+  · intro _
+    exact (h rfl).finishP hi hs hv hok.p
+
+theorem VSpan.closeVert' {v : Nat} (h : VSpan v s) (hi : s.Inv' D) (hs : Shape s) (hv : v < s.g.nv)
+    {curV : Nat} {dir isType1 : Bool} {orig : Nat} {isSingle : Bool}
+    (hok : CloseVertOk D curV dir isType1 orig isSingle s) :
+    VSpan v (after (closeVert' curV dir isType1 orig isSingle) s) := by
+  have st₁ : Step D v s (cvS₁ isType1 orig isSingle s) := Step.vertPre hi hs hv hok.loop3
+  have hv₁ : v < (cvS₁ isType1 orig isSingle s).g.nv := by rw [st₁.g]; exact hv
+  obtain ⟨st₂, hfree⟩ := Step.vertUnwrap (v := v) st₁.inv st₁.shape (isType1 := isType1)
+    (isSingle := cvB₁ isType1 orig isSingle s) (fun h => by subst h; exact hok.unwrap rfl)
+  have st₂ : Step D v (cvS₁ isType1 orig isSingle s) (cvS₂ isType1 orig isSingle s) := st₂
+  have st₃ : Step D v _ (cvS₃ isType1 orig isSingle s) := Step.mergeTop st₂.inv st₂.shape hok.merge₁
+  have st₄ : Step D v _ (cvS₄ isType1 orig isSingle s) := Step.mergeTop st₃.inv st₃.shape hok.merge₂
+  have hne₄ : (cvS₄ isType1 orig isSingle s).tstack ≠ [] := hok.retarget.nonempty
+  have hne₃ : (cvS₃ isType1 orig isSingle s).tstack ≠ [] := by
+    intro h0; apply hne₄
+    show (after mergeTstackTops _).tstack = []
+    rw [after_mergeTstackTops, h0]; rfl
+  have hne₂ : (cvS₂ isType1 orig isSingle s).tstack ≠ [] := by
+    intro h0; apply hne₃
+    show (after mergeTstackTops _).tstack = []
+    rw [after_mergeTstackTops, h0]; rfl
+  show VSpan v (after (vertFinish (result (vertUnwrap isType1 (cvB₁ isType1 orig isSingle s))
+    (cvS₁ isType1 orig isSingle s)) (cvB₁ isType1 orig isSingle s)) (cvS₅ curV dir isType1 orig isSingle s))
+  cases isType1
+  · have hS₂ : cvS₂ false orig isSingle s = cvS₁ false orig isSingle s := rfl
+    have hS₁ : cvS₁ false orig isSingle s =
+        after (WalkM.loop s.tstack.length (loop3Cond orig) mergeTstackTops) s := rfl
+    have h₁ : VSpan v (cvS₁ false orig isSingle s) := by
+      rw [hS₁]
+      exact h.mergeLoop _ _ (fun _ => rfl) (by rw [← hS₁, ← hS₂]; exact hne₂)
+    have h₂ : VSpan v (cvS₂ false orig isSingle s) := by rw [hS₂]; exact h₁
+    exact (((h₂.mergeTop' hne₃).mergeTop' hne₄).retarget curV dir)
+  · have hS₂ : cvS₂ true orig isSingle s =
+        after (maybeUnwrapNxt (if isSingle then .S else .R)) (cvS₁ true orig isSingle s) := by
+      simp only [cvS₂, after, WalkState.vertUnwrap, ↓reduceIte, WalkM.map_run]; rfl
+    have hu : UnwrapOk (if isSingle then .S else .R) (cvS₁ true orig isSingle s) := hok.unwrap rfl
+    obtain ⟨a, b, rest, hts₁⟩ := two_entries_of_le hu.two
+    have h₂ : VSpan v (cvS₂ true orig isSingle s) := by
+      rw [hS₂]
+      exact (show VSpan v (cvS₁ true orig isSingle s) from h).maybeUnwrap st₁.shape hv₁
+        (by cases isSingle <;> decide) hu hts₁
+    have h₅ := ((h₂.mergeTop' hne₃).mergeTop' hne₄).retarget curV dir
+    have hf : ItemFree (cvS₂ true orig isSingle s) ((maybeUnwrapNxt (if isSingle then .S else .R)).run
+        (cvS₁ true orig isSingle s)).1 := hfree _ rfl
+    have hf₅ := ((hf.merge).merge).retarget curV dir
+    have hfin := hok.finish rfl
+    obtain ⟨t, rest, hts₅⟩ := List.exists_cons_of_ne_nil hfin.nonempty
+    have hside := hfin.side
+    rw [curE, hts₅, List.head!_cons] at hside
+    exact h₅.finishTop hf₅ hts₅ hside
+
 /-- Once the vertex entry of `curV` is on the stack (`hasVert`), `finishEdge` keeps every edge under
 `vertItem curV` on the stack (`EarFinish.vert` at the pre-state: `vertItem curV` is spanned by a `base`
 entry; the merges and closes keep it spanned or put it under the pushed node). (Checker: `own_vcover`
@@ -507,7 +913,79 @@ at `post`/`end`.) -/
 theorem finishEdge_vertCover {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
     (h : OwnSite σ n D curV d o origTstack hasVert s) :
     wp (finishEdge curV d o origTstack hasVert) (fun hv' s' => hv' = true → VertCover curV s') s := by
-  sorry
+  obtain ⟨sub, base, hlen, hE⟩ := h.book.ear
+  have hi := h.rgs.1.inv
+  have hs := h.rgs.2.1
+  have hv := h.book.v_lt
+  by_cases hge : d ≤ o.cls.lowval d
+  · have hnv := hE.bd_noVert hge
+    subst hnv
+    have hge' : o.cls.lowval d ≥ d := hge
+    rw [finishEdge_eq]
+    simp only [finishEdge', wp_bind, wp_get, wp_stackDir, hge', ↓reduceIte]
+    unfold finishBoundary
+    simp only [wp_bind, wp_modifyItem, wp_modify, wp_ite, wp_allocItem, wp_makeVs, wp_popTstack, wp_pure]
+    simp
+  have hlow : o.cls.lowval d < d := Nat.lt_of_not_le hge
+  obtain ⟨lv, kind, ho, hl⟩ := ret_of_lowval_lt hlow
+  have hok := finishOk_of_guards ho hl h.guards hE hlen hi hs h.hD hv h.book.e_lt h.book.q
+    (h.book.ends lv kind ho) h.book.vert
+  have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
+  have hge' : ¬ (lv ≥ d) := by omega
+  have hj : edgeItem s.g o.e < 1 + s.g.nv + s.g.ne := by
+    show 1 + s.g.nv + o.e < _; have := hok.e_lt; omega
+  have st₀ : Step D curV s (feS₀ d o s) := Step.modifyVs hi hs (edgeItem s.g o.e) _ hj
+  have hv₀ : curV < (feS₀ d o s).g.nv := by rw [st₀.g]; exact hv
+  have hpre : hasVert = true → VSpan curV (feS₀ d o s) := fun hhv => by
+    obtain ⟨t, ht, -, hmem⟩ := hE.vert hhv
+    exact VSpan.modifyVs ⟨t, by rw [hE.tstack]; exact List.mem_append_right _ ht, vertItem curV, hmem,
+      Relation.ReflTransGen.refl⟩ _ _
+  show ((finishEdge curV d o origTstack hasVert).run s).1 = true →
+    VertCover curV ((finishEdge curV d o origTstack hasVert).run s).2
+  rw [finishEdge_eq]
+  simp only [finishEdge', finishTree, finishBack, hlv, hge', ↓reduceIte, WalkM.run_bind, WalkM.get_run,
+    run_stackDir, run_makeVs, run_modifyItem]
+  by_cases ht : o.cls.isTree = true
+  · simp only [ht, ↓reduceIte, closeVert_eq, WalkM.run_bind]
+    have st₁ : Step D curV _ (feS₁ d o s) := Step.closeEars st₀.inv st₀.shape hv₀ (hok.ears ht)
+    have hv₁ : curV < (feS₁ d o s).g.nv := by rw [st₁.g]; exact hv₀
+    have st₂ : Step D curV _ (feS₂ d o s) := Step.mergeLate st₁.inv st₁.shape hv₁ (hok.late ht)
+    have hv₂ : curV < (feS₂ d o s).g.nv := by rw [st₂.g]; exact hv₁
+    have hne₂ : (feS₂ d o s).tstack ≠ [] := by
+      obtain ⟨c, mid, py, vy, hts, -⟩ := hE.loops ht hlow
+      rw [hts]; simp
+    have h₂ : hasVert = true → VSpan curV (feS₂ d o s) := fun hhv =>
+      ((hpre hhv).closeEars st₀.inv st₀.shape hv₀ (hok.ears ht)).mergeLate d hne₂
+    cases hasVert
+    · simp only [Bool.false_eq_true, ↓reduceIte]
+      have := VSpan.finishRest st₂.inv st₂.shape hv₂ (hok.rest_tree ht rfl) h₂ (fun _ => hne₂)
+      exact fun hv' => (this hv').vertCover
+    · simp only [↓reduceIte, WalkM.run_bind]
+      have hcv := hok.vert ht rfl
+      have h₃ : VSpan curV (feS₃ curV d o origTstack s) :=
+        (h₂ rfl).closeVert' st₂.inv st₂.shape hv₂ hcv
+      have st₃ : Step D curV _ (feS₃ curV d o origTstack s) := Step.closeVert' st₂.inv st₂.shape hv₂ hcv
+      have hv₃ : curV < (feS₃ curV d o origTstack s).g.nv := by rw [st₃.g]; exact hv₂
+      have := VSpan.finishRest st₃.inv st₃.shape hv₃ (hok.rest_vert ht rfl) (fun _ => h₃)
+        (fun h => Bool.noConfusion h)
+      exact fun hv' => (this hv').vertCover
+  · have ht' : o.cls.isTree = false := Bool.eq_false_iff.2 ht
+    simp only [ht', Bool.false_eq_true, ↓reduceIte, WalkM.run_bind]
+    have hq : Items.ch (feS₀ d o s).items (edgeItem (feS₀ d o s).g o.e) = [] := by
+      show Items.ch (s.items.modify _ _) (edgeItem s.g o.e) = []
+      rw [Items.ch_modify_ch_eq (edgeItem s.g o.e)
+        (fun it => { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) }) (fun _ => rfl)]
+      exact hok.q ht'
+    have st₁ : Step D curV _ (after (pushEdgeTstack curV lv o.e) (feS₀ d o s)) :=
+      Step.pushEdge st₀.inv st₀.shape curV lv o.e hok.e_lt hq (hok.ends ht') (hok.lv_le ht')
+    have st₂ : Step D curV _ (feBack curV lv d o s) := Step.frame st₁.inv st₁.shape rfl rfl rfl rfl
+    have hv₂ : curV < (feBack curV lv d o s).g.nv := by rw [st₂.g, st₁.g]; exact hv₀
+    have hB : hasVert = true → VSpan curV (feBack curV lv d o s) := fun hhv =>
+      ((hpre hhv).pushEdge curV lv o.e).frame' rfl rfl
+    have hneB : (feBack curV lv d o s).tstack ≠ [] := by
+      show (_ :: _) ≠ []; simp
+    have := VSpan.finishRest st₂.inv st₂.shape hv₂ (hok.rest_back ht') hB (fun _ => hneB)
+    exact fun hv' => (this hv').vertCover
 
 end WalkState
 end Spqr
