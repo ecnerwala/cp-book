@@ -126,6 +126,8 @@ structure CtxTop (v d : Nat) (done : List (DfsOut × Bool)) (hasVert : Bool) (s 
   edges : ∀ t ∈ top, ∀ e, e < s.g.ne → t.edges s.g s.items e → ∃ o ∈ done, subEdges o.1 e
   cover : ∀ o ∈ done, o.1.cls.lowval d < d → ∀ e, e < s.g.ne → subEdges o.1 e →
     ∃ t ∈ top, t.edges s.g s.items e
+  /-- Only returning outs leave entries (boundary outs pop everything they pushed). -/
+  ret : top ≠ [] → ∃ o ∈ done, o.1.cls.lowval d < d
 
 /-- The between-edges invariant of `walkOuts v d` (see the module docstring). -/
 structure EarCtx (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut) (hasVert : Bool)

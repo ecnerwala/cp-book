@@ -459,6 +459,7 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
     if isV t && !(hv && vt.any (sameT t)) then out := bad "vert_free" (showT t) :: out
   for t in below do
     if t.vStart == v then out := bad "open_bot" (showT t) :: out
+  if top ≠ [] && !endPush && !done.any (fun o => o.1.cls.lowval d < d) then out := bad "top_ret" "" :: out
   for t in base do
     if t.vStart == v then out := bad "base_bot" (showT t) :: out
   -- (ii') the entry holding `V v`: if still started at `v` it is the untouched vertex entry
@@ -598,6 +599,13 @@ def keptCheck (seed v d : Nat) (o : DfsOut) (hv : Bool) (s₂ s : WalkState) : L
     if hasParent s (edgeItem s.g e) then out := bad "q_root" "" :: out
     if hasParent s (vertItem v) then out := bad "v_root" "" :: out
     if edgesBelow s (vertItem v) ≠ edgesBelow s₂ (vertItem v) then out := bad "v_below" "" :: out
+    let childItem (j : Nat) : Bool :=
+      child.verts.any (fun w => vertItem w == j) || child.edges.any (fun e' => edgeItem s.g e' == j)
+    let parents (s : WalkState) (j : Nat) : List Nat := (List.range s.items.size).filter (isParent s · j)
+    for j in List.range s₂.items.size do
+      if !childItem j then
+        if s.items[j]!.ch ≠ s₂.items[j]!.ch then out := bad "items_ch" s!"j={j}" :: out
+        if parents s j ≠ parents s₂ j then out := bad "items_par" s!"j={j}" :: out
     return out
 
 mutual

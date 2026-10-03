@@ -368,6 +368,18 @@ structure TreeSite (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOu
   hL' : L' = if push' then [⟨y, d + 1, sE.nxtEdgeIdx, setSides dir' [vertItem y] []⟩] else []
   sd₃ : ∀ k, k ≤ d → D₃[k]! = sE.stackDir[k]!
   hdir' : push' = true → dir' = true
+  size_le : s.items.size ≤ sE.items.size
+  verts_lt : ∀ x ∈ (DfsTree.node y outs).verts, x < s.g.nv
+  e_ends : Items.PairEq (y, v) s.g.edges[e]!
+  rest_nd : ∀ o' ∈ rest, ∀ e', subEdges o' e' →
+    ¬ subEdges (.tree e cls (.node y outs)) e' ∧ e' < s.g.ne
+  rest_nv : ∀ o' ∈ rest, ∀ e₁ cls₁ c, o' = .tree e₁ cls₁ c →
+    ∀ w ∈ c.verts, w ∉ (DfsTree.node y outs).verts ∧ w < s.g.nv
+  /-- The child's walk touches only its own items and the ones it allocates. -/
+  items_kept : ∀ j, j < s.items.size → (∀ x ∈ (DfsTree.node y outs).verts, j ≠ vertItem x) →
+    (∀ e' ∈ (DfsTree.node y outs).edges, j ≠ edgeItem s.g e') →
+    Items.ch sE.items j = Items.ch s.items j ∧
+    ∀ p, Items.IsParent sE.items p j ↔ Items.IsParent s.items p j
   bridge_bd : cls = .bridge → ∀ o' ∈ done', d + 1 ≤ o'.1.cls.lowval (d + 1)
   comp_ret : cls = .component → ∀ o' ∈ done', o'.1.cls.lowval (d + 1) < d + 1 →
     o'.1.cls.lowval (d + 1) = d
