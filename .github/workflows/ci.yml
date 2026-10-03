@@ -447,9 +447,9 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Set up competitive-verifier
+      - name: Set up competitive-verifier and gcovr
         run: |
-          uv sync --locked
+          uv sync --locked --group coverage
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       # Rolling cache: the previous run's staged counters plus the result.json
@@ -532,9 +532,6 @@ jobs:
             .cv-coverage-result
           key: ${{ needs.setup-verify.outputs.coverage-counters-key }}-${{ github.ref }}-${{ github.run_id }}
 
-      - name: Install gcovr
-        run: pipx install gcovr
-
       - name: Generate coverage tracefile
         run: |
           gcovr --root . --filter 'src/' --exclude '.*\.test\.(cpp|hpp)' \
@@ -588,8 +585,14 @@ jobs:
           done
           wait
 
-      - name: Install gcovr
-        run: pipx install gcovr
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up gcovr
+        run: |
+          uv sync --locked --only-group coverage
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Generate coverage tracefile
         run: |
@@ -608,12 +611,85 @@ jobs:
           path: ${{ runner.temp }}/coverage-unit-tests.json
           retention-days: 1
 
-  docs:
+  coverage:
     runs-on: ubuntu-26.04
-    needs: [verify-merge, coverage-verify-merge, coverage-unit-tests]
+    needs: [coverage-verify-merge, coverage-unit-tests]
     permissions:
       contents: read
       pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download coverage tracefiles
+        uses: actions/download-artifact@v7
+        with:
+          pattern: CoverageTrace-*
+          path: .traces
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up coverage tools
+        run: |
+          uv sync --locked --only-group coverage
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Merge coverage reports
+        run: |
+          mkdir -p coverage
+          gcovr --root . \
+            --add-tracefile '.traces/CoverageTrace-*/coverage-*.json' \
+            --json coverage/coverage.json
+
+      # Uninstantiated templates emit no gcov data even in the stubs; add them
+      # as uncovered so they count against coverage.
+      - name: Add uncovered code to coverage.json
+        run: python3 scripts/coverage_fill_missing.py coverage/coverage.json
+
+      - name: Generate coverage reports
+        run: |
+          gcovr --root . \
+            --add-tracefile coverage/coverage.json \
+            --html-details coverage/index.html \
+            --cobertura coverage/coverage.xml \
+            --markdown-summary coverage/summary.md \
+            --json-summary coverage/summary.json \
+            --print-summary
+          cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write coverage badge
+        run: |
+          python3 - <<'EOF'
+          import json
+          s = json.load(open("coverage/summary.json"))
+          pct = s["line_percent"]
+          color = "brightgreen" if pct >= 90 else "green" if pct >= 75 else "yellow" if pct >= 50 else "red"
+          json.dump({
+              "schemaVersion": 1,
+              "label": "coverage",
+              "message": f"{pct:.1f}%",
+              "color": color,
+          }, open("coverage/badge.json", "w"))
+          EOF
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: Coverage-${{ runner.os }}
+          path: coverage/
+          retention-days: 7
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: coverage
+          path: coverage/summary.md
+
+  docs:
+    runs-on: ubuntu-26.04
+    needs: [verify-merge, coverage]
     outputs:
       upload-pages: ${{ steps.upload-pages.outcome == 'success' }}
     steps:
@@ -641,40 +717,17 @@ jobs:
         env:
           SRCDIR: .artifacts/Bundled-${{ runner.os }}
 
+      - name: Extract coverage report
+        run: mv .artifacts/Coverage-${{ runner.os }} coverage
+
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
       - name: Set up competitive-verifier
         run: |
-          uv sync --locked --group docs
+          uv sync --locked
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
-
-      - name: Install gcovr
-        run: pipx install gcovr
-
-      - name: Merge coverage reports
-        run: |
-          mkdir -p coverage
-          gcovr --root . \
-            --add-tracefile '${{ steps.all-artifacts.outputs.artifacts-root }}/CoverageTrace-*/coverage-*.json' \
-            --json coverage/coverage.json
-
-      # Uninstantiated templates emit no gcov data even in the stubs; add them
-      # as uncovered so they count against coverage.
-      - name: Add uncovered code to coverage.json
-        run: python3 scripts/coverage_fill_missing.py coverage/coverage.json
-
-      - name: Generate coverage reports
-        run: |
-          gcovr --root . \
-            --add-tracefile coverage/coverage.json \
-            --html-details coverage/index.html \
-            --cobertura coverage/coverage.xml \
-            --markdown-summary coverage/summary.md \
-            --json-summary coverage/summary.json \
-            --print-summary
-          cat coverage/summary.md >> "$GITHUB_STEP_SUMMARY"
 
       # Run the docs CLI directly (rather than competitive-verifier/actions/docs)
       # to pass --coverage-json.
@@ -693,21 +746,6 @@ jobs:
       - name: Link coverage pages
         run: python3 scripts/coverage_page_links.py --coverage-dir coverage --jekyll-dir _jekyll
 
-      - name: Write coverage badge
-        run: |
-          python3 - <<'EOF'
-          import json
-          s = json.load(open("coverage/summary.json"))
-          pct = s["line_percent"]
-          color = "brightgreen" if pct >= 90 else "green" if pct >= 75 else "yellow" if pct >= 50 else "red"
-          json.dump({
-              "schemaVersion": 1,
-              "label": "coverage",
-              "message": f"{pct:.1f}%",
-              "color": color,
-          }, open("coverage/badge.json", "w"))
-          EOF
-
       - name: Setup Pages
         uses: actions/configure-pages@v6
       - name: Build with Jekyll
@@ -718,20 +756,6 @@ jobs:
 
       - name: Add coverage report to site
         run: sudo cp -r coverage _site/coverage
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v7
-        with:
-          name: Coverage-${{ runner.os }}
-          path: coverage/
-          retention-days: 7
-
-      - name: Comment coverage on PR
-        if: github.event_name == 'pull_request'
-        uses: marocchino/sticky-pull-request-comment@v3
-        with:
-          header: coverage
-          path: coverage/summary.md
 
       - name: Upload artifact
         id: upload-pages

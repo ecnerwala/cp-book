@@ -5,8 +5,8 @@ requires-python = ">=3.12"
 dependencies = ["competitive-verifier"]
 
 [dependency-groups]
-# scripts/coverage_fill_missing.py (docs CI)
-docs = ["tree-sitter", "tree-sitter-cpp"]
+# coverage CI: gcovr + tree-sitter for scripts/coverage_fill_missing.py
+coverage = ["gcovr", "tree-sitter", "tree-sitter-cpp"]
 
 [tool.uv]
 package = false
