@@ -108,3 +108,4 @@ import Spqr.Proofs.Orbits
 import Spqr.Proofs.PlanarGlue
 import Spqr.RangesStep
 import Spqr.RangesTree
+import Spqr.RangesFinal

@@ -1045,8 +1045,29 @@ between the pieces of `(1,1,1,[Q8])` and `(6,1,2,[Q15])`/`(6,6,2,[vert 6])`. Hol
 non-adjacent pieces are therefore edges below the *unpushed* vertex items of the DFS path, and the
 fact that the code never merges across such a hole (the vertex entry is pushed and merged first)
 is `hasVert` bookkeeping, i.e. schedule-specific. Consequently `finishEdge_rangesInv` takes `hadj`
-per merge site as a hypothesis bundle (`RangesOk`, mirroring `FinishOk`'s `MergeTopOk` sites)
-instead of deriving it from `ordered` + stack adjacency.
+per merge site as a hypothesis bundle (`FinishAdj`, `RangesStep.lean`, mirroring `FinishOk`'s
+`MergeTopOk` sites) instead of deriving it from `ordered` + stack adjacency.
+
+*Induction (`RangesStep.lean`, `RangesTree.lean`, `RangesFinal.lean`).* `finishEdge_rangesInv`
+(standard axioms): `RangesInv σ n D` is preserved across the returning-edge branches of `finishEdge`
+under `FinishOk` + `FinishAdj` (`RgStep.loop`/`loop1Body`/`closeEars`/`mergeLate`/`closeVert'`/
+`finishP`/`finishTail`/`finishRest`, each `Step`-shaped lemma paired with the range invariant).
+`walkTree_rangesInv` (`rgTree`/`rgOuts`/`rgOut`, mutual like `invTree`/`GuardsTree`): under
+`GuardsTree`/`BookTree` and the range-side hypotheses `RgTree` (`σ[n]? = some o.e` at every edge,
+`FinishR` = `FinishAdj` at returning edges / `BoundaryAdj` at block boundaries) the state after
+`walkTree t d` satisfies `RangesInv σ (n + t.edgePostorder.length) d`. The block-boundary case
+`finishBoundary_rangesInv` is a named admission. `ranges_of_rangesInv` (standard axioms):
+`RangesInv σ n D s → WalkTyping s.g s.items → Items.CloseFacts s.g s.items → Items.Ranges s.g s.items σ`.
+Exactly two `Ranges` clauses come from the invariant: `convex` (= `closed`) and `att_vs` for the
+*allocated node items* (`Inv'.nodes`: `TwoAttached` at their `vs`; `I`/`O` leaves own no edge).
+`Items.CloseFacts` is the remainder, which `RangesInv` does not carry because it is about an item
+at its close (its `vs` just written from the entries' terminals, its children's shape): `att_vs`
+for the Q items (not in `Inv'.nodes`), `vs_att`, `vs_ne`, `interior`, `child_two`, `io_parent`,
+`q_leaf`, `q_root`, `q_under_v`, `p_shape`, `s_order`, `r_shape`. The walk-side admissions are now
+`walk_rangesInv` (the `walkForest` instantiation of `walkTree_rangesInv`: needs the ear guards and
+`RgTree` discharged at every `finishEdge`) and `walk_closeFacts`; `walk_ranges` (`WalkItemsWF.lean`,
+under `0 < g.nv` + bounded/covering forest) is `ranges_of_rangesInv walk_rangesInv walk_typing
+walk_closeFacts` with `walk_g : (g.walk tern forest).g = g` from `walkForest_typing`.
 
 ## 5. Phase 3: relabel
 
@@ -1282,6 +1303,8 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |
 | 4.5 Child-return settling diagnostic and provisional contract | `Proofs/RInvFrame.lean`, `checks/RInvReturnCheck.lean` | `RReturn`/`WalkTreeRReturnSpec` stated without an admission; legacy conclusion still refuted; fixed base/settled-entry clauses kernel-checked (standard axioms); seeds 0..300 × both modes pass shape/disjointness, with content frames checked on the 65 block inputs; preservation proof remains open |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean`, `EarFrontier.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export proved: `finishEdge_frontier` (from `FinishBook.ear` + `Inv'`/`Shape`), `walkTree_frontiers` (`FrontiersTree` under the `walkTree_inv'` hypotheses), standard axioms; R interval/saturation preservation remains open |
+| 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
+| 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge_rangesInv` (`RangesStep.lean`, under `FinishAdj`) and `walkTree_rangesInv` (`RangesTree.lean`, under `GuardsTree`/`BookTree`/`RgTree`) proved; `finishBoundary_rangesInv`, `walk_rangesInv`, `walk_closeFacts` (`WalkWF.lean`) admitted; `ranges_of_rangesInv` (`RangesFinal.lean`) derives `convex` + node `att_vs` from `RangesInv`, the rest is `Items.CloseFacts`; saturation not a field (attachment-count forms false, §4.6) |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
@@ -1289,7 +1312,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | 5 relabel, CSR bounds: `relabelTree_adj : Items.WF → Items.ROriented → (∀ n, adjBounds[2 nvSt n] = 2 neSt n) ∧ adjBounds[2 |nodeVerts|] = |adjDat|` (the statement of `relabel_adj_spec`); `layout_local` (`Layout.Local` for every item's `nodeLayout`) | `RelabelAdj.lean` | proved; `relabel_adj_spec` itself stays admitted in `RelabelSpec.lean` only because that file cannot import its proof |
 | 5 relabel, `WF` assembly: `RelabelAll.wf_tree`, `preorder` (`child_idx`/`subtree_end` chain, `subtree_props`, `parent_eq_iff`), `only_root_F`, `shape` (`skeleton_eq` + `LayoutShape.shape_*`), `adj_bounds_mono`, `adj_dest`, `adj_incident'` (`global_bound`/`global_row`: global CSR rows = `Layout.Local` rows; `foreign_ne`, `row_filter`) | `RelabelWF.lean` | proved (standard axioms) |
 | 2/7 `Items.ROriented` of the walk output: `rOriented_of_stNumbered`, `walk_items_rOriented'` | `StOriented.lean` | proved from `walk_st` (+ `walk_items_wf`), under `g.WF`/`OrderOK` like `walk_st`; used by `spqrTree_wf'` (`Correctness.lean`); the hypothesis-free `spqrTree_wf` the planar layer uses is a named admission (§7.6) |
-| 2 walk→relabel interface `walk_items_wf : g.WF → OrderOK g.nv vo → OrderOK g.ne eo → Items.WF g (g.walk tern (g.dfsForest vo eo)).items` (`WalkItemsWF.lean`, above `WalkCover`/`WalkTyping`), and `spqrTree_eq` (`WalkWF.lean`, below the st layer) | `walk_items_wf = wf_of_ranges walk_tree.toTree walk_typing.toTypingFacts walk_ranges` (empty graph: `wf_initialItems`); admitted: `walk_ranges` (§4.6), `walk_canonical` (`tern = false`, used by `spqrTree_canonical`); `spqrTree_eq` proved |
+| 2 walk→relabel interface `walk_items_wf : g.WF → OrderOK g.nv vo → OrderOK g.ne eo → Items.WF g (g.walk tern (g.dfsForest vo eo)).items` (`WalkItemsWF.lean`, above `WalkCover`/`WalkTyping`), and `spqrTree_eq` (`WalkWF.lean`, below the st layer) | `walk_items_wf = wf_of_ranges walk_tree.toTree walk_typing.toTypingFacts walk_ranges` (empty graph: `wf_initialItems`); admitted: `walk_rangesInv`/`walk_closeFacts` (§4.6; `walk_ranges` is derived), `walk_canonical` (`tern = false`, used by `spqrTree_canonical`); `spqrTree_eq` proved |
 | §4.6 final-state ranges `Items.Ranges g items σ` (piece-edge convexity in the DFS edge postorder + attachment facts), `wf_of_ranges : Tree → TypingFacts → Ranges → canonical → Items.WF` (`endpoints_of_ranges`, `shapes_of_ranges`); checker `check_ranges` (`CheckRanges.lean`) | `Ranges.lean`, `RangesWF.lean` | def / proved (standard axioms); every field 0 violations on seeds 0..400 + tiny graphs; corrected `s_shape` (`1 ≤`), `r_shape` (`5 ≤`), `q_children` (Q leaf child allowed) in `ItemSpec.lean` with counterexamples |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
 | 5 relabel per-node interface `RelabelNode`/`RelabelLayout`/`RelabelIdx`, `Items.nvList`/`ordered`/`edgeChildren`/`PosOK`/`hasCap`/`nEdges`/`ROriented` | `RelabelSpec.lean` | def; `relabel_node_spec` proved in `RelabelMain.lean` (`Ghost.relabel_node_spec_proved`) |

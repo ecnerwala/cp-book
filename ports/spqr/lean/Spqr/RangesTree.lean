@@ -6,7 +6,7 @@ import Spqr.WalkInv
 
 Mirrors `walkTree_inv'` (`WalkInv.lean`): the same mutual induction over `walkTree`/`walkOuts`/
 `walkOut`, with the ear guards (`GuardsTree`), the bookkeeping (`BookTree`) and, new here, the
-range-side hypotheses `RTree σ n t d s`: at every `finishEdge` the `FinishAdj`/`BoundaryAdj`
+range-side hypotheses `RgTree σ n t d s`: at every `finishEdge` the `FinishAdj`/`BoundaryAdj`
 bundle (edge position in `σ`, adjacency at each merge), and at every vertex push `PushVertR`. The
 edge counter `n` advances by one per `finishEdge`, i.e. by `o.block.length` per out-edge and by
 `t.edgePostorder.length` per subtree.
@@ -87,23 +87,23 @@ theorem finishEdge_ranges {v d : Nat} {o : DfsOut} {m : Nat} {hasVert : Bool} {D
 
 mutual
 /-- The range-side hypotheses of the walk, in the style of `GuardsTree`. -/
-def RTree (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
+def RgTree (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
   match t with
-  | .node v outs => ROuts σ n v d outs false { s with stackVerts := s.stackVerts.set! d v }
+  | .node v outs => RgOuts σ n v d outs false { s with stackVerts := s.stackVerts.set! d v }
 
-def ROuts (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
+def RgOuts (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
   match outs with
   | [] => hasVert = false → PushVertR σ n v s
-  | o :: rest => ROut σ n v d o hasVert s ∧
-      wp (walkOut v d o hasVert) (fun hasVert' s' => ROuts σ (n + o.block.length) v d rest hasVert' s') s
+  | o :: rest => RgOut σ n v d o hasVert s ∧
+      wp (walkOut v d o hasVert) (fun hasVert' s' => RgOuts σ (n + o.block.length) v d rest hasVert' s') s
 
-def ROut (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
+def RgOut (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
   (hasVert = false → PushVertR σ n v s) ∧
   wp (walkOutPre v d o hasVert) (fun hasVert' s₁ =>
     match o with
     | .tree _ _ child =>
       wp (modify fun s => { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }) (fun _ s₂ =>
-        RTree σ n child (d + 1) s₂ ∧
+        RgTree σ n child (d + 1) s₂ ∧
         wp (walkTree child (d + 1)) (fun _ s₃ =>
           FinishR σ (n + child.edgePostorder.length) v d o s₁.tstack.length hasVert' s₃) s₂) s₁
     | .back .. => FinishR σ n v d o s₁.tstack.length hasVert' s₁) s
@@ -126,65 +126,65 @@ theorem walkOutPre_ranges {v d : Nat} {o : DfsOut} {hasVert : Bool} (hi : s.Rang
   · rename_i hc
     have hf : hasVert = false := by cases hasVert <;> simp_all
     obtain ⟨hv, hc, ha⟩ := hb hf
-    have st := RStep.pushVert (v := v) hi' hs' d hv hc ha ⟨(hr hf).vtype, (hr hf).below⟩
+    have st := RgStep.pushVert (v := v) hi' hs' d hv hc ha ⟨(hr hf).vtype, (hr hf).below⟩
     exact ⟨st.ranges, st.step.shape, lt_ne_of_g st.step.g hσ⟩
   · exact ⟨hi', hs', hσ⟩
 
-abbrev RS (σ : List Nat) (n d : Nat) (s : WalkState) : Prop :=
+abbrev RgS (σ : List Nat) (n d : Nat) (s : WalkState) : Prop :=
   s.RangesInv σ n d ∧ Shape s ∧ ∀ e ∈ σ, e < s.g.ne
 
-abbrev RInvTree (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
+abbrev RgInvTree (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
   (∀ v outs, t = .node v outs → ({ s with stackVerts := s.stackVerts.set! d v } : WalkState).RangesInv σ n d) →
-  Shape s → σ.Nodup → (∀ e ∈ σ, e < s.g.ne) → GuardsTree t d s → BookTree t d s → RTree σ n t d s →
-  wp (walkTree t d) (fun _ s' => RS σ (n + t.edgePostorder.length) d s') s
+  Shape s → σ.Nodup → (∀ e ∈ σ, e < s.g.ne) → GuardsTree t d s → BookTree t d s → RgTree σ n t d s →
+  wp (walkTree t d) (fun _ s' => RgS σ (n + t.edgePostorder.length) d s') s
 
-abbrev RInvOuts (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
-  RS σ n d s → σ.Nodup → GuardsOuts v d outs hasVert s → BookOuts v d outs hasVert s →
-  ROuts σ n v d outs hasVert s →
+abbrev RgInvOuts (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
+  RgS σ n d s → σ.Nodup → GuardsOuts v d outs hasVert s → BookOuts v d outs hasVert s →
+  RgOuts σ n v d outs hasVert s →
   wp (walkOuts v d outs hasVert) (fun hasVert' s' =>
-    RS σ (n + (DfsOut.edgePostorderList outs).length) d s' ∧ VertBook v hasVert' s' ∧
+    RgS σ (n + (DfsOut.edgePostorderList outs).length) d s' ∧ VertBook v hasVert' s' ∧
       (hasVert' = false → PushVertR σ (n + (DfsOut.edgePostorderList outs).length) v s')) s
 
-abbrev RInvOut (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
-  RS σ n d s → σ.Nodup → GuardsOut v d o hasVert s → BookOut v d o hasVert s → ROut σ n v d o hasVert s →
-  wp (walkOut v d o hasVert) (fun _ s' => RS σ (n + o.block.length) d s') s
+abbrev RgInvOut (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
+  RgS σ n d s → σ.Nodup → GuardsOut v d o hasVert s → BookOut v d o hasVert s → RgOut σ n v d o hasVert s →
+  wp (walkOut v d o hasVert) (fun _ s' => RgS σ (n + o.block.length) d s') s
 
 mutual
-theorem rTree : ∀ (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState), RInvTree σ n t d s
+theorem rgTree : ∀ (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState), RgInvTree σ n t d s
   | σ, n, .node v outs, d, s => fun hi hs hnd hσ hg hb hr => by
     unfold walkTree
     simp only [wp_bind, wp_modify]
-    unfold GuardsTree at hg; unfold BookTree at hb; unfold RTree at hr
+    unfold GuardsTree at hg; unfold BookTree at hb; unfold RgTree at hr
     refine wp_imp (wp_of_forall fun hv s' ⟨⟨hi', hs', hσ'⟩, hvb, hpr⟩ => ?_)
-      (rOuts σ n v d outs false _ ⟨hi v outs rfl, hs.frame', hσ⟩ hnd hg hb hr)
+      (rgOuts σ n v d outs false _ ⟨hi v outs rfl, hs.frame', hσ⟩ hnd hg hb hr)
     cases hv
     · simp only [Bool.false_eq_true, ↓reduceIte, wp_bind, wp_setStackDir]
       obtain ⟨hv, hc, ha⟩ := hvb rfl
       have hi₂ : ({ s' with stackDir := s'.stackDir.set! d true } : WalkState).RangesInv σ _ d := hi'.frame'
       have hs₂ : Shape ({ s' with stackDir := s'.stackDir.set! d true } : WalkState) := hs'.frame'
-      have st := RStep.pushVert (v := v) hi₂ hs₂ d hv hc ha ⟨(hpr rfl).vtype, (hpr rfl).below⟩
+      have st := RgStep.pushVert (v := v) hi₂ hs₂ d hv hc ha ⟨(hpr rfl).vtype, (hpr rfl).below⟩
       exact ⟨st.ranges, st.step.shape, lt_ne_of_g st.step.g hσ'⟩
     · exact ⟨hi', hs', hσ'⟩
 
-theorem rOuts : ∀ (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState),
-    RInvOuts σ n v d outs hasVert s
+theorem rgOuts : ∀ (σ : List Nat) (n v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState),
+    RgInvOuts σ n v d outs hasVert s
   | σ, n, v, d, [], hasVert, s => fun ⟨hi, hs, hσ⟩ _ _ hb hr => by
-    unfold BookOuts at hb; unfold ROuts at hr
+    unfold BookOuts at hb; unfold RgOuts at hr
     unfold walkOuts
     simp only [wp_pure, DfsOut.edgePostorderList, List.length_nil, Nat.add_zero]
     exact ⟨⟨hi, hs, hσ⟩, hb, hr⟩
   | σ, n, v, d, o :: rest, hasVert, s => fun hrs hnd hg hb hr => by
-    unfold GuardsOuts at hg; unfold BookOuts at hb; unfold ROuts at hr
+    unfold GuardsOuts at hg; unfold BookOuts at hb; unfold RgOuts at hr
     unfold walkOuts
     simp only [wp_bind]
     rw [DfsOut.edgePostorderList_cons, List.length_append, ← Nat.add_assoc]
     exact wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv' s' hrs' hg' hb' hr' =>
-      rOuts σ (n + o.block.length) v d rest hv' s' hrs' hnd hg' hb' hr') (rOut σ n v d o hasVert s hrs hnd hg.1 hb.1 hr.1)) hg.2) hb.2) hr.2
+      rgOuts σ (n + o.block.length) v d rest hv' s' hrs' hnd hg' hb' hr') (rgOut σ n v d o hasVert s hrs hnd hg.1 hb.1 hr.1)) hg.2) hb.2) hr.2
 
-theorem rOut : ∀ (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), RInvOut σ n v d o hasVert s
+theorem rgOut : ∀ (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), RgInvOut σ n v d o hasVert s
   | σ, n, v, d, o, hasVert, s => fun ⟨hi, hs, hσ⟩ hnd hg hb hr => by
     rw [walkOut_eq, wp_bind]
-    unfold GuardsOut at hg; unfold BookOut at hb; unfold ROut at hr
+    unfold GuardsOut at hg; unfold BookOut at hb; unfold RgOut at hr
     refine wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv' s₁ ⟨hi₁, hs₁, hσ₁⟩ hg₁ hb₁ hr₁ => ?_)
       (walkOutPre_ranges hi hs hσ hb.1 hr.1)) hg) hb.2) hr.2
     unfold walkOutRest
@@ -201,7 +201,7 @@ theorem rOut : ∀ (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (
       simp only [wp_bind, wp_modify, DfsOut.block, List.length_append, List.length_singleton, ← Nat.add_assoc]
       refine wp_imp (wp_imp (wp_of_forall fun _ s₃ ⟨hg₃, hb₃, hr₃⟩ ⟨hi₃, hs₃, hσ₃⟩ => ?body)
         (wp_and hg₁.2 (wp_and hb₁.2 hr₁.2)))
-        (rTree σ n child (d + 1) _ ?pre hs₁.frame' hnd hσ₁ hg₁.1 hb₁.1 hr₁.1)
+        (rgTree σ n child (d + 1) _ ?pre hs₁.frame' hnd hσ₁ hg₁.1 hb₁.1 hr₁.1)
       case body =>
         obtain ⟨h₁, h₂, h₃⟩ := finishEdge_ranges (D := d + 1)
           (by rw [if_pos (hb₃.tree.2 ⟨_, _, _, rfl⟩)]) hi₃ hs₃ hnd hσ₃ hg₃ hb₃ hr₃
@@ -212,13 +212,13 @@ theorem rOut : ∀ (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) (
 end
 
 /-- `walkTree` preserves the range invariant and advances `n` by the number of edges below `t`,
-given the ear guards, the bookkeeping facts and the range-side hypotheses `RTree`. -/
+given the ear guards, the bookkeeping facts and the range-side hypotheses `RgTree`. -/
 theorem walkTree_rangesInv (t : DfsTree) (d : Nat) (s : WalkState)
     (hi : ∀ v outs, t = .node v outs → ({ s with stackVerts := s.stackVerts.set! d v } : WalkState).RangesInv σ n d)
     (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne) (hg : GuardsTree t d s) (hb : BookTree t d s)
-    (hr : RTree σ n t d s) :
+    (hr : RgTree σ n t d s) :
     ((walkTree t d).run s).2.RangesInv σ (n + t.edgePostorder.length) d ∧ Shape ((walkTree t d).run s).2 :=
-  let r := rTree σ n t d s hi hs hnd hσ hg hb hr
+  let r := rgTree σ n t d s hi hs hnd hσ hg hb hr
   ⟨r.1, r.2.1⟩
 
 end WalkState
