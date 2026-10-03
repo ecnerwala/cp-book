@@ -311,5 +311,145 @@ theorem rkOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), R
         exact this
 end
 
+/-! ## The boundary branch (`finishBoundary`): no R item is created or re-parented -/
+
+theorem Items.noParent_modify {items : Items} {j k : ItemId} (f : Item → Item)
+    (hk : ∀ p, ¬ Items.IsParent items p k)
+    (hnew : ∀ hj : j < items.size, k ∉ (f items[j]).ch) :
+    ∀ p, ¬ Items.IsParent (items.modify j f) p k :=
+  fun p hp => (Items.IsParent_modify hp).elim (hk p) fun ⟨_, hj, hmem⟩ => hnew hj hmem
+
+theorem Items.noParent_push_size {items : Items} (x : Item) (hx : x.ch = [])
+    (hc : ∀ p c, Items.IsParent items p c → c < items.size) :
+    ∀ p, ¬ Items.IsParent (items.push x) p items.size :=
+  fun p hp => Nat.lt_irrefl _ (hc p _ (Items.IsParent_push hx hp))
+
+theorem Items.chLt_modify {items : Items} (j : ItemId) (f : Item → Item) (hf : ∀ it, (f it).ch = it.ch)
+    (hc : ∀ p c, Items.IsParent items p c → c < items.size) :
+    ∀ p c, Items.IsParent (items.modify j f) p c → c < (items.modify j f).size := by
+  intro p c hp
+  rw [Array.size_modify]
+  unfold Items.IsParent at hp
+  rw [Items.ch_modify_ch_eq j f hf] at hp
+  exact hc p c hp
+
+theorem Items.type_modify_ch {items : Items} (j : ItemId) (L : Item → List ItemId) (p : ItemId) :
+    Items.type (items.modify j fun it => { it with ch := L it }) p = items.type p :=
+  Items.type_modify_type_eq j (fun it => { it with ch := L it }) (fun _ => rfl) p
+
+theorem Items.type_modify_vs {items : Items} (j : ItemId) (v : Option Nat × Option Nat) (p : ItemId) :
+    Items.type (items.modify j fun it => { it with vs := v }) p = items.type p :=
+  Items.type_modify_type_eq j (fun it => { it with vs := v }) (fun _ => rfl) p
+
+theorem keepsR_finishBoundary {D : Nat} (curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool)
+    (hge : d ≤ o.cls.lowval d) (hs : Shape s) (hv : curV < s.g.nv) (he : o.e < s.g.ne)
+    (hok : BoundaryOk D curV d o s) :
+    KeepsR (finishEdge curV d o origTstack hasVert) s := by
+  intro h0
+  have hge' : o.cls.lowval d ≥ d := hge
+  have hqt : Items.type s.items (edgeItem s.g o.e) = .Q := hs.edge _ he
+  have hvt : Items.type s.items (vertItem curV) = .V := hs.vert _ hv
+  have hqlt : edgeItem s.g o.e < s.items.size := by
+    have := hs.size; show 1 + s.g.nv + o.e < _; omega
+  have hvlt : vertItem curV < s.items.size := by
+    have := hs.size; show 1 + curV < _; omega
+  have hc0 := hs.ch_lt
+  show wp (finishEdge curV d o origTstack hasVert) (fun _ s' => Items.RSkelInv s.g s'.items) s
+  rw [finishEdge_eq]
+  simp only [finishEdge', wp_bind, wp_get, wp_stackDir, hge', ↓reduceIte]
+  unfold finishBoundary
+  simp only [wp_bind, wp_modifyItem, wp_modify, wp_ite, wp_allocItem, wp_makeVs, wp_popTstack,
+    wp_pure]
+  obtain ⟨I₁, hI₁⟩ : ∃ I₁ : Items,
+      I₁ = s.items.modify (edgeItem s.g o.e) fun it => { it with vs := (some curV, none) } :=
+    ⟨_, rfl⟩
+  rw [← hI₁]
+  have h1 : Items.RSkelInv s.g I₁ := by
+    rw [hI₁]; exact h0.modify_root_of_ne hok.q_root _ (fun _ => rfl) (by rw [hqt]; decide)
+  have hq1 : ∀ p, ¬ Items.IsParent I₁ p (edgeItem s.g o.e) := by
+    rw [hI₁]; exact fun p hp => hok.q_root p ((isParent_modifyVs_iff ..).1 hp)
+  have hv1 : ∀ p, ¬ Items.IsParent I₁ p (vertItem curV) := by
+    rw [hI₁]; exact fun p hp => hok.v_root p ((isParent_modifyVs_iff ..).1 hp)
+  have hc1 : ∀ p c, Items.IsParent I₁ p c → c < I₁.size := by
+    rw [hI₁]; exact Items.chLt_modify (edgeItem s.g o.e) _ (fun _ => rfl) hc0
+  have hsz1 : I₁.size = s.items.size := by rw [hI₁]; exact Array.size_modify ..
+  have hqt1 : Items.type I₁ (edgeItem s.g o.e) = .Q := by rw [hI₁, Items.type_modify_vs, hqt]
+  have hvt1 : Items.type I₁ (vertItem curV) = .V := by rw [hI₁, Items.type_modify_vs, hvt]
+  clear hI₁
+  have hqne : edgeItem s.g o.e ≠ I₁.size := Nat.ne_of_lt (by rw [hsz1]; exact hqlt)
+  have hvne : vertItem curV ≠ I₁.size := Nat.ne_of_lt (by rw [hsz1]; exact hvlt)
+  split
+  · rename_i hT
+    have hpops := hok.pops hT
+    split
+    · rename_i hL
+      simp only [hL, ↓reduceIte] at hpops
+      obtain ⟨t, rest, hts⟩ : ∃ t rest, s.tstack = t :: rest := by
+        match h : s.tstack, hpops with
+        | t :: rest, _ => exact ⟨t, rest, rfl⟩
+      have ht : t ∈ s.tstack := by rw [hts]; exact List.mem_cons_self ..
+      simp only [hts, List.head!_cons]
+      refine Items.RSkelInv.modify_root_of_ne ?h4 ?hv4 _ (fun _ => rfl) ?hvt4
+      case h4 =>
+        refine Items.RSkelInv.modify_root_of_ne ?h3 ?hq3 _ (fun _ => rfl) ?hqt3
+        case h3 =>
+          refine Items.RSkelInv.modify_root_of_ne ?h2 ?hn2 _ (fun _ => rfl) ?hnt2
+          case h2 => exact h1.push_nil (fun i _ c hc => hc1 i c hc) _ rfl (by decide)
+          case hn2 => exact Items.noParent_push_size _ rfl hc1
+          case hnt2 => rw [Items.type_push_size]; decide
+        case hq3 =>
+          intro p hp
+          exact hq1 p (Items.IsParent_push rfl ((isParent_modifyVs_iff ..).1 hp))
+        case hqt3 => rw [Items.type_modify_vs, Items.type_push_of_ne _ hqne, hqt1]; decide
+      case hv4 =>
+        refine Items.noParent_modify _ ?_ fun _ hmem => ?_
+        · intro p hp
+          exact hv1 p (Items.IsParent_push rfl ((isParent_modifyVs_iff ..).1 hp))
+        · simp only [List.mem_cons] at hmem
+          rcases hmem with h | h
+          · exact hvne h
+          · exact hok.v_free t ht (List.mem_append_right _ h)
+      case hvt4 =>
+        rw [Items.type_modify_ch, Items.type_modify_vs, Items.type_push_of_ne _ hvne, hvt1]; decide
+    · rename_i hL
+      simp only [hL] at hpops
+      obtain ⟨t₁, t₂, rest, hts⟩ : ∃ t₁ t₂ rest, s.tstack = t₁ :: t₂ :: rest := by
+        rcases hl : s.tstack with _ | ⟨t₁, _ | ⟨t₂, rest⟩⟩
+        · rw [hl] at hpops; simp at hpops
+        · rw [hl] at hpops; simp at hpops
+        · exact ⟨t₁, t₂, rest, rfl⟩
+      simp only [hts, List.head!_cons, List.tail_cons]
+      refine Items.RSkelInv.modify_root_of_ne ?h3 ?hv3 _ (fun _ => rfl) ?hvt3
+      case h3 => exact h1.modify_root_of_ne hq1 _ (fun _ => rfl) (by rw [hqt1]; decide)
+      case hv3 =>
+        refine Items.noParent_modify _ hv1 fun _ hmem => ?_
+        simp only [List.mem_append] at hmem
+        rcases hmem with h | h
+        · exact hok.v_free t₁ (by rw [hts]; exact List.mem_cons_self ..) (List.mem_append_left _ h)
+        · exact hok.v_free t₂ (by rw [hts]; exact List.mem_cons_of_mem _ (List.mem_cons_self ..))
+            (List.mem_append_right _ h)
+      case hvt3 => rw [Items.type_modify_ch, hvt1]; decide
+  · rename_i hT
+    refine Items.RSkelInv.modify_root_of_ne ?h4 ?hv4 _ (fun _ => rfl) ?hvt4
+    case h4 =>
+      refine Items.RSkelInv.modify_root_of_ne ?h3 ?hq3 _ (fun _ => rfl) ?hqt3
+      case h3 =>
+        refine Items.RSkelInv.modify_root_of_ne ?h2 ?hn2 _ (fun _ => rfl) ?hnt2
+        case h2 => exact h1.push_nil (fun i _ c hc => hc1 i c hc) _ rfl (by decide)
+        case hn2 => exact Items.noParent_push_size _ rfl hc1
+        case hnt2 => rw [Items.type_push_size]; decide
+      case hq3 =>
+        intro p hp
+        exact hq1 p (Items.IsParent_push rfl ((isParent_modifyVs_iff ..).1 hp))
+      case hqt3 => rw [Items.type_modify_vs, Items.type_push_of_ne _ hqne, hqt1]; decide
+    case hv4 =>
+      refine Items.noParent_modify _ ?_ fun _ hmem => ?_
+      · intro p hp
+        exact hv1 p (Items.IsParent_push rfl ((isParent_modifyVs_iff ..).1 hp))
+      · simp only [List.mem_singleton] at hmem
+        exact hvne hmem
+    case hvt4 =>
+      rw [Items.type_modify_ch, Items.type_modify_vs, Items.type_push_of_ne _ hvne, hvt1]; decide
+
 end WalkState
 end Spqr
