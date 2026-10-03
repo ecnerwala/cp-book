@@ -148,7 +148,7 @@ theorem closeEars_st {D d : Nat} {o : DfsOut} {s : WalkState} {curV v₀ : Nat} 
       ⟨Items.type_modify s.items _ _ f (fun _ => rfl), Items.ch_modify_ch_eq _ f (fun _ => rfl) y⟩
   refine ⟨⟨⟨o.dest, d, s.nxtEdgeIdx, setSides s.stackDir[d]! [edgeItem s.g o.e] []⟩ :: (sub ++ pre), ?_,
     StRead.pushEntry _ _ _ _ _ (Or.inr hty₀) hR₀⟩, ?_, fun k _ => rfl⟩
-  · dsimp only; rw [hE.tstack, hB, List.append_assoc]; rfl
+  · dsimp only; simp only [hE.tstack, hB, List.cons_append, List.append_assoc]
   · exact StItems.pushEntry (s := { s with items := s.items.modify (edgeItem s.g o.e) f }) o.dest d
       s.nxtEdgeIdx s.stackDir[d]! (edgeItem s.g o.e) hqlt hroot₀ hch₀ hfree hI₀
 

@@ -65,6 +65,63 @@ theorem StRead.fold {items : Items} (dir : Bool) (curV : Nat) (t : TEntry) (ps :
   · exact ⟨hflat, .nil⟩
   · exact ⟨.nil, hflat⟩
 
+/-! ### Splitting readings -/
+
+theorem ExpandsList.unique {items : Items} {xs L L' : List ItemId} (h : ExpandsList items xs L)
+    (h' : ExpandsList items xs L') : L = L' := by
+  induction h generalizing L' with
+  | nil => cases h'; rfl
+  | leaf hx _ ih =>
+    cases h' with
+    | leaf _ h'' => rw [ih h'']
+    | node hn => exact absurd hx hn
+  | node hx _ ih =>
+    cases h' with
+    | leaf hl => exact absurd hl hx
+    | node _ h'' => exact ih h''
+
+theorem ExpandsList.split {items : Items} {a b L : List ItemId} (h : ExpandsList items (a ++ b) L) :
+    ∃ A B, L = A ++ B ∧ ExpandsList items a A ∧ ExpandsList items b B := by
+  generalize hab : a ++ b = ab at h
+  induction h generalizing a with
+  | nil =>
+    obtain ⟨rfl, rfl⟩ := List.append_eq_nil_iff.1 hab
+    exact ⟨[], [], rfl, .nil, .nil⟩
+  | leaf hx hxs ih =>
+    rename_i x xs L
+    cases a with
+    | nil => simp at hab; subst hab; exact ⟨[], x :: L, rfl, .nil, .leaf hx hxs⟩
+    | cons y a' =>
+      simp at hab; obtain ⟨rfl, hab⟩ := hab
+      obtain ⟨A, B, rfl, hA, hB⟩ := ih hab
+      exact ⟨y :: A, B, rfl, .leaf hx hA, hB⟩
+  | node hx hxs ih =>
+    rename_i x xs L
+    cases a with
+    | nil => simp at hab; subst hab; exact ⟨[], L, rfl, .nil, .node hx hxs⟩
+    | cons y a' =>
+      simp at hab; obtain ⟨rfl, hab⟩ := hab
+      obtain ⟨A, B, rfl, hA, hB⟩ := ih (a := Items.ch items y ++ a') (by rw [List.append_assoc, hab])
+      exact ⟨A, B, rfl, .node hx hA, hB⟩
+
+/-- Concatenating segments: `hi` sits above `lo`, so its pieces come later. -/
+theorem StRead.append {items : Items} {hi lo : List TEntry} {ps qs : List StPiece}
+    (h₁ : StRead items hi qs) (h₂ : StRead items lo ps) : StRead items (hi ++ lo) (ps ++ qs) := by
+  unfold StRead at *
+  rw [readL_append, readR_append, stNestL_append, stNestR_append]
+  exact ⟨h₁.1.append h₂.1, h₂.2.append h₁.2⟩
+
+/-- A reading of `hi ++ lo` whose upper part is known splits (leaf expansions are unique). -/
+theorem StRead.split {items : Items} {hi lo : List TEntry} {ps qs : List StPiece}
+    (h : StRead items (hi ++ lo) (ps ++ qs)) (h₁ : StRead items hi qs) : StRead items lo ps := by
+  unfold StRead at *
+  rw [readL_append, readR_append, stNestL_append, stNestR_append] at h
+  obtain ⟨A, B, hAB, hA, hB⟩ := h.1.split
+  obtain ⟨A', B', hAB', hA', hB'⟩ := h.2.split
+  rw [hA.unique h₁.1] at hAB
+  rw [hB'.unique h₁.2] at hAB'
+  exact ⟨List.append_cancel_left hAB ▸ hB, List.append_cancel_right hAB' ▸ hA'⟩
+
 /-! ### Loop 3 -/
 
 theorem mergeTops_length (l : List TEntry) (h : 2 ≤ l.length) : (mergeTops l).length = l.length - 1 := by
@@ -310,7 +367,8 @@ tree edge): afterwards one entry reads as the single piece `⟨!edgeDir, stNest 
 theorem closeVert_st {g : Graph} {s st : WalkState} {d lv : Nat} {ps : List StPiece}
     {blocks : List StBlock} {base : List TEntry} (curV origTstack : Nat) (edgeDir isType1 isSingle : Bool)
     (c : TEntry) (mid : List TEntry) (py vy : TEntry)
-    (hJ : L1StInv g s d ps blocks base st)
+    {pre B : List TEntry} {qs : List StPiece} (hbase : base = pre ++ B)
+    (hJ : L1StInv g s d ps blocks base st) (hJ' : L1StInv g s d (qs ++ ps) blocks B st)
     (hts : st.tstack = c :: mid ++ [py, vy] ++ base)
     (hlv : lv ≤ d) (horig : base.length = origTstack) (hsd : edgeDir = !s.stackDir[lv]!)
     (hcl : lv ≤ c.topDepth) (hvyt : lv ≤ vy.topDepth)
@@ -318,7 +376,7 @@ theorem closeVert_st {g : Graph} {s st : WalkState} {d lv : Nat} {ps : List StPi
     (hpy : isType1 = true → py.topDepth = lv ∧ ∃ i, py.spans = setSides s.stackDir[lv]! [i] []) :
     let s' := ((closeVert' curV edgeDir isType1 origTstack isSingle).run st).2
     ∃ m : TEntry, s'.tstack = m :: base ∧ m.vStart = curV ∧ s'.stackDir = st.stackDir ∧ s'.g = st.g ∧
-      StRead s'.items [m] [⟨!edgeDir, stNest ps⟩] ∧ StItems g s' blocks ∧
+      StRead s'.items (m :: pre) (qs ++ [⟨!edgeDir, stNest ps⟩]) ∧ StItems g s' blocks ∧
       (isType1 = true → m.topDepth = lv ∧ getSide m.spans (!st.stackDir[lv]!) = []) := by
   dsimp only
   have hrun : ((closeVert' curV edgeDir isType1 origTstack isSingle).run st).2 =
@@ -346,7 +404,15 @@ theorem closeVert_st {g : Graph} {s st : WalkState} {d lv : Nat} {ps : List StPi
     have hlen₁ : new₁.length = 3 := by
       rw [hts₁, List.length_append] at hlen; omega
     obtain ⟨a, b, c', rfl⟩ := List.length_eq_three.1 hlen₁
-    generalize hS : cvS₁ false origTstack isSingle st = S₁ at hts₁ hR₁ hJ₁ hS₁
+    have hJ₁' : L1StInv g s d (qs ++ ps) blocks B (cvS₁ false origTstack isSingle st) := by
+      rw [hS₁]
+      refine L1StInv.mergeLoop _ (fun _ => rfl) _ hJ' ?_
+      rw [← hS₁, hlen, ← horig, hbase, List.length_append]; omega
+    obtain ⟨new₁', hts₁', hR₁'⟩ := hJ₁'.read
+    have hnew₁' : new₁' = [a, b, c'] ++ pre :=
+      List.append_cancel_right (hts₁'.symm.trans (by rw [hts₁, hbase, List.append_assoc]))
+    subst hnew₁'
+    generalize hS : cvS₁ false origTstack isSingle st = S₁ at hts₁ hR₁ hJ₁ hS₁ hR₁'
     have hS₂ : cvS₂ false origTstack isSingle st = S₁ := by rw [← hS]; rfl
     have hS₃ : cvS₃ false origTstack isSingle st = { S₁ with tstack := TEntry.mergeInto a b :: c' :: base } := by
       show (mergeTstackTops.run (cvS₂ false origTstack isSingle st)).2 = _
@@ -365,10 +431,16 @@ theorem closeVert_st {g : Graph} {s st : WalkState} {d lv : Nat} {ps : List StPi
     have hsd₁ : S₁.stackDir = st.stackDir := by rw [hS₁, hl₁]
     have hg₁ : S₁.g = st.g := by rw [hS₁, hl₁]
     refine ⟨_, rfl, rfl, hsd₁, hg₁, ?_, ?_, fun h => absurd h Bool.false_ne_true⟩
-    · refine StRead.fold _ _ _ _ ?_
-      unfold StRead at hR₁ ⊢
-      rw [readL_mergeInto_cons, readR_mergeInto_cons, readL_mergeInto_cons, readR_mergeInto_cons]
-      exact hR₁
+    · have hM : StRead S₁.items [TEntry.mergeInto (TEntry.mergeInto a b) c'] ps := by
+        unfold StRead at hR₁ ⊢
+        rw [readL_mergeInto_cons, readR_mergeInto_cons, readL_mergeInto_cons, readR_mergeInto_cons]
+        exact hR₁
+      have hM' : StRead S₁.items ([TEntry.mergeInto (TEntry.mergeInto a b) c'] ++ pre) (qs ++ ps) := by
+        unfold StRead at hR₁' ⊢
+        rw [List.singleton_append, readL_mergeInto_cons, readR_mergeInto_cons, readL_mergeInto_cons,
+          readR_mergeInto_cons]
+        exact hR₁'
+      exact StRead.append (StRead.fold _ _ _ _ hM) (hM'.split hM)
     · refine StItems.perm hJ₁.items ?_ rfl
       dsimp only
       refine (readStack_fold_perm _ _ _ _).trans ?_
@@ -392,10 +464,22 @@ theorem closeVert_st {g : Graph} {s st : WalkState} {d lv : Nat} {ps : List StPi
         (fun _ h hh _ => by rw [hpys', getSide_setSides] at hh ⊢; rw [← hh]; rfl)
         (fun h _ _ => by rw [hpys', getSide_setSides_other])
         hRn hJ.items
+    obtain ⟨new', hnew'', hRn'⟩ := hJ'.read
+    have hnew''' : new' = c :: py :: vy :: pre :=
+      List.append_cancel_right (hnew''.symm.trans (by rw [hts', hbase]; rfl))
+    subst hnew'''
+    obtain ⟨m', hts₃', -, -, -, -, -, -, -, hR₃', -⟩ :=
+      StSim.unwrapMerge st (if isSingle then NodeType.S else NodeType.R) c py (vy :: pre) B (qs ++ ps) blocks
+        (by rw [hts', hbase]; rfl) hd htyS
+        (fun _ h hh _ => by rw [hpys', getSide_setSides] at hh ⊢; rw [← hh]; rfl)
+        (fun h _ _ => by rw [hpys', getSide_setSides_other])
+        hRn' hJ.items
+    have hmm : m' = m := (List.cons.inj (hts₃'.symm.trans hts₃)).1
+    rw [hmm] at hR₃'
     have hS₃ : cvS₃ true origTstack isSingle st =
         (mergeTstackTops.run ((maybeUnwrapNxt (if isSingle then NodeType.S else NodeType.R)).run st).2).2 := rfl
-    rw [← hS₃] at hts₃ hsd₃ hg₃ hsv₃ hsz₃ hty₃ hR₃ hX₃
-    generalize hS : cvS₃ true origTstack isSingle st = S₃ at hts₃ hsd₃ hg₃ hsv₃ hsz₃ hty₃ hR₃ hX₃
+    rw [← hS₃] at hts₃ hsd₃ hg₃ hsv₃ hsz₃ hty₃ hR₃ hX₃ hR₃'
+    generalize hS : cvS₃ true origTstack isSingle st = S₃ at hts₃ hsd₃ hg₃ hsv₃ hsz₃ hty₃ hR₃ hX₃ hR₃'
     have hitem : result (vertUnwrap true (cvB₁ true origTstack isSingle st)) (cvS₁ true origTstack isSingle st) =
         some ((maybeUnwrapNxt (if isSingle then NodeType.S else NodeType.R)).run st).1 := rfl
     rw [hitem]
@@ -431,82 +515,34 @@ theorem closeVert_st {g : Graph} {s st : WalkState} {d lv : Nat} {ps : List StPi
       · intro x hx
         rw [hts₅] at hx; rw [hts₃]
         exact mem_readStack_cons.2 (Or.inr hx)
-    have hR₅ : StRead S₅.items [F] [⟨!edgeDir, stNest ps⟩] := by
-      rw [hitems₅, ← hF]
-      refine StRead.fold _ _ _ _ ?_
+    have hMr : StRead S₃.items [M] ps := by
       unfold StRead at hR₃ ⊢
       rw [hM, readL_mergeInto_cons, readR_mergeInto_cons]
       exact hR₃
+    have hMr' : StRead S₃.items ([M] ++ pre) (qs ++ ps) := by
+      unfold StRead at hR₃' ⊢
+      rw [List.singleton_append, hM, readL_mergeInto_cons, readR_mergeInto_cons]
+      exact hR₃'
+    have hR₅ : StRead S₅.items (F :: pre) (qs ++ [⟨!edgeDir, stNest ps⟩]) := by
+      rw [hitems₅, ← hF]
+      exact StRead.append (StRead.fold _ _ _ _ hMr) (hMr'.split hMr)
     have htyi : ¬ (Items.type S₅.items item = .V ∨ Items.type S₅.items item = .Q) := by
       rw [hitems₅, hty₃]; cases isSingle <;> simp
-    obtain ⟨hts₆, hR₆⟩ := StRead.finishTstackTop S₅ item F [] base [⟨!edgeDir, stNest ps⟩] hts₅ hside hX₅.lt htyi
-      (fun x hx => hX₅.notBelow x (by rw [hts₅]; exact mem_readStack_append_left hx)) (by simp [readStack, readL, readR])
+    have hts₅' : S₅.tstack = F :: (pre ++ B) := by rw [hts₅, hbase]; rfl
+    obtain ⟨hts₆, hR₆⟩ := StRead.finishTstackTop S₅ item F pre B (qs ++ [⟨!edgeDir, stNest ps⟩]) hts₅' hside
+      hX₅.lt htyi
+      (fun x hx => hX₅.notBelow x (by rw [hts₅']; exact mem_readStack_append_left hx))
+      (fun hx => hX₅.notin (by rw [hts₅']; exact mem_readStack_cons.2 (Or.inr (mem_readStack_append_left hx))))
       hR₅
     obtain ⟨x', items', hrun₆, -⟩ := finishTstackTop_run item S₅ hts₅
-    refine ⟨_, hts₆, ?_, ?_, ?_, ?_, hX₅.close F base hts₅ hside, fun _ => ⟨hFt, ?_⟩⟩
+    refine ⟨{ F with spans := setSides S₅.stackDir[F.topDepth]! [item] [] }, by rw [hts₆, hbase],
+      ?_, ?_, ?_, ?_, hX₅.close F base hts₅ hside, fun _ => ⟨hFt, ?_⟩⟩
     · show F.vStart = curV; rw [← hF]
     · rw [hrun₆]; show S₅.stackDir = st.stackDir; rw [hsd₅, hsd₃]
     · rw [hrun₆]; show S₅.g = st.g; rw [← hS₅', hg₃]
     · exact hR₆
     · show getSide (setSides S₅.stackDir[F.topDepth]! [item] []) _ = []
       rw [hsd₅, hsd₃, hFt]; exact getSide_setSides_other _ _ _
-
-/-! ### Splitting readings -/
-
-theorem ExpandsList.unique {items : Items} {xs L L' : List ItemId} (h : ExpandsList items xs L)
-    (h' : ExpandsList items xs L') : L = L' := by
-  induction h generalizing L' with
-  | nil => cases h'; rfl
-  | leaf hx _ ih =>
-    cases h' with
-    | leaf _ h'' => rw [ih h'']
-    | node hn => exact absurd hx hn
-  | node hx _ ih =>
-    cases h' with
-    | leaf hl => exact absurd hl hx
-    | node _ h'' => exact ih h''
-
-theorem ExpandsList.split {items : Items} {a b L : List ItemId} (h : ExpandsList items (a ++ b) L) :
-    ∃ A B, L = A ++ B ∧ ExpandsList items a A ∧ ExpandsList items b B := by
-  generalize hab : a ++ b = ab at h
-  induction h generalizing a with
-  | nil =>
-    obtain ⟨rfl, rfl⟩ := List.append_eq_nil_iff.1 hab
-    exact ⟨[], [], rfl, .nil, .nil⟩
-  | leaf hx hxs ih =>
-    rename_i x xs L
-    cases a with
-    | nil => simp at hab; subst hab; exact ⟨[], x :: L, rfl, .nil, .leaf hx hxs⟩
-    | cons y a' =>
-      simp at hab; obtain ⟨rfl, hab⟩ := hab
-      obtain ⟨A, B, rfl, hA, hB⟩ := ih hab
-      exact ⟨y :: A, B, rfl, .leaf hx hA, hB⟩
-  | node hx hxs ih =>
-    rename_i x xs L
-    cases a with
-    | nil => simp at hab; subst hab; exact ⟨[], L, rfl, .nil, .node hx hxs⟩
-    | cons y a' =>
-      simp at hab; obtain ⟨rfl, hab⟩ := hab
-      obtain ⟨A, B, rfl, hA, hB⟩ := ih (a := Items.ch items y ++ a') (by rw [List.append_assoc, hab])
-      exact ⟨A, B, rfl, .node hx hA, hB⟩
-
-/-- Concatenating segments: `hi` sits above `lo`, so its pieces come later. -/
-theorem StRead.append {items : Items} {hi lo : List TEntry} {ps qs : List StPiece}
-    (h₁ : StRead items hi qs) (h₂ : StRead items lo ps) : StRead items (hi ++ lo) (ps ++ qs) := by
-  unfold StRead at *
-  rw [readL_append, readR_append, stNestL_append, stNestR_append]
-  exact ⟨h₁.1.append h₂.1, h₂.2.append h₁.2⟩
-
-/-- A reading of `hi ++ lo` whose upper part is known splits (leaf expansions are unique). -/
-theorem StRead.split {items : Items} {hi lo : List TEntry} {ps qs : List StPiece}
-    (h : StRead items (hi ++ lo) (ps ++ qs)) (h₁ : StRead items hi qs) : StRead items lo ps := by
-  unfold StRead at *
-  rw [readL_append, readR_append, stNestL_append, stNestR_append] at h
-  obtain ⟨A, B, hAB, hA, hB⟩ := h.1.split
-  obtain ⟨A', B', hAB', hA', hB'⟩ := h.2.split
-  rw [hA.unique h₁.1] at hAB
-  rw [hB'.unique h₁.2] at hAB'
-  exact ⟨List.append_cancel_left hAB ▸ hB, List.append_cancel_right hAB' ▸ hA'⟩
 
 /-! ### `finishP` and `finishTail` -/
 
@@ -571,8 +607,7 @@ theorem finishP_st {g : Graph} (s : WalkState) (curV lowval : Nat) (isType1 : Bo
   · have h' : (isType1 && decide (s.tstack.length ≥ 2) && (s.tstack.tail.head!.vStart == curV) &&
         (s.tstack.tail.head!.topDepth == lowval)) = false := Bool.eq_false_iff.2 h
     simp only [h', Bool.false_eq_true, ↓reduceIte, WalkM.pure_run]
-    refine ⟨c :: new, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
-      first | trivial | exact hts | exact hR | exact hI | exact Nat.le_refl _
+    refine ⟨c :: new, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> trivial
 
 /-- The first-edge vertex push on `new ++ base`: the piece `⟨stackDir[d], [V curV]⟩` is appended
 (merged into the top entry unless `isSingle`). -/
