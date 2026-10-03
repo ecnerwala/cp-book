@@ -2149,6 +2149,17 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   outside the tree theorems), `spqrTree_wf`, the final-items hypotheses of `spqrTree_pieceSep`
   (`walk_pieceInv`, §4.6), `walk_canonInv`/`walk_ternarize`
   (canonicity, §4.6), the planarity admissions.
+* **Stage 2e — R context uniform in `d`.** Preparing the child-entry lemma (`WalkInvOut … (.tree e
+  cls child :: rest) → WalkInv G child (d + 1)`): the R fields `WalkInv.r`/`WalkInvOut.r` are no
+  longer gated on `d = dp + 1`; `RCtx` now carries `par : ∀ dp, d = dp + 1 → RPar dfs t dp s`
+  (the former parent-side fields `inv_par`/`parent`/`chain`/`top`) and `root : d = 0 → (∀ v outs,
+  t = .node v outs → dfs.depth v = 0) ∧ s.tstack = [] ∧ F = []`, and `ROutCtx` gains `root : d = 0
+  → s.tstack = [] ∧ hasVert = false ∧ F = []` (true by `rootOut`: every root between-edge site has
+  an empty stack and no vertex entry). `WalkInv.toOut` builds the root `ROutCtx` from `RCtx.root`
+  and `walkOut_inv_r` keeps it through a root `walkOut` by `rootOut` + `rkRootOut` (`RSkelInv`) +
+  `kOut`. Checker: the `r.anc`/`r.stab` mirrors are no longer skipped at `d = 0` and a new
+  `r.root` field checks `tstack = [] ∧ hasVert = false` at every root out-site; still
+  `violations=0`.
 
 ## 5. Phase 3: relabel
 

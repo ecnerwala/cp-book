@@ -117,11 +117,11 @@ partial def iTree (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n : Nat) (t
     let vs := (Extra.e3Check c.seed d v s).map fun x =>
       { x with info := s!"block={c.block} frames(v,done,e)={fs.map fun f => (f.v, f.done.length, f.o.e)} {x.info}" }
     let s' := { s with stackVerts := s.stackVerts.set! d v }
-    let vs := vs ++ (if !c.block || d = 0 then [] else
+    let vs := vs ++ (if !c.block then [] else
       s.tstack.flatMap fun t =>
         if (R.entryR c.D s t).isEmpty && !(R.entryR c.D s' t).isEmpty then
           [⟨c.seed, tern, "r.stab", s!"v={v} d={d} {R.showT t} loses EntryR under stackVerts.set! d v"⟩] else [])
-    let vs := vs ++ (if d = 0 then [] else (List.range (d + 1)).flatMap fun k =>
+    let vs := vs ++ ((List.range (d + 1)).flatMap fun k =>
       let a := s'.stackVerts[k]!
       if c.D.depth[a]! == k && R.ancP c.D.parent a v then [] else
         [⟨c.seed, tern, "r.anc", s!"v={v} d={d} k={k} sv[k]={a} depth={c.D.depth[a]!}"⟩])
@@ -200,6 +200,8 @@ partial def iOut (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n v d : Nat)
   let lowval := o.cls.lowval d
   let pushNow := !hv && lowval < d && o.cls.isType1
   let vs := if hv then [] else ofRanges (Ranges.checkVertPast c.seed σ v (σ.idxOf o.block.head!) s)
+  let vs := vs ++ (if d = 0 && !(s.tstack.isEmpty && !hv) then
+    [⟨c.seed, tern, "r.root", s!"v={v} d=0 e={o.e} tstack={s.tstack.length} hv={hv}"⟩] else [])
   let vs := vs ++ (if pushNow then Extra.e2Check c.seed s!"pre-push e={o.e}" v s else [])
   let (hv₀, s) := (walkOutPre v d o hv).run s
   let hv := hv₀
