@@ -447,6 +447,51 @@ def checkL1 (seed : Nat) (curV d : Nat) (o : DfsOut) (s : WalkState) : List V :=
     | [] => out := bad "stack" :: out
   return out
 
+/-- `rangesInv_l1Iter`/`rangesInv_feS₂`: the `RangesInv` clauses (`o.e` processed, `D = d + 1`) at every
+loop-1 iterate of `closeEars` and at `feS₂` of a returning tree edge. -/
+def checkRI (seed : Nat) (σ : List Nat) (curV d : Nat) (o : DfsOut) (s : WalkState) : List V := Id.run do
+  if !(o.cls.isTree && o.cls.lowval d < d) then return []
+  let pos := fun e => σ.idxOf e
+  let n := pos o.e + 1
+  let dir := s.stackDir[d]!
+  let iters := mergeSites (loop1Cond d) (loop1Body d dir) (ceS₁ o.dest d o.e (feS₀ d o s))
+  let sites := iters.map (fun st => ("rangesInv_l1Iter", st)) ++ [("rangesInv_feS₂", feS₂ d o s)]
+  let mut out := []
+  for (site, st) in sites do
+    let bad := fun k info => (⟨seed, st.ternarize, curV, d, site, k,
+      s!"o.e={o.e} {info} stack={st.tstack.map showT}"⟩ : V)
+    let E := fun t => entryEdges st t
+    let P := fun t => entryPiece st t
+    let stk := st.tstack
+    for t in stk do
+      for e in E t do
+        if !(pos e < n) then out := bad "processed" s!"{showT t} e={e}" :: out
+    let rec ord : List TEntry → List V
+      | [] => []
+      | t :: rest =>
+        (rest.flatMap fun t' => (P t).flatMap fun e => (E t').filterMap fun e' =>
+          if pos e' < pos e then none else some (bad "ordered" s!"{showT t} e={e} below {showT t'} e'={e'}")) ++
+        ord rest
+    out := ord stk ++ out
+    for t in stk do
+      let ps := (P t).map pos
+      match ps.min?, ps.max? with
+      | some lo, some hi =>
+        for b in List.range' lo (hi + 1 - lo) do
+          if !(E t).contains σ[b]! then out := bad "convex" s!"{showT t} hole e={σ[b]!}" :: out
+      | _, _ => pure ()
+    for i in List.range st.items.size do
+      let it := st.items[i]!
+      if it.type != .F && it.type != .V then
+        let ps := (pieceBelow st i).map pos
+        let below := edgesBelow st i
+        match ps.min?, ps.max? with
+        | some lo, some hi =>
+          for b in List.range' lo (hi + 1 - lo) do
+            if !below.contains σ[b]! then out := bad "closed_convex" s!"i={i} hole e={σ[b]!}" :: out
+        | _, _ => pure ()
+  return out
+
 def checkClose (seed : Nat) (site : String) (s : WalkState) : List V := Id.run do
   let ty := fun i => s.items[i]!.type
   let ch := fun i => s.items[i]!.ch
@@ -604,7 +649,8 @@ partial def iOut (seed : Nat) (σ : List Nat) (c : OwnCtx) (v d : Nat) (o : DfsO
     ((adjacencySites v d o orig hv s).filter (·.1 == "P")).flatMap (fun (_, st) =>
       checkOwned seed σ c (σ.idxOf o.e + 1) v d "P" st) ++
     check seed σ v d o orig s ++ checkAdj seed σ v d o orig hv s ++ checkClose seed "pre" s ++
-    checkCtx seed v d o s ++ checkP seed v d o orig hv s ++ checkV seed v d o orig hv s ++ checkL1 seed v d o s
+    checkCtx seed v d o s ++ checkP seed v d o orig hv s ++ checkV seed v d o orig hv s ++ checkL1 seed v d o s ++
+    checkRI seed σ v d o s
   let vs := vs ++ (closeSites v d o orig hv s).flatMap fun (site, st) => checkClose seed site st
   let vs := vs ++ if hv then [] else checkVertPast seed σ v (σ.idxOf o.e) s
   let (hv', s) := (finishEdge v d o orig hv).run s
