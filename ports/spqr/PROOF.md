@@ -1931,8 +1931,43 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `keepsR_finishEdge`/`finishEdge_rInvTop`/`finishEdge_rInvG_base`, `finishEdge_st`/
   `finishRet_frame_st`/`finishBoundary_st`, `ctx_step_*`), after which the per-layer inductions
   are deletable.
-* Not yet a field: the per-segment `StLive` of §7 (checked as `st.live_*`); it enters with the
-  `walkOut`-level statement, where `finishBoundary_stLive` consumes it.
+* **Stage 2b — the between-edge level.** `WalkInvOut G B v d outs₀ done rest hasVert n P s` is the
+  conjunction at a between-edge site of `walkOuts v d` (after `done`, before `rest`; `n`/`P` the
+  current schedule position and pushed set, `B` the R bottom): the frame facts of `COut`
+  (`split`/`sorted`/`WF`/`Ends`/nodup/bounds/`comp`/`pe_anc`/sizes/`anc_sv`/`sv_d`), `EarCtx v d
+  done rest hasVert …` + `Inv' d` + `Shape`, `RangesInv σ n d` + `PostAt σ n (edgePostorderList
+  rest)` + `AncPath` + `CloseInv`, `Full g P X` + `P_past` + `OwnedD σ sts origs P d n` with the
+  prefix bounds and `P`-freshness of `rest`/`v` (`Pv`/`Pe`/`Pcur`/`Pcur'`) + `VertCover`, (block)
+  `ROutCtx` (`dfs.Spec`/`Rooted`, `dfs.outs v = outs₀` and the sub-out-lists, `AncChain`, `RWalk
+  dfs F v d`, the frame bounds against `B`, `RSkelInv`), and the st data (`StPre … (done.map (·.1))
+  hasVert`, the height bound, `base_out`, `segs.length = fs.length`) **plus the §7 pairing as
+  fields**: `live_cur` (`StLive g items new (openBlock g fs (DirsOf s d) (refOuts … done).1 ++ [vert
+  piece unless hasVert])` for the current segment `new`) and `live_lower` (segment `segs[j]` of
+  frame `k = fs.length - 1 - j` is `StLive` in `openBlock g (fs.take k) (DirsOf s k) segs[j].2`).
+  `WalkInvOut.sites` produces `EarOut`/`BookOut`/`GuardsOut`/`FrontiersOut`/`CsOut`/`CoverOut`/
+  `RgOut`/`CbOut`/`RSideOut` from the conjunction (`bOut`, `gbOut`, `frOut`, `dsOut`, `cvOut`,
+  `scheduleOut`, `cbOut`, `rsOut`; the per-out edge completeness `comp_out` is derived from the
+  list-level `comp` by `endsOut_wf` and the vertex-disjointness of distinct outs).
+  `walkOut_inv : WalkInvOut … done (o :: rest) hasVert n P s → wp (walkOut v d o hasVert)
+  (fun hv' s' => (hasVert → hv') ∧ ∃ hvF, WalkInvOut … (done ++ [(o, hvF)]) rest hv' (n +
+  |o.block|) (Pushed g (P ∨ hv' ∧ · = vertItem v) o.verts o.edges) s')` is the step (in this stage
+  still the conjunction of the out-level component theorems `cOut`, `kOut`, `invOut`, `rgOut`,
+  `ccOut`, `cvOut`, `walk_full_aux`, `stOut_step`, `rrOut`/`rkOut` applied to `sites`; the next
+  stage opens `walkOut` and assembles it from the `finishEdge` primitives), and `walkOuts_inv`
+  threads it through `walkOuts` (post: `∃ done'`, `WalkInvOut … done' [] hv' (n + |edgePostorderList
+  rest|) (Pushed g (P ∨ …) (vertsList rest) (edgesList rest))`, via `WalkInvOut.congr` and
+  `Pushed.append`).
+* **New named admission (backbone-specific).** `walkOut_stLive` (`Spqr/WalkBackbone.lean`): from
+  `WalkInvOut … (o :: rest) hasVert n P s`, `wp (walkOut v d o hasVert)` of `live_cur` for
+  `done ++ [o]`/`hv'` and `live_lower` unchanged — i.e. one `walkOut` keeps the per-segment
+  `StLive ↔ openBlock` pairing. This is the §7 "StLive closes" content stated at the only site the
+  backbone needs it (checker fields `st.live_cur`/`st.live_lower`, 0 violations on 6002 runs); the
+  tree-level `live_end` (what `finishBoundary_stLive` needs at the child's boundary) is the `[]`
+  instance of `live_cur` after `walkOuts_inv`, to be plumbed in the next stage.
+* Not yet: `walkTree_inv` is still the tree-level composition (it does not yet go through
+  `walkOuts_inv`; the glue `WalkInv → WalkInvOut … [] t.outs false` at the entry and
+  `WalkInvOut … done' [] hv' → WalkInvEnd` at the exit is the next step, together with the
+  `walkTree.mutual_induct` skeleton).
 * Admissions reachable from `walkTree_inv` (direct `sorry` bodies in its dependency closure, 35):
   ear `ctx_step_tree_ret`, `walkTree_below_kept`, `walkTree_items_kept`, `ends_of_wf_boundary`,
   `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,bottom,close,late,late_fo,loop1,loop1_side,
