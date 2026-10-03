@@ -369,6 +369,7 @@ structure TreeSite (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOu
   sd₃ : ∀ k, k ≤ d → D₃[k]! = sE.stackDir[k]!
   hdir' : push' = true → dir' = true
   size_le : s.items.size ≤ sE.items.size
+  hsz : 1 + s.g.nv + s.g.ne ≤ s.items.size
   verts_lt : ∀ x ∈ (DfsTree.node y outs).verts, x < s.g.nv
   e_ends : Items.PairEq (y, v) s.g.edges[e]!
   rest_nd : ∀ o' ∈ rest, ∀ e', subEdges o' e' →
