@@ -1259,10 +1259,15 @@ Exactly two `Ranges` clauses come from the invariant: `convex` (= `closed`) and 
 `Items.CloseFacts` is the remainder, which `RangesInv` does not carry because it is about an item
 at its close (its `vs` just written from the entries' terminals, its children's shape): `att_vs`
 for the Q items (not in `Inv'.nodes`), `vs_att`, `vs_ne`, `interior`, `child_two`, `io_parent`,
-`q_leaf`, `q_root`, `q_under_v`, `p_shape`, `s_order`, `r_shape`. The walk-side admissions are now
-`walk_rangesInv` (the `walkForest` instantiation of `walkTree_rangesInv`: needs the ear guards and
-`RgTree` discharged at every `finishEdge`) and `walk_closeFacts`; `walk_ranges` (`WalkItemsWF.lean`,
-under `0 < g.nv` + bounded/covering forest) is `ranges_of_rangesInv walk_rangesInv walk_typing
+`q_leaf`, `q_root`, `q_under_v`, `p_shape`, `s_order`, `r_shape`. The remaining range/close
+admissions are `walk_rootsCover` (P-site split ownership and vertex processed-prefix bounds)
+and `walk_closeInv` (construction and walk-level preservation of the close records).
+`walk_rangesInv` assembles the forest from the ear exports plus `RootsCover`; `walk_closeFacts`
+assembles the final close records using the item tree and typing. The mutual scheduler and
+local close-record proofs use only standard axioms. The forest assembly also consumes the
+ear layer's `walkTree_ear` admission; the final wrappers retain `sorryAx` until all of these
+obligations are discharged. `walk_ranges` (`WalkItemsWF.lean`, under `g.WF`, both `OrderOK`,
+`0 < g.nv`, and a bounded/covering forest) is `ranges_of_rangesInv walk_rangesInv walk_typing
 walk_closeFacts` with `walk_g : (g.walk tern forest).g = g` from `walkForest_typing`.
 
 ## 5. Phase 3: relabel
