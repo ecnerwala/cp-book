@@ -280,4 +280,64 @@ theorem finishBack_st {D d lv : Nat} {kind : RetKind} {o : DfsOut} {s : WalkStat
   refine ⟨hr1, by rw [hg₅, hg₄]; rfl, by rw [hsd₅, hsd₄]; rfl, new₅, hts₅, ?_, hI₅⟩
   cases hasVert <;> simp only [Bool.false_eq_true, ↓reduceIte, hd₄, List.append_nil] at hR₅ ⊢ <;> exact hR₅
 
+/-- `walkOutPre`: `setStackDir d` leaves `DirsOf s d` and the readings fixed; the type-1 vertex push
+(`!hasVert`, `lowval < d`, type 1) appends the reference's `pre` piece `⟨!stackDir[lowval], [V v]⟩`. -/
+theorem walkOutPre_st {g : Graph} {blocks : List StBlock} {base new : List TEntry} {ps : List StPiece}
+    (s : WalkState) (v d : Nat) (o : DfsOut) (hasVert : Bool) (hd : d < s.stackDir.size)
+    (hts : s.tstack = new ++ base) (hR : StRead s.items new ps) (hI : StItems g s blocks)
+    (hvert : hasVert = false →
+      vertItem v < s.items.size ∧ Items.type s.items (vertItem v) = .V ∧
+      (∀ p, ¬ Items.IsParent s.items p (vertItem v)) ∧ vertItem v ∉ readStack s.tstack) :
+    let r := (walkOutPre v d o hasVert).run s
+    let x : Bool := if d ≤ o.cls.lowval d then false else !s.stackDir[o.cls.lowval d]!
+    let push : Bool := !hasVert && decide (o.cls.lowval d < d) && o.cls.isType1
+    r.1 = (push || hasVert) ∧
+    r.2.items = s.items ∧ r.2.g = s.g ∧ r.2.stackVerts = s.stackVerts ∧
+    r.2.stackDir = s.stackDir.set! d x ∧ DirsOf r.2 d = DirsOf s d ∧
+    ∃ new', r.2.tstack = new' ++ base ∧
+      StRead r.2.items new' (ps ++ if push then [⟨x, [vertItem v]⟩] else []) ∧
+      StItems g r.2 blocks := by
+  dsimp only
+  set x : Bool := if d ≤ o.cls.lowval d then false else !s.stackDir[o.cls.lowval d]! with hx
+  set s₁ : WalkState := { s with stackDir := s.stackDir.set! d x } with hs₁
+  have hdirs : DirsOf s₁ d = DirsOf s d := by
+    unfold DirsOf
+    apply List.map_congr_left
+    intro k hk
+    rw [List.mem_range] at hk
+    show (s.stackDir.set! d x)[k]! = _
+    exact Array.getElem!_set!_ne _ _ _ _ (Nat.ne_of_gt hk)
+  have hxd : (s.stackDir.set! d x)[d]! = x := Array.getElem!_set!_self _ _ _ hd
+  have hR₁ : StRead s₁.items new ps := hR
+  have hI₁ : StItems g s₁ blocks := StItems.perm hI (List.Perm.refl _) rfl
+  by_cases hp : (!hasVert && decide (o.cls.lowval d < d) && o.cls.isType1) = true
+  · have hr : (walkOutPre v d o hasVert).run s =
+        (true, { s₁ with tstack :=
+          ⟨v, d, s.nxtEdgeIdx, setSides (s.stackDir.set! d x)[d]! [vertItem v] []⟩ :: s.tstack }) := by
+      unfold walkOutPre
+      simp only [hp, ↓reduceIte]
+      rfl
+    rw [hr]
+    have hhv : hasVert = false := by cases hasVert <;> simp_all
+    obtain ⟨hlt, hty, hroot, hfree⟩ := hvert hhv
+    refine ⟨by simp [hp], rfl, rfl, rfl, rfl, hdirs,
+      ⟨v, d, s.nxtEdgeIdx, setSides x [vertItem v] []⟩ :: new, ?_, ?_, ?_⟩
+    · show ⟨v, d, s.nxtEdgeIdx, setSides (s.stackDir.set! d x)[d]! [vertItem v] []⟩ :: s.tstack = _
+      rw [hxd, hts]; rfl
+    · simp only [hp, ↓reduceIte]
+      exact StRead.pushEntry _ _ _ _ _ (Or.inl hty) hR₁
+    · have := StItems.pushEntry (s := s₁) v d s.nxtEdgeIdx x (vertItem v) hlt hroot hfree hI₁
+      show StItems g { s₁ with tstack :=
+        ⟨v, d, s.nxtEdgeIdx, setSides (s.stackDir.set! d x)[d]! [vertItem v] []⟩ :: s.tstack } blocks
+      rw [hxd]; exact this
+  · have hr : (walkOutPre v d o hasVert).run s = (hasVert, s₁) := by
+      unfold walkOutPre
+      simp only [hp, ↓reduceIte]
+      rfl
+    rw [hr]
+    simp only [Bool.not_eq_true] at hp
+    refine ⟨by simp [hp], rfl, rfl, rfl, rfl, hdirs, new, hts, ?_, hI₁⟩
+    simp only [hp, Bool.false_eq_true, ↓reduceIte, List.append_nil]
+    exact hR₁
+
 end Spqr
