@@ -969,8 +969,10 @@ from `vs_att` at the child + `att_vs`/`interior` at the parent + `desc_disjoint`
 `interior` = `interior`). `convex` is not needed for `WF` at all — it is the field the walk-time
 invariant (`RangesInv`, step 4) and the R/st layers consume. `walk_items_wf` (`WalkItemsWF.lean`, under
 `g.WF`/`OrderOK`) is `wf_of_ranges walk_tree.toTree walk_typing.toTypingFacts walk_ranges`: `Tree`
-comes from `WalkCover.walk_tree`, the `Endpoints`/`Shapes` half rests on the named admission
-`walk_ranges` instead of the ear layer. `WalkItemsWF` sits above `WalkCover`/`WalkTyping`
+comes from `EarWalk.walk_tree` (which, since `walk_sides` moved under the ear layer, also takes
+`∀ t ∈ forest, t.Ends g`, supplied by the named admission `dfsForest_ends` — the `adjacency`-level
+endpoint fact carried through `FoldInv`/`ForestInv` like `dfsForest_wf`), the `Endpoints`/`Shapes` half
+rests on the named admission `walk_ranges` instead of the ear layer. `WalkItemsWF` sits above `WalkCover`/`WalkTyping`
 (the DFS prerequisites `Bounded`/`ForestOK`/coverage come from `dfsForest_spanning'`/`dfsForest_wf`;
 the empty graph, where `walk_tree`'s `0 < g.nv` fails, is the initial items), so the st layer
 (`StWalk.walk_st`/`spqrTree_st`) takes `Items.WF` as a hypothesis and `StOriented`/`Correctness`/
@@ -1254,7 +1256,7 @@ disjointness), which restricts the global filter to the node's own segment (`row
 `Items.RThreeConnected` as its explicit hypothesis and is `relabelTree_represents'`;
 `spqrTree_represents` (under `g.WF`/`OrderOK`) is `relabelTree_represents_of_r` on `walk_items_wf`
 and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf` (`walk_ranges`,
-`walk_sides`) and `spqrTree_r_three_connected`.
+`walk_sides`, `dfsForest_ends`) and `spqrTree_r_three_connected`.
 
 `RelabelSt.lean` proves `relabel_st : Items.StNumbered → Items.WF g → (relabelTree g items).StOrder`
 **[proved]** from the same package, see §7.3.
@@ -1299,11 +1301,9 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | Item S/R shape minimum counts | `ItemSpec.lean`, `checks/SkeletonShapeCheck.lean` | corrected: ≥ 1 V child for S, ≥ 5 non-V children for R; kernel-checked sharp triangle/K4 outputs (standard axioms) |
 | R correctness input domain | `Correctness.lean`, `Proofs/RItems.lean`, `checks/RInvalidOrderCheck.lean` | corrected to `g.WF` + `OrderOK` for both orders; K4 with invalid edge order `[6]` kernel-checks failure of the former public target (standard axioms) |
 | R coverage and laminarity edge domain | `RInv.lean`, `RClose.lean`, `RMax.lean`, `Proofs/RunSaturation.lean`, `checks/REdgeDomainCheck.lean` | restricted containment and coverage to `e < g.ne`; kernel-checked K4 failure of unrestricted coverage and success of bounded coverage; affected transport proofs audited (standard axioms) |
-| 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge`/`walkTree` induction and `walk_ranges` admitted; saturation not a field (attachment-count forms false, §4.6) |
 | 4.5 Run saturation and interval-to-run laminarity | `Proofs/RunSaturation.lean` | `Saturated` stated; eight conditional lemmas proved, standard axioms only; walk preservation and marker alignment remain open |
 | 4.5 Child-return settling diagnostic and provisional contract | `Proofs/RInvFrame.lean`, `checks/RInvReturnCheck.lean` | `RReturn`/`WalkTreeRReturnSpec` stated without an admission; legacy conclusion still refuted; fixed base/settled-entry clauses kernel-checked (standard axioms); seeds 0..300 × both modes pass shape/disjointness, with content frames checked on the 65 block inputs; preservation proof remains open |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean`, `EarFrontier.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export proved: `finishEdge_frontier` (from `FinishBook.ear` + `Inv'`/`Shape`), `walkTree_frontiers` (`FrontiersTree` under the `walkTree_inv'` hypotheses), standard axioms; R interval/saturation preservation remains open |
-| 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean` | stated and threaded into `finishEdge_rInvAt`/`walkTree_rInvAt`; ear export and R interval/saturation preservation remain open |
 | 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge_rangesInv` (`RangesStep.lean`, under `FinishAdj`) and `walkTree_rangesInv` (`RangesTree.lean`, under `GuardsTree`/`BookTree`/`RgTree`) proved; `finishBoundary_rangesInv`, `walk_rangesInv`, `walk_closeFacts` (`WalkWF.lean`) admitted; `ranges_of_rangesInv` (`RangesFinal.lean`) derives `convex` + node `att_vs` from `RangesInv`, the rest is `Items.CloseFacts`; saturation not a field (attachment-count forms false, §4.6) |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |

@@ -76,7 +76,7 @@ theorem finishEdge_ranges {v d : Nat} {o : DfsOut} {m : Nat} {hasVert : Bool} {D
       (after (finishEdge v d o m hasVert) s).g = s.g := by
   obtain ⟨hi', hs'⟩ := finishEdge_step hD h.inv hs hg hb
   by_cases hge : d ≤ o.cls.lowval d
-  · obtain ⟨hr', hgg⟩ := finishBoundary_rangesInv hge h hs hnd hσ hb (ear_boundary hge hg h.inv hs hb) (hr.2 hge)
+  · obtain ⟨hr', hgg⟩ := finishBoundary_rangesInv hge h hs hnd hσ hb (ear_boundary hge hg h.inv hs hb hD) (hr.2 hge)
     exact ⟨hr'.withInv hi', hs', hgg⟩
   · obtain ⟨lv, kind, ho, hl⟩ := ret_of_lowval_lt (Nat.lt_of_not_le hge)
     obtain ⟨sub, base, hlen, hE⟩ := hb.ear

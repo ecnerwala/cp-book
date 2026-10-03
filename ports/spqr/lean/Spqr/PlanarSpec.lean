@@ -212,13 +212,14 @@ theorem nodePlanar_complete (g : Graph) (ternarize : Bool) (vertOrder edgeOrder 
 
 /-- The root piece contains every edge, and its local quarter-edge numbering permutes the
 original quarter-edges. Its closed planar embedding transports to the glued rotation. -/
-theorem glued_root (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
+theorem glued_root (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
+    (hvo : OrderOK g.nv vertOrder) (heo : OrderOK g.ne edgeOrder)
     (hwf : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.WF) (s : PlanarSpqrTree.EmbedState)
     (h : (g.planarTree ternarize vertOrder edgeOrder).GluedUpTo g 0 s) :
     IsPlanarEmbedding g.edges.toList g.nv ⟨s.rotAdj⟩ := by
   apply (g.planarTree ternarize vertOrder edgeOrder).glued_root_of g hwf ?_ ?_ s h
   · rw [planarRelabel_proj]
-    exact spqrTree_childShape g ternarize vertOrder edgeOrder
+    exact spqrTree_childShape g hg ternarize vertOrder edgeOrder hvo heo
   · rw [planarRelabel_proj]
     rfl
 
@@ -244,7 +245,7 @@ theorem planarEmbed_sound (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder 
       rw [planarRelabel_proj]; exact spqrTree_represents g hg ternarize vertOrder edgeOrder hvo heo
     have hsep : (g.planarTree ternarize vertOrder edgeOrder).toSpqrTree.PieceSep g := by
       rw [planarRelabel_proj]; exact spqrTree_pieceSep g hg ternarize vertOrder edgeOrder hvo heo
-    exact glued_root g ternarize vertOrder edgeOrder hwf _
+    exact glued_root g hg ternarize vertOrder edgeOrder hvo heo hwf _
       ((g.planarTree ternarize vertOrder edgeOrder).gluedUpTo_planarEmbed g hwf hsh hrep hsep hall)
   · cases h
 

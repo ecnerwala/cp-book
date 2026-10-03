@@ -5,7 +5,7 @@ import Spqr.PlanarRotInv
 
 `RotInv.step` is the per-node bookkeeping (the new node's `layoutRot` block lands at
 `4 · neBounds[n]`); `planarRelabel_rotInv` threads it through the fold with the abstract-state
-`wp`/`Frame` calculus of `PlanarRotInv.lean` (states are never unfolded past one primitive).
+`wp`/`PlanarRelabelM.Frame` calculus of `PlanarRotInv.lean` (states are never unfolded past one primitive).
 -/
 
 namespace Spqr
@@ -76,33 +76,33 @@ theorem modifyAux_snd (f : PlanarRelabelAux → PlanarRelabelAux) (s : PlanarRel
     (modifyAux f s).2 = { s with aux := f s.aux } := rfl
 
 theorem wp_jp_match1 {Q : Unit → PlanarRelabelState → Prop} (ty : NodeType) (m₁ m₂ k : PlanarRelabelM Unit)
-    (s : PlanarRelabelState) (h₁ : ∀ s, Frame s (m₁ s).2) (h₂ : ∀ s, Frame s (m₂ s).2)
-    (hk : ∀ s', Frame s s' → wp k Q s') :
+    (s : PlanarRelabelState) (h₁ : ∀ s, PlanarRelabelM.Frame s (m₁ s).2) (h₂ : ∀ s, PlanarRelabelM.Frame s (m₂ s).2)
+    (hk : ∀ s', PlanarRelabelM.Frame s s' → wp k Q s') :
     wp (planarRelabel.match_1 (fun _ => PlanarRelabelM Unit) ty (fun _ => m₁ >>= fun _ => k)
       (fun _ => m₂ >>= fun _ => k) (fun _ => k)) Q s := by
   cases ty
   all_goals first
-    | exact hk s (Frame.refl s)
+    | exact hk s (PlanarRelabelM.Frame.refl s)
     | exact wp_frame m₁ h₁ fun _ s' hf => hk s' hf
     | exact wp_frame m₂ h₂ fun _ s' hf => hk s' hf
 
 theorem wp_jp_ite {Q : Unit → PlanarRelabelState → Prop} (c : Prop) [Decidable c] (m k : PlanarRelabelM Unit)
-    (s : PlanarRelabelState) (h : ∀ s, Frame s (m s).2) (hk : ∀ s', Frame s s' → wp k Q s') :
+    (s : PlanarRelabelState) (h : ∀ s, PlanarRelabelM.Frame s (m s).2) (hk : ∀ s', PlanarRelabelM.Frame s s' → wp k Q s') :
     wp (if c then m >>= fun _ => k else k) Q s := by
   split
   · exact wp_frame m h fun _ s' hf => hk s' hf
-  · exact hk s (Frame.refl s)
+  · exact hk s (PlanarRelabelM.Frame.refl s)
 
 theorem wp_jp_ite3 {Q : Unit → PlanarRelabelState → Prop} (c : Prop) [Decidable c] (m₁ : PlanarRelabelM Unit)
     (m₂ : PlanarRelabelAux → PlanarRelabelM Unit) (k : PlanarRelabelM Unit) (s : PlanarRelabelState)
-    (h₁ : ∀ s, Frame s (m₁ s).2) (h₂ : ∀ a s, Frame s (m₂ a s).2) (hk : ∀ s', Frame s s' → wp k Q s') :
+    (h₁ : ∀ s, PlanarRelabelM.Frame s (m₁ s).2) (h₂ : ∀ a s, PlanarRelabelM.Frame s (m₂ a s).2) (hk : ∀ s', PlanarRelabelM.Frame s s' → wp k Q s') :
     wp (if c then m₁ >>= fun _ => getAux >>= fun a => m₂ a >>= fun _ => k else k) Q s := by
   split
   · rw [wp_bind]
     refine wp_frame m₁ h₁ fun _ s₁ hf₁ => ?_
     simp only [wp_bind, wp_getAux]
     exact wp_frame (m₂ _) (h₂ _) fun _ s₂ hf₂ => hk s₂ (hf₁.trans hf₂)
-  · exact hk s (Frame.refl s)
+  · exact hk s (PlanarRelabelM.Frame.refl s)
 
 theorem planarRelabel_rotInv (g : Graph) :
     ∀ (fuel : Nat) (cur : ItemId) (p pn ct : Option Nat) (s : PlanarRelabelState),
@@ -118,29 +118,29 @@ theorem planarRelabel_rotInv (g : Graph) :
     simp only [liftR_modify_snd] at hg₁ ht₁ hne₁ hnv₁ hE₁ hV₁ hR₁
     try dsimp only
     -- V/Q bookkeeping
-    refine wp_jp_match1 _ _ _ _ _ (fun s => Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
-      (fun s => Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩) fun s₂ hf₂ => ?_
+    refine wp_jp_match1 _ _ _ _ _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+      (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩) fun s₂ hf₂ => ?_
     try simp only [wp_bind]
-    refine wp_frame _ (fun s => Frame.setupNode _ _ _ s) fun planar s₃ hf₃ => ?_
+    refine wp_frame _ (fun s => PlanarRelabelM.Frame.setupNode _ _ _ s) fun planar s₃ hf₃ => ?_
     try simp only [wp_bind]
-    refine wp_frame _ (fun s => Frame.modifyAux _ s rfl) fun _ s₄ hf₄ => ?_
+    refine wp_frame _ (fun s => PlanarRelabelM.Frame.modifyAux _ s rfl) fun _ s₄ hf₄ => ?_
     try simp only [wp_liftR_get]
     -- node-verts
     refine wp_abs _ fun s₅ hg₅ ht₅ hne₅ hnv₅ hE₅ hV₅ hR₅ => ?_
     simp only [liftR_modify_snd, Array.size_append, List.size_toArray] at hg₅ ht₅ hne₅ hnv₅ hE₅ hV₅ hR₅
     try dsimp only
     -- R: vertex positions + flips
-    refine wp_jp_ite3 _ _ _ _ _ (fun s => Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
-      (fun _ s => Frame.applyFlips _ _ _ s) fun s₆ hf₆ => ?_
+    refine wp_jp_ite3 _ _ _ _ _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+      (fun _ s => PlanarRelabelM.Frame.applyFlips _ _ _ s) fun s₆ hf₆ => ?_
     try simp only [wp_bind]
     refine wp_liftR_orderedChildren _ _ fun children hch => ?_
     -- child slots
-    refine wp_frame _ (fun s => Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+    refine wp_frame _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
       fun _ s₇ hf₇ => ?_
     try simp only [wp_liftR_get]
     try dsimp only
     -- R: rotEdgeNe
-    refine wp_jp_ite _ _ _ _ (fun s => Frame.modifyAux _ s rfl) fun s₈ hf₈ => ?_
+    refine wp_jp_ite _ _ _ _ (fun s => PlanarRelabelM.Frame.modifyAux _ s rfl) fun s₈ hf₈ => ?_
     try simp only [wp_bind, wp_getAux]
     try dsimp only
     -- node edges / bounds
@@ -187,7 +187,7 @@ theorem planarRelabel_rotInv (g : Graph) :
           hf₃.nodeVerts, hf₂.nodeVerts, hV₁]
     -- cap twin
     refine wp_jp_ite _ _ _ _
-      (fun s => Frame.liftR_modify _ s (by constructor <;> simp only [Array.size_modify])) fun s₁₁ hf₁₁ => ?_
+      (fun s => PlanarRelabelM.Frame.liftR_modify _ s (by constructor <;> simp only [Array.size_modify])) fun s₁₁ hf₁₁ => ?_
     have hinv₁₁ := RotInv.frame hf₁₁ hinv₁₀
     try simp only [wp_bind]
     -- children
@@ -201,7 +201,7 @@ theorem planarRelabel_rotInv (g : Graph) :
         exact ⟨_, rfl, ih c _ _ _ _ (RotInv.frame (by constructor <;> simp only [Array.size_modify]) hinv')⟩
     · intro b s' hinv'
       try dsimp only
-      exact wp_frame _ (fun s => Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+      exact wp_frame _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
         fun _ s'' hf => RotInv.frame hf hinv'
 
 end Spqr

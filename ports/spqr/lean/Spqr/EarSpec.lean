@@ -1,5 +1,10 @@
 import Spqr.Ear
-import Spqr.Correctness
+import Spqr.Build
+import Spqr.Spec
+import Spqr.ItemSpec
+import Spqr.RelabelRep
+import Spqr.WalkWF
+import Spqr.RelabelWF
 import Spqr.Frame
 import Spqr.Proofs.Dfs
 import Mathlib.Data.List.TakeDrop
