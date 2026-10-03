@@ -109,15 +109,15 @@ theorem closeEars_st {D d : Nat} {o : DfsOut} {s : WalkState} {curV v₀ : Nat} 
     (hD : D = d + 1) (he : o.e < s.g.ne) (hq : Items.ch s.items (edgeItem s.g o.e) = [])
     (hends : Items.PairEq (o.dest, s.stackVerts[d]!) s.g.edges[o.e]!) (hv : v₀ < s.g.nv)
     (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d)
-    (hqty : Items.type s.items (edgeItem s.g o.e) = .Q)
-    (hR : StRead s.items sub ps) (hI : StItems g s blocks) :
-    L1StInv g s d (ps ++ [⟨s.stackDir[d]!, [edgeItem s.g o.e]⟩]) blocks base (feS₁ d o s) := by
+    (hqty : Items.type s.items (edgeItem s.g o.e) = .Q) {pre B : List TEntry} (hB : base = pre ++ B)
+    (hR : StRead s.items (sub ++ pre) ps) (hI : StItems g s blocks) :
+    L1StInv g s d (ps ++ [⟨s.stackDir[d]!, [edgeItem s.g o.e]⟩]) blocks B (feS₁ d o s) := by
   obtain ⟨hi', lo, hrange, hc⟩ := L1Ctx.ofEar hE hs hD ht hlow
   have h0 := l1_init hE hi hs hD he hq hends hrange
-  show L1StInv g s d _ blocks base
+  show L1StInv g s d _ blocks B
     ((loop (ceS₁ o.dest d o.e (feS₀ d o s)).tstack.length (loop1Cond d) (loop1Body d s.stackDir[d]!)).run
       (ceS₁ o.dest d o.e (feS₀ d o s))).2
-  refine l1St_loop hc h0 hv (List.nil_append base).symm ?_ _
+  refine l1St_loop hc h0 hv hB ?_ _
   set f : Item → Item :=
     fun it => { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) } with hf
   have hst : ceS₁ o.dest d o.e (feS₀ d o s) =
@@ -143,12 +143,12 @@ theorem closeEars_st {D d : Nat} {o : DfsOut} {s : WalkState} {curV v₀ : Nat} 
     exact hE.q_free u hu hmu
   have hqlt : edgeItem s.g o.e < (s.items.modify (edgeItem s.g o.e) f).size := by
     rw [Array.size_modify]; have := hs.size; show 1 + s.g.nv + o.e < _; omega
-  have hR₀ : StRead (s.items.modify (edgeItem s.g o.e) f) sub ps :=
+  have hR₀ : StRead (s.items.modify (edgeItem s.g o.e) f) (sub ++ pre) ps :=
     hR.congr fun x _ y _ =>
       ⟨Items.type_modify s.items _ _ f (fun _ => rfl), Items.ch_modify_ch_eq _ f (fun _ => rfl) y⟩
-  refine ⟨⟨⟨o.dest, d, s.nxtEdgeIdx, setSides s.stackDir[d]! [edgeItem s.g o.e] []⟩ :: sub, ?_,
+  refine ⟨⟨⟨o.dest, d, s.nxtEdgeIdx, setSides s.stackDir[d]! [edgeItem s.g o.e] []⟩ :: (sub ++ pre), ?_,
     StRead.pushEntry _ _ _ _ _ (Or.inr hty₀) hR₀⟩, ?_, fun k _ => rfl⟩
-  · dsimp only; rw [hE.tstack]; rfl
+  · dsimp only; rw [hE.tstack, hB, List.append_assoc]; rfl
   · exact StItems.pushEntry (s := { s with items := s.items.modify (edgeItem s.g o.e) f }) o.dest d
       s.nxtEdgeIdx s.stackDir[d]! (edgeItem s.g o.e) hqlt hroot₀ hch₀ hfree hI₀
 
