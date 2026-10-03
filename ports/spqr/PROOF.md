@@ -1052,8 +1052,11 @@ including its optional S merge and following unwrap, from the frontier's 3/2-ent
 `closeEarsAdj_of_frontier` supplies all of `CloseEarsAdj` from the loop-1 frontier export.
 `finishTailAdj_of_vert` discharges the tail merge because the pushed vertex has no piece
 edges; the `PushVertR` processed-edge bound remains a separate obligation.
-All eighteen lemmas have only standard axioms. Full `FinishAdj` still needs the vertex
-close and the P merge into the base; the frontier lemma alone applies only
+`Frontier.owns_late` obtains ownership at the exit of loop 2.
+`closeVertAdj_of_frontier` supplies all three vertex-close adjacency fields; its three-entry
+frontier bound follows from `FinishBook.late_length`.
+All twenty-one lemmas have only standard axioms. Full `FinishAdj` still needs the P merge
+into the base; the frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece
 on that entry, so its `MergeAdj` obligation is vacuous.
 The final assembly must avoid importing `RangesFrontier` into `WalkWF`: the current

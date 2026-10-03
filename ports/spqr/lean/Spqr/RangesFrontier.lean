@@ -1,5 +1,5 @@
 import Spqr.RangesTree
-import Spqr.EarFrontier
+import Spqr.EarSides
 import Spqr.Proofs.ForestSpec
 
 namespace Spqr.WalkState
@@ -172,11 +172,11 @@ theorem mergeLateAdj_of_frontier {o : DfsOut} {d orig : Nat}
   obtain ⟨hown, hlen⟩ := hf.loop2 ht hlow k (fun j hj => hk j (by omega))
   exact ⟨hown, hlen (hk k (Nat.le_refl _))⟩
 
-theorem loop3Adj_of_frontier {o : DfsOut} {d orig : Nat}
+theorem loop3Adj_of_frontier {o : DfsOut} {d orig curV : Nat}
     (hf : Frontier (o := o) d orig s) (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d)
     (h : (feS₂ d o s).RangesInv σ n D) (hnd : σ.Nodup)
     (hσ : ∀ e ∈ σ, e < (feS₂ d o s).g.ne) (ho : o.block <:+: σ)
-    (hok : CloseVertOk D s.stackVerts[d]! s.stackDir[d]! o.cls.isType1 orig (feSingle d o s) (feS₂ d o s))
+    (hok : CloseVertOk D curV s.stackDir[d]! o.cls.isType1 orig (feSingle d o s) (feS₂ d o s))
     (hty : o.cls.isType1 = false) :
     ∀ k, (∀ j, j ≤ k → result (loop3Cond orig) (iter mergeTstackTops j (feS₂ d o s)) = true) →
       MergeAdj σ (iter mergeTstackTops k (feS₂ d o s)) := by
@@ -373,5 +373,79 @@ theorem finishTailAdj_of_vert {curV d : Nat} {hasVert isSingle : Bool}
   have hc := (List.cons.inj hts).1
   subst cur
   exact (TEntry.piece_vertEntry _ _ _ _ ht _ hp).elim
+
+theorem Frontier.owns_late {o : DfsOut} {d orig : Nat}
+    (hf : Frontier (o := o) d orig s) (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d) :
+    FrontierOwns orig (s.tstack.drop (s.tstack.length - orig)) (subEdges o) (feS₂ d o s) := by
+  unfold feS₂ after
+  rw [mergeLate_run]
+  split
+  · obtain ⟨k, -, hk, hj, -⟩ := loop_run_iter (feS₁ d o s).tstack.length
+      (loop2Cond (feS₁ d o s).firstOccurrence[d]!) mergeTstackTops (feS₁ d o s) (fun _ => rfl)
+    rw [hk]
+    exact (hf.loop2 ht hlow k hj).1
+  · exact (hf.loop2 ht hlow 0 (fun j hj => by omega)).1
+
+theorem closeVertAdj_of_frontier {o : DfsOut} {d orig curV : Nat}
+    (hf : Frontier (o := o) d orig s) (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d)
+    (h : (feS₂ d o s).RangesInv σ n D) (hs : Shape (feS₂ d o s)) (hv : curV < (feS₂ d o s).g.nv)
+    (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < (feS₂ d o s).g.ne) (ho : o.block <:+: σ)
+    (hlen : orig + 3 ≤ (feS₂ d o s).tstack.length)
+    (hok : CloseVertOk D curV s.stackDir[d]! o.cls.isType1 orig (feSingle d o s) (feS₂ d o s)) :
+    CloseVertAdj σ o.cls.isType1 orig (feSingle d o s) (feS₂ d o s) := by
+  have ha := loop3Adj_of_frontier hf ht hlow h hnd hσ ho hok
+  have st₁ : RgStep σ n D curV (feS₂ d o s)
+      (cvS₁ o.cls.isType1 orig (feSingle d o s) (feS₂ d o s)) :=
+    RgStep.vertPre h hs hnd hσ hv hok.loop3 ha
+  have hf₁ : FrontierOwns orig (s.tstack.drop (s.tstack.length - orig)) (subEdges o)
+      (cvS₁ o.cls.isType1 orig (feSingle d o s) (feS₂ d o s)) ∧
+      orig + 3 ≤ (cvS₁ o.cls.isType1 orig (feSingle d o s) (feS₂ d o s)).tstack.length := by
+    cases hty : o.cls.isType1
+    · simp only [cvS₁, after, vertPre, Bool.not_false, ↓reduceIte, WalkM.run_bind, WalkM.pure_run, run_tstackSize]
+      obtain ⟨k, -, hk, hj, -⟩ := loop_run_iter (feS₂ d o s).tstack.length (loop3Cond orig)
+        mergeTstackTops (feS₂ d o s) (fun _ => rfl)
+      rw [hk]
+      refine ⟨(hf.loop3 ht hlow hty k hj).1, ?_⟩
+      exact iter_merge_length_ge _ (by omega) k _ hlen fun j hj' => by
+        have hc := hj j hj'
+        rw [run_loop3Cond] at hc
+        simpa using hc
+    · exact ⟨hf.owns_late ht hlow, hlen⟩
+  have hf₂ : FrontierOwns orig (s.tstack.drop (s.tstack.length - orig)) (subEdges o)
+      (cvS₂ o.cls.isType1 orig (feSingle d o s) (feS₂ d o s)) ∧
+      orig + 3 ≤ (cvS₂ o.cls.isType1 orig (feSingle d o s) (feS₂ d o s)).tstack.length := by
+    cases hty : o.cls.isType1
+    · rw [hty] at hf₁; exact hf₁
+    · rw [hty] at hf₁ st₁ hok
+      have hu := hf₁.1.unwrap (by omega) st₁.step.shape
+        (ty := if feSingle d o s then .S else .R) (by split <;> decide) (hok.unwrap rfl)
+      refine ⟨hu.1, ?_⟩
+      change orig + 3 ≤ (after (maybeUnwrapNxt (if feSingle d o s then .S else .R))
+        (cvS₁ true orig (feSingle d o s) (feS₂ d o s))).tstack.length
+      rw [hu.2]
+      exact hf₁.2
+  obtain ⟨st₂, -⟩ := RgStep.vertUnwrap (v := curV) st₁.ranges st₁.step.shape (st₁.hσ hσ)
+    (isType1 := o.cls.isType1) (isSingle := cvB₁ o.cls.isType1 orig (feSingle d o s) (feS₂ d o s))
+    (fun hty => by rw [hty]; exact hok.unwrap hty)
+  have st₂ : RgStep σ n D curV (cvS₁ o.cls.isType1 orig (feSingle d o s) (feS₂ d o s))
+      (cvS₂ o.cls.isType1 orig (feSingle d o s) (feS₂ d o s)) := st₂
+  have ha₁ := st₂.ranges.mergeAdj_of_frontier hnd (st₂.hσ (st₁.hσ hσ)) hf₂.1 (by omega)
+    (subEdges_interval hnd ho)
+  have st₃ := RgStep.mergeTop (v := curV) st₂.ranges st₂.step.shape hnd (st₂.hσ (st₁.hσ hσ)) hok.merge₁ ha₁
+  have hf₃ := hf₂.1.mergeTop (by omega)
+  refine ⟨ha, ha₁, st₃.ranges.mergeAdj_of_frontier hnd (st₃.hσ (st₂.hσ (st₁.hσ hσ))) hf₃.1 ?_
+    (subEdges_interval hnd ho)⟩
+  have hl := hf₃.2
+  dsimp only [after] at hl
+  omega
+
+theorem FinishBook.late_length {curV d orig : Nat} {o : DfsOut} {hasVert : Bool}
+    (hb : FinishBook curV d o orig hasVert s) (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d) :
+    orig + 3 ≤ (feS₂ d o s).tstack.length := by
+  obtain ⟨sub, base, hlen, he⟩ := hb.ear
+  obtain ⟨c, mid, py, vy, hts, -⟩ := he.loops ht hlow
+  rw [hts]
+  simp only [List.length_cons, List.length_append, List.length_nil]
+  omega
 
 end Spqr.WalkState
