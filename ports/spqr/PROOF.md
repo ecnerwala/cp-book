@@ -1310,11 +1310,7 @@ Remaining close-site obligations, precisely:
   arm only merges/modifies the stack and creates no item record.
 * `finishP`: the analogous P record after unwrap/merge, including the minimum virtual-edge
   count and absence of V children; both newly allocated and reused item paths remain.
-* `finishBoundary`: construct the nonempty Q record after writing its children: bridge
-  (`I :: t.spans.2`), completed block (`backedge.spans.1 ++ t.spans.2`), or self-loop (`[O]`).
-  The Q root/leaf alternative, I/O parent restriction, attachment and child endpoint facts
-  remain. `CloseAt.leafIO` handles the new leaf from its allocated index, type, and empty children;
-  `CloseInv.vertex_append` then attaches the complete Q record to V.
+* `finishBoundary`: proved (`finishBoundary_closeAt`), see below.
 * Actual vertex pre-push and root pop/append are proved (`walkOutPre_closeInv`,
   `rootAppend_closeInv`). The end-of-tree and first-edge vertex pushes use `CloseInv.pushVert`.
   Thread these through the mutual walk/forest induction, with placement and `RootOK`.
@@ -1329,14 +1325,31 @@ after `feS₀`) and `finishBack_closeAt` (`feBack`) are proved (`leafQ_closeInv`
 record from the written terminals `setSides dir (stackVerts[d]) o.dest`, distinct by
 `EarFinish.path`/`path_child`, with the parent edge / `dest_edge` / the path edge at
 `stackVerts[lv]` as the second `Att` witness; `feS₀` itself is `CloseInv.modifyLoose` since
-the pending Q is in no span and has no parent), still admitted:
-`loop1Body_closeAt` (one loop-1 iteration under the loop condition), `closeVertTail_closeAt`
-(`cvS₅ → feS₃`), `finishP_closeAt` (from `feRest`, the state `finishRest` runs from),
-`finishBoundary_closeAt` (the whole boundary `finishEdge`). The checker evaluates every
-`CloseAt` clause at every one of these block boundaries (`closeSites`, with the theorem name
-as the site; the frame blocks `feS₀`/`mergeLate`/`closeVert'.pre`/`finishTail` as well):
+the pending Q is in no span and has no parent). `finishBoundary_closeAt` (the whole boundary
+`finishEdge`) is proved, mirroring `finishBoundary_rangesInv` step by step: the pending Q's
+terminal `(some curV, none)` is a loose write (`CloseInv.modifyLoose`); the I/O leaf is
+allocated (`CloseInv.alloc'`, the `Place`-free variant from `Shape`) and its terminals written
+loose; the one or two popped entries transfer through `CloseInv.pop` with
+`BoundaryOk.gone`/`gone₂`; the root-Q record is `CloseAt.rootQ` (children `[I, vertItem dest]`
+at a bridge, `[node, vertItem dest]` at a completed block, `[O]` at a self-loop; the Q's `Att`
+is `curV` only, from the popped entries' terminals via `EarFinish.sub_cover`/`dest_edges`/
+`sv_child`/`path_child`, `Inv'.entries`, and the open-path edges of `CloseCtx.path`) written by
+`CloseInv.writeChildren`, after which `CloseInv.vertex_append'` (the `Shape` variant) hangs the
+Q under `vertItem curV` (`cnt (vertItem curV) = 0` from `BoundaryOk.v_root`/`v_free`). It
+consumes four new `CloseCtx` fields, facts about the pre-state that the walk induction must
+supply and that no current `EarFinish`/`RangesInv` field exports: `dest_lt : o.dest < nv`;
+`bd_loop` (a non-tree boundary edge is a self-loop, `o.dest = curV`); `bd_vert` (the block
+entry `(o.dest, d+1)` — the top entry at a bridge, the second at a completed block — has
+`spans.2 = [vertItem o.dest]`, i.e. nothing was merged into the child vertex's entry);
+`bd_node` (at a completed block the top entry's `spans.1` is a single non-V/F node, a leaf if
+Q, whose terminals are `{curV, o.dest}`). The checker evaluates these four at the pre-state
+of every block boundary (`checkCtx`, kinds `ctx_*`). Still admitted: `loop1Body_closeAt` (one
+loop-1 iteration under the loop condition), `closeVertTail_closeAt` (`cvS₅ → feS₃`),
+`finishP_closeAt` (from `feRest`, the state `finishRest` runs from). The checker evaluates
+every `CloseAt` clause at every one of these block boundaries (`closeSites`, with the theorem
+name as the site; the frame blocks `feS₀`/`mergeLate`/`closeVert'.pre`/`finishTail` as well):
 0 failures on seeds 0..400 × both modes + tiny graphs. `walk_closeInv` remains the named
-assembly admission over these six names (two proved, four admitted).
+assembly admission over these six names (three proved, three admitted).
 Likewise `walk_rootsCover` still groups P ownership with its enclosing mutual/forest induction.
 No new admission was added to the completed local lemmas.
 
@@ -1696,7 +1709,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | 4.5 Child-return induction `rrTree`/`rrOuts`/`rrOut` (`RWalk`: ancestor frames `RInvG` + `RInvTop` of the walked vertex; `BotKeep`/`finishEdge_bot_keep`), `walkTree_rReturn`, `walkTreeRReturnSpec`; side facts `RSideTree`/`RSideOuts`/`RSideOut` (`AncChain`, `EntryR` stability under `stackVerts.set!`, parent entries top out `≤ d-1`, non-root out-edges return, `VertFree`, `FinishRShape`) | `Proofs/RInvWalk.lean`, `checks/RFinishEdgeCheck.lean` (`anc`/`stab`/`entry`/`ret`/`vertown` lines) | induction and `walkTree_rReturn` proved from `finishEdge_rInvTop` + `finishEdge_rInvG_base` (non-standard axiom only via the admitted `finishEdge_tree_top_settled`); side facts dump-checked at every entry/site (seeds 0..300 × both modes + 6000 random, 0 failures) and admitted as `walkTree_rSide` |
 | 4.5 Child-return settling diagnostic and provisional contract | `Proofs/RInvFrame.lean`, `checks/RInvReturnCheck.lean` | `RReturn`/`WalkTreeRReturnSpec` stated without an admission; legacy conclusion still refuted; fixed base/settled-entry clauses kernel-checked (standard axioms); seeds 0..300 × both modes pass shape/disjointness, with content frames checked on the 65 block inputs; preservation proof remains open |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean`, `EarFrontier.lean` | stated and threaded into `finishEdge_rInvTop`; ear export proved: `finishEdge_frontier` (from `FinishBook.ear` + `Inv'`/`Shape`), `walkTree_frontiers` (`FrontiersTree` under the `walkTree_inv'` hypotheses), standard axioms; R interval/saturation preservation remains open |
-| 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge_rangesInv` (`RangesStep.lean`, under `FinishAdj`) and `walkTree_rangesInv` (`RangesTree.lean`, under `GuardsTree`/`BookTree`/`RgTree`) proved; `finishBoundary_rangesInv` proved (`RangesTree.lean`); `walk_rootsCover` and `walk_closeInv` (`WalkItemsWF.lean`) admitted, the latter split into six checked per-site statements, `closeEars_closeAt`/`finishBack_closeAt` proved (leaf Q, `leafQ_closeInv`) and `loop1Body_closeAt`/`closeVertTail_closeAt`/`finishP_closeAt`/`finishBoundary_closeAt` admitted (`RangesCloseSites.lean`, 0 violations at every block boundary, seeds 0..400 × tern + tiny graphs); `ranges_of_rangesInv` (`RangesFinal.lean`) derives `convex` + node `att_vs` from `RangesInv`, the rest is `Items.CloseFacts`; saturation not a field (attachment-count forms false, §4.6) |
+| 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge_rangesInv` (`RangesStep.lean`, under `FinishAdj`) and `walkTree_rangesInv` (`RangesTree.lean`, under `GuardsTree`/`BookTree`/`RgTree`) proved; `finishBoundary_rangesInv` proved (`RangesTree.lean`); `walk_rootsCover` and `walk_closeInv` (`WalkItemsWF.lean`) admitted, the latter split into six checked per-site statements, `closeEars_closeAt`/`finishBack_closeAt` (leaf Q, `leafQ_closeInv`) and `finishBoundary_closeAt` (root Q, `CloseAt.rootQ`; new `CloseCtx` fields `dest_lt`/`bd_loop`/`bd_vert`/`bd_node`, checker `checkCtx`) proved and `loop1Body_closeAt`/`closeVertTail_closeAt`/`finishP_closeAt` admitted (`RangesCloseSites.lean`, 0 violations at every block boundary, seeds 0..400 × tern + tiny graphs); `ranges_of_rangesInv` (`RangesFinal.lean`) derives `convex` + node `att_vs` from `RangesInv`, the rest is `Items.CloseFacts`; saturation not a field (attachment-count forms false, §4.6) |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
