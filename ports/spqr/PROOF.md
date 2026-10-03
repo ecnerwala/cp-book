@@ -1304,8 +1304,8 @@ Remaining close-site obligations, precisely:
   item in the final modified array supplied to `CloseInv.finishTop`. Missing are the new
   record's attachment/terminal facts, interior V-child equivalence, non-V child's two terminals,
   and the S/P/R count/order clause for the selected type.
-* `closeVertTail`: the same final-array record in the `some item` arm (S or R); the `none`
-  arm only merges/modifies the stack and creates no item record.
+* `closeVertTail`: proved (`closeVertTail_closeAt`), see below; the `none` arm only
+  merges/modifies the stack and creates no item record.
 * `finishP`: the analogous P record after unwrap/merge, including the minimum virtual-edge
   count and absence of V children; both newly allocated and reused item paths remain.
 * `finishBoundary`: proved (`finishBoundary_closeAt`), see below.
@@ -1359,12 +1359,27 @@ side with terminals `{stackVerts[lv], curV}` and an empty passive side; its atta
 terminals or interior; it touches both terminals; each terminal has an edge outside both
 entries; S/P/R/leaf-Q kinds (also for a P item's children); every spanned item is a root
 listed once on the stack. The checker evaluates `PSite` at every `feRest` state where `condP`
-holds (`checkP`, kinds `psite_*`): 0 failures. Still admitted: `loop1Body_closeAt` (one loop-1
-iteration under the loop condition), `closeVertTail_closeAt` (`cvS₅ → feS₃`). The checker evaluates
+holds (`checkP`, kinds `psite_*`): 0 failures. `closeVertTail_closeAt` (`cvS₅ → feS₃`) is
+proved: for a type-2 edge `feS₃` is `cvS₅` itself; for a type-1 edge it is
+`finishTstackTop x` at `cvS₅` for the item `x` returned by `maybeUnwrapNxt`, and
+`VSite.closeInv` runs it by `finishTstackTop_run_eq` and `CloseInv.finishTop'`, with the
+S/R record `CloseAt.node` (distinct terminals; `Att` of the node equal to the terminals;
+each terminal touched and with an edge outside; children S/P/R/Q/V, non-V ones with two
+distinct terminals; a vertex item is a child iff all its edges lie below the node and in no
+single child; the S path and R shape clauses on the node's virtual edges). Its facts come from
+one new `CloseCtx` field `v_site : isTree → lowval < d → hasVert → isType1 → ∃ t, VSite curV x t
+cvS₅`, where `VSite` (`RangesCloseSites.lean`) records at `cvS₅`: top entry `t` with
+`vStart = curV` and an empty passive side; `x` free (`ItemFree`) of type S or R;
+`curV ≠ stackVerts[t.topDepth]`; the active side's kinds and two-terminal children; its
+attachments are terminals or interior, both terminals touched and with an edge outside the
+side; the interior-vertex equivalence; and the S/R clauses on the side's virtual edges
+(`vKids`/`vTerms`/`vVirt`). The checker evaluates `VSite` at every type-1 vertex close
+(`checkV`, kinds `vsite_*`): 0 failures. Still admitted: `loop1Body_closeAt` (one loop-1
+iteration under the loop condition). The checker evaluates
 every `CloseAt` clause at every one of these block boundaries (`closeSites`, with the theorem
 name as the site; the frame blocks `feS₀`/`mergeLate`/`closeVert'.pre`/`finishTail` as well):
 0 failures on seeds 0..400 × both modes + tiny graphs. `walk_closeInv` remains the named
-assembly admission over these six names (four proved, two admitted).
+assembly admission over these six names (five proved, one admitted).
 Likewise `walk_rootsCover` still groups P ownership with its enclosing mutual/forest induction.
 No new admission was added to the completed local lemmas.
 
@@ -1674,7 +1689,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | 4.5 Depth-bounded settling `RInvTop`/`RInvFront`; `finishEdge_rInvTop` (replaces `finishEdge_rInvAt`): back-edge branch proved (`finishEdge_back_rInvTop`), tree-edge branch proved up to the top entry's `EntryR` (`finishEdge_tree_rInvTop_of_top`; admitted `finishEdge_tree_top_settled`) | `RInv.lean`, `Proofs/RInvFrame.lean`, `Proofs/RInvBack.lean`, `Proofs/RInvTree.lean`, `checks/RFinishEdgeCounter.lean`, `checks/RFinishEdgeCheck.lean` | two kernel-checked counterexamples to the parent-only exemption (standard axioms); contract B checked on 6414 sites, 0 failures; frame lemmas, the back-edge branch (`RInvTop.pushEdge/finishP/unwrapNxt_exempt/mergeTop_exempt/finishTop_exempt`) and the tree-edge branch below the top (`RInvG.closeEars`, `RInvH.mergeLate/closeVert'/finishRest`) proved, standard axioms; `FinishRShape` checked on 6414 sites |
 | 4.5 Child-return settling diagnostic and provisional contract | `Proofs/RInvFrame.lean`, `checks/RInvReturnCheck.lean` | `RReturn`/`WalkTreeRReturnSpec` stated without an admission; legacy conclusion still refuted; fixed base/settled-entry clauses kernel-checked (standard axioms); seeds 0..300 × both modes pass shape/disjointness, with content frames checked on the 65 block inputs; preservation proof remains open |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean`, `EarFrontier.lean` | stated and threaded into `finishEdge_rInvTop`; ear export proved: `finishEdge_frontier` (from `FinishBook.ear` + `Inv'`/`Shape`), `walkTree_frontiers` (`FrontiersTree` under the `walkTree_inv'` hypotheses), standard axioms; R interval/saturation preservation remains open |
-| 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge_rangesInv` (`RangesStep.lean`, under `FinishAdj`) and `walkTree_rangesInv` (`RangesTree.lean`, under `GuardsTree`/`BookTree`/`RgTree`) proved; `finishBoundary_rangesInv` proved (`RangesTree.lean`); `walk_rootsCover` and `walk_closeInv` (`WalkItemsWF.lean`) admitted, the latter split into six checked per-site statements, `closeEars_closeAt`/`finishBack_closeAt` (leaf Q, `leafQ_closeInv`) and `finishBoundary_closeAt` (root Q, `CloseAt.rootQ`; new `CloseCtx` fields `dest_lt`/`bd_loop`/`bd_vert`/`bd_node`, checker `checkCtx`) and `finishP_closeAt` (P record `CloseAt.pNode'` via `PSite.closeInv`; new `CloseCtx` field `p_site : … → PSite`, checker `checkP`) proved and `loop1Body_closeAt`/`closeVertTail_closeAt` admitted (`RangesCloseSites.lean`, 0 violations at every block boundary, seeds 0..400 × tern + tiny graphs); `ranges_of_rangesInv` (`RangesFinal.lean`) derives `convex` + node `att_vs` from `RangesInv`, the rest is `Items.CloseFacts`; saturation not a field (attachment-count forms false, §4.6) |
+| 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge_rangesInv` (`RangesStep.lean`, under `FinishAdj`) and `walkTree_rangesInv` (`RangesTree.lean`, under `GuardsTree`/`BookTree`/`RgTree`) proved; `finishBoundary_rangesInv` proved (`RangesTree.lean`); `walk_rootsCover` and `walk_closeInv` (`WalkItemsWF.lean`) admitted, the latter split into six checked per-site statements, `closeEars_closeAt`/`finishBack_closeAt` (leaf Q, `leafQ_closeInv`) and `finishBoundary_closeAt` (root Q, `CloseAt.rootQ`; new `CloseCtx` fields `dest_lt`/`bd_loop`/`bd_vert`/`bd_node`, checker `checkCtx`) and `finishP_closeAt` (P record `CloseAt.pNode'` via `PSite.closeInv`; new `CloseCtx` field `p_site : … → PSite`, checker `checkP`) and `closeVertTail_closeAt` (S/R record `CloseAt.node` via `VSite.closeInv`; new `CloseCtx` field `v_site : … → ∃ t, VSite`, checker `checkV`) proved and `loop1Body_closeAt` admitted (`RangesCloseSites.lean`, 0 violations at every block boundary, seeds 0..400 × tern + tiny graphs); `ranges_of_rangesInv` (`RangesFinal.lean`) derives `convex` + node `att_vs` from `RangesInv`, the rest is `Items.CloseFacts`; saturation not a field (attachment-count forms false, §4.6) |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |

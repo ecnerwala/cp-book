@@ -374,6 +374,58 @@ def checkP (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s 
     if !(allE.any fun e => inc r e w && !Eall.contains e) then out := bad "pend" :: out
   return out
 
+def checkV (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
+    List V := Id.run do
+  let lv := o.cls.lowval d
+  if !(o.cls.isTree && lv < d && hv && o.cls.isType1) then return []
+  let x := ((maybeUnwrapNxt (if feSingle d o s then NodeType.S else .R)).run (feS₂ d o s)).1
+  let r := cvS₅ curV s.stackDir[d]! true orig (feSingle d o s) (feS₂ d o s)
+  let ty : Nat → NodeType := fun i => r.items[i]!.type
+  let vs : Nat → Option Nat × Option Nat := fun i => r.items[i]!.vs
+  let bad := fun k => (⟨seed, r.ternarize, curV, d, "closeVertTail_closeAt", "vsite_" ++ k,
+    s!"o.e={o.e} x={x} stack={r.tstack.map showT}"⟩ : V)
+  match r.tstack with
+  | [] => return [bad "stack"]
+  | t :: _ =>
+    let mut out := []
+    let dir := r.stackDir[t.topDepth]!
+    let u := r.stackVerts[t.topDepth]!
+    let cs := getSide t.spans dir
+    let E := entryEdges r t
+    let allE := List.range r.g.ne
+    let interior := fun (F : List Nat) (w : Nat) => allE.all fun e => !inc r e w || F.contains e
+    if t.vStart != curV then out := bad "vstart" :: out
+    if !(getSide t.spans (!dir)).isEmpty then out := bad "side" :: out
+    if !(x < r.items.size && 1 + r.g.nv + r.g.ne ≤ x && r.items.all (fun it => !it.ch.contains x)
+        && r.tstack.all (fun t' => !(spanItems t').contains x)) then out := bad "free" :: out
+    if !(ty x == .S || ty x == .R) then out := bad "ty" :: out
+    if curV == u then out := bad "ne" :: out
+    for c in cs do
+      if ![NodeType.S, .P, .R, .Q, .V].contains (ty c) then out := bad "kinds" :: out
+      if ty c != .V then
+        match vs c with
+        | (some a, some b) => if a == b then out := bad "two" :: out
+        | _ => out := bad "two" :: out
+    for w in List.range r.g.nv do
+      if touches r E w && w != curV && w != u && !interior E w then out := bad "att" :: out
+      let inner := touches r E w && interior E w && cs.all fun c => !interior (edgesBelow r c) w
+      if cs.contains (vertItem w) != inner then out := bad "inner" :: out
+    if !(touches r E curV && touches r E u) then out := bad "touch" :: out
+    for w in [curV, u] do
+      if !(allE.any fun e => inc r e w && !E.contains e) then out := bad "pend" :: out
+    let terms := setSides dir u curV
+    let xs := (cs.filter (fun c => ty c == .V)).map (· - 1)
+    let ve := (cs.filter (fun c => ty c != .V)).map fun c => ((vs c).1.getD 0, (vs c).2.getD 0)
+    if ty x == .S then
+      if !(xs.length ≥ 1 && ve == List.zip (terms.1 :: xs) (xs ++ [terms.2])) then
+        out := bad "s_order" :: out
+    if ty x == .R then
+      let keys := ve.map fun q => min q.1 q.2 + r.g.nv * max q.1 q.2
+      let pair := fun (p q : Nat × Nat) => p == q || p == (q.2, q.1)
+      if !(xs.length ≥ 2 && ve.length ≥ 5 && keys.Nodup && ve.all fun q => !pair q terms) then
+        out := bad "r_shape" :: out
+    return out
+
 def checkClose (seed : Nat) (site : String) (s : WalkState) : List V := Id.run do
   let ty := fun i => s.items[i]!.type
   let ch := fun i => s.items[i]!.ch
@@ -467,7 +519,7 @@ partial def iOut (seed : Nat) (σ : List Nat) (v d : Nat) (o : DfsOut) (hv : Boo
     | .tree _ _ child => iTree seed σ child (d+1) { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
     | .back .. => (s, [])
   let vs := vp ++ vs ++ check seed σ v d o orig s ++ checkAdj seed σ v d o orig hv s ++ checkClose seed "pre" s ++
-    checkCtx seed v d o s ++ checkP seed v d o orig hv s
+    checkCtx seed v d o s ++ checkP seed v d o orig hv s ++ checkV seed v d o orig hv s
   let vs := vs ++ (closeSites v d o orig hv s).flatMap fun (site, st) => checkClose seed site st
   let vs := vs ++ if hv then [] else checkVertPast seed σ v (σ.idxOf o.e) s
   let (hv', s) := (finishEdge v d o orig hv).run s
