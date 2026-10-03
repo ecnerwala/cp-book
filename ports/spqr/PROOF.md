@@ -3186,9 +3186,34 @@ across a permutation of `ves` (the children are glued in skeleton order, `edgesB
 children order), via `glob`/`loc` inverse maps, `IsPlanarEmbedding.reindex` and
 `sameFaceOrbit_of_map` (face orbits pull back along a quarter-edge map commuting with `get` and
 `^^^ 3`).
-`#print axioms planarEmbed_sound` reaches `sorryAx` only through `walk_items_wf`,
-`spqrTree_r_three_connected`, `spqrTree_pieceSep`, `nodePlanar_sound_R` and
-`nodeFold_capped`.
+`nodeFold_capped_S` (the `S` case of the node fold, standard axioms; `PlanarEmbedNodeS.lean`,
+`PlanarEmbedNodeSChain.lean`, `PlanarEmbedNodeSFold.lean`, `PlanarEmbedNodeSMain.lean`): the
+executable fold is `blockFold` over the `n` four-quarter-edge blocks of the cycle layout
+(`layoutRot .S`, obtained from the new hypothesis `hlay : LayoutAt i` = `neRotAdj_segment`,
+threaded through `embedItem_step_node_faces`/`embedItem_step_faces`/`gluedFaces_planarEmbed` and
+discharged in `planarEmbed_sound`). Block `0` (the cap edge) is four `setOuter`s exposing slots
+`0, 1` of the first non-`V` child and `2, 3` of the last one (`cap_block_S`); block `k`
+(`1 ≤ k ≤ n - 2`) is two skips, the corner link at node-vertex `s + k` (`Capped.attachOpen` when
+the node-vertex's `V` item is present, read off `nodeStep`'s own `outerE[v][0].isSome` test —
+`NodeCorners` is not needed) and the child-to-child link (`Capped.join`), with the exposed slots
+transported along `treeQe` (`nodeStep_skip`/`_cap`/`_link`/`_corner`); block `n - 1` is a no-op
+(`last_block_S`: all its successors are earlier). The induction invariant `InvS` carries the
+`Capped` certificate of the growing chain `chain g i m` (first child, then alternately the `V` item
+and the non-`V` child of each interior node-vertex, `sL`), `rotAdj` framed outside the chain and
+the other rows unchanged (`invS_zero`, `invS_step`, `invS_all`). The chain's edge list is a
+permutation of `edgesBelow i` (every child is a non-`V` child or the `V` item of an interior
+node-vertex: `PieceSep.v_child_nv`/`nv_child` with `capEnd_S`; `children_perm_sL`), so
+`Capped.perm` gives the certificate of `pieceBelow g i`; the cap's `neOrig` endpoints are the
+first and last node-vertex's original vertices (`capOrig_S`). The S-node data layer (`shape_S`,
+`nEdges_S`, `capNe_S`, `nvs_S`, `noncap_S`, `neRotAdj_S`, `child_S`, `child_cert_S`,
+`sW_boundary`, `nvInc_*`, `sep_*`/`disjoint_*`) is derived from `ChildShape`, `Twins` and
+`PieceSep` (`node_child_cap`, `nv_orig_inj`, `node_touch`, `node_attach`). `nodeFold_capped`
+(`PlanarEmbedNodeFold.lean`) dispatches on the type; the `P` and `R` cases are the named admissions
+`nodeFold_capped_P`/`nodeFold_capped_R` (same statement restricted to the type; their executable
+consequences are what `check_piece_sep`'s `checkOuter`/`checkCapFace` and `compare_planar_lean.sh`
+check).
+`#print axioms planarEmbed_sound` reaches `sorryAx` only through the walk/R-side admissions,
+`spqrTree_pieceSep`, `nodePlanar_sound_R`, `nodeFold_capped_P` and `nodeFold_capped_R`.
 
 `glued_root` is proved. `edgesBelow 0` is a permutation of `range t.ne`, rather
 than the identity enumeration claimed by its old docstring. Each item's piece is
@@ -3271,9 +3296,11 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `embedItem_Q_nil`, `embedItem_Q_O`, `embedItem_Q_cons`, `qUpper`, `qLower`, `setOuter4` | `PlanarEmbedQExec.lean` | **proved** (exact unfolding of the executable `Q` branch) |
 | `q_edge_not_below`, `q_fresh`, `q_lower_boundary`, `q_capped_child`, `q_open_glued`, `q_leaf_glued`, `q_loop_glued`, `q_block_glued`, `embedItem_step_Q_faces` | `PlanarEmbedQ.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `treeQe`, `nodeStep`, `embedItem_node`, `forIn_state_foldl`, `nodeStep_outerE_ne`/`_outerE_size`/`_rotAdj_size`/`_exposedAt_ne`, `nodeFold_*` | `PlanarEmbedNodeExec.lean` | **proved** (exact unfolding of the executable `S`/`P`/`R` branch + frame lemmas) |
-| `node_capped_glued`, `embedItem_step_node_faces` | `PlanarEmbedNode.lean` | **proved** modulo `nodeFold_capped` |
-| `nodeFold_capped` | `PlanarEmbedNode.lean` | sorry (semantic node fold: (N1)–(N3)) |
-| `embedItem_step_faces`, `gluedFaces_planarEmbed` | `PlanarEmbedFacesFold.lean` | proved modulo `nodeFold_capped` |
+| `node_capped_glued`, `capped_child` | `PlanarEmbedNode.lean` | **proved** (standard axioms) |
+| S-node data layer (`shape_S`, `nEdges_S`, `capNe_S`, `nvs_S`, `noncap_S`, `neRotAdj_S`, `nodeStep_skip`/`_cap`/`_link`/`_corner`, `child_S`), chain layer (`sC`, `sW`, `sL`, `chain`, `child_cert_S`, `sW_boundary`, `nvInc_*`, `sep_*`, `disjoint_*`), fold (`blockFold`, `InvS`, `cap_block_S`, `invS_zero`, `invS_step`, `invS_all`, `last_block_S`), `capEnd_S`, `children_perm_sL`, `chain_perm_edgesBelow`, `nodeFold_capped_S` | `PlanarEmbedNodeS.lean`, `PlanarEmbedNodeSChain.lean`, `PlanarEmbedNodeSFold.lean`, `PlanarEmbedNodeSMain.lean` | **proved** (standard axioms) |
+| `LayoutAt`, `nodeFold_capped` (dispatch), `embedItem_step_node_faces` | `PlanarEmbedNodeFold.lean` | **proved** modulo `nodeFold_capped_P`/`_R` |
+| `nodeFold_capped_P`, `nodeFold_capped_R` | `PlanarEmbedNodeFold.lean` | sorry (P: executable correspondence of the bond fold with iterated `Capped.parJoin`; R: `TwoSum.splice`/`insert`/`uninsert` route, (N2)/(N3)) |
+| `embedItem_step_faces`, `gluedFaces_planarEmbed` | `PlanarEmbedFacesFold.lean` | proved modulo `nodeFold_capped_P`/`_R` |
 | `CornerAt`, `NodeCorners`; `planarTree_nodeCorners` | `PlanarNodeSpec.lean`, `PlanarSpec.lean` | def / sorry (not reached by `planarEmbed_sound`) |
 | `conj_not_sameOrbit_split`, `insert_not_sameFaceOrbit`, `Proofs/PlanarDegree.lean` | `Proofs/OrbitSplit.lean`, `Proofs/PlanarInsert.lean`, `Proofs/PlanarDegree.lean` | **proved** (standard axioms) |
 | `localSkeleton`, `nodeRot`, `isPlanar`, `isPlanar_of_all`; `RotInv.np_size`, `planarTree_nodePlanar_size` | `PlanarNodeSpec.lean`, `PlanarRotInv.lean`, `PlanarSpec.lean` | def / **proved** |
@@ -3283,7 +3310,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): `spqrTree_wf` (inherited by `planarRelabel_rot_spec`, `neRotAdj_segment`);
 `nodePlanar_sound_R`; the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
 `planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`,
-`nodeFold_capped` (hence `planarEmbed_sound`; the old `GluedUpTo`-level
+`nodeFold_capped_P`, `nodeFold_capped_R` (hence `planarEmbed_sound`; the old `GluedUpTo`-level
 `embedItem_step_Q`/`embedItem_step_node` and the unattempted `TwoSum.planar_left` converse have
 been removed); `spqrTree_planar`. The S and P
 cases of `nodePlanar_sound` are proved except for the `Shape` of the

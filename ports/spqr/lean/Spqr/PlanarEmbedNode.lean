@@ -6,9 +6,9 @@ import Spqr.PlanarEmbedNodeExec
 # The `S`/`P`/`R` step of `planarEmbed`
 
 `node_capped_glued` assembles `GluedFaces g i` from a `Capped` certificate of the node's piece
-whose four exposed ends fill the node's row, framed outside the piece; `nodeFold_capped` (the
-semantic content of the node fold, admitted) supplies it; `embedItem_step_node_faces` combines them
-through the executable unfolding `embedItem_node`.
+whose four exposed ends fill the node's row, framed outside the piece; `nodeFold_capped`
+(`PlanarEmbedNodeFold.lean`, the semantic content of the node fold) supplies it and
+`embedItem_step_node_faces` there combines them through the executable unfolding `embedItem_node`.
 -/
 
 namespace Spqr.PlanarSpqrTree
@@ -267,46 +267,5 @@ theorem capped_child (g : Graph) (hwf : t.toSpqrTree.WF) (hne : t.ne = g.ne)
   · refine ⟨l2, l3, hl2, hl3, hg23, ?_⟩
     rw [t.pieceBelow_loc_vert hwf hne hl2, hvert 2 c2 h2]
     simp
-
-/-- Semantic content of the node fold: starting from `GluedFaces g (i + 1) s`, the fold of
-`nodeStep` over the node's quarter-edges leaves `rotAdj` unchanged outside the node's piece, fills
-the node's row with four exposed ends, and the piece is `Capped` there — planar witness agreeing
-with `rotAdj`, the two exposed pairs facing at the cap's endpoints, slots 0/2 cofacial. Admitted:
-(N1) the 2-sum of `hloc` with each child's `Capped` certificate through its twin (`Twins.noncap_children`,
-`PieceSep.twin_orient`), (N2) iteration in `nodeRot` order with `Piece.loc` bookkeeping, (N3)
-the inner `V` items at corners (1-sum) and cofaciality of the cap's sides; see PROOF.md §8.6. -/
-theorem nodeFold_capped (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTree.ChildShape)
-    (hrep : t.toSpqrTree.Represents g) (hsep : t.toSpqrTree.PieceSep g) {i : Nat} (hi : i < t.size)
-    (hty : t.toSpqrTree.type i = .S ∨ t.toSpqrTree.type i = .P ∨ t.toSpqrTree.type i = .R)
-    (hloc : IsPlanarEmbedding (t.localSkeleton i) (t.toSpqrTree.nVerts i) (t.nodeRot i))
-    {ne : Nat} (hcne : t.toSpqrTree.capNe i = some ne) {p : Nat × Nat}
-    (hp : t.toSpqrTree.neOrig ne = some p)
-    (s : EmbedState) (h : t.GluedFaces g (i + 1) s) :
-    let s' := (List.range' (4 * t.neBounds[i]!) (4 * t.neBounds[i + 1]! - 4 * t.neBounds[i]!)).foldl
-      (t.nodeStep i t.neBounds[i]!) s
-    (∀ q, ¬(t.pieceBelow g i).Mem q → s'.rotAdj[q]? = s.rotAdj[q]?) ∧
-    ∃ a0 a1 a2 a3 ρ, s'.outerE[i]? = some #[some a0, some a1, some a2, some a3] ∧
-      (t.pieceBelow g i).Capped s'.rotAdj ρ a0 a1 a2 a3 p.1 p.2 := by
-  sorry
-
-/-- `S`/`P`/`R` step over `GluedFaces`: `embedItem_node` + `nodeFold_capped` + `node_capped_glued`. -/
-theorem embedItem_step_node_faces (g : Graph) (hwf : t.toSpqrTree.WF)
-    (hsh : t.toSpqrTree.ChildShape) (hrep : t.toSpqrTree.Represents g)
-    (hsep : t.toSpqrTree.PieceSep g) (i : Nat) (hi : i < t.size)
-    (hty : t.types[i]! = .S ∨ t.types[i]! = .P ∨ t.types[i]! = .R)
-    (hloc : IsPlanarEmbedding (t.localSkeleton i) (t.toSpqrTree.nVerts i) (t.nodeRot i))
-    (s : EmbedState) (h : t.GluedFaces g (i + 1) s) :
-    t.GluedFaces g i ((t.embedItem i).run s).2 := by
-  have ht : t.toSpqrTree.type i = .S ∨ t.toSpqrTree.type i = .P ∨ t.toSpqrTree.type i = .R := by
-    rw [t.type_eq_of_lt i hi]; exact hty
-  have hcne : t.toSpqrTree.capNe i = some (t.toSpqrTree.neRange i).1 := by
-    rcases ht with h' | h' | h' <;> simp [SpqrTree.capNe, SpqrTree.hasCap, h'] <;> decide
-  obtain ⟨p, hp⟩ := hsep.cap_orig i _ hi hcne
-  rw [t.embedItem_node i hty s]
-  obtain ⟨hframe, a0, a1, a2, a3, ρ, hrow, hcap⟩ :=
-    t.nodeFold_capped g hwf hsh hrep hsep hi ht hloc hcne hp s h
-  exact t.node_capped_glued g hwf hsh hrep hsep hi ht hcne hp s _ h
-    (t.nodeFold_rotAdj_size _ _ _ _) (t.nodeFold_outerE_size _ _ _ _) hframe
-    (fun j hji => t.nodeFold_outerE_ne _ _ _ _ j hji) hrow hcap
 
 end Spqr.PlanarSpqrTree

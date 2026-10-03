@@ -2,13 +2,13 @@ import Spqr.PlanarEmbedFacesSteps
 import Spqr.PlanarEmbedQ
 import Spqr.PlanarNodeSpec
 import Spqr.PlanarEmbedNodeExec
-import Spqr.PlanarEmbedNode
+import Spqr.PlanarEmbedNodeFold
 
 /-!
 # The fold of `planarEmbed` over the same-witness invariant `GluedFaces`
 
 `embedItem_step_faces` dispatches on the item type (leaf, `F`, `V`, `Q` proved; `S`/`P`/`R` from
-`PlanarEmbedNode.lean`, admitted there as `nodeFold_capped`) and `gluedFaces_planarEmbed` folds it over the reverse
+`PlanarEmbedNodeFold.lean`, through `nodeFold_capped`) and `gluedFaces_planarEmbed` folds it over the reverse
 preorder from `gluedFaces_init`.
 -/
 
@@ -23,6 +23,7 @@ theorem embedItem_step_faces (g : Graph) (hg : g.WF) (hwf : t.toSpqrTree.WF)
     (hsep : t.toSpqrTree.PieceSep g) (i : Nat) (hi : i < t.size)
     (hloc : ∀ i, i < t.size → t.types[i]! = .S ∨ t.types[i]! = .P ∨ t.types[i]! = .R →
       IsPlanarEmbedding (t.localSkeleton i) (t.toSpqrTree.nVerts i) (t.nodeRot i))
+    (hlay : ∀ i, i < t.size → t.LayoutAt i)
     (s : EmbedState) (h : t.GluedFaces g (i + 1) s) :
     t.GluedFaces g i ((t.embedItem i).run s).2 := by
   match hty : t.types[i]! with
@@ -31,22 +32,23 @@ theorem embedItem_step_faces (g : Graph) (hg : g.WF) (hwf : t.toSpqrTree.WF)
   | .Q => exact t.embedItem_step_Q_faces g hg hwf hsh hrep hsep i hi hty s h
   | .O => exact t.embedItem_step_leaf_faces g hwf hsh i hi (Or.inl hty) s h
   | .I => exact t.embedItem_step_leaf_faces g hwf hsh i hi (Or.inr hty) s h
-  | .S => exact t.embedItem_step_node_faces g hwf hsh hrep hsep i hi (Or.inl hty) (hloc i hi (Or.inl hty)) s h
+  | .S => exact t.embedItem_step_node_faces g hwf hsh hrep hsep i hi (Or.inl hty) (hloc i hi (Or.inl hty)) (hlay i hi) s h
   | .P =>
     exact t.embedItem_step_node_faces g hwf hsh hrep hsep i hi (Or.inr (Or.inl hty))
-      (hloc i hi (Or.inr (Or.inl hty))) s h
+      (hloc i hi (Or.inr (Or.inl hty))) (hlay i hi) s h
   | .R =>
     exact t.embedItem_step_node_faces g hwf hsh hrep hsep i hi (Or.inr (Or.inr hty))
-      (hloc i hi (Or.inr (Or.inr hty))) s h
+      (hloc i hi (Or.inr (Or.inr hty))) (hlay i hi) s h
 
 theorem gluedFaces_planarEmbed (g : Graph) (hg : g.WF) (hwf : t.toSpqrTree.WF)
     (hsh : t.toSpqrTree.ChildShape) (hrep : t.toSpqrTree.Represents g)
     (hsep : t.toSpqrTree.PieceSep g)
     (hloc : ∀ i, i < t.size → t.types[i]! = .S ∨ t.types[i]! = .P ∨ t.types[i]! = .R →
-      IsPlanarEmbedding (t.localSkeleton i) (t.toSpqrTree.nVerts i) (t.nodeRot i)) :
+      IsPlanarEmbedding (t.localSkeleton i) (t.toSpqrTree.nVerts i) (t.nodeRot i))
+    (hlay : ∀ i, i < t.size → t.LayoutAt i) :
     t.GluedFaces g 0 (((List.range t.size).reverse.forM t.embedItem).run t.initState).2 :=
   t.forM_reverse_range_inv (fun i s => t.GluedFaces g i s) t.size
-    (fun i s hi h => t.embedItem_step_faces g hg hwf hsh hrep hsep i hi hloc s h) _
+    (fun i s hi h => t.embedItem_step_faces g hg hwf hsh hrep hsep i hi hloc hlay s h) _
     (t.gluedFaces_init g)
 
 end PlanarSpqrTree

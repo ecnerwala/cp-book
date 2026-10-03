@@ -101,6 +101,20 @@ theorem mod4_cases {e k x : Nat} (hx : x = 0 ∨ x = 2) (hk : k < 4) :
     4 * e + k = 4 * e + x ∨ 4 * e + k = 4 * e + (x + 1) ∨ 4 * e + k = 4 * e + (2 - x) ∨
       4 * e + k = 4 * e + (3 - x) := by omega
 
+theorem Capped.frame {P : Piece} {A B : Array (Option Nat)} {ρ : RotationSystem}
+    {c0 c1 c2 c3 u v : Nat} (h : P.Capped A ρ c0 c1 c2 c3 u v)
+    (hframe : ∀ q, P.Mem q → B[q]? = A[q]?) : P.Capped B ρ c0 c1 c2 c3 u v where
+  planar := h.planar
+  agrees := fun q r hq hr => h.agrees q r hq (by rwa [hframe q hq] at hr)
+  unset := fun q hq => by rw [hframe q hq]; exact h.unset q hq
+  pair0 := h.pair0
+  pair2 := h.pair2
+  face := h.face
+  dir0 := h.dir0
+  dir1 := h.dir1
+  dir2 := h.dir2
+  dir3 := h.dir3
+
 /-- The two `link`s of the `Q` step onto its capped child: `4e + x + 1 ↔ c0`, `4e + 2 - x ↔ c3`.
 The new ends are `(4e + x, c1)` at `u` and `(c2, 4e + 3 - x)` at `v`, with witness `ρ.insert`. -/
 theorem Capped.insert {P : Piece} {s : EmbedState} {ρ : RotationSystem} {c0 c1 c2 c3 u v e x : Nat}

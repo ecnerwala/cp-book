@@ -266,9 +266,12 @@ theorem planarEmbed_sound (g : Graph) (hg : g.WF) (ternarize : Bool) (vertOrder 
         (PlanarSpqrTree.isPlanar_of_all hall ?_)
       · rw [(g.planarTree ternarize vertOrder edgeOrder).type_eq_of_lt i hi]; exact hty
       · rw [planarTree_nodePlanar_size]; exact hi
+    have hlay : ∀ i, i < (g.planarTree ternarize vertOrder edgeOrder).size →
+        (g.planarTree ternarize vertOrder edgeOrder).LayoutAt i :=
+      fun i hi => neRotAdj_segment g ternarize vertOrder edgeOrder i hi
     exact glued_root g hg ternarize vertOrder edgeOrder hvo heo hwf _
       ((g.planarTree ternarize vertOrder edgeOrder).gluedFaces_planarEmbed g hg hwf hsh hrep hsep
-        hloc).toGluedUpTo
+        hloc hlay).toGluedUpTo
   · cases h
 
 /-- The eventual target: the planar SPQR tree yields an embedding iff `g` is planar. `→` is
