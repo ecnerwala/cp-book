@@ -216,16 +216,88 @@ theorem rkForest (g : Graph) (dfs : DfsData) : ∀ (forest pre : List DfsTree) (
 
 end WalkState
 
-/-- **Named admission.** Exact obligation: the DFS data of `g.dfsForest vo eo` is rooted for a
-2-connected `g` — `(DfsData.ofForest (g.dfsForest vo eo)).Rooted g`, i.e. every endpoint of
-every edge of `g` is a descendant (`Anc`) of `dfs.root`, the first root of the forest. For a
-2-connected (hence connected) graph the forest is a single tree whose vertex set is all of
-`g.nv` (`dfsForest_spanning'`), so `Anc root x` follows from the tree structure; the connectivity
-→ single-tree argument is DFS-layer reasoning outside the R proof files. -/
+/-- The DFS data of `g.dfsForest vo eo`, re-rooted at a depth-0 vertex `r`, is rooted for a
+2-connected `g`: every endpoint of every edge is a descendant (`Anc`) of `r`. `r` is the root of
+the tree holding the edges — `ofForest`'s own `root` (the *first* tree's root) does not work, since
+an isolated vertex ordered first becomes `root` with no out-edges (`checks/RRootedCounter.lean`,
+kernel-checked). Proof: an out-edge joins `v` to a child or to an ancestor (`Spec.back_anc`), so
+the endpoints of every edge are `Anc`-comparable, and a depth-0 ancestor of one endpoint is an
+ancestor of the other (`Anc.comparable`); 2-connectivity joins any edge to edge `0` by a walk, and
+the ancestor relation propagates along it. -/
 theorem dfsForest_rooted (g : Graph) (hg : g.WF) (vo eo : List Nat)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) (h2 : g.TwoConnected) :
-    (DfsData.ofForest (g.dfsForest vo eo)).Rooted g := by
-  sorry
+    ∃ r, (DfsData.ofForest (g.dfsForest vo eo)).depth r = 0 ∧
+      ({ DfsData.ofForest (g.dfsForest vo eo) with root := r } : DfsData).Rooted g := by
+  obtain ⟨hvp, -⟩ := dfsForest_spanning' hg hvo heo
+  have hnd : ((g.dfsForest vo eo).flatMap DfsTree.verts).Nodup := hvp.nodup_iff.2 List.nodup_range
+  have hsp : (DfsData.ofForest (g.dfsForest vo eo)).Spec g :=
+    (dfsForestSpec_of_dfsForest hg hvo heo).toSpec
+  generalize hdfs : DfsData.ofForest (g.dfsForest vo eo) = dfs at hsp ⊢
+  have hbound : ∀ {e a b}, g.Joins e a b → a < g.nv ∧ b < g.nv := by
+    intro e a b h
+    rcases h with h | h
+    · obtain ⟨_, h⟩ := Array.getElem?_eq_some_iff.1 h
+      exact hg _ (h ▸ Array.getElem_mem _)
+    · obtain ⟨_, h⟩ := Array.getElem?_eq_some_iff.1 h
+      exact (hg _ (h ▸ Array.getElem_mem _)).symm
+  have hpair : ∀ {e a b x y}, g.Joins e a b → g.Joins e x y → (x = a ∧ y = b) ∨ (x = b ∧ y = a) := by
+    intro e a b x y hab hxy
+    rcases hab with h | h <;> rcases hxy with h' | h' <;>
+      have := h'.symm.trans h <;> simp only [Option.some.injEq, Prod.mk.injEq] at this
+    · exact .inl this
+    · exact .inr ⟨this.2, this.1⟩
+    · exact .inr this
+    · exact .inl ⟨this.2, this.1⟩
+  have hends : ∀ {e a b x}, g.Joins e a b → g.IsEnd e x → x = a ∨ x = b :=
+    fun hab ⟨_, hx⟩ => (hpair hab hx).elim (fun h => .inl h.1) (fun h => .inr h.1)
+  have hstep : ∀ r x y, dfs.depth r = 0 → dfs.Anc r x → g.Adj x y → dfs.Anc r y := by
+    intro r x y hr hx ⟨e, hxy⟩
+    obtain ⟨w, o, ho, rfl⟩ := hsp.edge_out e hxy.lt
+    have hj := hsp.joins w o ho
+    have hcomp : dfs.Anc w o.dest ∨ dfs.Anc o.dest w := by
+      cases hdt : o.isTree
+      · exact .inr (hsp.back_anc w o ho hdt)
+      · exact .inl (DfsData.IsParent.anc ⟨o, ho, hdt, rfl⟩)
+    have key : ∀ a b, dfs.Anc r a → (dfs.Anc a b ∨ dfs.Anc b a) → dfs.Anc r b := by
+      intro a b hra hab
+      rcases hab with hab | hba
+      · exact hra.trans hab
+      · rcases hra.comparable hsp hba with h | h
+        · exact h
+        · obtain rfl : b = r := by
+            by_contra hne
+            have := h.depth_lt hsp hne; omega
+          exact DfsData.Anc.refl _
+    rcases hpair hj hxy with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact key _ _ hx hcomp
+    · exact key _ _ hx hcomp.symm
+  by_cases hne : g.ne = 0
+  · exact ⟨dfs.root, hsp.depth_root, fun e x hx => absurd hx.lt (by omega)⟩
+  obtain ⟨w, o, ho, hoe⟩ := hsp.edge_out 0 (Nat.pos_of_ne_zero hne)
+  have hj : g.Joins 0 w o.dest := hoe ▸ hsp.joins w o ho
+  obtain ⟨t, ht, hwt⟩ := List.mem_flatMap.1
+    (hvp.mem_iff.2 (List.mem_range.2 (hbound hj).1))
+  refine ⟨t.v, hdfs ▸ DfsData.ofForest_depth_root hnd ht, fun e x hx => ?_⟩
+  have hr0 : dfs.depth t.v = 0 := hdfs ▸ DfsData.ofForest_depth_root hnd ht
+  have hrw : dfs.Anc t.v w :=
+    hdfs ▸ (DfsData.ofForest_anc_iff hnd ht (DfsTree.Sub.refl _)).2 hwt
+  have hend0 : ∀ z, g.IsEnd 0 z → dfs.Anc t.v z := by
+    intro z hz
+    rcases hends hj hz with rfl | rfl
+    · exact hrw
+    · exact hstep _ _ _ hr0 hrw ⟨0, hj⟩
+  show dfs.Anc t.v x
+  rcases h2 g.nv 0 e (Nat.pos_of_ne_zero hne) hx.lt with rfl | ⟨x₀, y, hx₀, hy, hreach⟩
+  · exact hend0 x hx
+  · have hy' : dfs.Anc t.v y := by
+      clear hy
+      induction hreach with
+      | refl _ => exact hend0 _ hx₀
+      | tail _ hadj _ ih => exact hstep _ _ _ hr0 ih hadj
+    obtain ⟨y', hyy'⟩ := hy
+    rcases hends hyy' hx with rfl | rfl
+    · exact hy'
+    · exact hstep _ _ _ hr0 hy' ⟨e, hyy'⟩
 
 /-- Every R item of the walk's items is a 3-connected skeleton (`Items.RSkelInv`), threading the
 invariant from `WalkState.init` through every root of `g.dfsForest vo eo`. -/
@@ -236,7 +308,9 @@ theorem walk_rSkelInv (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
   have hf : ForestOK g (g.dfsForest vo eo) := ForestOK.of_perm hvp hep
   have hnd : ((g.dfsForest vo eo).flatMap DfsTree.verts).Nodup := hvp.nodup_iff.2 List.nodup_range
   have hspec := dfsForestSpec_of_dfsForest hg hvo heo
-  have hrt := dfsForest_rooted g hg vo eo hvo heo h2
+  obtain ⟨r, hr0, hrt⟩ := dfsForest_rooted g hg vo eo hvo heo h2
+  have hsp' : ({ DfsData.ofForest (g.dfsForest vo eo) with root := r } : DfsData).Spec g :=
+    { hspec.toSpec with depth_root := hr0 }
   have hp : ∀ t ∈ g.dfsForest vo eo, ∀ v outs, t = .node v outs → ∀ o ∈ outs, ∀ e cls c couts,
       o = .tree e cls (.node c couts) →
       (DfsData.ofForest (g.dfsForest vo eo)).IsParent v c ∧
@@ -249,7 +323,7 @@ theorem walk_rSkelInv (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
       DfsData.ofForest_outs hnd ht (DfsTree.Sub.step (DfsTree.Sub.refl _) ho)
     exact ⟨⟨_, by rw [h1]; exact ho, rfl, rfl⟩, h2.symm⟩
   exact rkForest g _ (g.dfsForest vo eo) [] (WalkState.init g tern) (rootState_init g tern) hf
-    (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo) h2 hspec.toSpec hrt hp
+    (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo) h2 hsp' hrt hp
     (fun t ht => DfsData.ofForest_depth_root hnd ht) (init_rSkelInv g tern)
 
 end Spqr
