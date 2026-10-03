@@ -191,6 +191,52 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
             bad := bad + 1
             IO.println s!"node_twin_node: i={i} ne={ne} tw={tw}"
   let pt := g.planarSpqrTree tern vo eo
+  for i in [0:pt.size] do
+    let ty := pt.toSpqrTree.type i
+    if (ty == .S || ty == .P || ty == .R) && pt.nodePlanar[i]! then
+      let (neSt, neEn) := pt.toSpqrTree.neRange i
+      let (nvSt, nvEn) := pt.toSpqrTree.nvRange i
+      let cap := pt.toSpqrTree.nodeEdges[neSt]!
+      for nv in [nvSt:nvEn] do
+        let mut cnt := 0
+        let mut cntRev := 0
+        for ta in [4 * (neSt + 1):4 * neEn] do
+          if ta % 4 == 2 && (pt.toSpqrTree.nodeEdges[ta / 4]!).nvs.2 == nv then
+            if let some tb := pt.neRotAdj[ta]! then
+              if tb % 4 == 1 then
+                if ta < tb then cnt := cnt + 1 else cntRev := cntRev + 1
+        let v := (pt.toSpqrTree.nodeVerts[nv]!).vert
+        let capEnd := cap.nvs.1 == nv || cap.nvs.2 == nv
+        let hasPieces := !(pt.edgesBelow v).isEmpty
+        let isChild := pt.toSpqrTree.parent v == some i
+        if capEnd && (cnt + cntRev != 0) then
+          bad := bad + 1
+          IO.println s!"corner_capend: i={i} nv={nv} cnt={cnt} rev={cntRev}"
+        if !capEnd && (cnt != 1 || cntRev != 0) then
+          bad := bad + 1
+          IO.println s!"corner_inner: i={i} ty={repr ty} nv={nv} cnt={cnt} rev={cntRev} pieces={hasPieces}"
+        if !capEnd && !isChild then
+          bad := bad + 1
+          IO.println s!"corner_vitem_not_child: i={i} nv={nv} v={v}"
+        if capEnd && isChild then
+          bad := bad + 1
+          IO.println s!"corner_capend_child: i={i} nv={nv} v={v} pieces={hasPieces}"
+      if let some p := pt.toSpqrTree.parent i then
+        if pt.toSpqrTree.type p == .F || pt.toSpqrTree.type p == .V then
+          bad := bad + 1
+          IO.println s!"node_parent: i={i} p={p}"
+      for c in pt.toSpqrTree.children i do
+        if pt.toSpqrTree.type c == .V then
+          let nvs := (List.range (nvEn - nvSt)).filter fun k =>
+            (pt.toSpqrTree.nodeVerts[nvSt + k]!).vert == c
+          if nvs.length != 1 then
+            bad := bad + 1
+            IO.println s!"corner_vchild_nv: i={i} c={c} n={nvs.length}"
+      for nv in [nvSt:nvEn] do
+        for nv' in [nvSt:nv] do
+          if (pt.toSpqrTree.nodeVerts[nv]!).vert == (pt.toSpqrTree.nodeVerts[nv']!).vert then
+            bad := bad + 1
+            IO.println s!"corner_nv_inj: i={i} nv={nv} nv'={nv'}"
   let mut s := pt.initState
   bad := bad + (← checkOuter g pt pt.size s)
   if pt.nodePlanar.all id then

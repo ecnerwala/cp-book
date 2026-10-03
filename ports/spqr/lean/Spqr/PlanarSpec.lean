@@ -191,6 +191,17 @@ theorem nodePlanar_sound (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : L
   · exact nodePlanar_sound_P g ternarize vertOrder edgeOrder i hi hP
   · exact nodePlanar_sound_R g ternarize vertOrder edgeOrder i hi hR h
 
+/-- Corner structure of the node rotation systems (`NodeCorners`), under the all-planar flag.
+Admitted; checked empirically by `check_piece_sep`. For S and P it is mechanical from the explicit
+`layoutRot` cycle/bond layouts (`neRotAdj_segment'`); for R it is the left/right structure of the
+embedding routine's `mapRot`: at each vertex the quarter-edges of edges towards lower node-vertices
+form one contiguous block, and edges are sorted by endpoint midpoint (`RelabelSt` ordering), so the
+unique `(side 1, dir 0) → (side 0, dir 1)` transition has `ta < tb`. -/
+theorem planarTree_nodeCorners (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat)
+    (hall : (g.planarTree ternarize vertOrder edgeOrder).nodePlanar.all id = true) :
+    (g.planarTree ternarize vertOrder edgeOrder).NodeCorners := by
+  sorry
+
 /-- Completeness of the per-node flag: a node flagged nonplanar has a nonplanar skeleton.
 Admitted (Kuratowski-style; plan in PROOF.md §8.3: the `mergePlanarity` nesting obstruction
 exhibits a `K₅` / `K₃,₃` subdivision in the skeleton). -/

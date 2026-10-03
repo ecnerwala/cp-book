@@ -160,6 +160,100 @@ theorem conj_numFaceOrbits_split (ht : rs.Total) (hi : rs.Involution) (ho : rs.O
       (m := m) (by rw [conj_size, hs]), numFaceOrbits_eq _ ht hi hs, ← hs]
   exact conj_orbitCount_split rs a b ht hi ho ha hb hab hrab hs (by decide) (by decide) h1 h2
 
+/-- After conjugating by two cofacial pairs, the two first elements lie in distinct orbits. -/
+theorem conj_not_sameOrbit_split (ht : rs.Total) (hi : rs.Involution) (ho : rs.OppositeDir)
+    (ha : a < rs.size) (hb : b < rs.size) (hab : a ≠ b) (hrab : rs.rot a ≠ b)
+    {m c : Nat} (hs : rs.size = 4 * m) (hc : c < 4) (hc2 : c % 2 = 1)
+    (h1 : SameOrbit (rs.stepC c) (a ^^^ c) (b ^^^ c))
+    (h2 : SameOrbit (rs.stepC c) (rs.rot a ^^^ c) (rs.rot b ^^^ c)) :
+    ¬SameOrbit ((rs.conj a b).stepC c) (a ^^^ c) (b ^^^ c) := by
+  rw [conj_stepC rs a b ht hi ho ha hb hab hrab hs hc]
+  have hf := isPermOn_stepC ht hi hs hc
+  have hpar : ∀ x y, SameOrbit (rs.stepC c) x y → x % 2 = y % 2 := fun x y h =>
+    sameOrbit_invariant (· % 2) (stepC_mod2 ht ho hs hc hc2) h
+  have hra := rot_lt ht hi ha
+  have hrb := rot_lt ht hi hb
+  have mem : ∀ z, z < rs.size → z ^^^ c ∈ Finset.range rs.size := fun z hz =>
+    Finset.mem_range.2 (hs ▸ xor_lt_mul4 (hs ▸ hz) hc)
+  have hne1 : a ^^^ c ≠ b ^^^ c := fun h => hab (xor_right_inj.1 h)
+  have hdis : ¬SameOrbit (rs.stepC c) (a ^^^ c) (rs.rot a ^^^ c) := by
+    intro h
+    have h1 := hpar _ _ h
+    have h2 := xor_mod2 a hc2
+    have h3 := xor_mod2 (rs.rot a) hc2
+    have h4 := rot_mod2 ht ho ha
+    omega
+  set f := rs.stepC c with hfdef
+  set f' := swapImg f (a ^^^ c) (b ^^^ c) with hf'def
+  have hf' := isPermOn_swapImg hf (mem a ha) (mem b hb)
+  have hf'a : f' (a ^^^ c) = f (b ^^^ c) := swapImg_left f _ _
+  have hf'b : f' (b ^^^ c) = f (a ^^^ c) := swapImg_right f hne1.symm
+  have hf'z : ∀ z, z ≠ a ^^^ c → z ≠ b ^^^ c → f' z = f z := fun z h1 h2 => swapImg_of_ne f h1 h2
+  have h2' : SameOrbit f' (rs.rot a ^^^ c) (rs.rot b ^^^ c) := by
+    refine (sameOrbit_congr (fun z => ¬SameOrbit f (a ^^^ c) z) ?_ ?_ ?_ hdis).1 h2
+    · intro z
+      exact not_congr ⟨fun h => h.trans (SameOrbit.step z), fun h => h.trans (SameOrbit.step z).symm⟩
+    · intro z
+      by_cases hz : SameOrbit f (a ^^^ c) z
+      · simp only [hz, not_true_eq_false, false_iff, not_not]
+        by_cases hza : z = a ^^^ c
+        · rw [hza, hf'a]; exact h1.trans (SameOrbit.step _)
+        by_cases hzb : z = b ^^^ c
+        · rw [hzb, hf'b]; exact SameOrbit.step _
+        rw [hf'z z hza hzb]; exact hz.trans (SameOrbit.step z)
+      · have hza : z ≠ a ^^^ c := fun h => hz (h ▸ SameOrbit.refl f _)
+        have hzb : z ≠ b ^^^ c := fun h => hz (h ▸ h1)
+        rw [hf'z z hza hzb]
+        exact not_congr ⟨fun h => h.trans (SameOrbit.step z), fun h => h.trans (SameOrbit.step z).symm⟩
+    · intro z hz
+      have hza : z ≠ a ^^^ c := fun h => hz (h ▸ SameOrbit.refl f _)
+      have hzb : z ≠ b ^^^ c := fun h => hz (h ▸ h1)
+      rw [hf'z z hza hzb]
+  have hsplit : ¬SameOrbit f' (a ^^^ c) (b ^^^ c) :=
+    not_sameOrbit_swapImg_of_sameOrbit hf (mem a ha) hne1 h1
+  have hpar' : ∀ z, f' z % 2 = z % 2 := by
+    intro z
+    by_cases hza : z = a ^^^ c
+    · rw [hza, hf'a, hfdef, stepC_mod2 ht ho hs hc hc2]; exact (hpar _ _ h1).symm
+    by_cases hzb : z = b ^^^ c
+    · rw [hzb, hf'b, hfdef, stepC_mod2 ht ho hs hc hc2]; exact hpar _ _ h1
+    rw [hf'z z hza hzb, hfdef]; exact stepC_mod2 ht ho hs hc hc2 z
+  have hdis' : ¬SameOrbit f' (rs.rot a ^^^ c) (a ^^^ c) := by
+    intro h
+    have h1 := sameOrbit_invariant (· % 2) hpar' h
+    have h2 := xor_mod2 a hc2
+    have h3 := xor_mod2 (rs.rot a) hc2
+    have h4 := rot_mod2 ht ho ha
+    omega
+  set f'' := swapImg f' (rs.rot a ^^^ c) (rs.rot b ^^^ c) with hf''def
+  have hne2 : rs.rot a ^^^ c ≠ rs.rot b ^^^ c :=
+    fun h => hab (rot_inj ht hi ha hb (xor_right_inj.1 h))
+  have hf''a : f'' (rs.rot a ^^^ c) = f' (rs.rot b ^^^ c) := swapImg_left f' _ _
+  have hf''b : f'' (rs.rot b ^^^ c) = f' (rs.rot a ^^^ c) := swapImg_right f' hne2.symm
+  have hf''z : ∀ z, z ≠ rs.rot a ^^^ c → z ≠ rs.rot b ^^^ c → f'' z = f' z :=
+    fun z h1 h2 => swapImg_of_ne f' h1 h2
+  intro h
+  apply hsplit
+  refine (sameOrbit_congr (fun z => ¬SameOrbit f' (rs.rot a ^^^ c) z) ?_ ?_ ?_ hdis').2 h
+  · intro z
+    exact not_congr ⟨fun h => h.trans (SameOrbit.step z), fun h => h.trans (SameOrbit.step z).symm⟩
+  · intro z
+    by_cases hz : SameOrbit f' (rs.rot a ^^^ c) z
+    · simp only [hz, not_true_eq_false, false_iff, not_not]
+      by_cases hza : z = rs.rot a ^^^ c
+      · rw [hza, hf''a]; exact h2'.trans (SameOrbit.step _)
+      by_cases hzb : z = rs.rot b ^^^ c
+      · rw [hzb, hf''b]; exact SameOrbit.step _
+      rw [hf''z z hza hzb]; exact hz.trans (SameOrbit.step z)
+    · have hza : z ≠ rs.rot a ^^^ c := fun h => hz (h ▸ SameOrbit.refl f' _)
+      have hzb : z ≠ rs.rot b ^^^ c := fun h => hz (h ▸ h2')
+      rw [hf''z z hza hzb]
+      exact not_congr ⟨fun h => h.trans (SameOrbit.step z), fun h => h.trans (SameOrbit.step z).symm⟩
+  · intro z hz
+    have hza : z ≠ rs.rot a ^^^ c := fun h => hz (h ▸ SameOrbit.refl f' _)
+    have hzb : z ≠ rs.rot b ^^^ c := fun h => hz (h ▸ h2')
+    rw [hf''z z hza hzb]
+
 end RotationSystem
 
 end Spqr

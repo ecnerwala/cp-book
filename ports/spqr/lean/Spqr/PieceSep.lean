@@ -8,6 +8,13 @@ variable (t : SpqrTree) (g : Graph)
 def Touches (i v : Nat) : Prop :=
   ∃ e, Graph.Incident g v e ∧ t.EdgeIn i e
 
+/-- Node-vertex `nv` is an endpoint of the cap of node `i`. -/
+def CapEnd (i nv : Nat) : Prop :=
+  ∃ ne d, t.capNe i = some ne ∧ t.nodeEdges[ne]? = some d ∧ (d.nvs.1 = nv ∨ d.nvs.2 = nv)
+
+/-- `nv` is a node-vertex of item `i`. -/
+def NvOf (i nv : Nat) : Prop := (t.nvRange i).1 ≤ nv ∧ nv < (t.nvRange i).2
+
 /-- Separation of the uncapped pieces used in the F/V/Q gluing steps. -/
 structure PieceSep : Prop where
   root_disjoint : ∀ a ∈ t.children 0, ∀ b ∈ t.children 0, a ≠ b →
@@ -58,5 +65,20 @@ structure PieceSep : Prop where
   q_lower_attach : ∀ i c w e, i < t.size → t.type i = .Q → t.children i = [c, w] →
     t.origId[i]! = some e → ∀ v, (t.Touches g c v ∨ Graph.Incident g v e) → t.Touches g w v →
       v = if t.edgeFlipped[e]! then (g.edges[e]!).1 else (g.edges[e]!).2
+  /-- The V item of a node-vertex of an S/P/R node is a child of the node exactly when the
+  node-vertex is not a cap endpoint (the node step splices it at that vertex's corner). -/
+  nv_child : ∀ i nv d, i < t.size → (t.type i = .S ∨ t.type i = .P ∨ t.type i = .R) →
+    t.NvOf i nv → t.nodeVerts[nv]? = some d → (t.parent d.vert = some i ↔ ¬ t.CapEnd i nv)
+  /-- Every V child of an S/P/R node is the V item of one of its node-vertices. -/
+  v_child_nv : ∀ i c, i < t.size → (t.type i = .S ∨ t.type i = .P ∨ t.type i = .R) →
+    c ∈ t.children i → t.type c = .V → ∃ nv d, t.NvOf i nv ∧ t.nodeVerts[nv]? = some d ∧ d.vert = c
+  /-- An S/P/R node hangs under a `Q` (block root) or another node, never directly under the root
+  or a `V` item (so its exposed row has four slots). -/
+  node_parent : ∀ i p, i < t.size → (t.type i = .S ∨ t.type i = .P ∨ t.type i = .R) →
+    t.parent i = some p → t.type p ≠ .F ∧ t.type p ≠ .V
+  /-- Distinct node-vertices of an S/P/R node have distinct V items. -/
+  nv_vert_inj : ∀ i nv nv' d d', i < t.size → (t.type i = .S ∨ t.type i = .P ∨ t.type i = .R) →
+    t.NvOf i nv → t.NvOf i nv' → t.nodeVerts[nv]? = some d → t.nodeVerts[nv']? = some d' →
+    d.vert = d'.vert → nv = nv'
 
 end Spqr.SpqrTree
