@@ -108,6 +108,39 @@ theorem walkOutPre_past {g : Graph} {P X : ItemId → Prop} {s : WalkState} {σ 
   · exact hP e he hp
   · exact (edgeItem_ne_vertItem hv e hve).elim
 
+theorem finishEdge_past {g : Graph} {P X : ItemId → Prop} {s : WalkState} {σ : List Nat} {n : Nat}
+    (v d : Nat) (o : DfsOut) (orig : Nat) (hasVert : Bool) (h : s.Place g P X)
+    (hv : v < g.nv) (he : o.e < g.ne) (hPe : ¬ P (edgeItem g o.e))
+    (hPv : hasVert = false → ¬ P (vertItem v))
+    (hP : ∀ e, e < g.ne → P (edgeItem g e) → σ.idxOf e < n)
+    (hp : σ[n]? = some o.e) (hnd : σ.Nodup) :
+    wp (finishEdge v d o orig hasVert) (fun _ s' => ∀ w, w < g.nv → PushVertR σ (n + 1) w s') s := by
+  apply wp_mono _ (finishEdge_place v d o orig hasVert h hv he hPe hPv)
+  rintro hv' s' ⟨h', _⟩ w hw
+  apply h'.pushVertR hw
+  rintro e he' (h | h | ⟨_, h⟩)
+  · exact Nat.lt_succ_of_lt (hP e he' h)
+  · have heq := edgeItem_inj h
+    subst e
+    have hn := (List.getElem?_eq_some_iff.mp hp).1
+    have heq : σ[n]! = o.e := by simp [hp]
+    rw [← heq, idxOf_getElem! hnd hn]
+    omega
+  · exact (edgeItem_ne_vertItem hv e h).elim
+
+theorem RootState.pushVertR {g : Graph} {pre rest : List DfsTree} {s : WalkState}
+    (h : RootState g pre s) (hf : ForestOK g (pre ++ rest)) {v : Nat} (hv : v < g.nv) :
+    PushVertR (edgePostorderForest (pre ++ rest)) (edgePostorderForest pre).length v s := by
+  apply h.place.pushVertR hv
+  have hp : PostAt (edgePostorderForest (pre ++ rest)) 0 (edgePostorderForest pre) :=
+    ⟨[], edgePostorderForest rest, rfl, by simp [edgePostorderForest]⟩
+  have hn := DfsData.edgePostorderForest_perm.nodup_iff.mpr hf.edges_nodup
+  have hh := pushed_past (P := fun _ => False) (vs := pre.flatMap DfsTree.verts)
+    (es := pre.flatMap DfsTree.edges) (fun _ _ h => h.elim)
+    (fun v hv => hf.verts_lt v (by simpa only [List.flatMap_append] using List.mem_append_left (rest.flatMap DfsTree.verts) hv))
+    (fun e he => DfsData.edgePostorderForest_perm.symm.subset he) hp hn
+  simpa using hh
+
 mutual
 def CoverTree (σ : List Nat) (n : Nat) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
   match t with
