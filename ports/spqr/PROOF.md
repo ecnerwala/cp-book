@@ -1031,6 +1031,23 @@ and `spqrTree_wf'` interfaces. The planar embedding soundness caller already sup
 The item and public R-connectivity theorems remain admitted; correcting their domain does
 not discharge the walk invariants or the block-local reduction.
 
+*Adjacency of the merged entries (`RangesInv.mergeTop`'s `hadj`) is a schedule fact, not a range
+fact.* `checks/RangesInvCheck.lean` candidates at every `finishEdge`: `cand_gapfree` (adjacent
+entries are `σ`-adjacent: the positions strictly between `nxt`'s piece and `cur`'s piece are edges
+of one of them) has no violations on seeds 0..400 × tern + tiny graphs, but it does not survive
+through entries with an empty piece (vertex entries), and the two generalisations that would make
+it preservable fail: `cand_runs` (runs of consecutive entries are `σ`-convex, 1570 observations)
+and `cand_reach_all` (every position from an entry's first piece edge up to the edge being pushed
+is owned by an entry at or above it, 448). First counterexample, seed 1, `tern = false`, at
+`curV = 6`, `d = 6`: the self-loop `e13 = (5,5)` is a hanging block under `vertItem 5`, whose
+vertex entry is not pushed yet (vertex 6 is a type-2 child of 5), and `σ`-position 4 of `e13` lies
+between the pieces of `(1,1,1,[Q8])` and `(6,1,2,[Q15])`/`(6,6,2,[vert 6])`. Holes between
+non-adjacent pieces are therefore edges below the *unpushed* vertex items of the DFS path, and the
+fact that the code never merges across such a hole (the vertex entry is pushed and merged first)
+is `hasVert` bookkeeping, i.e. schedule-specific. Consequently `finishEdge_rangesInv` takes `hadj`
+per merge site as a hypothesis bundle (`RangesOk`, mirroring `FinishOk`'s `MergeTopOk` sites)
+instead of deriving it from `ordered` + stack adjacency.
+
 ## 5. Phase 3: relabel
 
 `relabelTree` **[def]** takes the item array and produces `SpqrTree`. It is a plain preorder walk:
