@@ -435,6 +435,135 @@ def checkL1 (seed : Nat) (curV d : Nat) (o : DfsOut) (s : WalkState) : List V :=
     | [] => out := bad "stack" :: out
   return out
 
+/-- The `PContent` fields of `CloseContent.p_site` (`RangesCloseContent.lean`). -/
+def checkPContent (bad : String → V) (curV lv : Nat) (r : WalkState) : List V := Id.run do
+  let ty : Nat → NodeType := fun i => r.items[i]!.type
+  let ch : Nat → List ItemId := fun i => r.items[i]!.ch
+  let vs : Nat → Option Nat × Option Nat := fun i => r.items[i]!.vs
+  let u := r.stackVerts[lv]!
+  let dir := r.stackDir[lv]!
+  let top := r.tstack.take 2
+  let mut out := []
+  match r.tstack with
+  | cur :: _ => if cur.vStart != curV || cur.topDepth != lv then out := bad "p_stack" :: out
+  | [] => out := bad "p_stack" :: out
+  let pair := fun (p q : Nat × Nat) => p == q || p == (q.2, q.1)
+  let kind := fun j => [NodeType.S, .P, .R, .Q].contains (ty j) && (ty j != .Q || (ch j).isEmpty)
+  let allE := List.range r.g.ne
+  for t in top do
+    let E := entryEdges r t
+    let interior := fun w => allE.all fun e => !inc r e w || E.contains e
+    match getSide t.spans dir, getSide t.spans (!dir) with
+    | [j], [] =>
+      match vs j with
+      | (some a, some b) => if !pair (a, b) (u, curV) then out := bad "p_single" :: out
+      | _ => out := bad "p_single" :: out
+    | _, _ => out := bad "p_single" :: out
+    for w in List.range r.g.nv do
+      if touches r E w && w != curV && w != u && !interior w then out := bad "p_att" :: out
+    if !(touches r E curV && touches r E u) then out := bad "p_touch" :: out
+    for j in spanItems t do
+      for j' in j :: (if ty j == .P then ch j else []) do
+        if !kind j' then out := bad "p_kinds" :: out
+      let cnt := (r.tstack.map fun t' => (spanItems t').count j).sum
+      if cnt != 1 || r.items.any (fun it => it.ch.contains j) then out := bad "p_once" :: out
+  return out
+
+/-- The `VContent` fields of `CloseContent.v_site`/`l1_site` for the top entry `t` of `r`
+(`pre` prefixes the kind: `v_` or `l1_`). -/
+def checkVContent (bad : String → V) (pre : String) (curV x : Nat) (r : WalkState) : List V := Id.run do
+  let ty : Nat → NodeType := fun i => r.items[i]!.type
+  let vs : Nat → Option Nat × Option Nat := fun i => r.items[i]!.vs
+  match r.tstack with
+  | [] => return [bad (pre ++ "stack")]
+  | t :: _ =>
+    let mut out := []
+    let dir := r.stackDir[t.topDepth]!
+    let u := r.stackVerts[t.topDepth]!
+    let cs := getSide t.spans dir
+    let E := entryEdges r t
+    let allE := List.range r.g.ne
+    let interior := fun (F : List Nat) (w : Nat) => allE.all fun e => !inc r e w || F.contains e
+    if t.vStart != curV then out := bad (pre ++ "vstart") :: out
+    if !(getSide t.spans (!dir)).isEmpty then out := bad (pre ++ "side") :: out
+    if !(x < r.items.size && 1 + r.g.nv + r.g.ne ≤ x && r.items.all (fun it => !it.ch.contains x)
+        && r.tstack.all (fun t' => !(spanItems t').contains x)) then out := bad (pre ++ "free") :: out
+    for c in cs do
+      if ![NodeType.S, .P, .R, .Q, .V].contains (ty c) then out := bad (pre ++ "kinds") :: out
+      if ty c != .V then
+        match vs c with
+        | (some a, some b) => if a == b then out := bad (pre ++ "two") :: out
+        | _ => out := bad (pre ++ "two") :: out
+    if !(touches r E curV && touches r E u) then out := bad (pre ++ "touch") :: out
+    for w in List.range r.g.nv do
+      let inner := touches r E w && interior E w && cs.all fun c => !interior (edgesBelow r c) w
+      if cs.contains (vertItem w) != inner then out := bad (pre ++ "inner") :: out
+    let terms := setSides dir u curV
+    let pair := fun (p q : Nat × Nat) => p == q || p == (q.2, q.1)
+    let xs := (cs.filter (fun c => ty c == .V)).map (· - 1)
+    let ve := (cs.filter (fun c => ty c != .V)).map fun c => ((vs c).1.getD 0, (vs c).2.getD 0)
+    if ty x == .S then
+      if !(xs.length ≥ 1 && ve == List.zip (terms.1 :: xs) (xs ++ [terms.2])) then
+        out := bad (pre ++ "s_order") :: out
+    if ty x == .R then
+      let keys := ve.map fun q => min q.1 q.2 + r.g.nv * max q.1 q.2
+      if !(xs.length ≥ 2 && ve.length ≥ 5 && keys.Nodup && ve.all fun q => !pair q terms) then
+        out := bad (pre ++ "r_shape") :: out
+    if ty x == .P then
+      if !(ve.length ≥ 2 && xs.isEmpty && ve.all fun q => pair q terms) then
+        out := bad (pre ++ "p_shape") :: out
+    return out
+
+/-- Every field of `CloseContent curV d o orig hv s` (`RangesCloseContent.lean`), evaluated at its
+site state and reported separately (`content_*`). -/
+def checkContent (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
+    List V := Id.run do
+  let lv := o.cls.lowval d
+  let bad := fun (r : WalkState) k => (⟨seed, s.ternarize, curV, d, "CloseContent", "content_" ++ k,
+    s!"o.e={o.e} dest={o.dest} lv={lv} stack={r.tstack.map showT}"⟩ : V)
+  let mut out := []
+  if o.cls.isTree && d ≤ lv then
+    let ty : Nat → NodeType := fun i => s.items[i]!.type
+    let ch : Nat → List ItemId := fun i => s.items[i]!.ch
+    let vs : Nat → Option Nat × Option Nat := fun i => s.items[i]!.vs
+    match (if lv == d + 1 then s.tstack.head? else s.tstack.tail.head?) with
+    | some t => if t.spans.2 != [vertItem o.dest] then out := bad s "bd_vert" :: out
+    | none => out := bad s "bd_vert_none" :: out
+    if lv != d + 1 then
+      match s.tstack.head? with
+      | some b =>
+        let ok := match b.spans.1 with
+          | [c] => ty c != .F && ty c != .V && (ty c != .Q || (ch c).isEmpty) &&
+              (match vs c with
+                | (some a, some b') => (a, b') == (curV, o.dest) || (a, b') == (o.dest, curV)
+                | _ => false)
+          | _ => false
+        if !ok then out := bad s "bd_node" :: out
+      | none => out := bad s "bd_node_none" :: out
+  if lv < d && o.cls.isType1 then
+    let r := feRest curV d o orig hv s
+    if result (condP curV lv true) r then out := checkPContent (bad r) curV lv r ++ out
+  if o.cls.isTree && lv < d && hv && o.cls.isType1 then
+    let x := ((maybeUnwrapNxt (if feSingle d o s then NodeType.S else .R)).run (feS₂ d o s)).1
+    let r := cvS₅ curV s.stackDir[d]! true orig (feSingle d o s) (feS₂ d o s)
+    out := checkVContent (bad r) "v_" curV x r ++ out
+  if o.cls.isTree && lv < d then
+    let dir := s.stackDir[d]!
+    for st in mergeSites (loop1Cond d) (loop1Body d dir) (ceS₁ o.dest d o.e (feS₀ d o s)) do
+      let s₁ := l1S₁ d dir st
+      let x := result (maybeUnwrapNxt (l1Ty d dir st)) s₁
+      let r := after mergeTstackTops (l1S₂ d dir st)
+      match r.tstack with
+      | t :: _ =>
+        let u := r.stackVerts[t.topDepth]!
+        if t.vStart == u then out := bad r "l1_ne" :: out
+        let E := entryEdges r t
+        for w in [t.vStart, u] do
+          if !((List.range r.g.ne).any fun e => inc r e w && !E.contains e) then out := bad r "l1_pend" :: out
+        out := checkVContent (bad r) "l1_" t.vStart x r ++ out
+      | [] => out := bad r "l1_stack" :: out
+  return out
+
 /-- `rangesInv_l1Iter`/`rangesInv_feS₂`: the `RangesInv` clauses (`o.e` processed, `D = d + 1`) at every
 loop-1 iterate of `closeEars` and at `feS₂` of a returning tree edge. -/
 def checkRI (seed : Nat) (σ : List Nat) (curV d : Nat) (o : DfsOut) (s : WalkState) : List V := Id.run do

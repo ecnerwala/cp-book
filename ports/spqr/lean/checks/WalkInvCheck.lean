@@ -226,6 +226,7 @@ partial def iOut (c : Ctx) (prev : List DfsTree) (fs : List Frame) (n v d : Nat)
     Ranges.check c.seed σ v d o orig s ++ Ranges.checkAdj c.seed σ v d o orig hv s ++ Ranges.checkClose c.seed "pre" s ++
     Ranges.checkCtx c.seed v d o s ++ Ranges.checkP c.seed v d o orig hv s ++ Ranges.checkV c.seed v d o orig hv s ++
     Ranges.checkL1 c.seed v d o s ++ Ranges.checkRI c.seed σ v d o s ++
+    Ranges.checkContent c.seed v d o orig hv s ++
     (Ranges.closeSites v d o orig hv s).flatMap (fun (st, r) => Ranges.checkClose c.seed st r) ++
     (if hv then [] else Ranges.checkVertPast c.seed σ v (σ.idxOf o.e) s))
   -- R (block graphs), before `finishEdge`

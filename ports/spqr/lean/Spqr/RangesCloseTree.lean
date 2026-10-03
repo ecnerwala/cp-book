@@ -1,4 +1,4 @@
-import Spqr.RangesCloseSites
+import Spqr.RangesCloseContent
 
 /-!
 # Close invariant through the walk
@@ -50,7 +50,8 @@ variable {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
 
 /-- Block entry of a boundary edge carries exactly `vertItem o.dest` on its active side
 (checker: `closeCtx_bd_vert`, kind `ctx_bd_vert`). -/
-theorem closeCtx_bd_vert (h : CloseBase σ n D curV d o origTstack hasVert s) :
+theorem closeCtx_bd_vert (h : CloseBase σ n D curV d o origTstack hasVert s)
+    (hc : CloseContent curV d o origTstack hasVert s) :
     o.cls.isTree = true → d ≤ o.cls.lowval d →
     ∀ t ∈ (if o.cls.lowval d = d + 1 then s.tstack.head? else s.tstack.tail.head?),
       t.spans.2 = [vertItem o.dest] := by
@@ -58,7 +59,8 @@ theorem closeCtx_bd_vert (h : CloseBase σ n D curV d o origTstack hasVert s) :
 
 /-- Completed block: the top entry's passive side is one non-`F`/`V` node (a leaf if `Q`) with
 terminals `{curV, o.dest}` (checker: `closeCtx_bd_node`, kind `ctx_bd_node`). -/
-theorem closeCtx_bd_node (h : CloseBase σ n D curV d o origTstack hasVert s) :
+theorem closeCtx_bd_node (h : CloseBase σ n D curV d o origTstack hasVert s)
+    (hc : CloseContent curV d o origTstack hasVert s) :
     o.cls.isTree = true → d ≤ o.cls.lowval d → o.cls.lowval d ≠ d + 1 →
     ∀ b ∈ s.tstack.head?, ∃ c, b.spans.1 = [c] ∧ Items.type s.items c ∉ [NodeType.F, .V] ∧
       (Items.type s.items c = .Q → Items.ch s.items c = []) ∧
@@ -66,21 +68,24 @@ theorem closeCtx_bd_node (h : CloseBase σ n D curV d o origTstack hasVert s) :
   sorry
 
 /-- The P-merge site (checker: `closeCtx_p_site`, kinds `psite_*`). -/
-theorem closeCtx_p_site (h : CloseBase σ n D curV d o origTstack hasVert s) :
+theorem closeCtx_p_site (h : CloseBase σ n D curV d o origTstack hasVert s)
+    (hc : CloseContent curV d o origTstack hasVert s) :
     o.cls.lowval d < d → o.cls.isType1 = true →
     result (condP curV (o.cls.lowval d) true) (feRest curV d o origTstack hasVert s) = true →
     PSite curV (o.cls.lowval d) (feRest curV d o origTstack hasVert s) := by
   sorry
 
 /-- The type-1 vertex-close site (checker: `closeCtx_v_site`, kinds `vsite_*`). -/
-theorem closeCtx_v_site (h : CloseBase σ n D curV d o origTstack hasVert s) :
+theorem closeCtx_v_site (h : CloseBase σ n D curV d o origTstack hasVert s)
+    (hc : CloseContent curV d o origTstack hasVert s) :
     o.cls.isTree = true → o.cls.lowval d < d → hasVert = true → o.cls.isType1 = true →
     ∃ t, VSite curV ((maybeUnwrapNxt (if feSingle d o s then NodeType.S else .R)).run (feS₂ d o s)).1 t
       (cvS₅ curV s.stackDir[d]! true origTstack (feSingle d o s) (feS₂ d o s)) := by
   sorry
 
 /-- The loop-1 iteration sites (checker: `closeCtx_l1_site`, kinds `l1site_*`). -/
-theorem closeCtx_l1_site (h : CloseBase σ n D curV d o origTstack hasVert s) :
+theorem closeCtx_l1_site (h : CloseBase σ n D curV d o origTstack hasVert s)
+    (hc : CloseContent curV d o origTstack hasVert s) :
     o.cls.isTree = true → o.cls.lowval d < d → ∀ k,
     (∀ j, j ≤ k → result (loop1Cond d) (l1Iter d o s j) = true) →
     Shape (l1S₁ d s.stackDir[d]! (l1Iter d o s k)) ∧
@@ -90,8 +95,9 @@ theorem closeCtx_l1_site (h : CloseBase σ n D curV d o origTstack hasVert s) :
       t (after mergeTstackTops (l1S₂ d s.stackDir[d]! (l1Iter d o s k))) := by
   sorry
 
-/-- `CloseCtx` from the exports; the five `closeCtx_*` fields are the remaining admissions. -/
-theorem CloseCtx.of_exports (h : CloseBase σ n D curV d o origTstack hasVert s) :
+/-- `CloseCtx` from the exports and the block contents. -/
+theorem CloseCtx.of_exports (h : CloseBase σ n D curV d o origTstack hasVert s)
+    (hc : CloseContent curV d o origTstack hasVert s) :
     CloseCtx σ n D curV d o origTstack hasVert s where
   hD := h.hD
   nodup := h.nodup
@@ -111,11 +117,21 @@ theorem CloseCtx.of_exports (h : CloseBase σ n D curV d o origTstack hasVert s)
   dest_edges := h.site.dest_edges
   dest_lt := h.site.dest_lt
   bd_loop := h.site.bd_loop
-  bd_vert := closeCtx_bd_vert h
-  bd_node := closeCtx_bd_node h
-  p_site := closeCtx_p_site h
-  v_site := closeCtx_v_site h
-  l1_site := closeCtx_l1_site h
+  bd_vert := closeCtx_bd_vert h hc
+  bd_node := closeCtx_bd_node h hc
+  p_site := closeCtx_p_site h hc
+  v_site := closeCtx_v_site h hc
+  l1_site := closeCtx_l1_site h hc
+
+/-- The block contents at every `finishEdge` pre-state; supplied by the walk induction
+(`WalkBackbone.lean`, `WalkInvEnd`), a named hypothesis here. -/
+theorem closeBase_content (h : CloseBase σ n D curV d o origTstack hasVert s) :
+    CloseContent curV d o origTstack hasVert s := by
+  sorry
+
+theorem CloseCtx.of_base (h : CloseBase σ n D curV d o origTstack hasVert s) :
+    CloseCtx σ n D curV d o origTstack hasVert s :=
+  CloseCtx.of_exports h (closeBase_content h)
 
 end Admissions
 
@@ -221,7 +237,7 @@ theorem ccOut : ∀ (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) 
     | back e cls dest =>
       try simp only [wp_pure] at hg₁ hb₁ hf₁ hr₁ hc₁
       simp only [wp_bind, wp_pure]
-      exact finishEdge_closeInv (CloseCtx.of_exports (D := d)
+      exact finishEdge_closeInv (CloseCtx.of_base (D := d)
         ⟨by rw [if_neg fun h => by obtain ⟨_, _, _, h⟩ := hb₁.tree.1 h; cases h],
           hnd, ⟨hi₁, hs₁, hσ₁⟩, hg₁, hb₁, hf₁, hr₁, hcl₁, hc₁⟩)
     | tree e cls child =>
@@ -237,7 +253,7 @@ theorem ccOut : ∀ (σ : List Nat) (n v d : Nat) (o : DfsOut) (hasVert : Bool) 
         (rgTree σ n child (d + 1) _ pre hs₁.frame' hnd hσ₁ hg₁.1 hb₁.1 hr₁.1))
         (ccTree σ n child (d + 1) _ pre hs₁.frame' hnd hσ₁ hg₁.1 hb₁.1 hf₁.1 hr₁.1 hc₁.1
           (hcl₁.frame rfl rfl (fun _ h => h)))
-      exact finishEdge_closeInv (CloseCtx.of_exports (D := d + 1)
+      exact finishEdge_closeInv (CloseCtx.of_base (D := d + 1)
         ⟨by rw [if_pos (hb₃.tree.2 ⟨_, _, _, rfl⟩)], hnd, ⟨hi₃, hs₃, hσ₃⟩, hg₃, hb₃, hf₃, hr₃, hcl₃, hc₃⟩)
 end
 
