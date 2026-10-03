@@ -259,15 +259,6 @@ theorem walkTree_local (t : DfsTree) (anc : List Nat) (s : WalkState)
   rcases (walkTree t anc.length).run { s with tstack := [] } with ⟨a', s''⟩
   exact ⟨Subsingleton.elim _ _, rfl⟩
 
-/-- PROOF.md Lemma 4.3: a non-first out-edge of `v` (a sub-ear, or a single back edge) nets out to
-one entry `(v, lowval)` on top of the stack — a fresh one, or merged (P) into an entry with the
-same `(vStart, topDepth)` that was already on top. (DFS well-formedness hypotheses to be added.) -/
-theorem earOut_one_entry (fuel v d : Nat) (o : DfsOut) (s : WalkState)
-    (hret : o.cls.lowval d < d) (hfuel : fuel > 0) :
-    let s' := ((earOut fuel v d o true).run s).2
-    ∃ e rest, s'.tstack = e :: rest ∧ e.vStart = v ∧ e.topDepth = o.cls.lowval d ∧
-      (rest = s.tstack ∨ ∃ e₀, s.tstack = e₀ :: rest ∧ e₀.vStart = v ∧ e₀.topDepth = e.topDepth) := by
-  sorry
 
 /-! PROOF.md Lemma 4.4 ("a finished frame's vertex owns exactly one entry", formerly
 `ascend_frame_one_entry`) is false for chain frames: a frame `(v, d)` is a type-2 chain edge, so the
