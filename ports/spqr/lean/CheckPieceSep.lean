@@ -168,6 +168,28 @@ def check (g : Graph) (tern : Bool) (vo eo : List Nat) : IO Nat := do
             if t.neOrig ne != some (orient e) then
               bad := bad + 1
               IO.println s!"q_cap_orient: i={i} c={c}"
+  for i in [0:t.size] do
+    let (neSt, neEn) := t.neRange i
+    for ne in [neSt:neEn] do
+      if let some tw := t.twin ne then
+        if t.neOrig ne != t.neOrig tw then
+          bad := bad + 1
+          IO.println s!"twin_orient: i={i} ne={ne} tw={tw}"
+    if t.type i == .S || t.type i == .P || t.type i == .R then
+      for ne in [neSt + (if t.hasCap i then 1 else 0):neEn] do
+        match t.twin ne with
+        | none =>
+          bad := bad + 1
+          IO.println s!"node_twin: i={i} ne={ne}"
+        | some tw =>
+          match t.nodeOfNe tw with
+          | some c =>
+            if !(t.children i).contains c || t.capNe c != some tw then
+              bad := bad + 1
+              IO.println s!"node_twin_child: i={i} ne={ne} tw={tw} c={c}"
+          | none =>
+            bad := bad + 1
+            IO.println s!"node_twin_node: i={i} ne={ne} tw={tw}"
   let pt := g.planarSpqrTree tern vo eo
   let mut s := pt.initState
   bad := bad + (← checkOuter g pt pt.size s)
