@@ -374,16 +374,9 @@ def checkP (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s 
     if !(allE.any fun e => inc r e w && !Eall.contains e) then out := bad "pend" :: out
   return out
 
-def checkV (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
-    List V := Id.run do
-  let lv := o.cls.lowval d
-  if !(o.cls.isTree && lv < d && hv && o.cls.isType1) then return []
-  let x := ((maybeUnwrapNxt (if feSingle d o s then NodeType.S else .R)).run (feS₂ d o s)).1
-  let r := cvS₅ curV s.stackDir[d]! true orig (feSingle d o s) (feS₂ d o s)
+def checkVSite (bad : String → V) (curV x : Nat) (r : WalkState) : List V := Id.run do
   let ty : Nat → NodeType := fun i => r.items[i]!.type
   let vs : Nat → Option Nat × Option Nat := fun i => r.items[i]!.vs
-  let bad := fun k => (⟨seed, r.ternarize, curV, d, "closeVertTail_closeAt", "vsite_" ++ k,
-    s!"o.e={o.e} x={x} stack={r.tstack.map showT}"⟩ : V)
   match r.tstack with
   | [] => return [bad "stack"]
   | t :: _ =>
@@ -398,7 +391,6 @@ def checkV (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s 
     if !(getSide t.spans (!dir)).isEmpty then out := bad "side" :: out
     if !(x < r.items.size && 1 + r.g.nv + r.g.ne ≤ x && r.items.all (fun it => !it.ch.contains x)
         && r.tstack.all (fun t' => !(spanItems t').contains x)) then out := bad "free" :: out
-    if !(ty x == .S || ty x == .R) then out := bad "ty" :: out
     if curV == u then out := bad "ne" :: out
     for c in cs do
       if ![NodeType.S, .P, .R, .Q, .V].contains (ty c) then out := bad "kinds" :: out
@@ -414,6 +406,7 @@ def checkV (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s 
     for w in [curV, u] do
       if !(allE.any fun e => inc r e w && !E.contains e) then out := bad "pend" :: out
     let terms := setSides dir u curV
+    let pair := fun (p q : Nat × Nat) => p == q || p == (q.2, q.1)
     let xs := (cs.filter (fun c => ty c == .V)).map (· - 1)
     let ve := (cs.filter (fun c => ty c != .V)).map fun c => ((vs c).1.getD 0, (vs c).2.getD 0)
     if ty x == .S then
@@ -421,10 +414,37 @@ def checkV (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s 
         out := bad "s_order" :: out
     if ty x == .R then
       let keys := ve.map fun q => min q.1 q.2 + r.g.nv * max q.1 q.2
-      let pair := fun (p q : Nat × Nat) => p == q || p == (q.2, q.1)
       if !(xs.length ≥ 2 && ve.length ≥ 5 && keys.Nodup && ve.all fun q => !pair q terms) then
         out := bad "r_shape" :: out
+    if ty x == .P then
+      if !(ve.length ≥ 2 && xs.isEmpty && ve.all fun q => pair q terms) then
+        out := bad "p_shape" :: out
     return out
+
+def checkV (seed : Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
+    List V :=
+  let lv := o.cls.lowval d
+  if !(o.cls.isTree && lv < d && hv && o.cls.isType1) then [] else
+  let x := ((maybeUnwrapNxt (if feSingle d o s then NodeType.S else .R)).run (feS₂ d o s)).1
+  let r := cvS₅ curV s.stackDir[d]! true orig (feSingle d o s) (feS₂ d o s)
+  checkVSite (fun k => ⟨seed, r.ternarize, curV, d, "closeVertTail_closeAt", "vsite_" ++ k,
+    s!"o.e={o.e} x={x} stack={r.tstack.map showT}"⟩) curV x r
+
+def checkL1 (seed : Nat) (curV d : Nat) (o : DfsOut) (s : WalkState) : List V := Id.run do
+  if !(o.cls.isTree && o.cls.lowval d < d) then return []
+  let dir := s.stackDir[d]!
+  let mut out := []
+  for st in mergeSites (loop1Cond d) (loop1Body d dir) (ceS₁ o.dest d o.e (feS₀ d o s)) do
+    let s₁ := l1S₁ d dir st
+    let x := result (maybeUnwrapNxt (l1Ty d dir st)) s₁
+    let r := after mergeTstackTops (l1S₂ d dir st)
+    let bad := fun k => (⟨seed, r.ternarize, curV, d, "loop1Body_closeAt", "l1site_" ++ k,
+      s!"o.e={o.e} x={x} stack={r.tstack.map showT}"⟩ : V)
+    if s₁.tstack.length < 2 then out := bad "two" :: out
+    match r.tstack with
+    | t :: _ => out := checkVSite bad t.vStart x r ++ out
+    | [] => out := bad "stack" :: out
+  return out
 
 def checkClose (seed : Nat) (site : String) (s : WalkState) : List V := Id.run do
   let ty := fun i => s.items[i]!.type
@@ -519,7 +539,7 @@ partial def iOut (seed : Nat) (σ : List Nat) (v d : Nat) (o : DfsOut) (hv : Boo
     | .tree _ _ child => iTree seed σ child (d+1) { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
     | .back .. => (s, [])
   let vs := vp ++ vs ++ check seed σ v d o orig s ++ checkAdj seed σ v d o orig hv s ++ checkClose seed "pre" s ++
-    checkCtx seed v d o s ++ checkP seed v d o orig hv s ++ checkV seed v d o orig hv s
+    checkCtx seed v d o s ++ checkP seed v d o orig hv s ++ checkV seed v d o orig hv s ++ checkL1 seed v d o s
   let vs := vs ++ (closeSites v d o orig hv s).flatMap fun (site, st) => checkClose seed site st
   let vs := vs ++ if hv then [] else checkVertPast seed σ v (σ.idxOf o.e) s
   let (hv', s) := (finishEdge v d o orig hv).run s

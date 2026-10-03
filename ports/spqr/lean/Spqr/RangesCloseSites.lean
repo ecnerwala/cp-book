@@ -211,7 +211,7 @@ theorem CloseAt.pNode' {g : Graph} {items : Items} {x : ItemId} {u v : Nat} {cs 
 
 /-- The record of a freshly closed S/R node `x` with children `cs` and terminals `(u, v)`. -/
 theorem CloseAt.node {g : Graph} {items : Items} {x : ItemId} {u v : Nat} {cs : List ItemId}
-    (hx : 1 + g.nv + g.ne ≤ x) (ht : items.type x = .S ∨ items.type x = .R) (hch : items.ch x = cs)
+    (hx : 1 + g.nv + g.ne ≤ x) (hch : items.ch x = cs)
     (hvs : items.vs x = (some u, some v)) (huv : u ≠ v)
     (hty : ∀ c ∈ cs, items.type c ∈ [NodeType.S, .P, .R, .Q, .V])
     (htwo : ∀ c ∈ cs, items.type c ≠ .V → ∃ a b, items.vs c = (some a, some b) ∧ a ≠ b)
@@ -225,7 +225,9 @@ theorem CloseAt.node {g : Graph} {items : Items} {x : ItemId} {u v : Nat} {cs : 
     (hr : items.type x = .R → 2 ≤ (cs.filter fun c => items.type c = .V).length ∧
       5 ≤ (items.virtualEdges x).length ∧
       ((items.virtualEdges x).map fun q => min q.1 q.2 + g.nv * max q.1 q.2).Nodup ∧
-      ∀ q ∈ items.virtualEdges x, ¬ PairEq q (u, v)) :
+      ∀ q ∈ items.virtualEdges x, ¬ PairEq q (u, v))
+    (hp : items.type x = .P → 2 ≤ (items.virtualEdges x).length ∧
+      (∀ c ∈ cs, items.type c ≠ .V) ∧ ∀ q ∈ items.virtualEdges x, PairEq q (u, v)) :
     CloseAt g items x := by
   have hpar : ∀ c, items.IsParent x c ↔ c ∈ cs := fun c => by simp [IsParent, hch]
   have hIsVs : ∀ w, items.IsVs x w ↔ w = u ∨ w = v := by
@@ -267,7 +269,9 @@ theorem CloseAt.node {g : Graph} {items : Items} {x : ItemId} {u v : Nat} {cs : 
     have : x = 1 + w := hw
     rw [this] at hx
     omega
-  · intro h; rcases ht with h' | h' <;> rw [h'] at h <;> cases h
+  · intro h
+    obtain ⟨h1, h2, h3⟩ := hp h
+    exact ⟨h1, fun c hc => h2 c ((hpar c).1 hc), fun q hq => ⟨u, v, hvs, h3 q hq⟩⟩
   · intro h
     obtain ⟨xs, hf, hl, hve⟩ := hs h
     exact ⟨u, v, xs, hvs, by rw [hch]; exact hf, hl, hve⟩
@@ -316,6 +320,10 @@ structure PSite (curV lv : Nat) (r : WalkState) : Prop where
   once : ∀ t ∈ r.tstack.take 2, ∀ j ∈ t.spans.1 ++ t.spans.2,
     (∀ p, ¬ Items.IsParent r.items p j) ∧ spansCount r.tstack j = 1
 
+/-- The state before the `k`-th iteration of loop 1. -/
+def l1Iter (d : Nat) (o : DfsOut) (s : WalkState) (k : Nat) : WalkState :=
+  iter (loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s))
+
 /-- The children side, terminals and virtual edges of the node closed from the top entry `t`. -/
 def vKids (t : TEntry) (r : WalkState) : List ItemId := getSide t.spans r.stackDir[t.topDepth]!
 def vTerms (curV : Nat) (t : TEntry) (r : WalkState) : Nat × Nat :=
@@ -325,19 +333,19 @@ def vVirt (t : TEntry) (r : WalkState) : List (Nat × Nat) :=
     ((Items.vs r.items c).1.getD 0, (Items.vs r.items c).2.getD 0)
 
 /-- The vertex close of a type-1 tree edge (`closeVertTail_closeAt`), at the state `cvS₅` the
-`finishTstackTop x` of the `some item` arm runs from: `t` is the top entry, re-targeted to `curV`,
-with everything on its `stackDir[topDepth]` side; `x` is the free S/R node about to receive that
+`finishTstackTop x` of the `some item` arm runs from (and, with `curV := t.vStart`, the merged
+pre-close state of a loop-1 iteration): `t` is the top entry, re-targeted to `curV`,
+with everything on its `stackDir[topDepth]` side; `x` is the free S/P/R node about to receive that
 side as children; the terminals `stackVerts[topDepth] ≠ curV` are touched and are the only
 attachments of the side, each with an edge outside it; children are S/P/R/Q/V, non-V ones with two
 distinct terminals; a vertex item is a child iff all its edges lie in the side and in no single
-child; and the S path / R shape clauses hold for the side's virtual edges. -/
+child; and the S path / P / R shape clauses hold for the side's virtual edges. -/
 structure VSite (curV : Nat) (x : ItemId) (t : TEntry) (r : WalkState) : Prop where
   shape : Shape r
   stack : ∃ rest, r.tstack = t :: rest
   vstart : t.vStart = curV
   side : getSide t.spans (!r.stackDir[t.topDepth]!) = []
   free : ItemFree r x
-  ty : Items.type r.items x = .S ∨ Items.type r.items x = .R
   ne : curV ≠ r.stackVerts[t.topDepth]!
   kinds : ∀ c ∈ vKids t r, Items.type r.items c ∈ [NodeType.S, .P, .R, .Q, .V]
   two : ∀ c ∈ vKids t r, Items.type r.items c ≠ .V →
@@ -358,6 +366,8 @@ structure VSite (curV : Nat) (x : ItemId) (t : TEntry) (r : WalkState) : Prop wh
     2 ≤ ((vKids t r).filter fun c => Items.type r.items c = .V).length ∧ 5 ≤ (vVirt t r).length ∧
     ((vVirt t r).map fun q => min q.1 q.2 + r.g.nv * max q.1 q.2).Nodup ∧
     ∀ q ∈ vVirt t r, ¬ Items.PairEq q (vTerms curV t r)
+  p_shape : Items.type r.items x = .P → 2 ≤ (vVirt t r).length ∧
+    (∀ c ∈ vKids t r, Items.type r.items c ≠ .V) ∧ ∀ q ∈ vVirt t r, Items.PairEq q (vTerms curV t r)
 
 /-- The context of a `finishEdge curV d o origTstack hasVert` call of the walk at state `s`. -/
 structure CloseCtx (σ : List Nat) (n D curV d : Nat) (o : DfsOut) (origTstack : Nat)
@@ -403,6 +413,15 @@ structure CloseCtx (σ : List Nat) (n D curV d : Nat) (o : DfsOut) (origTstack :
   v_site : o.cls.isTree = true → o.cls.lowval d < d → hasVert = true → o.cls.isType1 = true →
     ∃ t, VSite curV ((maybeUnwrapNxt (if feSingle d o s then NodeType.S else .R)).run (feS₂ d o s)).1 t
       (cvS₅ curV s.stackDir[d]! true origTstack (feSingle d o s) (feS₂ d o s))
+  /-- The loop-1 site (`loop1Body_closeAt`): at every iteration `l1S₁` is shaped with at least two
+  entries, and `VSite` holds for the unwrapped item at the merged pre-close state. -/
+  l1_site : o.cls.isTree = true → o.cls.lowval d < d → ∀ k,
+    (∀ j, j ≤ k → result (loop1Cond d) (l1Iter d o s j) = true) →
+    Shape (l1S₁ d s.stackDir[d]! (l1Iter d o s k)) ∧
+    (∃ a b rest, (l1S₁ d s.stackDir[d]! (l1Iter d o s k)).tstack = a :: b :: rest) ∧
+    ∃ t, VSite t.vStart
+      (result (maybeUnwrapNxt (l1Ty d s.stackDir[d]! (l1Iter d o s k))) (l1S₁ d s.stackDir[d]! (l1Iter d o s k)))
+      t (after mergeTstackTops (l1S₂ d s.stackDir[d]! (l1Iter d o s k)))
 
 variable {σ : List Nat} {n D curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
   {s : WalkState}
@@ -497,18 +516,6 @@ theorem closeEars_closeAt (hc : CloseCtx σ n D curV d o origTstack hasVert s)
   simp only [ht, ↓reduceIte] at hends
   exact leafQ_closeInv hc (hE.path_child ht d (Nat.le_refl d)) (pairEq_swap' hends)
     (hc.parent_edge (by omega)) (hc.dest_edge ht hlow)
-
-/-- One iteration of loop 1: the S/P/R record created (or reopened) by `maybeUnwrapNxt` and
-closed by `finishTstackTop` over the merged entry — attachment/terminal facts, the interior
-V-child equivalence, two terminals of every non-V child, and the S/P/R shape clause. -/
-theorem loop1Body_closeAt (hc : CloseCtx σ n D curV d o origTstack hasVert s)
-    (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d) (k : Nat)
-    (hk : ∀ j, j ≤ k → result (loop1Cond d)
-      (iter (loop1Body d s.stackDir[d]!) j (ceS₁ o.dest d o.e (feS₀ d o s))) = true)
-    (h : (iter (loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s))).CloseInv) :
-    (after (loop1Body d s.stackDir[d]!)
-      (iter (loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s)))).CloseInv := by
-  sorry
 
 /-- `finishP`: when `condP` holds, the new or reused P record over the merged `(curV,
 stackVerts[lowval])` entry — at least two virtual edges, all equal to its terminals, no V child. -/
@@ -1030,9 +1037,9 @@ theorem VSite.closeInv {curV : Nat} {x : ItemId} {t : TEntry} {r : WalkState}
     unfold Items.virtualEdges vVirt
     rw [hch, List.filter_congr (fun c _ => by rw [htc c])]
     exact List.map_congr_left fun c hc => by rw [hvsc c (List.mem_of_mem_filter hc)]
-  refine Items.CloseAt.node hv.free.node (by rw [htc]; exact hv.ty) hch hvs
+  refine Items.CloseAt.node hv.free.node hch hvs
     (setSides_ne _ hv.ne.symm) (fun c hc => by rw [htc]; exact hv.kinds c hc)
-    (fun c hc hne => by rw [htc] at hne; rw [hvsc c hc]; exact hv.two c hc hne) ?_ ?_ ?_ ?_ ?_ ?_
+    (fun c hc hne => by rw [htc] at hne; rw [hvsc c hc]; exact hv.two c hc hne) ?_ ?_ ?_ ?_ ?_ ?_ ?_
   · rintro w ⟨e, e', he, he', hi, hi', hb, hnb⟩
     refine (hor w).2 ?_
     rcases hv.att w ⟨e, he, (hEx e he).1 hb, hi⟩ with h1 | h1 | h1
@@ -1064,6 +1071,11 @@ theorem VSite.closeInv {curV : Nat} {x : ItemId} {t : TEntry} {r : WalkState}
     obtain ⟨h1, h2, h3, h4⟩ := hv.r_shape hR
     rw [hfilt, hVE]
     exact ⟨h1, h2, h3, h4⟩
+  · intro hP
+    rw [htc] at hP
+    obtain ⟨h1, h2, h3⟩ := hv.p_shape hP
+    rw [hVE]
+    exact ⟨h1, fun c hc => by rw [htc]; exact h2 c hc, h3⟩
 
 theorem closeVertTail_closeAt (hc : CloseCtx σ n D curV d o origTstack hasVert s)
     (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d) (hv : hasVert = true)
@@ -1086,6 +1098,58 @@ theorem closeVertTail_closeAt (hc : CloseCtx σ n D curV d o origTstack hasVert 
     rw [hS₃]; rw [h1] at h
     obtain ⟨t, hvs⟩ := hc.v_site ht hlow hv h1
     exact hvs.closeInv h
+
+theorem CloseInv.maybeUnwrap (h : s.CloseInv) (hs : Shape s) (ty : NodeType) {a b : TEntry}
+    {rest : List TEntry} (hts : s.tstack = a :: b :: rest) :
+    (after (maybeUnwrapNxt ty) s).CloseInv := by
+  show ((maybeUnwrapNxt ty).run s).2.CloseInv
+  rw [maybeUnwrapNxt_run_eq ty s a b rest hts _ rfl _ rfl]
+  have hi : (getSide b.spans s.stackDir[b.topDepth]!).head! < s.items.size := by
+    rcases hside : getSide b.spans s.stackDir[b.topDepth]! with _ | ⟨i, l⟩
+    · have := hs.size; show 0 < s.items.size; omega
+    · simp only [List.head!_cons]
+      exact hs.span b (by rw [hts]; simp) i (mem_of_mem_getSide (by rw [hside]; simp))
+  split
+  · rw [run_allocItem]; exact h.alloc' hs ty
+  · split
+    · have hch : s.items[(getSide b.spans s.stackDir[b.topDepth]!).head!]!.ch =
+          Items.ch s.items (getSide b.spans s.stackDir[b.topDepth]!).head! := by
+        simp [Items.ch_eq_getElem hi, hi]
+      rw [hch]
+      exact h.unwrap hts hi _
+    · rw [run_allocItem]; exact h.alloc' hs ty
+
+theorem after_mergeTstackTops (s : WalkState) :
+    after mergeTstackTops s = { s with tstack := WalkM.mergeTop s.tstack } := by
+  obtain ⟨g, tern, items, sv, sd, nei, fo, tstack, tb, tsl⟩ := s
+  rcases tstack with _ | ⟨b, _ | ⟨a, rest⟩⟩ <;> rfl
+
+theorem CloseInv.l1S₁ (h : s.CloseInv) (d : Nat) (dir : Bool) : (l1S₁ d dir s).CloseInv := by
+  show ((loop1Type d dir).run s).2.CloseInv
+  rw [loop1Type_run]
+  split
+  · show (after mergeTstackTops { s with stackDir := s.stackDir.set! (nxtE s).topDepth dir }).CloseInv
+    rw [after_mergeTstackTops]
+    exact (h.frame (s' := { s with stackDir := s.stackDir.set! (nxtE s).topDepth dir }) rfl rfl
+      fun _ h => h).mergeTop
+  · split <;> exact h
+
+/-- One iteration of loop 1: the S/P/R record created (or reopened) by `maybeUnwrapNxt` and
+closed by `finishTstackTop` over the merged entry — attachment/terminal facts, the interior
+V-child equivalence, two terminals of every non-V child, and the S/P/R shape clause. -/
+theorem loop1Body_closeAt (hc : CloseCtx σ n D curV d o origTstack hasVert s)
+    (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d) (k : Nat)
+    (hk : ∀ j, j ≤ k → result (loop1Cond d)
+      (iter (loop1Body d s.stackDir[d]!) j (ceS₁ o.dest d o.e (feS₀ d o s))) = true)
+    (h : (iter (loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s))).CloseInv) :
+    (after (loop1Body d s.stackDir[d]!)
+      (iter (loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s)))).CloseInv := by
+  obtain ⟨hs₁, ⟨a, b, rest, hts⟩, t, hvs⟩ := hc.l1_site ht hlow k hk
+  have h₁ : (l1S₁ d s.stackDir[d]! (l1Iter d o s k)).CloseInv := CloseInv.l1S₁ h _ _
+  have h₂ := h₁.maybeUnwrap hs₁ (l1Ty d s.stackDir[d]! (l1Iter d o s k)) hts
+  have h₃ : (after mergeTstackTops (l1S₂ d s.stackDir[d]! (l1Iter d o s k))).CloseInv := by
+    rw [after_mergeTstackTops]; exact h₂.mergeTop
+  exact hvs.closeInv h₃
 
 theorem finishP_closeInv_of_not {curV lv : Nat} {b : Bool} (h : s.CloseInv)
     (hc : result (condP curV lv b) s = false) : (after (finishP curV lv b) s).CloseInv := by
