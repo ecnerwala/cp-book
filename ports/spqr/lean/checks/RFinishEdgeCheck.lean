@@ -28,6 +28,12 @@ unwraps an exempt entry, the first-edge vertex entry takes unowned edges; plus t
   (`dp ≤ topDepth`, `vStart ≠ p`) are `EntryR` before and after, and the positional side
   conditions hold: `n₀ ≤ origTstack`, `hasVert → n₀ + 1 ≤ origTstack`, and for a tree edge
   `origTstack + 3 ≤ length` after loop 2 (`hclose`).
+* side-fact lines of the child-return induction (`walkTree_rSide`, `Proofs/RInvWalk.lean`): at
+  every non-root `walkTree` entry `(v, d)`, `anc` (`stackVerts[k]` is the depth-`k` ancestor of
+  `v` for `k ≤ d`), `stab` (no entry loses `EntryR` under `stackVerts.set! d v`) and `entry` (no
+  entry starting at the parent tops out above `d - 1`); at every out-edge of a non-root vertex,
+  `ret` (`lowval d < d`); `pre`/`tail` (`vertOwn`: no entry owns an edge below `vertItem v`
+  before a vertex push).
 
 `dfs` is `DfsData.ofForest forest`; `Anc` is read off the parent map, `Type2Pair` is evaluated
 through `NoBothSides`/`BetweenStays`, `SepClass a b` through the components of `g − {a, b}`.
@@ -289,21 +295,49 @@ def isBlock (g : Graph) : Bool := (List.range g.nv).all fun v => Id.run do
         u != v && (g.edges[f]!.1 == u || g.edges[f]!.2 == u)
   return seen.length == g.ne
 
+/-- No stack entry owns an edge below `vertItem v` (the vertex pushes of `walkOutPre` and the
+`walkTree` tail). -/
+def vertOwn (v : Nat) (s : WalkState) (tag : String) : List String := Id.run do
+  let vE := belowList s (vertItem v)
+  let mut bad := ["stat:vertown-site"]
+  for t in s.tstack do
+    if (t.spans.1 ++ t.spans.2).any fun i => (belowList s i).any vE.contains then
+      bad := s!"{tag}: vert_own {showT t}" :: bad
+  return bad
+
 mutual
 partial def tree (D : Dfs) (t : DfsTree) (d : Nat) (s : WalkState) (fr : List (Nat × Nat × Nat)) :
     WalkState × List String × Nat :=
   match t with
   | .node v os =>
-    let s := { s with stackVerts := s.stackVerts.set! d v }
+    let entry := if d = 0 then [] else
+      "stat:entry-site" :: (s.tstack.filter fun t => t.vStart == s.stackVerts[d - 1]! && t.topDepth > d - 1).map
+        fun t => s!"entry v={v} d={d} parent={s.stackVerts[d - 1]!}: {showT t} starts at the parent above d-1"
+    let s' := { s with stackVerts := s.stackVerts.set! d v }
+    let stab := if d = 0 then [] else
+      "stat:stab-site" :: s.tstack.flatMap fun t =>
+        if (entryR D s t).isEmpty && !(entryR D s' t).isEmpty then
+          [s!"stab v={v} d={d}: {showT t} loses EntryR under stackVerts.set! d v"] else []
+    let anc := if d = 0 then [] else
+      "stat:anc-site" :: (List.range (d + 1)).flatMap fun k =>
+        let a := s'.stackVerts[k]!
+        if D.depth[a]! == k && ancP D.parent a v then [] else
+          [s!"anc v={v} d={d} k={k}: stackVerts[k]={a} depth={D.depth[a]!} is not the depth-k ancestor"]
+    let s := s'
     let (hv, s, bad, n) := outs D v d os false s fr
+    let tail := if hv then [] else vertOwn v s s!"tail v={v} d={d}"
     let s := if hv then s else (setStackDir d true *> pushVertTstack v d).run s |>.2
-    (s, bad, n)
+    (s, entry ++ stab ++ anc ++ tail ++ bad, n)
 
 partial def outs (D : Dfs) (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkState)
     (fr : List (Nat × Nat × Nat)) : Bool × WalkState × List String × Nat :=
   match os with
   | [] => (hv, s, [], 0)
   | o :: rest =>
+    let preOwn := if !hv && o.cls.lowval d < d && o.cls.isType1 then vertOwn v s s!"pre v={v} d={d}" else []
+    let ret := if d = 0 then [] else
+      "stat:ret-site" :: (if o.cls.lowval d < d then [] else [s!"ret v={v} d={d} e={o.e}: lowval {o.cls.lowval d} ≥ d"])
+    let preOwn := ret ++ preOwn
     let (hv, s) := (walkOutPre v d o hv).run s
     let orig := s.tstack.length
     let (s, bad, n) := match o with
@@ -346,7 +380,7 @@ partial def outs (D : Dfs) (v d : Nat) (os : List DfsOut) (hv : Bool) (s : WalkS
       tagged s!"postB {tag}" ((List.replicate nB "stat:postB-entry") ++ checkEntries D d s.tstack s (fun t => t.vStart != v && t.topDepth ≥ d)) ++
       tagged s!"postD {tag}" (disjoint s) else []
     let (hv, s, bad', n') := outs D v d rest hv s fr
-    (hv, s, bad ++ pre ++ rcl ++ shp ++ basePre ++ post ++ basePost ++ bad', n + n' + (if site then 1 else 0))
+    (hv, s, bad ++ preOwn ++ pre ++ rcl ++ shp ++ basePre ++ post ++ basePost ++ bad', n + n' + (if site then 1 else 0))
 end
 
 def runGraph (g : Graph) (vo eo : List Nat) (tern : Bool) : List String × Nat := Id.run do
@@ -434,5 +468,5 @@ def main : IO UInt32 := do
           IO.println s!"seed={seed} tern={tern}: nv={g.nv} edges={g.edges} vo={vo} eo={eo}"
           for b in bad do IO.println s!"  {b}"
   IO.println s!"stats={stats.toList}"
-  IO.println s!"cases={toks[0]!} + fixed + 6000 extra; block cases={blocks}; finishEdge sites checked (both ternarize)={sites}; old-contract-A runs failing (expected)={expectedA}; failures (contract B / disjointness / loop-1 emulation / R-branch RTop / FinishRShape / RInvG base frame)={fails}"
+  IO.println s!"cases={toks[0]!} + fixed + 6000 extra; block cases={blocks}; finishEdge sites checked (both ternarize)={sites}; old-contract-A runs failing (expected)={expectedA}; failures (contract B / disjointness / loop-1 emulation / R-branch RTop / FinishRShape / RInvG base frame / child-return side facts)={fails}"
   return if fails == 0 then 0 else 1
