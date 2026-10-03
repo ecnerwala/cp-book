@@ -54,6 +54,17 @@ def check (seed : Nat) (σ : List Nat) (curV d : Nat) (o : DfsOut) (orig : Nat) 
   let E := fun t => entryEdges s t
   let P := fun t => entryPiece s t
   let stk := s.tstack
+  if d ≤ o.cls.lowval d && o.cls.isTree then
+    let front := if o.cls.lowval d == d + 1 then stk.take 1 else stk.take 2
+    let sideOk := if o.cls.lowval d == d + 1 then
+      stk.head!.spans.1.isEmpty
+    else stk.head!.spans.2.isEmpty && stk.tail.head!.spans.1.isEmpty
+    if !sideOk then out := bad "boundary_side" s!"front={front.map showT}" :: out
+    for t in front do
+      for e in P t do
+        for b in List.range' (pos e) (n - pos e) do
+          if !front.any (fun u => (E u).contains σ[b]!) then
+            out := bad "boundary_fill" s!"front={front.map showT} e={e} gap={σ[b]!}" :: out
   -- processed
   for t in stk do
     for e in E t do
