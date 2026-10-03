@@ -589,7 +589,16 @@ and `Types.ne_of_type` rules out `j` as the unwrapped item. `walk_sides`/`walk_f
 unchanged except for the added hypothesis `hends : ∀ t ∈ forest, t.Ends g` (`DfsTree.Ends`,
 `WalkInv.lean`: a tree edge joins the child's vertex and `v`, a back edge joins `v` and its destination
 — `FinishBook.ends` needs it and `t.WF []` does not imply it); `walk_sides` is now
-`walk_sides_of_roots` + `rootsBook_of_state`, so its only admission is `walkTree_book`.
+`walk_sides_of_roots` + `rootsBook_of_state`, so its only admission is `walkTree_book`. What is left
+in `walkTree_book` is the ear preservation induction itself: `FinishBook.ear` is the whole `EarFinish`
+contract, and the public `walkTree_guards` (guards only come from the ear, `finishGuards_of_ear`),
+the tree-edge case of `earOut_one_entry` and the restated `finishGuards`/`finishEdge` all reduce to
+that one induction. Suggested split keeping the statement: `EarTree` (= `BookTree` with the `ear` and
+`vert` fields only) as the single admission, the remaining `FinishBook` fields by a `kTree`-style
+induction (`ends` needs a `stackVerts[k]`, `k ≤ d`, frame; `q` needs the frame's exclusion set to be
+the edges finished so far, not the whole subtree). `earOut_one_entry` and the public
+`walkTree_guards` carry no `Inv'`/`Shape`/freshness hypotheses (their docstrings say they are to be
+added) and should be restated with `walkTree_book`'s before any proof attempt.
 
 **Acyclicity (`ItemAcyc.lean`, `WalkState.Full.acyc`).** Exact placement plus coverage say every
 non-root item has exactly one parent but not that `Items.IsParent` is well-founded, so `Full`
