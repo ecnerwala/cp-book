@@ -244,24 +244,15 @@ def TstackLocal (m : WalkM α) (s : WalkState) : Prop :=
   let (a', s'') := m.run { s with tstack := [] }
   a = a' ∧ s' = { s'' with tstack := s''.tstack ++ s.tstack }
 
-/-- The walk invariant (PROOF.md §4): along the walk of a well-formed DFS subtree from an empty
-tstack, the tstack-shape guards of every `finishEdge` (`FinishGuards`: boundary pops find their
-entries, `Inv1`/`Inv2` for the merge loops, the vertex ear has its three entries) hold. Hypotheses
-may need strengthening (e.g. `t` being a subtree of a DFS forest of `s.g`). -/
-theorem walkTree_guards (t : DfsTree) (anc : List Nat) (s : WalkState) (hwf : t.WF anc)
-    (hs : s.tstack = []) (hne : s.nxtEdgeIdx ≤ s.g.ne)
-    (hsz : anc.length + t.height ≤ s.firstOccurrence.size) : GuardsTree t anc.length s := by
-  sorry
-
 /-- Frame rule: the walk of a subtree is local to the entries it creates. Entries already on the
 tstack that return above the subtree's depth and were not started at its vertices are neither
-inspected nor modified. -/
-theorem walkTree_local (t : DfsTree) (anc : List Nat) (s : WalkState) (hwf : t.WF anc)
-    (hne : s.nxtEdgeIdx ≤ s.g.ne) (hsz : anc.length + t.height ≤ s.firstOccurrence.size)
+inspected nor modified. The guards of the walk from the empty tstack are an input (`GuardsTree`;
+at a root they are `walkTree_guards`, `EarShape.lean`). -/
+theorem walkTree_local (t : DfsTree) (anc : List Nat) (s : WalkState)
+    (hg : GuardsTree t anc.length { s with tstack := [] })
     (hS : ∀ e ∈ s.tstack, e.topDepth < anc.length ∧ e.vStart ∉ t.verts) :
     TstackLocal (walkTree t anc.length) s := by
-  obtain ⟨a, h, -⟩ := Sim.walkTree (bot := s.tstack) t anc.length hS { s with tstack := [] }
-    (walkTree_guards t anc _ hwf rfl hne hsz)
+  obtain ⟨a, h, -⟩ := Sim.walkTree (bot := s.tstack) t anc.length hS { s with tstack := [] } hg
   unfold TstackLocal
   rw [show lift s.tstack { s with tstack := [] } = s from rfl] at h
   rw [h]
