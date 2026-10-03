@@ -1153,6 +1153,13 @@ and threads `g.WF` and both `OrderOK` hypotheses through `walk_ranges`. Its resi
 admission is named `walk_rootsCover`; the statement specifies precisely the P-site coverage
 and unpushed-vertex bounds still to establish. `Place.pushVertR` proves the latter bound from
 the existing placement invariant once its pushed-edge predicate is bounded by the prefix.
+`PostAt.idx_bounds` and `pushed_past` prove the prefix arithmetic; `walkTree_past`,
+`walkOutPre_place` / `walkOutPre_past`, and `finishEdge_past` transport it through the child,
+pre-push, and edge finish. `RootState.pushVertR` supplies it at each root from the already
+processed forest prefix. All these lemmas use only standard axioms. Threading them through
+`CoverTree` / `CoverOuts` / `CoverOut` remains unfinished. The first-tree-edge P check with
+`hasVert = false` is false by `ear_condP_tree`; `FinishCover` therefore requires P ownership
+only for the `p_vert` and `p_back` sites, not `p_tree`.
 `FinishCover` asks for P coverage only on the return branch (`lowval < d`), where P finishing
 actually executes. The empirical checker now also checks the unpushed vertex bound and every
 `CloseFacts` clause on live items (`cnt > 0`) before and after each edge finish. Seeds 0–400,
