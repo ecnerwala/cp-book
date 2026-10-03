@@ -1256,6 +1256,72 @@ terminal frame is a sufficient condition that is false in general, not a contrac
 Reproduce with `lake env lean --run checks/RInvReturnCheck.lean`, supplying the concatenated
 outputs of `python3 ../gen.py 0` through `python3 ../gen.py 400`, prefixed by `401`.
 
+**Exports needed from ear/Ranges (R-5).** The remaining R admissions take facts of the ear and
+range layers as explicit hypotheses; this lists, per site, the exact statement each export must
+have so ear-5 (`walkTree_ear`) and Ranges-3 can discharge them by composition. Sites are the
+states of the `rsTree`/`rsOuts`/`rsOut` induction (`RSide.lean`), i.e. where the `GuardsTree`/
+`BookTree` conjuncts are read: a *child-entry site* is the `walkOut v d o hasVert` call state `s`
+(before `walkOutPre`) for a tree out `o = .tree e cls (.node c couts)`; a *vertex site* is a
+`walkOut` call / end-of-`walkOuts` state with `hasVert = false`; a *finish site* is the
+`finishEdge v d o origTstack hasVert` call state `s₃` (after the child's `walkTree`) with
+`o.cls.lowval d < d` and `origTstack = B` the stack length before the child. `rl1Iter d o s k`
+(`RLoop1.lean`) and `l1Iter d o s k` (`RangesCloseSites.lean`) have the same body.
+
+Ear (ear-5) — as a `BookTree`-style predicate (`CtxTree`) carried by `walkTree_ear`:
+- E1 (child-entry and vertex sites): `EarCtx v d done rest hasVert base bE sv s` for some
+  `done rest base bE sv`, `rest = o :: _` (resp. `rest = []`). Fields read: `split`
+  (`CtxEntry.depth`: `above` tops out `< d`; `vt.topDepth ≤ d`; `below` has `vStart ≠ v`),
+  `base_bot`, `vert_edges`, `vert_free`, `v_root`, `disj`, `span_disj`, `afterVert_ret`. Derived
+  from it by R-5: `∀ t ∈ s.tstack, t.vStart = v → t.topDepth ≤ d` (`rSide_entry_site`'s
+  parent-start bound).
+- E2 (new field candidate `bd_free`; for `rSide_vertFree_site` and `FinishRShape.vert_own`): at
+  a vertex site, and at a finish site with `hasVert = false`,
+  `∀ t ∈ s.tstack, ∀ e, e < s.g.ne → t.edges s.g s.items e → ¬ Items.EdgeBelow s.g s.items (vertItem v) e`
+  (the blocks already closed at `v` are owned by no open entry; with `vert_edges` this is
+  `∀ t ∈ s.tstack, ∀ e < ne, t.edges e → ∀ o ∈ done, d ≤ o.1.cls.lowval d → ¬ subEdges o.1 e`).
+  The `e ≥ s.g.ne` residue of `VertFree` (item ids aliasing `edgeItem e`) is E4.
+- E3 (new field candidate `buried_vacuous`; for `rSide_entry_site`'s `stab`): at a child-entry
+  site, every open `t` with `d < t.topDepth` satisfies
+  `(∀ e e', e < s.g.ne → e' < s.g.ne → t.edges s.g s.items e → t.edges s.g s.items e' → e = e') ∨ s.g.TwoAttached (t.edges s.g s.items) t.vStart t.vStart`
+  (buried entries are a single `Q`, seed 390, or a `V y` entry holding the closed blocks of a
+  finished deeper `y`, the `base_top` counterexample of §4.2b). `EntryR.single` is the only
+  `EntryR` field reading `stackVerts[t.topDepth]` (`EntryR.congr_top`) and is vacuous under
+  either disjunct, so `EntryR` survives `stackVerts.set! (d + 1) c` for `topDepth = d + 1`.
+  R-5 checks this on seeds 0..400 × both modes + 6000 random before it is taken as a field.
+- E4 (item-forest facts at every site; ear or Ranges, whichever carries them — `ItemFree`/`cnt`
+  are Ranges-3's): `∀ t ∈ s.tstack, ∀ i ∈ t.spans.1 ++ t.spans.2, ∀ p, ¬ Items.IsParent s.items p i`
+  (span items are roots) and `∀ c p p', Items.IsParent s.items p c → Items.IsParent s.items p' c → p = p'`
+  (unique parent). With `v_root`/`vert_free` these give the `e ≥ s.g.ne` part of `VertFree`/
+  `vert_own` (an id below both a span item and `vertItem v` forces the span item under
+  `vertItem v`, i.e. equal to it).
+- E5 (new `Loop1Spec`/`L1Close` field candidate `mid_cur`; for `loop1_rBranch_mid_ctx`): at a
+  reached split `L1Reach d hi done (t :: rest)` of a tree edge `o` with `lowval < d`, with `t`
+  closing at depth `d`:
+  `l1Bot o done = s.stackVerts[d + 1]! ∨ s.g.Interior (l1Edges o s done) s.stackVerts[d + 1]!`
+  (the child is the piece's bottom or interior to the piece *alone*; `L1Close.mid` only says it
+  for `l1Edges ∪ t.edges`). Already checked: `RFinishEdgeCheck` `rbranch mid` lines, 6518 sites,
+  0 failures.
+- No new ear field for `loop1_rTop_ctx`/`feS₂_top_entryR`/`settled`: they read `L1Ctx.hi_top`,
+  `L1Inv` (`L1Piece`, `L1Keep.edges`), `EarFinish.loops`/`late`/`close`, all exported already,
+  on top of R1/R2.
+
+Ranges (Ranges-3) — as an `RgTree`-style predicate carried by the walk, or per-site records:
+- R1 (finish site): `CloseCtx σ n (d + 1) v d o B hasVert s₃` for some `σ n` (whole record; fields
+  read: `ranges`, `nodup`, `lt`, `pos`, `block`, `l1_site`, `v_site`, `p_site`, `finishR`, `close`,
+  `dest_edge`). Consumers: `rSide_finish_content_site` (`settled`), `feS₂_top_entryR`,
+  `loop1_rTop_ctx`, `loop1_rBranch_fields_ctx` (`cur_piece`/`cur_vs`/`proper`/`nxt_touch_*` from
+  `VSite` at `l1_site`), `closeVert_type1_rCloseShape` (`v_site`).
+- R2: `RangesInv σ n (d + 1)` at the states R-5 reasons at — `l1Iter d o s k` for every `k` with
+  `∀ j ≤ k, result (loop1Cond d) (l1Iter d o s j) = true`, `feS₁ d o s`, `feS₂ d o s`,
+  `feP v d o s` — as lemmas from `CloseCtx` (if `RangesInv.iter_mergeAdj`/`mergeAdj_of_frontier`/
+  `RgStep.*` already give these, name the lemma; else export).
+- R3 (child-entry and vertex sites): `RangesInv σ n d` at `s` (`processed`-style ownership for
+  `rSide_vertFree_site`; E4 if span-rootness lives here).
+
+Pure R content with no export (R-5 proves it from the above): the `entry_cur` saturation at an
+R iterate, `feS₂_top_entryR`'s class saturation, `closeVert_type1_rCloseShape`'s HT fields,
+`settled`.
+
 ### 4.6 Ranges: `Endpoints`/`Shapes` without the tstack (`Ranges.lean`, `RangesWF.lean`)
 
 Almost all of `Items.Endpoints`/`Items.Shapes` is a consequence of the *final* item tree alone, read
