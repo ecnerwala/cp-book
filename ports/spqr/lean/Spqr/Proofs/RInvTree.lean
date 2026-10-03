@@ -931,9 +931,9 @@ loop-1 output: the tree edge `o.e` plus the S/P/R items closed by loop 1 (`Loop1
 `loop1_rBranch`), each a maximal piece at `(nxt.vStart, curV)` (the complement of a closed
 `(nxt.vStart, d)` set is one class because all `(nxt.vStart, d)` classes were P-merged when
 `nxt.vStart` was finished and the path class is merged here), with `firstIdx ≤
-firstOccurrence[d]`. Checked on seeds 0..300 and 6000 extra multigraphs, both ternarize modes
-(`checks/RFinishEdgeCheck.lean`, contract B, 6414 sites; `ptop` lines, 278 non-exempt
-first-edge tops, 0 failures). -/
+firstOccurrence[d]`. Checked as stated (`s2top` lines) on seeds 0..400 and 6000 extra
+multigraphs, both ternarize modes (`checks/RFinishEdgeCheck.lean`, 6518 sites; 292 non-exempt
+`feS₂` tops, 0 failures). -/
 theorem feS₂_top_entryR {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsOut)
     (origTstack : Nat) (ho : o.cls = .ret lv kind) (hk : kind ≠ .backEdge)
     (hlow : lv < d) (hv : curV < s.g.nv)
