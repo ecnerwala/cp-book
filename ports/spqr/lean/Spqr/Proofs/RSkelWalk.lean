@@ -1,5 +1,6 @@
 import Spqr.Proofs.RSkelFinish
 import Spqr.Proofs.RInvWalk
+import Spqr.Proofs.RLoop1
 
 /-!
 # `Items.RSkelInv` through the walk (PROOF.md §4.5)
@@ -78,6 +79,46 @@ theorem loop1_r_keepsR {v nxtV d e : Nat} {edgeDir : Bool} (hi : s.Inv' (d + 1))
   rw [loop1Body_run_of_R hb.tstack hb.cur_top hb.nxt_top hty]
   exact rCloseItems_rSkelInv hinv st.shape hb hR' st.inv (hg ▸ h2) (hg ▸ hsp) (hg ▸ hrt) _ hside
 
+/-- `loop1_r_keepsR` under the ear context of the site (`L1Ctx`/`L1Inv`), via `loop1_rBranch_ctx`. -/
+theorem loop1_r_keepsR' {D v d : Nat} {o : DfsOut} {hi lo base : List TEntry}
+    (hc : L1Ctx D d o s hi lo base)
+    (h0 : L1Inv D d o s hi lo base (ceS₁ o.dest d o.e (feS₀ d o s)))
+    (hD : D = d + 1) (he : o.e < s.g.ne)
+    (hi₀ : (feS₀ d o s).Inv' (d + 1)) (hs₀ : Shape (feS₀ d o s))
+    (hok : CloseEarsOk (d + 1) o.dest d o.e s.stackDir[d]! (feS₀ d o s)) (hv : v < s.g.nv)
+    (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
+    (hchild : o.dest = s.stackVerts[d + 1]!) {origTstack : Nat}
+    (hR : (feS₀ d o s).RInvFront dfs s.stackVerts[d]! d origTstack) (k : Nat)
+    (hk : ∀ j, j ≤ k → result (loop1Cond d) (l1Iter d o s j) = true)
+    (hty : l1Ty d s.stackDir[d]! (l1Iter d o s k) = .R) :
+    KeepsR (loop1Body d s.stackDir[d]!) (l1Iter d o s k) := by
+  subst hD
+  obtain ⟨cur, nxt, rest, hb, hR'⟩ := loop1_rBranch_ctx hc h0 hv he hi₀ hs₀ hok h2 hsp hrt hchild hR k hk hty
+  have st := closeEars_iter_step (v := v) hi₀ hs₀ hv hok k hk
+  set sk := l1Iter d o s k with hsk
+  have hg : sk.g = s.g := st.g
+  have hside : getSide (TEntry.mergeInto cur nxt).spans (!sk.stackDir[d]!) = [] := by
+    have h := (hok.body k hk).close.finish
+    have hl2 : l1S₂ d s.stackDir[d]! sk = { sk with items := sk.items.push ⟨.R, (none, none), []⟩ } := by
+      unfold l1S₂; rw [hty, l1S₁_of_R hty]
+      unfold after
+      rw [maybeUnwrapNxt_run_eq .R sk cur nxt rest hb.tstack _ rfl _ rfl]
+      simp only [true_or, ↓reduceIte, run_allocItem]
+    rw [hl2] at h
+    unfold after at h
+    rw [mergeTstackTops_run_eq { sk with items := sk.items.push ⟨.R, (none, none), []⟩ } cur nxt rest
+      hb.tstack] at h
+    have h := h.side
+    simp only [curE, List.head!_cons] at h
+    have htop : (TEntry.mergeInto cur nxt).topDepth = d := by
+      simp [TEntry.mergeInto, hb.cur_top, hb.nxt_top]
+    rw [htop] at h
+    exact h
+  unfold KeepsR
+  intro hinv
+  rw [loop1Body_run_of_R hb.tstack hb.cur_top hb.nxt_top hty]
+  exact rCloseItems_rSkelInv hinv st.shape hb hR' st.inv (hg ▸ h2) (hg ▸ hsp) (hg ▸ hrt) _ hside
+
 /-- Admitted (PROOF.md §4.5): the type-1 vertex close of a returning tree edge with
 `isSingle = false` (`maybeUnwrapNxt .R` at `cvS₁`, then two merges, the retarget to `curV` and
 `finishTstackTop`) builds an R item whose skeleton is 3-connected: the pieces are the items of
@@ -131,9 +172,19 @@ theorem keepsR_finishEdge_site {D : Nat} (curV d lv : Nat) (kind : RetKind) (o :
     have R₀ : (feS₀ d o s).RInvFront dfs (feS₀ d o s).stackVerts[d]! d origTstack := by
       rw [st₀.sv, hcur]
       exact hR.modifyVs_free (edgeItem s.g o.e) _ (fun _ => rfl) (fun _ => rfl) hfree₀
-    exact loop1_r_keepsR st₀.inv st₀.shape (hok.ears ht) (by rw [st₀.g]; exact hv)
-      (by rw [st₀.g]; exact h2) (by rw [st₀.g]; exact hsp) (by rw [st₀.g]; exact hrt)
-      (by rw [st₀.sv]; exact (hchild ht).symm) R₀ k hk' hty
+    obtain ⟨sub, base, -, hE⟩ := hshape.ear
+    have hlow' : o.cls.lowval d < d := by
+      have : o.cls.lowval d = lv := by rw [ho]; rfl
+      omega
+    obtain ⟨hi', lo, hrange, hctx⟩ := L1Ctx.ofEar hE hs rfl ht hlow'
+    have hq' : Items.ch s.items (edgeItem s.g o.e) = [] := by
+      have h := (hok.ears ht).q
+      exact (Items.ch_modify_ch_eq (edgeItem s.g o.e) (fun it =>
+        { it with vs := setSides s.stackDir[d]! (some s.stackVerts[d]!) (some o.dest) })
+        (fun _ => rfl) _).symm.trans h
+    have h0 := l1_init hE hi hs rfl hok.e_lt hq' (hok.ears ht).ends hrange
+    exact loop1_r_keepsR' hctx h0 rfl hok.e_lt st₀.inv st₀.shape (hok.ears ht) hv h2 hsp hrt
+      (hchild ht).symm (by rw [st₀.sv] at R₀; exact R₀) k hk' hty
   · intro ht hhv h1 hsingle
     subst hhv
     exact closeVert_type1_rSkel3 curV d lv kind o origTstack ho (hk ht) hlow hv hi hs hok hfront
