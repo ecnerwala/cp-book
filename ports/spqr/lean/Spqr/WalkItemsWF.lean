@@ -146,7 +146,9 @@ theorem wf_initialItems (g : Graph) (hnv : g.nv = 0) (hne : g.ne = 0) :
 base piece through the child's postorder block (`FinishPCover`); at each unpushed vertex,
 its descendants have already been processed (`PushVertR`). The latter follows from `Place`
 once its pushed-edge predicate is bounded by the current postorder prefix. This bookkeeping
-must be threaded through `CoverTree` and `RootsCover`; no adjacency premise remains. -/
+is proved for each back/tree `CoverOut` by `coverOut_back` / `coverOut_tree`. The remaining
+P ownership and enclosing `CoverOuts` / `CoverTree` / `RootsCover` induction are not proved;
+no adjacency premise remains. -/
 theorem walk_rootsCover (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
     WalkState.RootsCover (edgePostorderForest (g.dfsForest vo eo)) 0
@@ -165,10 +167,12 @@ theorem walk_g (g : Graph) (tern : Bool) (forest : List DfsTree) (hnv : 0 < g.nv
     (hb : ∀ t ∈ forest, t.Bounded g.nv g.ne) : (g.walk tern forest).g = g :=
   (WalkM.walkForest_typing forest (WalkState.init_typing g tern hnv) hb).g_eq
 
-/-- Admitted: construct `CloseAt` at each vertex/edge push, node finish, and boundary/root
-attachment, and thread those records through unwrap/reuse. `CloseInv.finishTop` preserves
-the other records from the closing item's zero count, but the new record's attachment,
-interior-child, Q/I/O, and P/S/R shape clauses still need the ear-side close-site facts. -/
+/-- Admitted: instantiate the leaf-Q record at returning tree/back edge pushes; construct
+new records in `loop1Body`, `closeVertTail`, `finishP`, and all three `finishBoundary` branches;
+then thread the mutual walk induction. Vertex pushes, root attachment, and conditional
+boundary vertex attachment are proved in `RangesClose` / `RangesWalk`. `CloseInv.finishTop`
+preserves other records; its new record still needs attachment/interior/child-terminal
+facts and the P/S/R shape clauses from the close site's ear and side information. -/
 theorem walk_closeInv (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
     (g.walk tern (g.dfsForest vo eo)).CloseInv := by

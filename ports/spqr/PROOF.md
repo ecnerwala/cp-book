@@ -1296,6 +1296,32 @@ obligations are discharged. `walk_ranges` (`WalkItemsWF.lean`, under `g.WF`, bot
 `0 < g.nv`, and a bounded/covering forest) is `ranges_of_rangesInv walk_rangesInv walk_typing
 walk_closeFacts` with `walk_g : (g.walk tern forest).g = g` from `walkForest_typing`.
 
+Remaining close-site obligations, precisely:
+* `closeEars` / `finishBack`: apply `CloseInv.pushEdge` after `finishSetup` by deriving distinct
+  endpoints and both terminal `Att` witnesses for the leaf Q from the returning-edge contract.
+  The Q constructor itself and preservation of the other records are proved.
+* `loop1Body`: after `loop1Type`, `maybeUnwrapNxt`, and the merge, construct `CloseAt` for the
+  item in the final modified array supplied to `CloseInv.finishTop`. Missing are the new
+  record's attachment/terminal facts, interior V-child equivalence, non-V child's two terminals,
+  and the S/P/R count/order clause for the selected type.
+* `closeVertTail`: the same final-array record in the `some item` arm (S or R); the `none`
+  arm only merges/modifies the stack and creates no item record.
+* `finishP`: the analogous P record after unwrap/merge, including the minimum virtual-edge
+  count and absence of V children; both newly allocated and reused item paths remain.
+* `finishBoundary`: construct the nonempty Q record after writing its children: bridge
+  (`I :: t.spans.2`), completed block (`backedge.spans.1 ++ t.spans.2`), or self-loop (`[O]`).
+  The Q root/leaf alternative, I/O parent restriction, attachment and child endpoint facts
+  remain. `CloseAt.leafIO` handles the new leaf from its allocated index, type, and empty children;
+  `CloseInv.vertex_append` then attaches the complete Q record to V.
+* Actual vertex pre-push and root pop/append are proved (`walkOutPre_closeInv`,
+  `rootAppend_closeInv`). The end-of-tree and first-edge vertex pushes use `CloseInv.pushVert`.
+  Thread these through the mutual walk/forest induction, with placement and `RootOK`.
+
+These sites are still grouped in the named admission `walk_closeInv`; separate per-site
+admitted theorems and their actual-walk assembly have **not** yet been implemented.
+Likewise `walk_rootsCover` still groups P ownership with its enclosing mutual/forest induction.
+No new admission was added to the completed local lemmas.
+
 ## 5. Phase 3: relabel
 
 `relabelTree` **[def]** takes the item array and produces `SpqrTree`. It is a plain preorder walk:
