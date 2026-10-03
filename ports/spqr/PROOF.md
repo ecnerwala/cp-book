@@ -1695,6 +1695,28 @@ loop-1 iterate `l1_site`) no child on the finished side has the type of the node
 named hypotheses, and `walk_canonical` is their assembly (`WalkItemsWF.lean`). `walk_q_children`
 is `walk_items_wf.shapes.q_children`, restated over `g.dfsForest vo eo` under `g.WF`/`OrderOK`
 (its former arbitrary-forest form had no callers).
+
+The five final-items facts of `spqrTree_pieceSep` are handled the same way (`RangesPiece.lean`):
+`PieceFacts s` (`Items.QUpper`/`RootSep`/`RootV`/`QChildVs`/`PChildVs` of `s.items`) and
+`PieceInv d s` (`PieceFacts` plus `root_path`: no vertex item of the open path `stackVerts[0..d]`
+lies below a root child — the clause that keeps `RootSep` through `finishBoundary`'s append under
+`vertItem curV`). Preservation is proved for every primitive (`PieceInv.frame`/`exit`/`setVert`/
+`init`/`alloc`/`modify`/`modifyVs`/`vAppend`/`mergeTop`/`mergeLoop`/`mergeLate`/`vertPre`/`retarget`/
+`pushVert`/`finishTail`/`l1Type`/`maybeUnwrap`/`finishTop`/`vertUnwrap`/`pSite`/`qClose`/`boundary`/
+`l1Body`/`rest`) and `finishEdge_piece : CloseBase → CloseContent → ClosePiece → PieceInv d s →
+PieceInv d (finishEdge … s)` (standard axioms), where the site record `ClosePiece` holds the
+boundary orientations (`bd_bridge`: the bridge's `makeVs` is `(curV, dest)`; `bd_node`: the closed
+node's `vs` is `(curV, dest)`) and `FinishPiece x s` at the three `finishTstackTop` sites (an
+`x` of type P only receives children already carrying its `vs`). Between trees only `PieceFacts`
+holds (`PieceFacts.rootAppend`; `root_path` is a within-tree clause — at a root end the finished
+root itself is a root child), and the next root re-enters `PieceInv 0` (`PieceFacts.root`).
+Checker (`checks/WalkInvCheck/Ranges.lean`): `checkPieceInv` evaluates every clause at the tree
+entry/end, before/after every `finishEdge` and (`PieceFacts` only) after every root append;
+`checkPiece` evaluates `ClosePiece` and the frame hypotheses of `finishEdge_piece`; fields
+`piece_*`, 0 violations 0..3000 × both modes. Threading to the final state is the backbone's:
+`walk_pieceInv : (g.walk tern (g.dfsForest vo eo)).PieceFacts` (`WalkPieceSep.lean`) is the named
+hypothesis and `walk_q_upper`/`walk_root_sep`/`walk_root_v`/`walk_q_child_vs`/`walk_p_child_vs`
+are its projections.
 `walk_closeFacts` is the proved tree/typing assembly from `walk_closeInv`, not an independent
 close-facts admission.
 
@@ -2125,7 +2147,7 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `feS₂_top_entryR`, `closeVert_type1_rCloseShape`; ST `finishBoundary_stLive`. Not reachable:
   `loop1_rBranch_content`, `walkTree_rSide_spec`, `walk_items_rThreeConnected` (R-layer glue
   outside the tree theorems), `spqrTree_wf`, the final-items hypotheses of `spqrTree_pieceSep`
-  (`walk_q_upper`/`walk_root_sep`/`walk_root_v`/`walk_q_child_vs`/`walk_p_child_vs`, §4.6), `walk_canonInv`/`walk_ternarize`
+  (`walk_pieceInv`, §4.6), `walk_canonInv`/`walk_ternarize`
   (canonicity, §4.6), the planarity admissions.
 
 ## 5. Phase 3: relabel
@@ -3492,15 +3514,18 @@ transport: `nvOf_iff`/`nodeVerts_get'`/`nvList_mid_iff`/`mem_nvList_iff` (node-v
 each virtual edge from `LayoutFacts.s_edge`/`p_edge`/`r_edge`), `nodeEdge_node`
 (`RelabelAll.nodeEdge_at`), `v_touch_eq`/`sep_vs`/`node_vertex_outside` (`Endpoints.separation`,
 `interior`, `Ranges.vs_att`), `below_antisymm`/`not_below_parent` (`Tree.acyclic`). Five walk-side
-facts about the final items remain named hypotheses in `WalkPieceSep.lean`, each a
-`check_walkinv` field (`Ranges.checkFinal`) with 0 violations on seeds 0..3000 × both modes:
-`walk_q_upper` (`Items.QUpper`: a child of `vertItem v` has `(vs).1 = some v`; field
-`ranges.q_upper`), `walk_root_sep` (`Items.RootSep`: distinct root children share no vertex;
-`ranges.root_sep`), `walk_root_v` (`Items.RootV`: root children are V items; `ranges.root_v`),
-`walk_q_child_vs` (`Items.QChildVs`: a block-root Q's non-V child has `vs = (vs_Q.1, some w)`, or
-`(vs_Q.1, none)` for a loop; `ranges.q_child_vs`), `walk_p_child_vs` (`Items.PChildVs`: a P's
-non-V children carry its `vs`; `ranges.p_child_vs`). `#print axioms spqrTree_pieceSep` reaches
-`sorryAx` only through these five and `walk_items_wf`/`walk_ranges`' existing admissions.
+facts about the final items are consumed: `Items.QUpper` (a child of `vertItem v` has
+`(vs).1 = some v`), `Items.RootSep` (distinct root children share no vertex), `Items.RootV` (root
+children are V items), `Items.QChildVs` (a block-root Q's non-V child has `vs = (vs_Q.1, some w)`,
+or `(vs_Q.1, none)` for a loop), `Items.PChildVs` (a P's non-V children carry its `vs`). They are
+the fields of `PieceFacts` (`RangesPiece.lean`, §4.6), whose walk-state invariant `PieceInv d s` is
+kept by every primitive and by `finishEdge_piece`; the final-state form is the single named
+hypothesis `walk_pieceInv` (`WalkPieceSep.lean`), with `walk_q_upper`/`walk_root_sep`/`walk_root_v`/
+`walk_q_child_vs`/`walk_p_child_vs` its projections. Checker: `Ranges.checkFinal` on the final
+items (`ranges.q_upper`/`root_sep`/`root_v`/`q_child_vs`/`p_child_vs`) and `checkPieceInv`/`checkPiece`
+at every walk site (`piece_*`), 0 violations on seeds 0..3000 × both modes. `#print axioms
+spqrTree_pieceSep` reaches `sorryAx` only through `walk_pieceInv` and `walk_items_wf`/`walk_ranges`'
+existing admissions.
 
 `embedItem_step_F` is proved in `PlanarEmbedF.lean` with the strengthened invariant.
 `only_root_F` reduces the item to index 0; `closeList_get` identifies each
@@ -3786,8 +3811,7 @@ permutation is needed. `nodeFold_capped` (`PlanarEmbedNodeFold.lean`) dispatches
 `R` case is `nodeFold_capped_R` (proved below via `main_R`; it takes the extra hypotheses
 `hclosed : NodeRotClosed` and `hcor : NodeCorners`).
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through the walk/R-side admissions,
-`spqrTree_pieceSep`'s final-items hypotheses (`walk_q_upper`/`walk_root_sep`/`walk_root_v`/
-`walk_q_child_vs`/`walk_p_child_vs`), `nodePlanar_sound_R`, `planarTree_nodeRotClosed` and
+`spqrTree_pieceSep`'s final-items hypothesis `walk_pieceInv`, `nodePlanar_sound_R`, `planarTree_nodeRotClosed` and
 `planarTree_nodeCorners`.
 
 **R node.** Route: the hybrid system. `hloc` is the local skeleton `localSkeleton i` with rotation
@@ -3844,7 +3868,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | statement | file | status |
 |---|---|---|
 | quarter-edges, `RotationSystem`, `IsEmbedding`, `IsPlanarEmbedding`, `Planar` | `Planar.lean` | def |
-| `SpqrTree.PieceSep`, `spqrTree_pieceSep` | `PieceSep.lean`, `WalkPieceSep.lean`, `RelabelPieceSep.lean` | def / **assembled** (`RelabelOK.pieceSep`, every field `RelabelOK.pieceSep_<field>` standard-axiom) over the five final-items hypotheses `walk_q_upper`/`walk_root_sep`/`walk_root_v`/`walk_q_child_vs`/`walk_p_child_vs` (`Items.QUpper`/`RootSep`/`RootV`/`QChildVs`/`PChildVs`; `check_walkinv` `ranges.q_upper`/`root_sep`/`root_v`/`q_child_vs`/`p_child_vs`, 0 violations 0..3000 × both modes); `sorryAx` only through those and `walk_items_wf`'s admissions |
+| `SpqrTree.PieceSep`, `spqrTree_pieceSep` | `PieceSep.lean`, `WalkPieceSep.lean`, `RelabelPieceSep.lean` | def / **assembled** (`RelabelOK.pieceSep`, every field `RelabelOK.pieceSep_<field>` standard-axiom) over the final-items hypothesis `walk_pieceInv` (`PieceFacts` = `Items.QUpper`/`RootSep`/`RootV`/`QChildVs`/`PChildVs`, kept as `PieceInv` by every primitive and `finishEdge_piece`, §4.6; `check_walkinv` `ranges.q_upper`/`root_sep`/`root_v`/`q_child_vs`/`p_child_vs`, 0 violations 0..3000 × both modes); `sorryAx` only through those and `walk_items_wf`'s admissions |
 | `IsPlanarEmbedding.append` (vertex-disjoint edge lists in the same vertex numbering) | `Proofs/PlanarAppend.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `IsPlanarEmbedding.oneSum_conj`, `IsPlanarEmbedding.splice` | `Proofs/PlanarOneSum.lean`, `Proofs/PlanarSplice.lean` | **proved** (standard axioms); the specified transposition gives the 1-sum rotation, and `splice` keeps the original vertex numbering when the pieces meet only at the attachment vertex |
 | `Piece.OpenEmbedding.splice`, `OpenEmbedding.frame`, `v_child_boundary` | `Proofs/PieceSplice.lean`, `PlanarEmbedVBoundary.lean` | **proved** (standard axioms); linking the inner ends of two open pieces agrees with the specified conjugated rotation and leaves exactly the two outer ends open; V children supply these open pieces |
@@ -3930,9 +3954,8 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 
 Admitted, precisely (`#print axioms` reports `sorryAx` for each): `spqrTree_wf` (inherited by `planarRelabel_rot_spec`, `neRotAdj_segment`);
 `nodePlanar_sound_R`; the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
-`planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`'s final-items hypotheses
-(`walk_q_upper`/`walk_root_sep`/`walk_root_v`/`walk_q_child_vs`/`walk_p_child_vs`),
-`planarTree_nodeRotClosed`, `planarTree_nodeCorners` (hence `planarEmbed_sound`; the old `GluedUpTo`-level
+`planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`'s final-items hypothesis
+`walk_pieceInv` (§4.6), `planarTree_nodeRotClosed`, `planarTree_nodeCorners` (hence `planarEmbed_sound`; the old `GluedUpTo`-level
 `embedItem_step_Q`/`embedItem_step_node` and the unattempted `TwoSum.planar_left` converse have
 been removed); `spqrTree_planar`. The S and P
 cases of `nodePlanar_sound` are proved except for the `Shape` of the
