@@ -175,6 +175,72 @@ theorem EntryR.congr (hg : s'.g = s.g) (hsv : s'.stackVerts = s.stackVerts)
     intro a b hsk ht2 o ho hot hanc
     exact (hlam _).2 (h.type2 a b ((hskp a b).1 hsk) ht2 o ho hot hanc)
 
+/-- `EntryR.congr` with `stackVerts` only required to agree at `t.topDepth`: `EntryR` reads
+`stackVerts` nowhere else (`single`, `EntrySkelPair`). -/
+theorem EntryR.congr_top (hg : s'.g = s.g)
+    (hsv : s'.stackVerts[t.topDepth]! = s.stackVerts[t.topDepth]!)
+    (hty : ∀ i ∈ t.spans.1 ++ t.spans.2, Items.type s'.items i = Items.type s.items i)
+    (hvs : ∀ i ∈ t.spans.1 ++ t.spans.2, Items.vs s'.items i = Items.vs s.items i)
+    (hE : ∀ i ∈ t.spans.1 ++ t.spans.2, ∀ e,
+      Items.EdgeBelow s.g s'.items i e ↔ Items.EdgeBelow s.g s.items i e)
+    (h : s.EntryR dfs t) : s'.EntryR dfs t := by
+  have hp : s'.entryPieceItems t = s.entryPieceItems t := entryPieceItems_congr hty
+  have hed : t.edges s.g s'.items = t.edges s.g s.items :=
+    funext fun e => propext (TEntry.edges_congr hE e)
+  have hEb : ∀ i ∈ s.entryPieceItems t,
+      Items.EdgeBelow s.g s'.items i = Items.EdgeBelow s.g s.items i :=
+    fun i hi => funext fun e => propext (hE i (mem_spans_of_entryPieceItems hi) e)
+  have hvs' : ∀ i ∈ s.entryPieceItems t, Items.vs s'.items i = Items.vs s.items i :=
+    fun i hi => hvs i (mem_spans_of_entryPieceItems hi)
+  have hskp : ∀ a b, s'.EntrySkelPair t a b ↔ s.EntrySkelPair t a b := by
+    intro a b
+    unfold EntrySkelPair
+    rw [hp, hg, hsv]
+    refine and_congr (forall₂_congr fun i hi => ?_) (and_congr (forall₂_congr fun i hi => ?_) Iff.rfl)
+    · rw [hvs' i hi, hEb i hi]
+    · rw [hvs' i hi]
+  have hlam : ∀ K, s'.EntryLaminar t K ↔ s.EntryLaminar t K := by
+    intro K
+    unfold EntryLaminar
+    rw [hp, hg, hed]
+    refine or_congr (exists_congr fun i => ?_) Iff.rfl
+    constructor
+    · rintro ⟨hi, hK⟩; exact ⟨hi, by rw [← hEb i hi]; exact hK⟩
+    · rintro ⟨hi, hK⟩; exact ⟨hi, by rw [hEb i hi]; exact hK⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [hp]
+    obtain ⟨nodup, vs, ne, conn, att, disj⟩ := h.pieces
+    refine ⟨nodup, fun i hi => ?_, fun i hi => ?_, fun i hi => ?_, fun i hi x y hxy => ?_,
+      fun i hi j hj hij e => ?_⟩
+    · rw [hvs' i hi]; exact vs i hi
+    · rw [hg, hEb i hi]; exact ne i hi
+    · rw [hg, hEb i hi]; exact conn i hi
+    · rw [hvs' i hi] at hxy; rw [hg, hEb i hi]; exact att i hi x y hxy
+    · rw [hg, hEb i hi, hEb j hj]; exact disj i hi j hj hij e
+  · rw [hp]
+    intro i hi x y hxy e e' he he' hn hn'
+    rw [hvs' i hi] at hxy
+    rw [hg] at he he' hn hn' ⊢
+    rw [hEb i hi] at hn hn'
+    exact h.maximal i hi x y hxy e e' he he' hn hn'
+  · rw [hp, hg, hed]
+    intro a b e₁ e₂ hne h1 h2 t1 t2
+    obtain ⟨i, hi, b1, b2⟩ := h.bond a b e₁ e₂ hne h1 h2 t1 t2
+    exact ⟨i, hi, by rw [hEb i hi]; exact b1, by rw [hEb i hi]; exact b2⟩
+  · rw [hg, hsv, hed]; exact h.single
+  · rw [hg]
+    intro a b hsk hanc o ho hcls
+    exact (hlam _).2 (h.type1 a b ((hskp a b).1 hsk) hanc o ho hcls)
+  · rw [hg]
+    intro a b hsk ht2 o ho hot hanc
+    exact (hlam _).2 (h.type2 a b ((hskp a b).1 hsk) ht2 o ho hot hanc)
+
+
+theorem EntryR.set_stackVerts {k v : Nat} (hk : t.topDepth ≠ k) (h : s.EntryR dfs t) :
+    ({ s with stackVerts := s.stackVerts.set! k v } : WalkState).EntryR dfs t :=
+  EntryR.congr_top (s := s) (s' := { s with stackVerts := s.stackVerts.set! k v }) rfl
+    (getElem!_set!_ne _ _ _ _ hk) (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ _ => Iff.rfl) h
+
 theorem RInvAt.congr {v : Nat} (hg : s'.g = s.g) (hsv : s'.stackVerts = s.stackVerts)
     (hts : s'.tstack = s.tstack)
     (hty : ∀ t ∈ s.tstack, ∀ i ∈ t.spans.1 ++ t.spans.2,

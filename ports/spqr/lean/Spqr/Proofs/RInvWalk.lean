@@ -727,12 +727,29 @@ theorem _root_.Spqr.DfsData.Spec.outs_lowval_lt {g : Graph} {dfs : DfsData} (hs 
         show l < dfs.depth c
         rw [← hl]; exact hanc.depth_lt hs hne
 
+/-- The ancestor chain at a child entry `(c, d + 1)` from the parent's chain (`RSideTree`'s first
+conjunct; `d + 1 < stackVerts.size` is a layout fact, `EarWalk`'s `sv : stackVerts.size = g.nv`). -/
+theorem ancChain_child {d c : Nat} (hsp : dfs.Spec s.g) (hsize : d + 1 < s.stackVerts.size)
+    (hp : dfs.IsParent s.stackVerts[d]! c)
+    (hchain : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! s.stackVerts[d]! ∧ dfs.depth s.stackVerts[k]! = k) :
+    AncChain dfs c (d + 1) { s with stackVerts := s.stackVerts.set! (d + 1) c } := by
+  have hself : (s.stackVerts.set! (d + 1) c)[d + 1]! = c := getElem!_set!_self _ _ _ hsize
+  refine ⟨hself, fun k hk => ?_⟩
+  rcases Nat.lt_or_eq_of_le hk with hk | rfl
+  · show dfs.Anc (s.stackVerts.set! (d + 1) c)[k]! c ∧ dfs.depth (s.stackVerts.set! (d + 1) c)[k]! = k
+    rw [getElem!_set!_ne _ _ _ _ (by omega)]
+    exact ⟨(hchain k (by omega)).1.trans hp.anc, (hchain k (by omega)).2⟩
+  · show dfs.Anc (s.stackVerts.set! (d + 1) c)[d + 1]! c ∧ dfs.depth (s.stackVerts.set! (d + 1) c)[d + 1]! = d + 1
+    rw [hself]
+    exact ⟨.refl _, by rw [hsp.depth_parent _ _ hp, (hchain d (le_refl _)).2]⟩
+
 /-- **Named admission** (R-4 statement correction, PROOF.md §4.5). Exact obligation: the side
 facts of the child-return induction at a block's non-root `walkTree` entry `(c, d + 1)`
 (`RSideTree`), given the ear bookkeeping `BookTree` of the entry and the parent's ancestor chain
 (`stackVerts[k]`, `k ≤ d`, is the depth-`k` ancestor of `stackVerts[d]`): the ancestor chain at
-`(c, d + 1)` (from `hchain`, `hp` and `dfs.Spec.depth_parent`); `EntryR` is stable under
-`stackVerts.set! (d + 1) c`; no entry starting at the parent tops out above `d`; every out-edge of
+`(c, d + 1)` (`ancChain_child` above, given `d + 1 < stackVerts.size`); `EntryR` is stable under
+`stackVerts.set! (d + 1) c` (`EntryR.set_stackVerts`, given `t.topDepth ≠ d + 1` for the settled
+entries — their tops are at depth `≤ d`); no entry starting at the parent tops out above `d`; every out-edge of
 a non-root vertex returns (`lowval < depth`: `DfsData.Spec.outs_lowval_lt` above, with
 `depth c = d + 1` from `hp`/`hchain`); no entry owns an
 edge below `vertItem v` before `v`'s vertex entry is pushed; and the R-maximality content
