@@ -622,13 +622,6 @@ theorem tree_comp_shape : cls = .component → hv' = true ∧ ∃ t₁ f₂,
     t₁.vStart = y ∧ t₁.topDepth = d ∧ t₁.spans.2 = [] := fun hc =>
   tree_comp_shape_of_shape H H.shape' (H.comp_ex hc) (H.comp_t1 hc) hc
 
-/-- Admitted (dump-checked, `retCheck`): the stack shape after loops 1–3 at a returning tree edge
-(`RetTop`), at the state `finishRest` runs from. -/
-theorem tree_ret_shape (hr : cls.lowval d < d) : ∃ R,
-    RetTop v d s e cls y outs L (hasVert || push)
-      (if hasVert || push then feS₃ v d o₀ (L ++ s.tstack).length s₃ else feS₂ d o₀ s₃) R := by
-  sorry
-
 /-! ### Named admissions (PROOF.md §4.2b): the `EarFinish` fields at a tree-edge site not yet
 derived from the child's end-of-outs context. Each is the field verbatim, over the site's `sub`. -/
 section
@@ -1006,6 +999,103 @@ theorem earAt_tree_of_ctx :
     · rfl
     · exact absurd (H.ctx.hv_ret hhv)
         (no_ret_before_boundary hge H.cls_ret H.rank)
+
+/-- The frame of loops 1–2 at a returning tree edge without the vertex entry, over the `EarClose`
+stack `R`: the `RetTop` fields `EarClose` does not supply (`retCheck`: `sd`, `sdd`, `size`, `nxt`,
+`keep_ch`/`keep_par`, `ch_lt`, `span_lt`/`span_root`/`span_old`/`span_owned`, `touch_bot`, `touch`,
+`vstart`, `noVert_v`/`noVert_path`). -/
+structure RetFrame (v d : Nat) (s : WalkState) (e : Nat) (cls : OutClass) (y : Nat)
+    (outs : List DfsOut) (L : List TEntry) (sX : WalkState) (R : List TEntry) : Prop where
+  sd : ∀ k, k < d → sX.stackDir[k]! = s.stackDir[k]!
+  sdd : sX.stackDir[d]! = !s.stackDir[cls.lowval d]!
+  size : s.items.size ≤ sX.items.size
+  nxt : s.nxtEdgeIdx ≤ sX.nxtEdgeIdx
+  kept : ∀ j, j < s.items.size → (∀ x ∈ (DfsTree.node y outs).verts, j ≠ vertItem x) →
+    (∀ e' ∈ (DfsTree.node y outs).edges, j ≠ edgeItem s.g e') → j ≠ edgeItem s.g e →
+    Items.ch sX.items j = Items.ch s.items j ∧
+    ∀ p, Items.IsParent sX.items p j ↔ Items.IsParent s.items p j
+  ch_lt : ∀ p c, Items.IsParent sX.items p c → c < sX.items.size
+  span_lt : ∀ t ∈ R, ∀ i ∈ t.spans.1 ++ t.spans.2, i < sX.items.size
+  span_root : ∀ t ∈ R, ∀ i ∈ t.spans.1 ++ t.spans.2, ∀ p, ¬ Items.IsParent sX.items p i
+  span_new : ∀ t ∈ R, ∀ i ∈ t.spans.1 ++ t.spans.2,
+    (∀ t' ∈ L ++ s.tstack, i ∉ t'.spans.1 ++ t'.spans.2) ∧
+    (i < s.items.size → (∃ x ∈ (DfsTree.node y outs).verts, i = vertItem x) ∨
+      (∃ e' ∈ (DfsTree.node y outs).edges, i = edgeItem s.g e') ∨ i = edgeItem s.g e)
+  touch_bot : ∀ t ∈ R, (∃ e', e' < s.g.ne ∧ t.edges s.g sX.items e') →
+    s.g.Touches (t.edges s.g sX.items) t.vStart
+  touch : ∀ t ∈ R, ∀ x, s.g.Touches (t.edges s.g sX.items) x →
+    x = v ∨ x ∈ (DfsTree.node y outs).verts ∨ ∃ k, cls.lowval d ≤ k ∧ k ≤ d ∧ x = s.stackVerts[k]!
+  vstart : ∀ t ∈ R, t.vStart = v ∨ t.vStart ∈ (DfsTree.node y outs).verts
+  noVert : ∀ t ∈ R, t.vStart ≠ v ∧ ∀ k, k ≤ d → s.stackVerts[k]! ≠ t.vStart
+
+/-- Admitted (dump-checked, `retCheck`): the frame of loops 1–2 (`RetFrame`) over the `EarClose`
+stack of the site's `EarFinish`, without the vertex entry. -/
+theorem tree_ret_frame (hr : cls.lowval d < d) (c : TEntry) (mid : List TEntry) (py vy : TEntry)
+    (hC : EarClose v d (cls.lowval d) o₀ false (L ++ s.tstack) s₃ (feS₂ d o₀ s₃) c mid py vy) :
+    RetFrame v d s e cls y outs L (feS₂ d o₀ s₃) (c :: mid ++ [py, vy]) := by
+  sorry
+
+/-- Admitted (dump-checked, `retCheck`): the stack after the vertex close (loop 3, the two merges,
+the retarget and the type-1 close) at a returning tree edge with the vertex entry (`RetTop`,
+`hv = true`). -/
+theorem tree_ret_vert (hr : cls.lowval d < d) (hb : (hasVert || push) = true) :
+    ∃ R, RetTop v d s e cls y outs L true (feS₃ v d o₀ (L ++ s.tstack).length s₃) R := by
+  sorry
+
+/-- The stack shape after loops 1–3 at a returning tree edge (`RetTop`), at the state `finishRest`
+runs from: without the vertex entry it is the `EarClose` stack of the site's `EarFinish`
+(`earAt_tree_of_ctx`) with the frame `tree_ret_frame`; with it, `tree_ret_vert`. -/
+theorem tree_ret_shape (hr : cls.lowval d < d) : ∃ R,
+    RetTop v d s e cls y outs L (hasVert || push)
+      (if hasVert || push then feS₃ v d o₀ (L ++ s.tstack).length s₃ else feS₂ d o₀ s₃) R := by
+  obtain ⟨sub, base₀, hlen, hE⟩ := earAt_tree_of_ctx H
+  have hbase : base₀ = L ++ s.tstack := by
+    obtain ⟨top', hts', -⟩ := H.ctx'.top
+    have h1 : (s₃).tstack = (L' ++ top') ++ (L ++ s.tstack) := by
+      show L' ++ sE.tstack = _; rw [hts', List.append_assoc]
+    exact List.append_inj_right' (hE.tstack.symm.trans h1) hlen
+  subst hbase
+  have hg3 : (s₃).g = s.g := H.gE
+  generalize hb : (hasVert || push) = hv₀ at hE ⊢
+  cases hv₀
+  · simp only [Bool.false_eq_true, ↓reduceIte]
+    obtain ⟨c, mid, py, vy, hC⟩ := hE.close H.tree hr
+    have F := tree_ret_frame H hr c mid py vy hC
+    have hsubE : ∀ t ∈ c :: mid ++ [py, vy], ∀ e', e' < s.g.ne →
+        t.edges s.g (feS₂ d o₀ s₃).items e' → subEdges o₀ e' := by
+      rw [← hg3]; exact hC.sub_edges
+    have hcover : ∀ e', e' < s.g.ne → subEdges o₀ e' →
+        ∃ t ∈ c :: mid ++ [py, vy], t.edges s.g (feS₂ d o₀ s₃).items e' := by
+      rw [← hg3]; exact hC.sub_cover
+    have hdisj : (feS₂ d o₀ s₃).tstack.Pairwise fun t t' => ∀ e', e' < s.g.ne →
+        t.edges s.g (feS₂ d o₀ s₃).items e' → ¬ t'.edges s.g (feS₂ d o₀ s₃).items e' := by
+      rw [← hg3]; exact hC.disj
+    have hce : c.edges s.g (feS₂ d o₀ s₃).items e := by rw [← hg3]; exact hC.c_edge
+    have hsdisj := hC.span_disj
+    rw [hC.tstack] at hdisj hsdisj
+    refine ⟨c :: mid ++ [py, vy],
+      { tstack := hC.tstack
+        g := hC.g.trans hg3
+        sv := fun k hk => by rw [hC.sv]; exact H.svlo k hk
+        sd := F.sd
+        sdd := fun _ => F.sdd
+        size := F.size
+        nxt := F.nxt
+        kept := F.kept
+        ch_lt := F.ch_lt
+        span_lt := F.span_lt
+        span_root := F.span_root
+        span_new := F.span_new
+        touch_bot := F.touch_bot
+        edges := fun e' he' => ⟨fun ⟨t, ht, hte⟩ => hsubE t ht e' he' hte, hcover e' he'⟩
+        touch := F.touch
+        disj := (List.pairwise_append.1 hdisj).1
+        span_disj := (List.pairwise_append.1 hsdisj).1
+        vstart := F.vstart
+        vert := fun h => absurd h (by decide)
+        noVert := fun _ => ⟨⟨c, mid ++ [py, vy], rfl, hce⟩, F.noVert⟩ }⟩
+  · simp only [↓reduceIte]
+    exact tree_ret_vert H hr hb
 
 end
 
