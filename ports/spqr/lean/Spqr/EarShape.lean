@@ -192,4 +192,24 @@ theorem walkTree_guards' (t : DfsTree) (d : Nat) (s : WalkState) (hb : BookTree 
   gbTree t d s hb
 
 end WalkState
+
+/-- The walk invariant (PROOF.md §4) at a root: along the walk of a DFS tree from the start state of
+a root walk, the tstack-shape guards of every `finishEdge` (`FinishGuards`: boundary pops find their
+entries, `Inv1`/`Inv2` for the merge loops, the vertex ear has its three entries) hold. The
+hypotheses are those of `WalkState.walkTree_book` (the DFS facts, the start state and the freshness of
+the tree's own `V`/`Q` items); the guards come from the ear contract (`finishGuards_of_ear`). -/
+theorem walkTree_guards (t : DfsTree) (s : WalkState) (hwf : t.WF []) (hends : t.Ends s.g)
+    (hvlt : ∀ v ∈ t.verts, v < s.g.nv) (helt : ∀ e ∈ t.edges, e < s.g.ne)
+    (hvn : t.verts.Nodup) (hen : t.edges.Nodup)
+    (hsv : s.stackVerts.size = s.g.nv) (hsd : s.stackDir.size = s.g.nv)
+    (hfo : s.firstOccurrence.size = s.g.nv)
+    (hts : s.tstack = []) (hi : s.Inv' 0) (hs : WalkState.Shape s)
+    (hvfresh : ∀ v ∈ t.verts, Items.ch s.items (vertItem v) = [] ∧
+      ∀ p, ¬ Items.IsParent s.items p (vertItem v))
+    (hefresh : ∀ e ∈ t.edges, Items.ch s.items (edgeItem s.g e) = [] ∧
+      ∀ p, ¬ Items.IsParent s.items p (edgeItem s.g e)) :
+    GuardsTree t 0 s :=
+  WalkState.walkTree_guards' t 0 s
+    (WalkState.walkTree_book t s hwf hends hvlt helt hvn hen hsv hsd hfo hts hi hs hvfresh hefresh)
+
 end Spqr
