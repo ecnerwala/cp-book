@@ -1045,8 +1045,11 @@ stronger `ordered` excludes lower owners (`mergeAdj_of_cover`). `iter_merge_rang
 `iter_mergeAdj` mutually thread that argument with range preservation through guarded
 merge iterates; `mergeLateAdj_of_frontier` and `loop3Adj_of_frontier` discharge loops 2 and 3
 from the corresponding `Frontier` fields and `MergeLateOk` / `CloseVertOk` guards.
-All ten lemmas have only standard axioms. Full `FinishAdj` still needs loop 1's S/unwrap/close
-sites, the vertex close and the P merge into the base; the frontier lemma alone applies only
+`FrontierOwns.replaceNxt` / `mergeTop` / `congr` / `unwrap` preserve ownership through the
+local stack changes. `loop1BodyAdj_of_frontier` discharges both sites of a loop-1 body,
+including its optional S merge and following unwrap, from the frontier's 3/2-entry bound.
+All fifteen lemmas have only standard axioms. Full `FinishAdj` still needs loop 1's iterate
+induction, the vertex close and the P merge into the base; the frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece
 on that entry, so its `MergeAdj` obligation is vacuous.
 The final assembly must avoid importing `RangesFrontier` into `WalkWF`: the current

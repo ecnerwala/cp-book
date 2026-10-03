@@ -186,4 +186,135 @@ theorem loop3Adj_of_frontier {o : DfsOut} {d orig : Nat}
   obtain ⟨hown, hlen⟩ := hf.loop3 ht hlow hty k (fun j hj => hk j (by omega))
   exact ⟨hown, hlen (hk k (Nat.le_refl _))⟩
 
+theorem FrontierOwns.replaceNxt {orig : Nat} {base : List TEntry} {E : Nat → Prop}
+    (hf : FrontierOwns orig base E s) (hlen : orig + 2 ≤ s.tstack.length)
+    {a b b' : TEntry} {rest : List TEntry} (hts : s.tstack = a :: b :: rest) {s' : WalkState}
+    (hg : s'.g = s.g) (hts' : s'.tstack = a :: b' :: rest)
+    (hE : ∀ (t : TEntry) e, e < s.g.ne → (t.edges s'.g s'.items e ↔ t.edges s.g s.items e))
+    (hB : ∀ e, e < s.g.ne → (b'.edges s'.g s'.items e ↔ b.edges s.g s.items e)) :
+    FrontierOwns orig base E s' := by
+  have hr : orig ≤ rest.length := by rw [hts] at hlen; simpa using hlen
+  have hlen' : s'.tstack.length = s.tstack.length := by simp [hts, hts']
+  have hcalc : s.tstack.length - orig = rest.length - orig + 2 := by
+    rw [hts]; simp only [List.length_cons]; omega
+  refine ⟨by rw [hlen']; exact hf.1, ?_, ?_⟩
+  · have hd := hf.2.1
+    rw [hcalc, hts] at hd
+    rw [hlen', hcalc, hts']
+    simpa only [List.drop_succ_cons] using hd
+  · intro e he
+    rw [hg] at he
+    rw [← hf.2.2 e he, hlen', hcalc, hts, hts']
+    simp only [List.take_succ_cons, List.mem_cons, exists_eq_or_imp]
+    rw [hB e he]
+    simp only [hE _ e he]
+
+theorem FrontierOwns.mergeTop {orig : Nat} {base : List TEntry} {E : Nat → Prop}
+    (hf : FrontierOwns orig base E s) (hlen : orig + 2 ≤ s.tstack.length) :
+    FrontierOwns orig base E (after mergeTstackTops s) ∧
+      (after mergeTstackTops s).tstack.length + 1 = s.tstack.length := by
+  match hts : s.tstack with
+  | [] => rw [hts] at hlen; simp at hlen
+  | [a] => rw [hts] at hlen; simp at hlen
+  | a :: b :: rest =>
+    have hr : orig ≤ rest.length := by rw [hts] at hlen; simpa using hlen
+    have hcalc : s.tstack.length - orig = rest.length - orig + 2 := by
+      rw [hts]; simp only [List.length_cons]; omega
+    have hcalc' : rest.length + 1 - orig = rest.length - orig + 1 := by omega
+    rw [after, run_mergeTstackTops, hts, mergeTops]
+    refine ⟨⟨by simp; omega, ?_, ?_⟩, by simp⟩
+    · have hd := hf.2.1
+      rw [hcalc, hts] at hd
+      simpa only [List.length_cons, hcalc', List.drop_succ_cons] using hd
+    · intro e he
+      rw [← hf.2.2 e he, hcalc, hts]
+      simp only [List.length_cons, hcalc', List.take_succ_cons, List.mem_cons, exists_eq_or_imp]
+      change ((TEntry.mergeInto a b).edges s.g s.items e ∨ _) ↔ _
+      rw [TEntry.edges_mergeInto, or_assoc]
+
+theorem FrontierOwns.congr {orig : Nat} {base : List TEntry} {E : Nat → Prop} {s' : WalkState}
+    (hf : FrontierOwns orig base E s) (hg : s'.g = s.g) (hts : s'.tstack = s.tstack)
+    (hE : ∀ (t : TEntry) e, t.edges s'.g s'.items e ↔ t.edges s.g s.items e) :
+    FrontierOwns orig base E s' := by
+  refine ⟨by rw [hts]; exact hf.1, by rw [hts]; exact hf.2.1, ?_⟩
+  intro e he
+  rw [hg] at he
+  simpa only [hts, hE] using hf.2.2 e he
+
+theorem FrontierOwns.unwrap {orig : Nat} {base : List TEntry} {E : Nat → Prop}
+    (hf : FrontierOwns orig base E s) (hlen : orig + 2 ≤ s.tstack.length)
+    {ty : NodeType} (hs : Shape s) (hty : ty ∉ [NodeType.F, .V, .Q]) (hok : UnwrapOk ty s) :
+    FrontierOwns orig base E (after (maybeUnwrapNxt ty) s) ∧
+      (after (maybeUnwrapNxt ty) s).tstack.length = s.tstack.length := by
+  have halloc : FrontierOwns orig base E (after (allocItem ty) s) ∧
+      (after (allocItem ty) s).tstack.length = s.tstack.length := by
+    refine ⟨hf.congr rfl rfl ?_, rfl⟩
+    exact fun t e => TEntry.edges_congr (fun i _ e => Items.Below_push_nil _ rfl) e
+  match hts : s.tstack with
+  | [] | [_] => have := hok.two; rw [hts] at this; simp at this
+  | a :: b :: rest =>
+    have hn : nxtE s = b := by rw [nxtE, hts]; rfl
+    have hd : nxtDir s = s.stackDir[b.topDepth]! := by rw [nxtDir, hn]
+    have hh : nxtHead s = (getSide b.spans s.stackDir[b.topDepth]!).head! := by rw [nxtHead, hn, hd]
+    rw [after, maybeUnwrapNxt_run_eq ty s a b rest hts _ rfl _ rfl]
+    by_cases h1 : ty = .R ∨ s.ternarize = true
+    · simpa only [h1, ↓reduceIte, after, hts] using halloc
+    simp only [h1, ↓reduceIte]
+    by_cases h2 : s.items[(getSide b.spans s.stackDir[b.topDepth]!).head!]!.type = ty
+    · simp only [h2, ↓reduceIte]
+      obtain ⟨side, single, -, -⟩ := hok.unwrap h1 (by rw [hh]; exact h2)
+      rw [hn, hd] at side single
+      rw [hh] at single
+      set dir := s.stackDir[b.topDepth]!
+      set i := (getSide b.spans dir).head!
+      have hib : i ∈ b.spans.1 ++ b.spans.2 := by
+        rw [mem_of_getSide_nil dir b.spans side, single]; exact List.mem_singleton_self i
+      have hilt : i < s.items.size := hs.span b (by simp [hts]) i hib
+      have hget : s.items[i]! = s.items[i] := getElem!_pos s.items i hilt
+      have hity : Items.type s.items i = ty := by rw [Items.type_eq_getElem hilt, ← hget]; exact h2
+      have hie : ∀ e, e < s.g.ne → edgeItem s.g e ≠ i := fun e he =>
+        hs.edgeItem_ne he (hs.node_of_type hilt hty hity)
+      have hch : s.items[i]!.ch = Items.ch s.items i := by rw [Items.ch_eq_getElem hilt, hget]
+      refine ⟨hf.replaceNxt hlen hts rfl rfl (fun _ _ _ => Iff.rfl) ?_, by simp⟩
+      intro e he
+      rw [TEntry.edges_single dir i side single, hch]
+      exact TEntry.edges_unwrap dir b.vStart b.topDepth b.firstIdx i hie he
+    · simpa only [h2, ↓reduceIte, after, hts] using halloc
+
+theorem loop1BodyAdj_of_frontier {orig d : Nat} {base : List TEntry} {E : Nat → Prop} {edgeDir : Bool}
+    (hf : FrontierOwns orig base E s)
+    (hlen : orig + (if d < (nxtE s).topDepth then 3 else 2) ≤ s.tstack.length)
+    (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+    (hok : Loop1BodyOk D d edgeDir s)
+    (hinterval : ∀ a b c, a ≤ b → b ≤ c → c < σ.length → E σ[a]! → E σ[c]! → E σ[b]!) :
+    Loop1BodyAdj σ d edgeDir s := by
+  have hm : orig + 2 ≤ s.tstack.length := by split_ifs at hlen <;> omega
+  have ha : ∀ hlt : d < (nxtE s).topDepth,
+      MergeAdj σ { s with stackDir := s.stackDir.set! (nxtE s).topDepth edgeDir } := by
+    intro _
+    exact (h.frame rfl rfl rfl rfl).mergeAdj_of_frontier hnd hσ
+      (hf.congr rfl rfl (fun _ _ => Iff.rfl)) hm hinterval
+  have st : RgStep σ n D 0 s (l1S₁ d edgeDir s) := RgStep.loop1Type h hs hnd hσ hok.mergeS ha
+  have hf₁ : FrontierOwns orig base E (l1S₁ d edgeDir s) ∧ orig + 2 ≤ (l1S₁ d edgeDir s).tstack.length := by
+    unfold l1S₁ after
+    rw [loop1Type_run]
+    by_cases hc : d < (nxtE s).topDepth
+    · simp only [hc, ↓reduceIte] at hlen ⊢
+      have hx := (hf.congr (s' := { s with stackDir := s.stackDir.set! (nxtE s).topDepth edgeDir })
+        rfl rfl (fun _ _ => Iff.rfl)).mergeTop hm
+      refine ⟨hx.1, ?_⟩
+      have hl := hx.2
+      dsimp only [after] at hl
+      omega
+    · simp only [hc, ↓reduceIte]
+      split <;> exact ⟨hf, hm⟩
+  have hu := hf₁.1.unwrap hf₁.2 st.step.shape (loop1Type_result d edgeDir s) hok.unwrap
+  dsimp only [after] at hu
+  have hr := st.ranges.unwrap' (st.hσ hσ) st.step.shape (loop1Type_result d edgeDir s) hok.unwrap
+  have hσ₂ := (maybeUnwrapNxt_spec (v := 0) st.ranges.inv st.step.shape
+    (loop1Type_result d edgeDir s) hok.unwrap).step.g
+  refine ⟨ha, hr.mergeAdj_of_frontier hnd ?_ hu.1 (by rw [hu.2]; exact hf₁.2) hinterval⟩
+  rw [hσ₂, st.step.g]
+  exact hσ
+
 end Spqr.WalkState
