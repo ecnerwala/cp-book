@@ -384,6 +384,11 @@ structure TreeSite (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOu
   bridge_bd : cls = .bridge → ∀ o' ∈ done', d + 1 ≤ o'.1.cls.lowval (d + 1)
   comp_ret : cls = .component → ∀ o' ∈ done', o'.1.cls.lowval (d + 1) < d + 1 →
     o'.1.cls.lowval (d + 1) = d
+  /-- The child's edges are connected to `y` through the child (DFS tree), within any edge set
+  containing them. -/
+  c_reach : ∀ E : Nat → Prop, (∀ e' ∈ (DfsTree.node y outs).edges, E e') →
+    ∀ e' ∈ (DfsTree.node y outs).edges, Relation.ReflTransGen (s.g.AdjIn E) y (s.g.edges[e']!).1
+  edges_lt : ∀ e' ∈ (DfsTree.node y outs).edges, e' < s.g.ne
 
 section
 variable {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOut} {hasVert : Bool}
@@ -398,6 +403,14 @@ include H
 
 local notation "o₀" => DfsOut.tree e cls (DfsTree.node y outs)
 local notation "s₃" => pushEnd sE D₃ L'
+
+/-- Admitted (dump-checked, `compEndCheck`): at a component edge the child's end-of-outs stack is
+`[(y, d), V y]` above the parent's, its vertex entry already pushed (so there is no end push), the
+`(y, d)` entry on side 1 and `V y` on side 2 — the two entries `finishBoundary` pops. -/
+theorem tree_comp_shape : cls = .component → hv' = true ∧ ∃ t₁ f₂,
+    sE.tstack = t₁ :: ⟨y, d + 1, f₂, ([], [vertItem y])⟩ :: (L ++ s.tstack) ∧
+    t₁.vStart = y ∧ t₁.topDepth = d ∧ t₁.spans.2 = [] := by
+  sorry
 
 /-! ### Named admissions (PROOF.md §4.2b): the `EarFinish` fields at a tree-edge site not yet
 derived from the child's end-of-outs context. Each is the field verbatim, over the site's `sub`. -/

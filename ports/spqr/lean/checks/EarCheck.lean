@@ -608,8 +608,21 @@ def keptCheck (seed v d : Nat) (o : DfsOut) (hv : Bool) (s₂ s : WalkState) : L
         if parents s j ≠ parents s₂ j then out := bad "items_par" s!"j={j}" :: out
     return out
 
+/-- The child's end-of-outs stack at a component edge (`TreeSite.comp_shape`): `hasVert`, and exactly
+`[(y, d-1), V y]` above the parent's stack, the `(y, d-1)` entry on side 1, `V y` on side 2. -/
+def compEndCheck (seed v d : Nat) (hv : Bool) (top : List TEntry) : List V := Id.run do
+  let mut out : List V := []
+  let bad (k : String) (info : String) : V := ⟨seed, v, d, "compEnd", hv, s!"compEnd_{k}", info⟩
+  if !hv then out := bad "hv" "" :: out
+  match top with
+  | [t₁, t₂] =>
+    if t₁.vStart ≠ v || t₁.topDepth ≠ d - 1 || t₁.spans.2 ≠ [] then out := bad "t1" (showT t₁) :: out
+    if t₂.vStart ≠ v || t₂.topDepth ≠ d || t₂.spans ≠ ([], [vertItem v]) then out := bad "t2" (showT t₂) :: out
+  | _ => out := bad "shape" (toString (top.map showT)) :: out
+  return out
+
 mutual
-partial def iTree (seed : Nat) (t : DfsTree) (d : Nat) (eb : EB) (s : WalkState) : WalkState × EB × List V :=
+partial def iTree (seed : Nat) (t : DfsTree) (d : Nat) (eb : EB) (s : WalkState) (pcls : Option OutClass) : WalkState × EB × List V :=
   match t with
   | .node v outs =>
     let orig := s.tstack.length
@@ -620,6 +633,9 @@ partial def iTree (seed : Nat) (t : DfsTree) (d : Nat) (eb : EB) (s : WalkState)
     let sv₀ := s.stackVerts.toList.take (d+1)
     let sd₀ := s.stackDir.toList.take d
     let (hv, s, eb, vs, done) := iOuts seed v d outs false eb s [] base₀ bE₀ sv₀ sd₀
+    let vs := vs ++ (match pcls with
+      | some .component => compEndCheck seed v d hv (s.tstack.take (s.tstack.length - orig))
+      | _ => [])
     let s := if hv then s else ((setStackDir d true *> pushVertTstack v d).run s).2
     let vs := vs ++ ctxCheck seed v d done [] true base₀ bE₀ sv₀ sd₀ s true ++ leftCheck seed v d t s₀ s
     let subv := s.tstack.take (s.tstack.length - orig)
@@ -645,7 +661,7 @@ partial def iOut (seed v d : Nat) (o : DfsOut) (hv : Bool) (eb : EB) (s : WalkSt
   let orig := s.tstack.length
   let s₂ := s
   let (s, eb, vs) := match o with
-    | .tree _ _ child => iTree seed child (d+1) eb { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne }
+    | .tree _ cls child => iTree seed child (d+1) eb { s with firstOccurrence := s.firstOccurrence.set! d s.g.ne } (some cls)
     | .back .. => (s, eb, [])
   let vs := vs ++ keptCheck seed v d o hv s₂ s
   let vs := vs ++ earCheck seed v d o orig hv s ++ ebCheck seed v d o orig hv eb s ++ specCheck seed v d o orig hv s ++ closeCheck seed v d o orig hv s
@@ -655,7 +671,7 @@ end
 
 def iForest (seed : Nat) (forest : List DfsTree) (s : WalkState) : WalkState × List V :=
   forest.foldl (fun (s, vs) t =>
-    let (s, _, vs') := iTree seed t 0 [] s
+    let (s, _, vs') := iTree seed t 0 [] s none
     let s := ((popTstack >>= fun top => modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }).run s).2
     (s, vs ++ vs')) (s, [])
 
