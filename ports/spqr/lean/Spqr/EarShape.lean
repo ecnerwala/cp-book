@@ -201,6 +201,7 @@ the tree's own `V`/`Q` items); the guards come from the ear contract (`finishGua
 theorem walkTree_guards (t : DfsTree) (s : WalkState) (hwf : t.WF []) (hends : t.Ends s.g)
     (hvlt : ∀ v ∈ t.verts, v < s.g.nv) (helt : ∀ e ∈ t.edges, e < s.g.ne)
     (hvn : t.verts.Nodup) (hen : t.edges.Nodup)
+    (hcomp : ∀ e, e < s.g.ne → ∀ x, s.g.Inc e x → x ∈ t.verts → e ∈ t.edges)
     (hsv : s.stackVerts.size = s.g.nv) (hsd : s.stackDir.size = s.g.nv)
     (hfo : s.firstOccurrence.size = s.g.nv)
     (hts : s.tstack = []) (hi : s.Inv' 0) (hs : WalkState.Shape s)
@@ -210,7 +211,7 @@ theorem walkTree_guards (t : DfsTree) (s : WalkState) (hwf : t.WF []) (hends : t
       ∀ p, ¬ Items.IsParent s.items p (edgeItem s.g e)) :
     GuardsTree t 0 s :=
   WalkState.walkTree_guards' t 0 s
-    (WalkState.walkTree_book t s hwf hends hvlt helt hvn hen hsv hsd hfo hts hi hs hvfresh hefresh)
+    (WalkState.walkTree_book t s hwf hends hvlt helt hvn hen hcomp hsv hsd hfo hts hi hs hvfresh hefresh)
 
 
 section OneEntry

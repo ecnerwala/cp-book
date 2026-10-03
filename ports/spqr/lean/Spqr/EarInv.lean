@@ -284,7 +284,7 @@ structure EarFinish (curV d : Nat) (o : DfsOut) (hasVert : Bool) (sub base : Lis
     s.g.Touches (t.edges s.g s.items) v → s.g.Touches (u.edges s.g s.items) v → v = curV
   /-- No enclosing entry touches the child (its edges were all unvisited; `dest_edges` — every edge
   at `o.dest` is a `subEdges` edge — was the former form, true of DFS forests but not derivable from
-  `walkTree_ear`'s hypotheses, which allow edges outside the tree: `EarFalse.walkTree_ear_false`). -/
+  `walkTree_ear`'s hypotheses, which allow edges outside the tree: `walkTree_ear_false`, `EarFalse.lean`). -/
   base_touch : o.cls.isTree = true → ∀ u ∈ base, ¬ s.g.Touches (u.edges s.g s.items) o.dest
   /-- A boundary edge (`d ≤ lowval`) comes before the vertex entry of `curV`; the child's entries are
   the block `(o.dest, d + 1)` (bridge) or `[(o.dest, lowval), (o.dest, d + 1)]` (component: the block

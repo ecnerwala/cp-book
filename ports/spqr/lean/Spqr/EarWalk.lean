@@ -28,6 +28,39 @@ theorem pushed_append {g : Graph} {P : ItemId → Prop} {vs es vs' es' : List Na
   · exact Or.inr (Or.inl ⟨v, List.mem_append_right _ hv, rfl⟩)
   · exact Or.inr (Or.inr ⟨e, List.mem_append_right _ he, rfl⟩)
 
+/-- The endpoints of an edge of a well-formed tree are vertices of the tree. -/
+theorem tree_inc_verts {g : Graph} {t : DfsTree} (hwf : t.WF []) (hends : t.Ends g) {e x : Nat}
+    (he : e ∈ t.edges) (hx : g.Inc e x) : x ∈ t.verts := by
+  obtain ⟨v, outs⟩ := t
+  rw [DfsTree.WF] at hwf
+  rw [DfsTree.Ends] at hends
+  obtain ⟨o, ho, hs⟩ := mem_subEdges_edgesList.1 he
+  rcases endsOut_wf g [] v o (hwf.2 o ho) (hends o ho) e hs x hx with h | rfl | h
+  · exact absurd h (List.not_mem_nil)
+  · exact List.mem_cons_self ..
+  · exact List.mem_cons_of_mem _ (mem_vertsList_of_verts ho h)
+
+/-- Per-tree edge completeness from the forest: every edge of `g` incident to a vertex of a tree
+of the forest is an edge of that tree (the edge lies in some tree, whose vertices it joins, and the
+trees' vertex sets are disjoint). `walkTree_book`/`walkTree_ear` need it (`EarFalse.lean`). -/
+theorem comp_of_forest {g : Graph} {forest : List DfsTree} (hf : ForestOK g forest)
+    (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g)
+    (hcov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) {t : DfsTree} (ht : t ∈ forest) :
+    ∀ e, e < g.ne → ∀ x, g.Inc e x → x ∈ t.verts → e ∈ t.edges := by
+  intro e he x hx hxt
+  obtain ⟨t', ht', he'⟩ := List.mem_flatMap.1 (hcov e he)
+  have hxt' := tree_inc_verts (hwf t' ht') (hends t' ht') he' hx
+  obtain ⟨l₁, l₂, rfl⟩ := List.append_of_mem ht
+  have hnd := hf.verts_nodup
+  simp only [List.flatMap_append, List.flatMap_cons] at hnd
+  rcases List.mem_append.1 ht' with h | h
+  · exact absurd (List.mem_flatMap.2 ⟨t', h, hxt'⟩) fun hm =>
+      List.disjoint_of_nodup_append hnd hm (List.mem_append_left _ hxt)
+  · rcases List.mem_cons.1 h with rfl | h
+    · exact he'
+    · exact absurd hxt fun hm => List.disjoint_of_nodup_append (List.nodup_append.1 hnd).2.1 hm
+        (List.mem_flatMap.2 ⟨t', h, hxt'⟩)
+
 /-- The state at the start of a root walk, after the roots `pre`. -/
 structure RootState (g : Graph) (pre : List DfsTree) (s : WalkState) : Prop where
   place : s.Place g (Pushed g (fun _ => False) (pre.flatMap DfsTree.verts) (pre.flatMap DfsTree.edges))
@@ -85,10 +118,11 @@ theorem hPe (hf : ForestOK g (pre ++ t :: rest)) :
 
 /-- `BookTree` at a root from the threaded state (the admitted `walkTree_book`). -/
 theorem book (h : RootState g pre s) (hf : ForestOK g (pre ++ t :: rest)) (hwf : t.WF [])
-    (hends : t.Ends g) : BookTree t 0 s := by
+    (hends : t.Ends g) (hcomp : ∀ e, e < g.ne → ∀ x, g.Inc e x → x ∈ t.verts → e ∈ t.edges) :
+    BookTree t 0 s := by
   obtain ⟨hp, hg, hsv, hsd, hfo, hs, hts, hi, hfresh⟩ := h
   subst hg
-  refine walkTree_book t s hwf hends (hvlt hf) (helt hf) (hvn hf).1 (hen hf).1 hsv hsd hfo hts hi hs
+  refine walkTree_book t s hwf hends (hvlt hf) (helt hf) (hvn hf).1 (hen hf).1 hcomp hsv hsd hfo hts hi hs
     (fun v hv => ⟨?_, ?_⟩) fun e he => ⟨?_, ?_⟩
   · refine hfresh _ (by show 0 < 1 + v; omega) (by have := hvlt hf v hv; show 1 + v < _; omega) ?_ ?_
     · intro w hw hvw; exact (hvn hf).2 v hv (vertItem_inj hvw ▸ hw)
@@ -103,11 +137,11 @@ theorem book (h : RootState g pre s) (hf : ForestOK g (pre ++ t :: rest)) (hwf :
 
 /-- One root: walk it, then pop its entry onto `rootItem`. -/
 theorem step (h : RootState g pre s) (hf : ForestOK g (pre ++ t :: rest)) (hwf : t.WF [])
-    (hends : t.Ends g) :
+    (hends : t.Ends g) (hcomp : ∀ e, e < g.ne → ∀ x, g.Inc e x → x ∈ t.verts → e ∈ t.edges) :
     wp (walkTree t 0) (fun _ s₁ =>
       wp (popTstack >>= fun top => modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 })
         (fun _ s₂ => RootState g (pre ++ [t]) s₂) s₁) s := by
-  have hb := h.book hf hwf hends
+  have hb := h.book hf hwf hends hcomp
   have hg := gbTree t 0 s hb
   have hi' : ∀ v outs, t = .node v outs →
       ({ s with stackVerts := s.stackVerts.set! 0 v } : WalkState).Inv' 0 :=
@@ -160,15 +194,19 @@ end RootState
 
 theorem rootsBook_of_state {g : Graph} : ∀ (forest pre : List DfsTree) (s : WalkState),
     RootState g pre s → ForestOK g (pre ++ forest) → (∀ t ∈ forest, t.WF []) →
-    (∀ t ∈ forest, t.Ends g) → RootsBook forest s
-  | [], _, _, _, _, _, _ => trivial
-  | t :: rest, pre, s, h, hf, hwf, hends => by
-    have hb := h.book hf (hwf t (by simp)) (hends t (by simp))
+    (∀ t ∈ forest, t.Ends g) →
+    (∀ t ∈ forest, ∀ e, e < g.ne → ∀ x, g.Inc e x → x ∈ t.verts → e ∈ t.edges) →
+    RootsBook forest s
+  | [], _, _, _, _, _, _, _ => trivial
+  | t :: rest, pre, s, h, hf, hwf, hends, hcomp => by
+    have hb := h.book hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp))
     refine ⟨gbTree t 0 s hb, hb, h.inv, ?_⟩
-    refine wp_mono _ (h.step hf (hwf t (by simp)) (hends t (by simp))) fun _ s₁ h₁ => ?_
+    refine wp_mono _ (h.step hf (hwf t (by simp)) (hends t (by simp)) (hcomp t (by simp)))
+      fun _ s₁ h₁ => ?_
     refine wp_mono _ h₁ fun _ s₂ h₂ => ?_
     exact rootsBook_of_state rest (pre ++ [t]) s₂ h₂ (by simpa using hf)
-      (fun t' ht' => hwf t' (by simp [ht'])) fun t' ht' => hends t' (by simp [ht'])
+      (fun t' ht' => hwf t' (by simp [ht'])) (fun t' ht' => hends t' (by simp [ht']))
+      fun t' ht' => hcomp t' (by simp [ht'])
 
 end WalkState
 open WalkState
@@ -181,19 +219,23 @@ empty (and the entries the sites pop exist). PROOF.md §4.4 says which ear facts
 `chain_stackDir_const` + `TEntry.OnSide` (every ear hangs on the side `stackDir[topDepth]`, so the
 side `finishTstackTop`/`maybeUnwrapNxt`/the block branch/`walkForest` discard is `[]`). -/
 theorem walk_sides (g : Graph) (ternarize : Bool) (forest : List DfsTree) (hf : ForestOK g forest)
-    (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g) :
+    (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g)
+    (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
     SidesForest forest (WalkState.init g ternarize) :=
   walk_sides_of_roots g ternarize forest hf
-    (rootsBook_of_state forest [] _ (rootState_init g ternarize) (by simpa using hf) hwf hends)
+    (rootsBook_of_state forest [] _ (rootState_init g ternarize) (by simpa using hf) hwf hends
+      fun t ht => comp_of_forest hf hwf hends hecov ht)
 
 /-- Exact placement at the end of the walk, and the `tstack` is empty. -/
 theorem walk_full (g : Graph) (ternarize : Bool) (forest : List DfsTree) (hf : ForestOK g forest)
-    (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g) :
+    (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g)
+    (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
     (g.walk ternarize forest).Full g
       (WalkM.Pushed g (fun _ => False) (forest.flatMap DfsTree.verts) (forest.flatMap DfsTree.edges))
       (fun _ => False) ∧ (g.walk ternarize forest).tstack = [] :=
   walkForest_full forest (WalkState.init_full g ternarize) rfl hf.verts_lt hf.edges_lt
-    hf.verts_nodup hf.edges_nodup (fun _ _ h => h) (fun _ _ h => h) (walk_sides g ternarize forest hf hwf hends)
+    hf.verts_nodup hf.edges_nodup (fun _ _ h => h) (fun _ _ h => h)
+    (walk_sides g ternarize forest hf hwf hends hecov)
 
 section Consequences
 
@@ -202,7 +244,8 @@ variable (g : Graph) (ternarize : Bool) (forest : List DfsTree) (hf : ForestOK g
 include hf hwf hends hends
 
 /-- The walk ends with an empty `tstack`. -/
-theorem walk_tstack_nil : (g.walk ternarize forest).tstack = [] := (walk_full g ternarize forest hf hwf hends).2
+theorem walk_tstack_nil (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
+    (g.walk ternarize forest).tstack = [] := (walk_full g ternarize forest hf hwf hends hecov).2
 
 /-- Every allocated non-root item ends up in some `ch` list. -/
 theorem walk_covered
@@ -210,7 +253,7 @@ theorem walk_covered
     (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
     ∀ i, 0 < i → i < (g.walk ternarize forest).items.size →
       ∃ p, Items.IsParent (g.walk ternarize forest).items p i := fun i hi hlt => by
-  obtain ⟨h, ht⟩ := walk_full g ternarize forest hf hwf hends
+  obtain ⟨h, ht⟩ := walk_full g ternarize forest hf hwf hends hecov
   refine WalkState.exists_parent_of_cnt ht ?_
   by_cases hn : 1 + g.nv + g.ne ≤ i
   · exact h.placed i hn hlt id
@@ -221,11 +264,11 @@ theorem walk_covered
         by show i = 1 + g.nv + (i - (1 + g.nv)); omega⟩)
 
 /-- The root's children are `vertItem`s of real vertices. -/
-theorem walk_root_children :
+theorem walk_root_children (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
     ∀ c, Items.IsParent (g.walk ternarize forest).items rootItem c →
       Items.type (g.walk ternarize forest).items c = .V := fun c hc => by
-  obtain ⟨v, hv, rfl⟩ := (walk_full g ternarize forest hf hwf hends).1.rootch c hc
-  exact (walk_full g ternarize forest hf hwf hends).1.place.vert v hv
+  obtain ⟨v, hv, rfl⟩ := (walk_full g ternarize forest hf hwf hends hecov).1.rootch c hc
+  exact (walk_full g ternarize forest hf hwf hends hecov).1.place.vert v hv
 
 /-- Every item is below the root: by `Full.acyc` every item is below a parentless one, and by
 `walk_covered` only the root is parentless. -/
@@ -234,7 +277,7 @@ theorem walk_reach
     (hecov : ∀ e, e < g.ne → e ∈ forest.flatMap DfsTree.edges) :
     ∀ i, i < (g.walk ternarize forest).items.size →
       Items.Below (g.walk ternarize forest).items rootItem i :=
-  (walk_full g ternarize forest hf hwf hends).1.acyc.reach fun r hr0 hrlt hnp =>
+  (walk_full g ternarize forest hf hwf hends hecov).1.acyc.reach fun r hr0 hrlt hnp =>
     let ⟨p, hp⟩ := walk_covered g ternarize forest hf hwf hends hvcov hecov r hr0 hrlt
     hnp p hp
 
@@ -297,6 +340,6 @@ theorem walk_tree (g : Graph) (ternarize : Bool) (forest : List DfsTree) (hnv : 
     ch_nodup := walk_ch_nodup g ternarize forest hf
     reach := walk_reach g ternarize forest hf hwf hends hvcov hecov
     v_children := ht.v_children
-    root_children := fun c hc => Or.inl (walk_root_children g ternarize forest hf hwf hends c hc) }
+    root_children := fun c hc => Or.inl (walk_root_children g ternarize forest hf hwf hends hecov c hc) }
 
 end Spqr

@@ -345,6 +345,8 @@ structure TreeSite (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOu
   cls_ret : ∀ lv k, cls = .ret lv k → lv < d
   v_nc : v ∉ (DfsTree.node y outs).verts
   e_ne : e ∉ (DfsTree.node y outs).edges
+  comp : ∀ e', e' < s.g.ne → ∀ x, s.g.Inc e' x → x ∈ (DfsTree.node y outs).verts →
+      subEdges (.tree e cls (.node y outs)) e'
   ends : d ≤ cls.lowval d → ∀ e', subEdges (.tree e cls (.node y outs)) e' → e' < s.g.ne →
     ∀ x, s.g.Inc e' x → x = v ∨ x ∈ (DfsTree.node y outs).verts
   hpush : push = true ↔ hasVert = false ∧ cls.lowval d < d ∧ cls.isType1 = true

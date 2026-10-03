@@ -11,8 +11,10 @@ edges). `VertBook`'s `TwoAttached` at the end of a vertex's outs is then false: 
 `0 - 1 - 2` (two bridges) with an extra edge `2 - 3` outside the tree. After the bridge `1 - 2`
 is finished, the edge set below `V 1` is `{1 - 2}`, attached at vertex `2` by the edge `2 - 3`,
 which is neither of the two terminals (`1`, `1`). Kernel-checked below (`decide +kernel` runs the
-walk on the concrete state); the fix is the per-tree edge completeness hypothesis `hcomp` (every
-edge of `g` incident to a vertex of `t` is an edge of `t`), see PROOF.md §4.2b.
+walk on the concrete state). The statements below are the pre-correction ones; the correction is
+the per-tree edge completeness hypothesis `hcomp` (every edge of `g` incident to a vertex of `t` is
+an edge of `t`) on `walkTree_ear`/`walkTree_book`/`walkTree_guards`/`RootState.book`, from the
+forest's edge coverage via `comp_of_forest` (`EarWalk.lean`); see PROOF.md §4.2b.
 -/
 
 namespace Spqr
