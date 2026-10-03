@@ -206,6 +206,68 @@ theorem node_capped_glued (g : Graph) (hwf : t.toSpqrTree.WF) (hsh : t.toSpqrTre
         exact hpres (by omega) hne
   exact t.gluedFaces_of_frame h h' (fun _ _ => ⟨ρ, hw, hface⟩) hdisj hout
 
+/-- A capped non-`I`/`O` child `c` of item `i` has, in a `GluedFaces g (i + 1)` state, a filled
+row and a same-witness `Capped` certificate of its piece at its cap's original endpoints. -/
+theorem capped_child (g : Graph) (hwf : t.toSpqrTree.WF) (hne : t.ne = g.ne)
+    (hsep : t.toSpqrTree.PieceSep g) {i c : Nat} (hi : i < t.size) (hc : c ∈ t.children i)
+    (hcI : t.toSpqrTree.type c ≠ .I) (hcO : t.toSpqrTree.type c ≠ .O)
+    (hcap : t.toSpqrTree.hasCap c = true) {p : Nat × Nat}
+    (hp : t.toSpqrTree.neOrig (t.toSpqrTree.neRange c).1 = some p)
+    (s : EmbedState) (h : t.GluedFaces g (i + 1) s) :
+    ∃ c0 c1 c2 c3 ρ, s.outerE[c]![0]! = some c0 ∧ s.outerE[c]![1]! = some c1 ∧
+      s.outerE[c]![2]! = some c2 ∧ s.outerE[c]![3]! = some c3 ∧
+      (t.pieceBelow g c).Capped s.rotAdj ρ c0 c1 c2 c3 p.1 p.2 := by
+  have hm := t.child_maximal hwf hi hc
+  obtain ⟨hcs, _, hic⟩ := t.child_data hwf hi hc
+  have hcne : t.toSpqrTree.capNe c = some (t.toSpqrTree.neRange c).1 := by
+    simp [SpqrTree.capNe, hcap]
+  obtain ⟨ρ, ⟨hρ, ha, ho, hpair⟩, hf⟩ := h.cap_face c hm _ hcne
+  have hnil : t.edgesBelow c ≠ [] := by
+    obtain ⟨e', he'⟩ := hsep.cap_nonempty c hcs hcap hcI hcO
+    have := t.mem_edgesBelow_of_edgeIn hwf he'
+    intro h0; rw [h0] at this; exact List.not_mem_nil this
+  obtain ⟨hvert, hpres⟩ := h.outer_cap c hcs _ hcne p hp
+  have hall := hpres (by omega) hnil
+  obtain ⟨c0, h0⟩ := hall 0 (by omega)
+  obtain ⟨c1, h1⟩ := hall 1 (by omega)
+  obtain ⟨c2, h2⟩ := hall 2 (by omega)
+  obtain ⟨c3, h3⟩ := hall 3 (by omega)
+  have hpr0 := hpair 0 (by omega)
+  have hpr1 := hpair 1 (by omega)
+  obtain ⟨b, hb, l0, l1, hl0, hl1, hg01⟩ := hpr0.1 c0 h0
+  have hbc : b = c1 := Option.some.inj (Option.some.inj (hb.symm.trans h1))
+  subst hbc
+  obtain ⟨d, hd, l2, l3, hl2, hl3, hg23⟩ := hpr1.1 c2 h2
+  have hdc : d = c3 := Option.some.inj (Option.some.inj (hd.symm.trans h3))
+  subst hdc
+  have hslot : ∀ k q, s.outerE[c]?.bind (fun o => o[k]?) = some (some q) → k < 4 :=
+    fun k q hk => (h.outer_slots c k q hk).1
+  refine ⟨c0, b, c2, d, ρ, (outer_some_iff s c 0 c0).2 h0, (outer_some_iff s c 1 b).2 h1,
+    (outer_some_iff s c 2 c2).2 h2, (outer_some_iff s c 3 d).2 h3, hρ, ha, ?_, ?_, ?_,
+    hf c0 c2 h0 h2, h.outer_dir c 0 c0 h0, h.outer_dir c 1 b h1, h.outer_dir c 2 c2 h2,
+    h.outer_dir c 3 d h3⟩
+  · intro q hq
+    rw [ho q hq]
+    constructor
+    · rintro ⟨k, hk⟩
+      have hk' := hslot k q hk
+      interval_cases k
+      · exact Or.inl (Option.some.inj (Option.some.inj (hk.symm.trans h0)))
+      · exact Or.inr (Or.inl (Option.some.inj (Option.some.inj (hk.symm.trans h1))))
+      · exact Or.inr (Or.inr (Or.inl (Option.some.inj (Option.some.inj (hk.symm.trans h2)))))
+      · exact Or.inr (Or.inr (Or.inr (Option.some.inj (Option.some.inj (hk.symm.trans h3)))))
+    · rintro (rfl | rfl | rfl | rfl)
+      · exact ⟨0, h0⟩
+      · exact ⟨1, h1⟩
+      · exact ⟨2, h2⟩
+      · exact ⟨3, h3⟩
+  · refine ⟨l0, l1, hl0, hl1, hg01, ?_⟩
+    rw [t.pieceBelow_loc_vert hwf hne hl0, hvert 0 c0 h0]
+    simp
+  · refine ⟨l2, l3, hl2, hl3, hg23, ?_⟩
+    rw [t.pieceBelow_loc_vert hwf hne hl2, hvert 2 c2 h2]
+    simp
+
 /-- Semantic content of the node fold: starting from `GluedFaces g (i + 1) s`, the fold of
 `nodeStep` over the node's quarter-edges leaves `rotAdj` unchanged outside the node's piece, fills
 the node's row with four exposed ends, and the piece is `Capped` there — planar witness agreeing
