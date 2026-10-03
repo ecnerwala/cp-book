@@ -1,11 +1,12 @@
 import Spqr.EarWalk
 import Spqr.WalkWF
+import Spqr.RangesWalk
 
 /-! # `Items.WF` for the walk on a DFS forest
 
 `walk_items_wf` assembles `Items.WF` for `g.walk tern (g.dfsForest vo eo)` from the proved tree
 (`walk_tree`) and typing (`WalkTyping.walk_typing`) layers and the range layer
-(`wf_of_ranges` with `walk_ranges`, from the admitted `walk_rangesInv`/`walk_closeFacts`). It lives above `WalkCover` (which imports
+(`wf_of_ranges` with `walk_ranges`, from the range invariant and `walk_closeFacts`). It lives above `WalkCover` (which imports
 `StWalk`, which imports `WalkWF`), so the DFS prerequisites of `walk_tree`/`walk_typing` are
 discharged here from `g.WF` and `OrderOK`. -/
 
@@ -140,18 +141,38 @@ theorem wf_initialItems (g : Graph) (hnv : g.nv = 0) (hne : g.ne = 0) :
 
 /-! ### `Items.Ranges` -/
 
+/-- Admitted: at each actual P site, stack ownership covers the interval from the settled
+base piece through the child's postorder block (`FinishPCover`); at each unpushed vertex,
+its descendants have already been processed (`PushVertR`). The latter follows from `Place`
+once its pushed-edge predicate is bounded by the current postorder prefix. This bookkeeping
+must be threaded through `CoverTree` and `RootsCover`; no adjacency premise remains. -/
+theorem walk_rootsCover (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
+    WalkState.RootsCover (edgePostorderForest (g.dfsForest vo eo)) 0
+      (g.dfsForest vo eo) (WalkState.init g tern) := by
+  sorry
+
+theorem walk_rangesInv (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
+    (g.walk tern (g.dfsForest vo eo)).RangesInv (edgePostorderForest (g.dfsForest vo eo))
+      (edgePostorderForest (g.dfsForest vo eo)).length 0 := by
+  obtain ⟨hvp, hep⟩ := dfsForest_spanning' hg hvo heo
+  exact WalkState.walk_rangesInv_of_cover g tern _ (ForestOK.of_perm hvp hep)
+    (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo) (walk_rootsCover g tern vo eo hg hvo heo)
+
 theorem walk_g (g : Graph) (tern : Bool) (forest : List DfsTree) (hnv : 0 < g.nv)
     (hb : ∀ t ∈ forest, t.Bounded g.nv g.ne) : (g.walk tern forest).g = g :=
   (WalkM.walkForest_typing forest (WalkState.init_typing g tern hnv) hb).g_eq
 
 /-- `Items.Ranges` for the walk: `convex`/node `att_vs` from the final range invariant
 (`walk_rangesInv`), the remaining attachment/shape clauses from `walk_closeFacts`. -/
-theorem walk_ranges (g : Graph) (tern : Bool) (vo eo : List Nat) (hnv : 0 < g.nv)
+theorem walk_ranges (g : Graph) (tern : Bool) (vo eo : List Nat) (hgf : g.WF)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) (hnv : 0 < g.nv)
     (hb : ∀ t ∈ g.dfsForest vo eo, t.Bounded g.nv g.ne)
     (hcov : ∀ e, e < g.ne → ∃ t ∈ g.dfsForest vo eo, e ∈ t.edges) :
     Items.Ranges g (g.walk tern (g.dfsForest vo eo)).items (edgePostorderForest (g.dfsForest vo eo)) := by
   have hg := walk_g g tern _ hnv hb
-  have key := WalkState.ranges_of_rangesInv (walk_rangesInv g tern vo eo)
+  have key := WalkState.ranges_of_rangesInv (walk_rangesInv g tern vo eo hgf hvo heo)
     (by rw [hg]; exact walk_typing g tern _ hnv hb hcov) (by rw [hg]; exact walk_closeFacts g tern vo eo)
   rwa [hg] at key
 
@@ -184,6 +205,6 @@ theorem walk_items_wf (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     have hcov : ∀ e, e < g.ne → ∃ t ∈ g.dfsForest vo eo, e ∈ t.edges :=
       fun e he => by simpa [List.mem_flatMap] using hecov e he
     have hty := walk_typing g tern _ hnv hb hcov
-    exact Items.wf_of_ranges ht.toTree hty.toTypingFacts (walk_ranges g tern vo eo hnv hb hcov)
+    exact Items.wf_of_ranges ht.toTree hty.toTypingFacts (walk_ranges g tern vo eo hg hvo heo hnv hb hcov)
 
 end Spqr

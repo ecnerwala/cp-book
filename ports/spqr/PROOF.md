@@ -1148,6 +1148,11 @@ the remaining `Cover*` obligations on actual DFS walks is still required.
 `walkTree_frontiers` and the postorder permutation. Their only nonstandard axiom dependency is
 the ear layer's existing `walkTree_book` admission (through `RootState.book` / `RootState.step`);
 the remaining range hypothesis is explicitly `RootsCover`, not an admitted local proof.
+The actual `walk_rangesInv` assembly now lives in `WalkItemsWF` (avoiding the ear import cycle)
+and threads `g.WF` and both `OrderOK` hypotheses through `walk_ranges`. Its residual range
+admission is named `walk_rootsCover`; the statement specifies precisely the P-site coverage
+and unpushed-vertex bounds still to establish. `Place.pushVertR` proves the latter bound from
+the existing placement invariant once its pushed-edge predicate is bounded by the prefix.
 All twenty-two lemmas have only standard axioms. Full `FinishAdj` still needs the P merge
 into the base; the child's frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece

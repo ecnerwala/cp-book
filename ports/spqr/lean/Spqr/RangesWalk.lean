@@ -4,6 +4,17 @@ import Spqr.EarWalk
 namespace Spqr.WalkState
 open WalkM
 
+theorem Place.pushVertR {g : Graph} {P X : ItemId → Prop} {s : WalkState} {σ : List Nat} {n v : Nat}
+    (h : s.Place g P X) (hv : v < g.nv) (hP : ∀ e, e < g.ne → P (edgeItem g e) → σ.idxOf e < n) :
+    PushVertR σ n v s := by
+  refine ⟨h.vert v hv, ?_⟩
+  intro e he hb
+  rw [h.g_eq] at he hb
+  by_cases hc : 0 < s.cnt (edgeItem g e)
+  · exact hP e he (h.fixed _ (by simp [edgeItem]) (by dsimp [edgeItem]; omega) hc)
+  · have hn := noParent_of_cnt_eq_zero (Nat.eq_zero_of_not_pos hc)
+    exact (vertItem_ne_edgeItem hv e (Items.Below.eq_of_no_parent hn hb)).elim
+
 def PostAt (σ : List Nat) (n : Nat) (xs : List Nat) : Prop :=
   ∃ pre post, pre.length = n ∧ σ = pre ++ xs ++ post
 
