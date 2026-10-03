@@ -2,6 +2,7 @@ import Spqr.StInduct
 import Spqr.StRestrict
 import Spqr.WalkItemsWF
 import Spqr.StNodup
+import Spqr.StIParent
 
 /-!
 # `walk_st'` / `walk_vsOriented` from the simulation (PROOF.md §7.6)
@@ -144,12 +145,13 @@ theorem expandsList_ne_nil {items : Items} : ∀ {xs L : List ItemId}, ExpandsLi
     · exact hb x (by simp) z (Relation.ReflTransGen.head ⟨hy, hx⟩ hyz) hz
     · exact hb y (by simp [hy]) z hyz hz
 
-/-- Admitted (walk shape, dump-checked by `check_stsim`): an `I` item hangs under a `Q` item. -/
-theorem walk_i_parent (g : Graph) (tern : Bool) (vo eo : List Nat) :
+/-- An `I` item hangs under a `Q` item (`IOk` invariant of `StIParent.lean`). -/
+theorem walk_i_parent (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
+    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
     ∀ p c, Items.IsParent (g.walk tern (g.dfsForest vo eo)).items p c →
       Items.type (g.walk tern (g.dfsForest vo eo)).items c = .I →
-      Items.type (g.walk tern (g.dfsForest vo eo)).items p = .Q := by
-  sorry
+      Items.type (g.walk tern (g.dfsForest vo eo)).items p = .Q :=
+  walk_i_parent' g tern _ (dfsForest_bounded g hg hvo heo)
 
 theorem spr_of_expBelow {g : Graph} {items : Items} (hwf : Items.WF g items)
     (hI : ∀ p c, Items.IsParent items p c → Items.type items c = .I → Items.type items p = .Q)
@@ -399,7 +401,7 @@ theorem walk_st' (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
         (g.walk tern (g.dfsForest vo eo)).items.size
         (refOrder g (g.dfsForest vo eo)) i := by
   have hwf := walk_items_wf g hg tern vo eo hvo heo
-  have hI := walk_i_parent g tern vo eo
+  have hI := walk_i_parent g hg tern vo eo hvo heo
   obtain ⟨b, hb, L, hL, ⟨A, B, hAB⟩, -⟩ := walk_inBlock g hg tern vo eo hvo heo i hi ht
   obtain ⟨pre, post, hbl⟩ := List.append_of_mem hb
   have horder : refOrder g (g.dfsForest vo eo) =
