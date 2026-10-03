@@ -209,6 +209,76 @@ theorem CloseAt.pNode' {g : Graph} {items : Items} {x : ItemId} {u v : Nat} {cs 
       (fun c hc w hw => (hatt c hc w hw).symm) (fun w hw => htouch w hw.symm)
       (fun w hw => hpend w hw.symm)
 
+/-- The record of a freshly closed S/R node `x` with children `cs` and terminals `(u, v)`. -/
+theorem CloseAt.node {g : Graph} {items : Items} {x : ItemId} {u v : Nat} {cs : List ItemId}
+    (hx : 1 + g.nv + g.ne ≤ x) (ht : items.type x = .S ∨ items.type x = .R) (hch : items.ch x = cs)
+    (hvs : items.vs x = (some u, some v)) (huv : u ≠ v)
+    (hty : ∀ c ∈ cs, items.type c ∈ [NodeType.S, .P, .R, .Q, .V])
+    (htwo : ∀ c ∈ cs, items.type c ≠ .V → ∃ a b, items.vs c = (some a, some b) ∧ a ≠ b)
+    (hatt : ∀ w, items.Att g x w → w = u ∨ w = v)
+    (htouch : ∀ w, w = u ∨ w = v → ∃ e, e < g.ne ∧ g.Inc e w ∧ items.EdgeBelow g x e)
+    (hpend : ∀ w, w = u ∨ w = v → ∃ e, e < g.ne ∧ g.Inc e w ∧ ¬ items.EdgeBelow g x e)
+    (hint : ∀ w, w < g.nv → (vertItem w ∈ cs ↔ items.Inner g x w ∧
+      ∀ c ∈ cs, ¬ ∀ e, e < g.ne → g.Inc e w → items.EdgeBelow g c e))
+    (hs : items.type x = .S → ∃ xs, (cs.filter fun c => items.type c = .V) = xs.map vertItem ∧
+      1 ≤ xs.length ∧ items.virtualEdges x = List.zip (u :: xs) (xs ++ [v]))
+    (hr : items.type x = .R → 2 ≤ (cs.filter fun c => items.type c = .V).length ∧
+      5 ≤ (items.virtualEdges x).length ∧
+      ((items.virtualEdges x).map fun q => min q.1 q.2 + g.nv * max q.1 q.2).Nodup ∧
+      ∀ q ∈ items.virtualEdges x, ¬ PairEq q (u, v)) :
+    CloseAt g items x := by
+  have hpar : ∀ c, items.IsParent x c ↔ c ∈ cs := fun c => by simp [IsParent, hch]
+  have hIsVs : ∀ w, items.IsVs x w ↔ w = u ∨ w = v := by
+    intro w
+    simp only [IsVs, hvs]
+    constructor
+    · rintro (h | h)
+      · exact .inl (Option.some.inj h).symm
+      · exact .inr (Option.some.inj h).symm
+    · rintro (rfl | rfl) <;> simp
+  constructor
+  · intro _ w hw; exact (hIsVs w).2 (hatt w hw)
+  · intro _ w hw
+    obtain ⟨e, he, hi, hb⟩ := htouch w ((hIsVs w).1 hw)
+    obtain ⟨e', he', hi', hnb⟩ := hpend w ((hIsVs w).1 hw)
+    exact ⟨e, e', he, he', hi, hi', hb, hnb⟩
+  · intro _ a b hab
+    rw [hvs] at hab
+    simp only [Prod.mk.injEq, Option.some.injEq] at hab
+    omega
+  · intro _ w hw
+    rw [hpar, hint w hw]
+    constructor
+    · rintro ⟨h1, h2⟩; exact ⟨h1, fun c hc => h2 c ((hpar c).1 hc)⟩
+    · rintro ⟨h1, h2⟩; exact ⟨h1, fun c hc => h2 c ((hpar c).2 hc)⟩
+  · intro c hc _ hcV; exact htwo c ((hpar c).1 hc) hcV
+  · intro c hc hio
+    have := hty c ((hpar c).1 hc)
+    rcases hio with h | h <;> (rw [h] at this; simp at this)
+  · intro e he hel _
+    have : x = 1 + g.nv + e := he
+    rw [this] at hx
+    omega
+  · intro e he hel _
+    have : x = 1 + g.nv + e := he
+    rw [this] at hx
+    omega
+  · intro w hw hwl
+    have : x = 1 + w := hw
+    rw [this] at hx
+    omega
+  · intro h; rcases ht with h' | h' <;> rw [h'] at h <;> cases h
+  · intro h
+    obtain ⟨xs, hf, hl, hve⟩ := hs h
+    exact ⟨u, v, xs, hvs, by rw [hch]; exact hf, hl, hve⟩
+  · intro h
+    obtain ⟨h1, h2, h3, h4⟩ := hr h
+    refine ⟨by rw [hch]; exact h1, h2, h3, fun a b hab => ?_⟩
+    rw [hvs] at hab
+    simp only [Prod.mk.injEq, Option.some.injEq] at hab
+    obtain ⟨rfl, rfl⟩ := hab
+    exact h4
+
 end Spqr.Items
 
 namespace Spqr.WalkState
@@ -245,6 +315,49 @@ structure PSite (curV lv : Nat) (r : WalkState) : Prop where
       (Items.type r.items j' = .Q → Items.ch r.items j' = [])
   once : ∀ t ∈ r.tstack.take 2, ∀ j ∈ t.spans.1 ++ t.spans.2,
     (∀ p, ¬ Items.IsParent r.items p j) ∧ spansCount r.tstack j = 1
+
+/-- The children side, terminals and virtual edges of the node closed from the top entry `t`. -/
+def vKids (t : TEntry) (r : WalkState) : List ItemId := getSide t.spans r.stackDir[t.topDepth]!
+def vTerms (curV : Nat) (t : TEntry) (r : WalkState) : Nat × Nat :=
+  setSides r.stackDir[t.topDepth]! r.stackVerts[t.topDepth]! curV
+def vVirt (t : TEntry) (r : WalkState) : List (Nat × Nat) :=
+  ((vKids t r).filter fun c => Items.type r.items c ≠ .V).map fun c =>
+    ((Items.vs r.items c).1.getD 0, (Items.vs r.items c).2.getD 0)
+
+/-- The vertex close of a type-1 tree edge (`closeVertTail_closeAt`), at the state `cvS₅` the
+`finishTstackTop x` of the `some item` arm runs from: `t` is the top entry, re-targeted to `curV`,
+with everything on its `stackDir[topDepth]` side; `x` is the free S/R node about to receive that
+side as children; the terminals `stackVerts[topDepth] ≠ curV` are touched and are the only
+attachments of the side, each with an edge outside it; children are S/P/R/Q/V, non-V ones with two
+distinct terminals; a vertex item is a child iff all its edges lie in the side and in no single
+child; and the S path / R shape clauses hold for the side's virtual edges. -/
+structure VSite (curV : Nat) (x : ItemId) (t : TEntry) (r : WalkState) : Prop where
+  shape : Shape r
+  stack : ∃ rest, r.tstack = t :: rest
+  vstart : t.vStart = curV
+  side : getSide t.spans (!r.stackDir[t.topDepth]!) = []
+  free : ItemFree r x
+  ty : Items.type r.items x = .S ∨ Items.type r.items x = .R
+  ne : curV ≠ r.stackVerts[t.topDepth]!
+  kinds : ∀ c ∈ vKids t r, Items.type r.items c ∈ [NodeType.S, .P, .R, .Q, .V]
+  two : ∀ c ∈ vKids t r, Items.type r.items c ≠ .V →
+    ∃ a b, Items.vs r.items c = (some a, some b) ∧ a ≠ b
+  att : ∀ w, r.g.Touches (t.edges r.g r.items) w →
+    w = curV ∨ w = r.stackVerts[t.topDepth]! ∨ r.g.Interior (t.edges r.g r.items) w
+  touch : r.g.Touches (t.edges r.g r.items) curV ∧
+    r.g.Touches (t.edges r.g r.items) r.stackVerts[t.topDepth]!
+  pend : ∀ w, w = curV ∨ w = r.stackVerts[t.topDepth]! → ∃ e, e < r.g.ne ∧ r.g.Inc e w ∧
+    ¬ t.edges r.g r.items e
+  inner : ∀ w, w < r.g.nv → (vertItem w ∈ vKids t r ↔
+    r.g.Touches (t.edges r.g r.items) w ∧ r.g.Interior (t.edges r.g r.items) w ∧
+    ∀ c ∈ vKids t r, ¬ r.g.Interior (Items.EdgeBelow r.g r.items c) w)
+  s_order : Items.type r.items x = .S → ∃ xs,
+    ((vKids t r).filter fun c => Items.type r.items c = .V) = xs.map vertItem ∧ 1 ≤ xs.length ∧
+    vVirt t r = List.zip ((vTerms curV t r).1 :: xs) (xs ++ [(vTerms curV t r).2])
+  r_shape : Items.type r.items x = .R →
+    2 ≤ ((vKids t r).filter fun c => Items.type r.items c = .V).length ∧ 5 ≤ (vVirt t r).length ∧
+    ((vVirt t r).map fun q => min q.1 q.2 + r.g.nv * max q.1 q.2).Nodup ∧
+    ∀ q ∈ vVirt t r, ¬ Items.PairEq q (vTerms curV t r)
 
 /-- The context of a `finishEdge curV d o origTstack hasVert` call of the walk at state `s`. -/
 structure CloseCtx (σ : List Nat) (n D curV d : Nat) (o : DfsOut) (origTstack : Nat)
@@ -286,6 +399,10 @@ structure CloseCtx (σ : List Nat) (n D curV d : Nat) (o : DfsOut) (origTstack :
   p_site : o.cls.lowval d < d → o.cls.isType1 = true →
     result (condP curV (o.cls.lowval d) true) (feRest curV d o origTstack hasVert s) = true →
     PSite curV (o.cls.lowval d) (feRest curV d o origTstack hasVert s)
+  /-- The vertex-close site (`closeVertTail_closeAt`): `VSite` for the unwrapped item at `cvS₅`. -/
+  v_site : o.cls.isTree = true → o.cls.lowval d < d → hasVert = true → o.cls.isType1 = true →
+    ∃ t, VSite curV ((maybeUnwrapNxt (if feSingle d o s then NodeType.S else .R)).run (feS₂ d o s)).1 t
+      (cvS₅ curV s.stackDir[d]! true origTstack (feSingle d o s) (feS₂ d o s))
 
 variable {σ : List Nat} {n D curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
   {s : WalkState}
@@ -393,18 +510,30 @@ theorem loop1Body_closeAt (hc : CloseCtx σ n D curV d o origTstack hasVert s)
       (iter (loop1Body d s.stackDir[d]!) k (ceS₁ o.dest d o.e (feS₀ d o s)))).CloseInv := by
   sorry
 
-/-- The `some item` arm of `closeVertTail` (`vertFinish`): the S or R record of the vertex ear,
-from the state `cvS₅` after the merges and the retarget (the `none` arm is the identity). -/
-theorem closeVertTail_closeAt (hc : CloseCtx σ n D curV d o origTstack hasVert s)
-    (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d) (hv : hasVert = true)
-    (h : (cvS₅ curV s.stackDir[d]! o.cls.isType1 origTstack (feSingle d o s) (feS₂ d o s)).CloseInv) :
-    (feS₃ curV d o origTstack s).CloseInv := by
-  sorry
-
 /-- `finishP`: when `condP` holds, the new or reused P record over the merged `(curV,
 stackVerts[lowval])` entry — at least two virtual edges, all equal to its terminals, no V child. -/
 theorem getSide_setSides' {α : Type} (dir : Bool) (a b : α) : getSide (setSides dir a b) dir = a := by
   cases dir <;> rfl
+
+theorem setSides_some (dir : Bool) (a b : Nat) :
+    setSides dir (some a) (some b) = (some (setSides dir a b).1, some (setSides dir a b).2) := by
+  cases dir <;> rfl
+
+theorem setSides_ne {a b : Nat} (dir : Bool) (h : a ≠ b) :
+    (setSides dir a b).1 ≠ (setSides dir a b).2 := by
+  cases dir <;> simp [setSides] <;> omega
+
+theorem eq_setSides_or (dir : Bool) (a b w : Nat) :
+    (w = (setSides dir a b).1 ∨ w = (setSides dir a b).2) ↔ (w = a ∨ w = b) := by
+  cases dir <;> simp [setSides, or_comm]
+
+theorem mem_of_mem_getSide {p : List ItemId × List ItemId} {dir : Bool} {c : ItemId}
+    (h : c ∈ getSide p dir) : c ∈ p.1 ++ p.2 := by
+  cases dir <;> simp_all [getSide]
+
+theorem mem_sides_iff {p : List ItemId × List ItemId} {dir : Bool} {c : ItemId}
+    (hside : getSide p (!dir) = []) : c ∈ p.1 ++ p.2 ↔ c ∈ getSide p dir := by
+  cases dir <;> simp_all [getSide]
 
 theorem getSide_mergeInto {dir : Bool} {cur nxt : TEntry} {a b : List ItemId}
     (hc : cur.spans = setSides dir a []) (hn : nxt.spans = setSides dir b []) :
@@ -840,6 +969,123 @@ theorem PSite.closeInv {curV lv : Nat} {r : WalkState} (hp : PSite curV lv r) (h
         rcases (hmemL _ j).1 hj' with rfl | hj'
         · exact hnc ((hEB _ hcni e).1 hb')
         · exact hni (Relation.ReflTransGen.head hj' ((hEB _ (hchni j hj') e).1 hb'))
+
+/-- The `some item` arm of `closeVertTail` (`vertFinish`): the S or R record of the vertex ear,
+from the state `cvS₅` after the merges and the retarget (the `none` arm is the identity). -/
+theorem VSite.closeInv {curV : Nat} {x : ItemId} {t : TEntry} {r : WalkState}
+    (hv : VSite curV x t r) (h : r.CloseInv) : (after (finishTstackTop x) r).CloseInv := by
+  obtain ⟨rest, hts⟩ := hv.stack
+  show ((finishTstackTop x).run r).2.CloseInv
+  rw [finishTstackTop_run_eq r x t rest hts]
+  dsimp only
+  refine CloseInv.finishTop' h hts hv.free.lt (cnt_eq_zero_of_free hv.free.free hv.free.root) _ _ ?_
+  obtain ⟨items', hI⟩ : ∃ I : Items, I = r.items.modify x fun it =>
+      { it with vs := setSides r.stackDir[t.topDepth]! (some r.stackVerts[t.topDepth]!) (some t.vStart),
+                ch := getSide t.spans r.stackDir[t.topDepth]! } := ⟨_, rfl⟩
+  rw [← hI]
+  have hf : ∀ it : Item,
+      ({ it with
+          vs := setSides r.stackDir[t.topDepth]! (some r.stackVerts[t.topDepth]!) (some t.vStart),
+          ch := getSide t.spans r.stackDir[t.topDepth]! } : Item).type = it.type := fun _ => rfl
+  have htc : ∀ c, Items.type items' c = Items.type r.items c := fun c => by
+    rw [hI]; exact Items.type_modify_type_eq _ _ hf c
+  have hch : Items.ch items' x = vKids t r := by rw [hI]; exact Items.ch_modify_at _ _ hv.free.lt
+  have hvs : Items.vs items' x =
+      (some (vTerms curV t r).1, some (vTerms curV t r).2) := by
+    rw [hI, Items.vs_modify_at _ _ hv.free.lt]
+    show setSides _ (some _) (some t.vStart) = _
+    rw [hv.vstart]; exact setSides_some _ _ _
+  have hxs : x ∉ t.spans.1 ++ t.spans.2 := hv.free.free t (by rw [hts]; simp)
+  have hxne : ∀ c ∈ vKids t r, c ≠ x := fun c hc heq => hxs (heq ▸ mem_of_mem_getSide hc)
+  have hvsc : ∀ c ∈ vKids t r, Items.vs items' c = Items.vs r.items c := fun c hc => by
+    rw [hI]; exact Items.vs_modify_of_ne _ _ (hxne c hc)
+  have hEB : ∀ j, j ≠ x → ∀ e, Items.EdgeBelow r.g items' j e ↔ Items.EdgeBelow r.g r.items j e :=
+    fun j hj e => by
+      rw [hI]
+      exact Items.Below_modify_of_not_below _ _ fun hb => hj (Items.Below.eq_of_no_parent hv.free.root hb)
+  have hpar : ∀ c, Items.IsParent items' x c ↔ c ∈ vKids t r := fun c => by
+    show c ∈ Items.ch items' x ↔ _
+    rw [hch]
+  have hEx : ∀ e, e < r.g.ne → (Items.EdgeBelow r.g items' x e ↔ t.edges r.g r.items e) := by
+    intro e he
+    constructor
+    · intro hb
+      rcases hb.head_cases with heq | ⟨c, hc, hb'⟩
+      · have : x = 1 + r.g.nv + e := heq
+        have h4 := hv.free.node
+        rw [this] at h4
+        omega
+      · have hc' := (hpar c).1 hc
+        exact ⟨c, mem_of_mem_getSide hc', (hEB c (hxne c hc') e).1 hb'⟩
+    · rintro ⟨i, hi, hb⟩
+      have hi' := (mem_sides_iff hv.side).1 hi
+      exact Relation.ReflTransGen.head ((hpar i).2 hi') ((hEB i (hxne i hi') e).2 hb)
+  have hor : ∀ w, (w = (vTerms curV t r).1 ∨ w = (vTerms curV t r).2) ↔
+      (w = curV ∨ w = r.stackVerts[t.topDepth]!) := fun w => by
+    rw [vTerms, eq_setSides_or, or_comm]
+  have hfilt : ((vKids t r).filter fun c => Items.type items' c = .V) =
+      (vKids t r).filter fun c => Items.type r.items c = .V :=
+    List.filter_congr fun c _ => by rw [htc c]
+  have hVE : Items.virtualEdges items' x = vVirt t r := by
+    unfold Items.virtualEdges vVirt
+    rw [hch, List.filter_congr (fun c _ => by rw [htc c])]
+    exact List.map_congr_left fun c hc => by rw [hvsc c (List.mem_of_mem_filter hc)]
+  refine Items.CloseAt.node hv.free.node (by rw [htc]; exact hv.ty) hch hvs
+    (setSides_ne _ hv.ne.symm) (fun c hc => by rw [htc]; exact hv.kinds c hc)
+    (fun c hc hne => by rw [htc] at hne; rw [hvsc c hc]; exact hv.two c hc hne) ?_ ?_ ?_ ?_ ?_ ?_
+  · rintro w ⟨e, e', he, he', hi, hi', hb, hnb⟩
+    refine (hor w).2 ?_
+    rcases hv.att w ⟨e, he, (hEx e he).1 hb, hi⟩ with h1 | h1 | h1
+    · exact .inl h1
+    · exact .inr h1
+    · exact (hnb ((hEx e' he').2 (h1 e' he' hi'))).elim
+  · intro w hw
+    rcases (hor w).1 hw with rfl | rfl
+    · obtain ⟨e, he, hE, hi⟩ := hv.touch.1; exact ⟨e, he, hi, (hEx e he).2 hE⟩
+    · obtain ⟨e, he, hE, hi⟩ := hv.touch.2; exact ⟨e, he, hi, (hEx e he).2 hE⟩
+  · intro w hw
+    obtain ⟨e, he, hi, hne⟩ := hv.pend w ((hor w).1 hw)
+    exact ⟨e, he, hi, fun hb => hne ((hEx e he).1 hb)⟩
+  · intro w hw
+    rw [hv.inner w hw]
+    constructor
+    · rintro ⟨⟨e, he, hE, hi⟩, hIn, hno⟩
+      refine ⟨⟨⟨e, he, hi⟩, fun e' he' hi' => (hEx e' he').2 (hIn e' he' hi')⟩, fun c hc hall =>
+        hno c hc fun e' he' hi' => (hEB c (hxne c hc) e').1 (hall e' he' hi')⟩
+    · rintro ⟨⟨⟨e, he, hi⟩, hall⟩, hno⟩
+      refine ⟨⟨e, he, (hEx e he).1 (hall e he hi), hi⟩, fun e' he' hi' => (hEx e' he').1 (hall e' he' hi'),
+        fun c hc hIn => hno c hc fun e' he' hi' => (hEB c (hxne c hc) e').2 (hIn e' he' hi')⟩
+  · intro hS
+    rw [htc] at hS
+    obtain ⟨xs, hf, hl, hve⟩ := hv.s_order hS
+    exact ⟨xs, by rw [hfilt]; exact hf, hl, by rw [hVE]; exact hve⟩
+  · intro hR
+    rw [htc] at hR
+    obtain ⟨h1, h2, h3, h4⟩ := hv.r_shape hR
+    rw [hfilt, hVE]
+    exact ⟨h1, h2, h3, h4⟩
+
+theorem closeVertTail_closeAt (hc : CloseCtx σ n D curV d o origTstack hasVert s)
+    (ht : o.cls.isTree = true) (hlow : o.cls.lowval d < d) (hv : hasVert = true)
+    (h : (cvS₅ curV s.stackDir[d]! o.cls.isType1 origTstack (feSingle d o s) (feS₂ d o s)).CloseInv) :
+    (feS₃ curV d o origTstack s).CloseInv := by
+  cases h1 : o.cls.isType1
+  · have hS₃ : feS₃ curV d o origTstack s =
+        cvS₅ curV s.stackDir[d]! false origTstack (feSingle d o s) (feS₂ d o s) := by
+      simp only [feS₃, h1, closeVert', cvS₅, cvS₄, cvS₃, cvS₂, cvS₁, after, vertPre,
+        vertUnwrap, vertFinish, Bool.not_false, Bool.false_eq_true, ↓reduceIte, WalkM.run_bind,
+        WalkM.pure_run, run_tstackSize]
+    rw [hS₃]; rw [h1] at h; exact h
+  · have hS₃ : feS₃ curV d o origTstack s =
+        after (finishTstackTop ((maybeUnwrapNxt (if feSingle d o s then .S else .R)).run (feS₂ d o s)).1)
+          (cvS₅ curV s.stackDir[d]! true origTstack (feSingle d o s) (feS₂ d o s)) := by
+      simp only [feS₃, h1, closeVert', cvS₅, cvS₄, cvS₃, cvS₂, cvS₁, cvB₁, after, result, vertPre,
+        vertUnwrap, vertFinish, Bool.not_true, Bool.false_eq_true, ↓reduceIte, WalkM.run_bind,
+        WalkM.pure_run, WalkM.map_run]
+      rfl
+    rw [hS₃]; rw [h1] at h
+    obtain ⟨t, hvs⟩ := hc.v_site ht hlow hv h1
+    exact hvs.closeInv h
 
 theorem finishP_closeInv_of_not {curV lv : Nat} {b : Bool} (h : s.CloseInv)
     (hc : result (condP curV lv b) s = false) : (after (finishP curV lv b) s).CloseInv := by
