@@ -890,15 +890,103 @@ theorem getElem!_map_fn {α : Type} [Inhabited α] (l : List α) (f : α → Nat
     (hk : k < l.length) : (l.map f)[k]! = f l[k]! := by
   rw [getElem!_pos (l.map f) k (by simpa using hk), getElem!_pos l k hk, List.getElem_map]
 
-/-- Named admission (dump-checked `kept_ends`; a DFS fact, not an ear fact): below a boundary tree
-edge (`d ≤ lowval`, i.e. no return above `v`), every subtree edge has both endpoints in
-`v :: child.verts`. From `WF` via `retDepths`/`low2`: every back edge of the subtree has
-`lowval ≥ d`, hence its destination at depth `≥ d` on the ancestor path. -/
+mutual
+/-- Below the ancestor path `anc ++ pre`, if every return depth of an out of `w` is `≥ anc.length`,
+every edge of the out has its endpoints in `pre`, `w` or the out's vertices (a back edge's
+destination `(anc ++ pre ++ [w])[i]` has `i = lowval ≥ anc.length`). -/
+theorem bdOut_wf : ∀ (g : Graph) (anc pre : List Nat) (w : Nat) (o : DfsOut), o.WF (anc ++ pre) w →
+    DfsOut.Ends g w o → (∀ r ∈ o.retDepths (anc ++ pre).length, anc.length ≤ r) →
+    ∀ e, subEdges o e → ∀ x, g.Inc e x → x ∈ pre ∨ x = w ∨ x ∈ o.verts
+  | g, anc, pre, w, .back e' dest cls, hwf, hE, hret, e, he, x, hx => by
+    rw [DfsOut.WF] at hwf
+    obtain ⟨i, hi, hcls⟩ := hwf
+    rw [DfsOut.Ends] at hE
+    have he' : e = e' := by simpa [subEdges, DfsOut.e] using he
+    subst he'
+    rcases eq_of_inc_pairEq hE hx with rfl | rfl
+    · exact .inr (.inl rfl)
+    · have hi' : i < (anc ++ pre ++ [w]).length := (List.getElem?_eq_some_iff.1 hi).1
+      have hile : i ≤ (anc ++ pre).length := by simp at hi' ⊢; omega
+      have hr := hret (cls.lowval (anc ++ pre).length) (by simp [DfsOut.retDepths])
+      rw [hcls, lowval_classify_back hile] at hr
+      rw [List.append_assoc, List.getElem?_append_right hr] at hi
+      rcases List.mem_append.1 (List.mem_of_getElem? hi) with h | h
+      · exact .inl h
+      · exact .inr (.inl (List.mem_singleton.1 h))
+  | g, anc, pre, w, .tree e' cls (.node y outs), hwf, hE, hret, e, he, x, hx => by
+    rw [DfsOut.WF] at hwf
+    obtain ⟨hwf', -⟩ := hwf
+    rw [DfsTree.WF] at hwf'
+    rw [DfsOut.Ends] at hE
+    obtain ⟨hpe, hE'⟩ := hE
+    rw [DfsTree.Ends] at hE'
+    rcases he with rfl | he
+    · rcases eq_of_inc_pairEq hpe hx with rfl | rfl
+      · exact .inr (.inr (List.mem_cons_self ..))
+      · exact .inr (.inl rfl)
+    · have hret' : ∀ r ∈ DfsOut.retDepthsList (anc ++ (pre ++ [w])).length outs, anc.length ≤ r := by
+        intro r hr
+        apply hret
+        simp only [DfsOut.retDepths, DfsTree.retDepths]
+        have hl : (anc ++ (pre ++ [w])).length = (anc ++ pre).length + 1 := by simp [Nat.add_assoc]
+        rw [hl] at hr
+        exact hr
+      rcases bdOuts_wf g anc (pre ++ [w]) y outs (by rw [← List.append_assoc]; exact hwf'.2) hE'
+        hret' e he x hx with h | rfl | h
+      · rcases List.mem_append.1 h with h | h
+        · exact .inl h
+        · exact .inr (.inl (List.mem_singleton.1 h))
+      · exact .inr (.inr (List.mem_cons_self ..))
+      · exact .inr (.inr (List.mem_cons_of_mem _ h))
+
+theorem bdOuts_wf : ∀ (g : Graph) (anc pre : List Nat) (w : Nat) (outs : List DfsOut),
+    (∀ o ∈ outs, o.WF (anc ++ pre) w) → (∀ o ∈ outs, DfsOut.Ends g w o) →
+    (∀ r ∈ DfsOut.retDepthsList (anc ++ pre).length outs, anc.length ≤ r) →
+    ∀ e, e ∈ DfsOut.edgesList outs → ∀ x, g.Inc e x → x ∈ pre ∨ x = w ∨ x ∈ DfsOut.vertsList outs
+  | g, anc, pre, w, [], _, _, _, e, he, x, hx => by simp [DfsOut.edgesList] at he
+  | g, anc, pre, w, o :: rest, hwf, hE, hret, e, he, x, hx => by
+    obtain ⟨o', ho', hs⟩ := mem_subEdges_edgesList.1 he
+    rw [DfsOut.retDepthsList_eq] at hret
+    rcases List.mem_cons.1 ho' with h' | ho'
+    · rw [h'] at hs
+      rcases bdOut_wf g anc pre w o (hwf _ (List.mem_cons_self ..)) (hE _ (List.mem_cons_self ..))
+        (fun r hr => hret r (List.mem_flatMap.2 ⟨o, List.mem_cons_self .., hr⟩)) e hs x hx with h | h | h
+      · exact .inl h
+      · exact .inr (.inl h)
+      · exact .inr (.inr (mem_vertsList_of_verts (List.mem_cons_self ..) h))
+    · rcases bdOuts_wf g anc pre w rest (fun o h => hwf o (List.mem_cons_of_mem _ h))
+        (fun o h => hE o (List.mem_cons_of_mem _ h))
+        (fun r hr => by
+          rw [DfsOut.retDepthsList_eq] at hr
+          obtain ⟨o'', ho'', hr'⟩ := List.mem_flatMap.1 hr
+          exact hret r (List.mem_flatMap.2 ⟨o'', List.mem_cons_of_mem _ ho'', hr'⟩))
+        e (mem_subEdges_edgesList.2 ⟨o', ho', hs⟩) x hx with h | h | h
+      · exact .inl h
+      · exact .inr (.inl h)
+      · rw [DfsOut.vertsList_eq] at h
+        obtain ⟨o'', ho'', hx'⟩ := List.mem_flatMap.1 h
+        exact .inr (.inr (mem_vertsList_of_verts (List.mem_cons_of_mem _ ho'') hx'))
+end
+
+/-- Below a boundary tree edge (`d ≤ lowval`, i.e. no return above `v`), every subtree edge has both
+endpoints in `v :: child.verts` (dump-checked `kept_ends`): `bdOut_wf` with `pre = []`, the lowval
+being the least return depth (`lowval_eq_lmin`). -/
 theorem ends_of_wf_boundary {g : Graph} {anc : List Nat} {v e : Nat} {cls : OutClass} {child : DfsTree}
     (hwf : DfsOut.WF anc v (.tree e cls child)) (hE : DfsOut.Ends g v (.tree e cls child))
     (hge : anc.length ≤ cls.lowval anc.length) :
     ∀ e', subEdges (.tree e cls child) e' → ∀ x, g.Inc e' x → x = v ∨ x ∈ child.verts := by
-  sorry
+  intro e' he' x hx
+  have hret : ∀ r ∈ (DfsOut.tree e cls child).retDepths (anc ++ []).length, anc.length ≤ r := by
+    intro r hr
+    rw [List.append_nil] at hr
+    have h := EarDfs.lowval_eq_lmin hwf
+    rw [DfsOut.cls] at h
+    rw [h] at hge
+    exact Nat.le_trans hge (lmin_le_of_mem hr)
+  rcases bdOut_wf g anc [] v _ (by rw [List.append_nil]; exact hwf) hE hret e' he' x hx with h | h | h
+  · simp at h
+  · exact .inl h
+  · exact .inr h
 
 /-- Named admission (dump-checked `kept_items_ch`/`kept_items_par`): a child walk touches only the
 items of its own vertices and edges and the items it allocates — every other allocated item keeps
@@ -931,13 +1019,6 @@ theorem walkTree_vroot_kept (t : DfsTree) (d : Nat) (s : WalkState) (v : Nat) (h
   refine hr p (((h (vertItem v) (by show 1 + v < _; omega) ?_ ?_).2 p).1 hp)
   · exact fun x hx h => hv ((vertItem_inj' h) ▸ hx)
   · exact fun e₁ _ h => vertItem_ne_edgeItem' hv' h
-
-/-- Named admission (dump-checked `kept_v_below`): a child walk does not change the edge set below
-the `V` item of a vertex outside the subtree. -/
-theorem walkTree_below_kept (t : DfsTree) (d : Nat) (s : WalkState) (v : Nat) (hv : v ∉ t.verts) :
-    wp (walkTree t d) (fun _ s' => ∀ e, e < s.g.ne →
-      (Items.EdgeBelow s'.g s'.items (vertItem v) e ↔ Items.EdgeBelow s.g s.items (vertItem v) e)) s := by
-  sorry
 
 theorem getElem!_range_map {β : Type} [Inhabited β] (n : Nat) (f : Nat → β) (k : Nat) (hk : k < n) :
     ((List.range n).map f)[k]! = f k := by
@@ -2855,6 +2936,32 @@ theorem below_kept {I I' : Items} (Old : ItemId → Prop)
       refine ⟨ih.1.tail ?_, hcl _ _ ih.2 hs⟩
       rw [Items.IsParent, hk _ ih.2]; exact hs
   exact ⟨fun h => (h1 i h).1, fun h => (h2 i h).1⟩
+
+/-- A child walk does not change the edge set below the `V` item of a vertex outside the subtree
+(dump-checked `kept_v_below`): from `walkTree_items_kept`, since the items below `V v` before the
+walk are neither the tree's items (those are roots) nor allocated by it (`below_kept`). -/
+theorem walkTree_below_kept (t : DfsTree) (d : Nat) (s : WalkState) {g : Graph} (hT : Types g s)
+    (v : Nat) (hv : v ∉ t.verts) (hv' : v < s.g.nv)
+    (hch : ∀ p c, Items.IsParent s.items p c → c < s.items.size)
+    (hvr : ∀ x ∈ t.verts, ∀ p, ¬ Items.IsParent s.items p (vertItem x))
+    (her : ∀ e ∈ t.edges, ∀ p, ¬ Items.IsParent s.items p (edgeItem s.g e)) :
+    wp (walkTree t d) (fun _ s' => ∀ e, e < s.g.ne →
+      (Items.EdgeBelow s'.g s'.items (vertItem v) e ↔ Items.EdgeBelow s.g s.items (vertItem v) e)) s := by
+  refine wp_mono _ (wp_and (walkTree_frame t d s hT) (walkTree_items_kept t d s))
+    fun _ s' h e he => ?_
+  obtain ⟨⟨hg, -⟩, hk⟩ := h
+  unfold Items.EdgeBelow
+  rw [hg]
+  refine below_kept (fun j => j < s.items.size ∧ (∀ x ∈ t.verts, j ≠ vertItem x) ∧
+      ∀ e ∈ t.edges, j ≠ edgeItem s.g e)
+    (fun a c _ hp => ⟨hch a c hp, fun x hx hc => hvr x hx a (hc ▸ hp),
+      fun e' he' hc => her e' he' a (hc ▸ hp)⟩)
+    (fun j hj => (hk j hj.1 hj.2.1 hj.2.2).1) ⟨?_, fun x hx h => hv (by rw [vertItem_inj' h]; exact hx),
+      fun e' _ h => vertItem_ne_edgeItem' hv' h⟩ _
+  have := hT.size
+  rw [hT.g_eq] at hv'
+  show 1 + v < _
+  omega
 
 /-- `finishBoundary` at a bridge tree out, over an abstract post-state: the child's outs are all
 boundary (`bridge_bd`), so its end-of-outs `top` is empty and `hasVert` false; the end push `V y`
@@ -5288,7 +5395,12 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
         have hvr := walkTree_vroot_kept (.node y outs') (anc.length + 1) S₂ v hv_nc
           (by subst hS₂; exact hv') (by subst hS₂; rw [hgs]; exact hT.size)
           (by subst hS₂; exact hC.v_root)
-        have hbel := walkTree_below_kept (.node y outs') (anc.length + 1) S₂ v hv_nc
+        have hbel := walkTree_below_kept (.node y outs') (anc.length + 1) S₂ hT₂ v hv_nc
+          (by subst hS₂; exact hv') (by subst hS₂; exact hC.ch_lt)
+          (fun x hx => by
+            subst hS₂; exact (hC.v_fresh _ (List.mem_cons_self ..) e cls (.node y outs') rfl x hx).1)
+          (fun e' he' => by
+            subst hS₂; exact (hC.q_fresh _ (List.mem_cons_self ..) e' (Or.inr he')).1)
         have hboth : wp (walkTree (.node y outs') (anc.length + 1)) (fun _ s₃ =>
             FinishEar v anc.length (.tree e cls (.node y outs')) (L ++ s.tstack).length
               (hasVert || push) s₃ ∧
