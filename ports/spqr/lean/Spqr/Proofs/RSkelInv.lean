@@ -1,4 +1,4 @@
-import Spqr.Proofs.RItems
+import Spqr.Proofs.RSkel3
 
 /-!
 # The R-skeleton invariant of the walk (PROOF.md §4.5, item level)
