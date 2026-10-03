@@ -1904,6 +1904,46 @@ violations, kernel counterexample `checks/WalkInvCheck/E3False.lean`), restated 
 `check_walkinv small <field> <n>` searches small random graphs; both were used for the E3
 counterexample.
 
+**Stage 2 — the statement (`Spqr/WalkBackbone.lean`).** `WalkInv G t d s` is the conjunction at the
+entry of `walkTree t d` (before `stackVerts[d] := t.v`), over one ghost record `TreeGhost`
+(`g anc base bE sv sd pe` of the ear frame, the schedule `σ n`, the R data `dfs F`, the coverage
+prefix `sts origs P X`, the st path `prev fs segs`): the DFS/frame facts (`Full`, `WF`, `Ends`,
+nodup/bounds, edge completeness `comp`/`pe_anc`, `stackVerts`/`stackDir` sizes, `anc_sv`), the ear
+context `EarCtx t.v d [] t.outs false …` with `Inv' d` and `Shape`, `RangesInv σ n d` with
+`PostAt`/`AncPath`/`CloseInv`, `OwnedD` with its prefix bounds and `P`-freshness, the R context
+`RCtx` (on a block, at a non-root entry `d = dp + 1`: `dfs.Spec`/`Rooted`, `Inv' dp` of the parent
+state, `IsParent`, the out-lists of the subtree, the ancestor chain, `RInvTop` at the parent, the
+frames `F` as `RInvG`, `RSkelInv`), and the st hypotheses of `StTreeP` (`segsStack segs`,
+`SegRead`, `StItems (simBlocks …)`, the height bound). `WalkInvEnd G t d s s'` is the conjunction at
+the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`, `Place (Pushed …)`/
+`OwnedD`/`VertCover`, (block) `RWalk dfs F t.v d` + `BotKeep` + `RSkelInv`, and `StSim`.
+
+* `WalkInv.sites` is the cross-layer plumbing: from the conjunction alone it produces every site
+  hypothesis the component inductions were stated against — `EarTree` (`cTree`), `BookTree`
+  (`bTree`), `GuardsTree` (`gbTree`), `FrontiersTree` (`frTree`), `CsTree` (`dsTree`),
+  `CoverTree` (`cvTree`), `RgTree` (`scheduleTree`), `CbTree` (`cbTree`), `RSideTree` (`rsTree`).
+  No layer takes an input that another induction carries.
+* `walkTree_inv : WalkInv G t d s → wp (walkTree t d) (fun _ s' => WalkInvEnd G t d s s') s`.
+  In this stage its body is the conjunction of the existing per-layer tree theorems (`cTree`,
+  `invTree`, `rgTree`, `ccTree`, `cvTree`, `rrTree`/`rkTree`, `stWalk`) applied to `sites`; the
+  second stage replaces them by one `walkTree.mutual_induct` whose `walkOut` step is assembled
+  from the `finishEdge` primitives (`finishEdge_rangesInv`, `finishEdge_closeInv`/`*_closeAt`,
+  `keepsR_finishEdge`/`finishEdge_rInvTop`/`finishEdge_rInvG_base`, `finishEdge_st`/
+  `finishRet_frame_st`/`finishBoundary_st`, `ctx_step_*`), after which the per-layer inductions
+  are deletable.
+* Not yet a field: the per-segment `StLive` of §7 (checked as `st.live_*`); it enters with the
+  `walkOut`-level statement, where `finishBoundary_stLive` consumes it.
+* Admissions reachable from `walkTree_inv` (direct `sorry` bodies in its dependency closure, 35):
+  ear `ctx_step_tree_ret`, `walkTree_below_kept`, `walkTree_items_kept`, `ends_of_wf_boundary`,
+  `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,bottom,close,late,late_fo,loop1,loop1_side,
+  loop1_touch,loops,lower,of_ctx}`, `tree_comp_shape`; Ranges `closeCtx_{bd_node,bd_vert,l1_site,
+  p_site,v_site}`, `finishEdge_ownedD`, `finishEdge_vertCover`; R `rSide_{entry,vertFree,
+  finish_content}_site`, `loop1_rBranch_fields_ctx`, `loop1_rBranch_mid_ctx`, `loop1_rTop_ctx`,
+  `feS₂_top_entryR`, `closeVert_type1_rCloseShape`; ST `finishBoundary_stLive`. Not reachable:
+  `loop1_rBranch_content`, `walkTree_rSide_spec`, `walk_items_rThreeConnected` (R-layer glue
+  outside the tree theorems), `spqrTree_wf`, `spqrTree_pieceSep`, `walk_q_children`,
+  `walk_canonical`, the planarity admissions.
+
 ## 5. Phase 3: relabel
 
 `relabelTree` **[def]** takes the item array and produces `SpqrTree`. It is a plain preorder walk:
