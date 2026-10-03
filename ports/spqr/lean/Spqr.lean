@@ -47,6 +47,7 @@ import Spqr.Proofs.PlanarSplice
 import Spqr.PlanarEmbedFaces
 import Spqr.PlanarEmbedFacesSteps
 import Spqr.Proofs.OrbitSplit
+import Spqr.Proofs.PlanarInsert
 import Spqr.Proofs.Postorder
 import Spqr.Proofs.SepPair
 import Spqr.Blocks
