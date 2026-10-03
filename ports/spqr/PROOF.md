@@ -1055,8 +1055,10 @@ edges; the `PushVertR` processed-edge bound remains a separate obligation.
 `Frontier.owns_late` obtains ownership at the exit of loop 2.
 `closeVertAdj_of_frontier` supplies all three vertex-close adjacency fields; its three-entry
 frontier bound follows from `FinishBook.late_length`.
-All twenty-one lemmas have only standard axioms. Full `FinishAdj` still needs the P merge
-into the base; the frontier lemma alone applies only
+`finishPAdj_of_frontier` handles the P unwrap/merge when an enclosing interval frontier owns
+both entries; supplying that enclosing frontier for the actual P merge remains open.
+All twenty-two lemmas have only standard axioms. Full `FinishAdj` still needs the P merge
+into the base; the child's frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece
 on that entry, so its `MergeAdj` obligation is vacuous.
 The final assembly must avoid importing `RangesFrontier` into `WalkWF`: the current

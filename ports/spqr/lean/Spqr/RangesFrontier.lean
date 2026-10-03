@@ -448,4 +448,20 @@ theorem FinishBook.late_length {curV d orig : Nat} {o : DfsOut} {hasVert : Bool}
   simp only [List.length_cons, List.length_append, List.length_nil]
   omega
 
+theorem finishPAdj_of_frontier {curV lowval orig : Nat} {isType1 : Bool}
+    {base : List TEntry} {E : Nat → Prop}
+    (h : s.RangesInv σ n D) (hs : Shape s) (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < s.g.ne)
+    (hok : FinishPOk D curV lowval isType1 s)
+    (hf : result (condP curV lowval isType1) s = true →
+      FrontierOwns orig base E s ∧ orig + 2 ≤ s.tstack.length)
+    (hinterval : ∀ a b c, a ≤ b → b ≤ c → c < σ.length → E σ[a]! → E σ[c]! → E σ[b]!) :
+    FinishPAdj σ curV lowval isType1 s := by
+  refine ⟨fun hc => ?_⟩
+  have hu := (hok.ok hc).1
+  have hf' := (hf hc).1.unwrap (hf hc).2 hs (by decide) hu
+  have hr := h.unwrap' hσ hs (by decide) hu
+  have hg := (maybeUnwrapNxt_spec (v := curV) h.inv hs (by decide) hu).step.g
+  dsimp only [after] at hf'
+  exact hr.mergeAdj_of_frontier hnd (by rwa [hg]) hf'.1 (by rw [hf'.2]; exact (hf hc).2) hinterval
+
 end Spqr.WalkState
