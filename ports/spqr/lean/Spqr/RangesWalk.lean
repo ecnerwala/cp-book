@@ -111,4 +111,98 @@ theorem scheduleOut : ∀ σ n v d o hasVert s, ScheduleOut σ n v d o hasVert s
         (rgTree σ n child (d + 1) _ pre hs₁.frame' hnd hσ₁ hg₁.1 hb₁.1 hr)
 end
 
+theorem init_rangesInv (g : Graph) (tern : Bool) {σ : List Nat} (hnd : σ.Nodup) :
+    (WalkState.init g tern).RangesInv σ 0 0 := by
+  refine ⟨init_inv g tern, ?_, ?_, ?_, ?_⟩
+  · intro t ht; simp [WalkState.init] at ht
+  · intro above t below ht; simp [WalkState.init] at ht
+  · intro t ht; simp [WalkState.init] at ht
+  · intro i _ _ a b c hab hbc hcl ha hc
+    have hae := Items.Below_of_ch_nil ha.edgeBelow (Items.initialItems_ch g i)
+    have hce := Items.Below_of_ch_nil hc.edgeBelow (Items.initialItems_ch g i)
+    have heq := edgeItem_inj (hae.trans hce.symm)
+    have hia := idxOf_getElem! hnd (by omega : a < σ.length)
+    have hic := idxOf_getElem! hnd hcl
+    rw [heq] at hia
+    have hba : b = a := by omega
+    subst b
+    exact ha.edgeBelow
+
+theorem RangesInv.stackVerts_of_nil {σ : List Nat} {n : Nat} {s : WalkState}
+    (h : s.RangesInv σ n 0) (ht : s.tstack = []) (sv : Array Nat) :
+    ({ s with stackVerts := sv } : WalkState).RangesInv σ n 0 :=
+  ⟨h.inv.stackVerts_of_nil ht sv, h.processed, h.ordered, h.convex, h.closed⟩
+
+theorem RangesInv.root_append {σ : List Nat} {n : Nat} {s : WalkState}
+    (h : s.RangesInv σ n 0) (hs : Shape s) (hk : RootOK s)
+    (hp : ∀ p, ¬ Items.IsParent s.items p rootItem) :
+    wp (popTstack >>= fun top => modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 })
+      (fun _ s' => s'.RangesInv σ n 0) s := by
+  obtain ⟨t, ht, -⟩ := hk
+  have hi : ({ s with tstack := s.tstack.tail } : WalkState).Inv' 0 :=
+    ⟨fun _ _ _ hx => by simp [ht] at hx, fun i h1 h2 => ⟨(h.inv.nodes i h1 h2).conn, (h.inv.nodes i h1 h2).attached⟩⟩
+  simp only [wp_bind, wp_popTstack, wp_modifyItem]
+  exact (h.pop' hi).modifyCh rootItem _ (by change 0 < 1 + s.g.nv + s.g.ne; omega) (fun _ => rfl) hp
+    (by simp [ht]) (fun hn => by simp [hs.root] at hn)
+
+def RootsCover (σ : List Nat) (n : Nat) : List DfsTree → WalkState → Prop
+  | [], _ => True
+  | t :: rest, s => CoverTree σ n t 0 s ∧
+      wp (walkTree t 0) (fun _ s₁ =>
+        wp (popTstack >>= fun top => modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 })
+          (fun _ s₂ => RootsCover σ (n + t.edgePostorder.length) rest s₂) s₁) s
+
+theorem forest_ranges_of_cover {g : Graph} {σ : List Nat} (hnd : σ.Nodup) (hσ : ∀ e ∈ σ, e < g.ne) :
+    ∀ forest pre n s, RootState g pre s → s.RangesInv σ n 0 → ForestOK g (pre ++ forest) →
+      (∀ t ∈ forest, t.WF []) → (∀ t ∈ forest, t.Ends g) → RootsCover σ n forest s →
+      PostAt σ n (edgePostorderForest forest) →
+      wp (walkForest forest) (fun _ s' => s'.RangesInv σ (n + (edgePostorderForest forest).length) 0) s
+  | [], _, _, _, _, hr, _, _, _, _, _ => by simpa [walkForest, edgePostorderForest, wp_pure] using hr
+  | t :: rest, pre, n, s, h, hr, hf, hwf, hends, hc, hat => by
+    have hb := h.book hf (hwf t (by simp)) (hends t (by simp))
+    have hg := gbTree t 0 s hb
+    have hi : ∀ v outs, t = .node v outs →
+        ({ s with stackVerts := s.stackVerts.set! 0 v } : WalkState).RangesInv σ n 0 :=
+      fun v _ _ => hr.stackVerts_of_nil h.tstack _
+    have hσ' : ∀ e ∈ σ, e < s.g.ne := by rwa [h.g_eq]
+    have hfront := walkTree_frontiers t 0 s (fun v outs ht => (hi v outs ht).inv) h.shape hg hb
+    have hat' : PostAt σ n (t.edgePostorder ++ edgePostorderForest rest) := hat
+    have hsched := scheduleTree σ n t 0 s hi h.shape hnd hσ' hg hb hfront hc.1 hat'.left
+    have hrg := rgTree σ n t 0 s hi h.shape hnd hσ' hg hb hsched
+    have hnv : 0 < s.g.nv := by
+      obtain ⟨v, outs⟩ := t
+      have hv := RootState.hvlt hf v (by simp [DfsTree.verts])
+      rw [h.g_eq]; omega
+    have hk : wp (walkTree t 0) (fun _ s' => RootOK s') s :=
+      walkTree_rootOK t s (fun v outs ht => (hi v outs ht).inv) h.shape hg hb h.tstack
+      (by rw [h.sd, ← h.g_eq]; exact hnv)
+    have hp := (walk_place_aux g).1 t 0 _ _ s h.place (RootState.hvlt hf) (RootState.helt hf)
+      (RootState.hvn hf).1 (RootState.hen hf).1 (RootState.hPv hf) (RootState.hPe hf)
+    have hst := h.step hf (hwf t (by simp)) (hends t (by simp))
+    show wp ((walkTree t 0 >>= fun _ => popTstack >>= fun top =>
+      modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }) >>= fun _ => walkForest rest) _ s
+    rw [show edgePostorderForest (t :: rest) = t.edgePostorder ++ edgePostorderForest rest from rfl,
+      List.length_append, ← Nat.add_assoc]
+    simp only [wp_bind]
+    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun _ s₁ hrs hk hp hst hc => ?_)
+      hrg) hk) hp) hst) hc.2
+    have hrpop := hrs.1.root_append hrs.2.1 hk (noParent_of_cnt_eq_zero hp.root)
+    exact wp_mono (popTstack >>= fun top => modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 })
+      (wp_and hrpop (wp_and hst hc)) fun _ s₂ ⟨hr₂, hs₂, hc₂⟩ =>
+      forest_ranges_of_cover hnd hσ rest (pre ++ [t]) (n + t.edgePostorder.length) s₂ hs₂ hr₂
+        (by simpa using hf) (fun t' ht' => hwf t' (by simp [ht']))
+        (fun t' ht' => hends t' (by simp [ht'])) hc₂ hat'.right
+
+theorem walk_rangesInv_of_cover (g : Graph) (tern : Bool) (forest : List DfsTree)
+    (hf : ForestOK g forest) (hwf : ∀ t ∈ forest, t.WF []) (hends : ∀ t ∈ forest, t.Ends g)
+    (hc : RootsCover (edgePostorderForest forest) 0 forest (WalkState.init g tern)) :
+    (g.walk tern forest).RangesInv (edgePostorderForest forest) (edgePostorderForest forest).length 0 := by
+  have hnd := DfsData.edgePostorderForest_perm.nodup_iff.2 hf.edges_nodup
+  have hσ : ∀ e ∈ edgePostorderForest forest, e < g.ne :=
+    fun e he => hf.edges_lt e (DfsData.edgePostorderForest_perm.subset he)
+  have h := forest_ranges_of_cover hnd hσ forest [] 0 (WalkState.init g tern)
+    (rootState_init g tern) (init_rangesInv g tern hnd) (by simpa using hf) hwf hends hc
+    ⟨[], [], rfl, by simp⟩
+  simpa only [wp, Graph.walk, Nat.zero_add] using h
+
 end Spqr.WalkState

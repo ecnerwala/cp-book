@@ -1143,6 +1143,11 @@ P-site ownership and the unpushed vertex's processed-edge bound; all other adjac
 ownership obligations. `PostAt` derives every edge's position and subtree interval from the
 DFS edge-postorder concatenations. These theorems use only standard axioms; instantiating
 the remaining `Cover*` obligations on actual DFS walks is still required.
+`init_rangesInv` and `RangesInv.root_append` handle the initial state and attaching each root.
+`forest_ranges_of_cover` and `walk_rangesInv_of_cover` assemble the forest using `RootState`,
+`walkTree_frontiers` and the postorder permutation. Their only nonstandard axiom dependency is
+the ear layer's existing `walkTree_book` admission (through `RootState.book` / `RootState.step`);
+the remaining range hypothesis is explicitly `RootsCover`, not an admitted local proof.
 All twenty-two lemmas have only standard axioms. Full `FinishAdj` still needs the P merge
 into the base; the child's frontier lemma alone applies only
 to merges above the split. The tail merge against a newly pushed V entry has no piece
