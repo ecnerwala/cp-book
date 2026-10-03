@@ -80,6 +80,29 @@ def delLast (rs : RotationSystem) : RotationSystem := Id.run do
     rot := rot.set! a (some (exit ((rs.get a).getD a)))
   return ⟨rot⟩
 
+/-- Delete the first edge: shortcut the vertex orbits around its four quarter-edges and shift. -/
+def delFirst (rs : RotationSystem) : RotationSystem := Id.run do
+  let m := rs.size / 4 - 1
+  let exit (q : Nat) : Nat := Id.run do
+    let mut q := q
+    for _ in [0:3] do
+      if q < 4 then q := (rs.get (q ^^^ 1)).getD q
+    return q
+  let mut rot : Array (Option Nat) := Array.replicate (4 * m) none
+  for a in [0:4 * m] do
+    rot := rot.set! a (some (exit ((rs.get (4 + a)).getD (4 + a)) - 4))
+  return ⟨rot⟩
+
+/-- `EdgesConn es u v`, by iterated relaxation. -/
+def conn (es : List (Nat × Nat)) (n u v : Nat) : Bool := Id.run do
+  let mut comp : Array Nat := Array.range n
+  for _ in [0:n + 1] do
+    for (a, b) in es do
+      let c := min comp[a]! comp[b]!
+      comp := comp.set! a c
+      comp := comp.set! b c
+  return comp[u]! == comp[v]!
+
 def main : IO Unit := do
   let mut r : Rng := ⟨12345⟩
   let mut fails := 0
@@ -87,6 +110,7 @@ def main : IO Unit := do
   let mut distinct := 0
   let mut same := 0
   let mut planars := 0
+  let mut uninserts := 0
   for _ in [0:4000] do
     let (n1, r1) := r.next 7
     let (m1, r2) := r1.next 9
@@ -150,5 +174,39 @@ def main : IO Unit := do
             if (if u == v then NI' + 1 != NI else NI' + 2 != NI) then
               fails := fails + 1; IO.println "NI both new"
             if C' + 1 != C then fails := fails + 1; IO.println s!"C both new {C} {C'}"
-  IO.println s!"embeddings={cnt} planar={planars} distinct={distinct} same={same} fails={fails}"
+      -- `IsPlanarEmbedding.uninsert`: first edge, both ends non-isolated in the rest, planar ⇒
+      -- sides distinct, the deleted system is planar, pairs `rot 0 ↔ rot 1`, `rot 2 ↔ rot 3`,
+      -- and `rot 1 - 4`, `rot 3 - 4` are cofacial.
+      if m > 0 then
+        let es' := es.drop 1
+        let (u, v) := es[0]!
+        let rot (q : Nat) : Nat := (rs.get q).getD q
+        let A := rot 0; let B := rot 1; let C := rot 2; let D := rot 3
+        let C0 := numComponents es n
+        let planar := rs.numFaceOrbits + 2 * numNonIsolated es n == 2 * (2 * C0 + m)
+        if planar && u != v && conn es' n u v then
+          if !(4 ≤ A && 4 ≤ B && 4 ≤ C && 4 ≤ D) then
+            fails := fails + 1; IO.println s!"uninsert: neighbour inside edge {es} {repr rs.rotAdj}"
+          else
+            uninserts := uninserts + 1
+            if sameFace rs 0 2 then
+              fails := fails + 1; IO.println s!"uninsert: sides cofacial {es} {repr rs.rotAdj}"
+            let rs' := delFirst rs
+            let C' := numComponents es' n
+            if !isEmb es' n rs' then
+              fails := fails + 1; IO.println s!"uninsert: not an embedding {es} {repr rs.rotAdj}"
+            if rs'.numFaceOrbits + 2 * numNonIsolated es' n != 2 * (2 * C' + (m - 1)) then
+              fails := fails + 1; IO.println s!"uninsert: not planar {es} {repr rs.rotAdj}"
+            if !(rs'.get (A - 4) == some (B - 4) && rs'.get (B - 4) == some (A - 4) &&
+                rs'.get (C - 4) == some (D - 4) && rs'.get (D - 4) == some (C - 4)) then
+              fails := fails + 1; IO.println s!"uninsert: pairs {es} {repr rs.rotAdj}"
+            if !sameFace rs' (B - 4) (D - 4) then
+              fails := fails + 1; IO.println s!"uninsert: B D not cofacial {es} {repr rs.rotAdj}"
+            if sameFace rs' (B - 4) (A - 4) then
+              fails := fails + 1; IO.println s!"uninsert: B A cofacial {es} {repr rs.rotAdj}"
+            for q in [0:rs'.size] do
+              if 4 + q != A && 4 + q != B && 4 + q != C && 4 + q != D then
+                if rs'.get q != (rs.get (4 + q)).map (· - 4) then
+                  fails := fails + 1; IO.println s!"uninsert: frame {es} {repr rs.rotAdj}"
+  IO.println s!"embeddings={cnt} planar={planars} distinct={distinct} same={same} uninserts={uninserts} fails={fails}"
 #eval main

@@ -143,6 +143,18 @@ theorem card_minSet_le_of_loop (hl : p.1 = p.2) :
   · exact isMin_unique hm1 hm2 hn1 hn2 (h1.trans (by rw [hl]; exact h2))
   · exact isMin_unique hm1 hm2 hn1 hn2 (h1.trans (by rw [← hl]; exact h2))
 
+theorem card_minSet_le_of_conn (hc : EdgesConn es p.1 p.2) :
+    (minSet es n).card ≤ (minSet (p :: es) n).card := by
+  refine Finset.card_le_card_of_injOn _ (fun w hw => compMin_cons_mem hw) ?_
+  intro w₁ hw₁ w₂ hw₂ h
+  rw [Finset.mem_coe] at hw₁ hw₂
+  obtain ⟨hn1, _, hm1⟩ := mem_minSet.1 hw₁
+  obtain ⟨hn2, _, hm2⟩ := mem_minSet.1 hw₂
+  rcases compMin_cons_eq hw₁ hw₂ h with h | ⟨h1, h2⟩ | ⟨h1, h2⟩
+  · exact h
+  · exact isMin_unique hm1 hm2 hn1 hn2 ((h1.trans hc).trans h2)
+  · exact isMin_unique hm1 hm2 hn1 hn2 ((h1.trans (edgesConn_symm hc)).trans h2)
+
 theorem card_minSet_succ_le (hp : p.1 < n ∧ p.2 < n) (hu : ¬HasEdge es p.1)
     (hv : ¬HasEdge es p.2) :
     (minSet es n).card + 1 ≤ (minSet (p :: es) n).card := by
@@ -200,6 +212,14 @@ theorem numComponents_cons_le_of_loop (hes : ∀ q ∈ es, q.1 < n ∧ q.2 < n)
   rw [numComponents_eq_ccCount hes, numComponents_eq_ccCount (hes_cons hes hp),
     ccCount_eq_card_minSet, ccCount_eq_card_minSet]
   exact card_minSet_le_of_loop hl
+
+/-- Deleting a non-bridge creates no component. -/
+theorem numComponents_cons_le_of_conn (hes : ∀ q ∈ es, q.1 < n ∧ q.2 < n)
+    (hp : p.1 < n ∧ p.2 < n) (hc : EdgesConn es p.1 p.2) :
+    numComponents es n ≤ numComponents (p :: es) n := by
+  rw [numComponents_eq_ccCount hes, numComponents_eq_ccCount (hes_cons hes hp),
+    ccCount_eq_card_minSet, ccCount_eq_card_minSet]
+  exact card_minSet_le_of_conn hc
 
 /-- Deleting an isolated edge removes a component. -/
 theorem numComponents_cons_succ_le (hes : ∀ q ∈ es, q.1 < n ∧ q.2 < n)

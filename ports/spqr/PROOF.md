@@ -3107,9 +3107,9 @@ hybrid skeleton (processed children substituted for their virtual edges), `es₂
 with its cap re-inserted by `RotationSystem.insert` between its two cofacial exposed slots
 (`WF.face` from `insert_not_sameFaceOrbit`, `WF.conn` from `edgesConn_of_sameOrbit`); the final
 `Capped` certificate then needs the inverse of `insert` (delete the cap edge, pair its four
-neighbours, the two sides merge into one face) — a dual lemma `IsPlanarEmbedding.uninsert` still
-to be written. Its hypothesis "the cap's two sides are distinct faces" is the classical
-edge-on-a-cycle fact, which needs the genus inequality
+neighbours, the two sides merge into one face) — the dual lemma `IsPlanarEmbedding.uninsert`
+below. Its hypothesis "the cap's two sides are distinct faces" is the classical edge-on-a-cycle
+fact `IsPlanarEmbedding.cap_sides_distinct`, which needs the genus inequality
 `numFaceOrbits + 2·numNonIsolated ≤ 2·(2·numComponents + es.length)` for arbitrary valid rotation
 systems (`twoSum_planar` assumes `face ∨ conn`). The S/P routes via `join`/`parJoin` do not
 need it.
@@ -3131,6 +3131,23 @@ along one side connects `p.1` to `p.2` inside `es` (`edgesConn_tail_across`), so
 `es` (`not_hasEdge_of_pair`, from the vertex-orbit labelling), both ends detached gives the
 `detach_both` dichotomy "`F + 4` or (`F` and sides not cofacial)". Checked beforehand on 4000
 random embeddings by `checks/PlanarGenusCheck.lean`.
+Edge deletion (`Proofs/PlanarUninsert.lean`, standard axioms): `detach_both` additionally returns
+the rotation of the detached system above the edge (`rot 0 ↔ rot 1`, `rot 2 ↔ rot 3`, identity
+elsewhere) and, when the sides are distinct faces, the cofaciality of `rot 1` and `rot 3` in it
+(`sameOrbit_detach_merge`: the four `swapImg`s of the two `conj_stepC`s merge the two side faces
+and split off the isolated edge's own face). `IsPlanarEmbedding.uninsert`: if `p :: es` has a
+planar embedding `rs`, `p.1 ≠ p.2` and `EdgesConn es p.1 p.2` (not a bridge), then the sides `2`,
+`0` of `p` are distinct faces, all four neighbours `rot 0..3` lie above the edge (a neighbour on
+the edge itself would make an endpoint isolated in `es`, `not_hasEdge_of_pair`, or force
+`p.1 = p.2`), and `σ = shrink H` is a planar embedding of `es` (Euler: `genus_le` for `σ` gives
+`C(es) ≥ C(p :: es)`, `numComponents_cons_le_of_conn` gives `≤`; the cofacial case of
+`detach_both` would give `F + 2` for `σ`, contradicting `genus_le`) with the explicit rotation
+`σ.get q = some (…)` above and `rot 1 - 4`, `rot 3 - 4` cofacial (transported through
+`union_stepC`/`sameOrbit_unionStep_right`/`sameOrbit_shift_sub`). `cap_sides_distinct` is the
+first conjunct restated as `¬rs.SameFaceOrbit 0 2`. Checked beforehand (`delFirst` in
+`checks/PlanarGenusCheck.lean`: embedding, Euler, components, neighbour pairing, cofaciality of the
+neighbours; 410 deletions, 0 failures — gating on connectivity in `es`, not on non-isolation,
+is essential: bridges fail).
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through `walk_items_wf`,
 `spqrTree_r_three_connected`, `spqrTree_pieceSep`, `nodePlanar_sound_R` and
 `nodeFold_capped`.
@@ -3212,6 +3229,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | `Capped.attachOpen` (open `V` piece hung at a capped end by the corner link), `capped_child` (child certificate from `GluedFaces`) | `Proofs/PieceJoin.lean`, `PlanarEmbedNode.lean` | **proved** (standard axioms) |
 | `IsPlanarEmbedding.ident_conj` (identify two connected vertices by a `conj` of two cofacial pairs), `IsPlanarEmbedding.splice2` (2-sum on the common vertex space by two `conj`s), `iterate_eq_of_eqOn`, `IsPermOn.exists_first_hit`, `RotationSystem.sameOrbit_stepC3_rot`, `Capped.parJoin` (P-node step: two capped pieces with the same cap endpoints, node-step link order, cofaciality of `c0`/`d2` kept) | `Proofs/PlanarIdent.lean`, `Proofs/PlanarSplice2.lean`, `Proofs/OrbitSegment.lean`, `Proofs/PieceParJoin.lean` | **proved** (standard axioms) |
 | `RotationSystem.genus_le` (genus inequality `F + 2V ≤ 2(2C + E)` for every `IsEmbedding`, by first-edge deletion: `DetachAt` conjugations, `detach_one`/`detach_both`, `eq_union_shrink`/`isEmbedding_of_union`, `genus_cons_bound`), `edgesConn_of_not_cofacial` (non-cofacial sides ⇒ endpoints connected in the tail), `numNonIsolated_cons_eq`, `numComponents_cons_le_succ`/`_succ_le`/`_le_of_isolated`/`_le_of_loop` | `Proofs/PlanarGenus.lean`, `Proofs/PlanarCompCons.lean` | **proved** (standard axioms) |
+| `IsPlanarEmbedding.uninsert` (delete a non-bridge first edge of a planar embedding: sides distinct faces, neighbours above the edge, planar `σ` with explicit rotation and cofacial `rot 1 - 4`/`rot 3 - 4`), `IsPlanarEmbedding.cap_sides_distinct`, `sameOrbit_detach_merge`, `detach_both` (extended with the rotation and cofaciality), `numComponents_cons_le_of_conn` | `Proofs/PlanarUninsert.lean`, `Proofs/PlanarGenus.lean`, `Proofs/PlanarCompCons.lean` | **proved** (standard axioms) |
 | `embedItem_Q_nil`, `embedItem_Q_O`, `embedItem_Q_cons`, `qUpper`, `qLower`, `setOuter4` | `PlanarEmbedQExec.lean` | **proved** (exact unfolding of the executable `Q` branch) |
 | `q_edge_not_below`, `q_fresh`, `q_lower_boundary`, `q_capped_child`, `q_open_glued`, `q_leaf_glued`, `q_loop_glued`, `q_block_glued`, `embedItem_step_Q_faces` | `PlanarEmbedQ.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `treeQe`, `nodeStep`, `embedItem_node`, `forIn_state_foldl`, `nodeStep_outerE_ne`/`_outerE_size`/`_rotAdj_size`/`_exposedAt_ne`, `nodeFold_*` | `PlanarEmbedNodeExec.lean` | **proved** (exact unfolding of the executable `S`/`P`/`R` branch + frame lemmas) |

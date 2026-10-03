@@ -589,6 +589,75 @@ theorem detach_one {es : List (Nat × Nat)} {p : Nat × Nat} {n : Nat} {rs : Rot
     have := d.z_ge
     split_ifs <;> omega
 
+/-- Face-orbit bookkeeping of the two detaching conjugations of the first edge (quarter-edges
+`0..3`, neighbours `A = rot 0`, `B = rot 1`, `C = rot 2`, `D = rot 3`) when its sides `2` and `0`
+are not cofacial: the neighbours `B` and `D` end up cofacial. -/
+theorem sameOrbit_detach_merge {f : Nat → Nat} {S : Finset Nat} (hf : IsPermOn f S)
+    (hpar : ∀ a, f a % 2 = a % 2) {A B C D : Nat}
+    (hA : A % 2 = 1) (hB : B % 2 = 0) (hC : C % 2 = 1) (hD : D % 2 = 0)
+    (h4B : 4 ≤ B) (h4C : 4 ≤ C) (h4D : 4 ≤ D) (hAC : A ≠ C)
+    (h0S : 0 ∈ S) (h2S : 2 ∈ S) (h3S : 3 ∈ S)
+    (hAS : A ^^^ 3 ∈ S) (hBS : B ^^^ 3 ∈ S) (hCS : C ^^^ 3 ∈ S)
+    (f2 : f 2 = B) (f0 : f 0 = D) (fA : f (A ^^^ 3) = 0) (fC : f (C ^^^ 3) = 2)
+    (hside : ¬SameOrbit f 2 0) :
+    SameOrbit (swapImg (swapImg (swapImg (swapImg f 2 (A ^^^ 3)) (B ^^^ 3) 3) 0 (C ^^^ 3))
+      (D ^^^ 3) 1) B D := by
+  have hA3 : (A ^^^ 3) % 2 ≠ A % 2 := xor_mod2 A (c := 3) rfl
+  have hB3 : (B ^^^ 3) % 2 ≠ B % 2 := xor_mod2 B (c := 3) rfl
+  have hC3 : (C ^^^ 3) % 2 ≠ C % 2 := xor_mod2 C (c := 3) rfl
+  have hD3 : (D ^^^ 3) % 2 ≠ D % 2 := xor_mod2 D (c := 3) rfl
+  have hC4 : 4 * 1 ≤ C ^^^ 3 := ge_of_xor_ge (by omega) (by decide)
+  have hCA : C ^^^ 3 ≠ A ^^^ 3 := fun e => by
+    have := congrArg (· ^^^ 3) e
+    simp only [xor_xor_self] at this
+    exact hAC this.symm
+  have heven : ∀ {φ : Nat → Nat}, (∀ a, φ a % 2 = a % 2) → ∀ {x y : Nat}, x % 2 = 1 → y % 2 = 1 →
+      ∀ {a b : Nat}, a % 2 = 0 → SameOrbit φ a b → SameOrbit (swapImg φ x y) a b := by
+    intro φ hφ x y hx hy a b ha hab
+    refine sameOrbit_mono_of_eqOn (fun a => a % 2 = 0) (fun a => by rw [hφ a]) ?_ ha hab
+    intro a ha'
+    rw [swapImg_of_ne _ (by omega) (by omega)]
+  -- first conjugation, even swap `2 ↔ A ^^^ 3`: the two sides merge
+  set h := swapImg f 2 (A ^^^ 3) with hh
+  have hA0 : SameOrbit f (A ^^^ 3) 0 := sameOrbit_of_eq fA
+  have hne2A : ¬SameOrbit f 2 (A ^^^ 3) := fun h' => hside (h'.trans hA0)
+  have hh_perm : IsPermOn h S := isPermOn_swapImg hf h2S hAS
+  have hh_par : ∀ a, h a % 2 = a % 2 := swapImg_mod2 hpar (by omega)
+  have hBD1 : SameOrbit h B D :=
+    (sameOrbit_swapImg hf h2S hAS hne2A).2 (Or.inr ⟨Or.inl (sameOrbit_of_eq f2),
+      Or.inr (hA0.trans (sameOrbit_of_eq f0))⟩)
+  -- its odd swap does not touch the even orbits
+  set g1 := swapImg h (B ^^^ 3) 3 with hg1
+  have hg1_par : ∀ a, g1 a % 2 = a % 2 := swapImg_mod2 hh_par (by omega)
+  have hg1_perm : IsPermOn g1 S := isPermOn_swapImg hh_perm hBS h3S
+  have hBD2 : SameOrbit g1 B D := heven hh_par (by omega) (by decide) hB hBD1
+  -- second conjugation, even swap `0 ↔ C ^^^ 3`: splits `{0, 2}` off the merged orbit
+  have g1C : g1 (C ^^^ 3) = 2 := by
+    rw [hg1, swapImg_of_ne _ (by omega) (by omega), hh, swapImg_of_ne _ (by omega) hCA, fC]
+  have g12 : g1 2 = 0 := by
+    rw [hg1, swapImg_of_ne _ (by omega) (by omega), hh, swapImg_left, fA]
+  have hC0 : SameOrbit g1 0 (C ^^^ 3) := ((sameOrbit_of_eq g1C).trans (sameOrbit_of_eq g12)).symm
+  set k := swapImg g1 0 (C ^^^ 3) with hk
+  have hk_perm : IsPermOn k S := isPermOn_swapImg hg1_perm h0S hCS
+  have hk_par : ∀ a, k a % 2 = a % 2 := swapImg_mod2 hg1_par (by omega)
+  have hnot : ¬SameOrbit k 0 (C ^^^ 3) :=
+    not_sameOrbit_swapImg_of_sameOrbit hg1_perm h0S (by omega) hC0
+  have hg1k : g1 = swapImg k 0 (C ^^^ 3) := by rw [hk, swapImg_swapImg]
+  have k0 : k 0 = 2 := by rw [hk, swapImg_left, g1C]
+  have k2 : k 2 = 0 := by rw [hk, swapImg_of_ne _ (by omega) (by omega), g12]
+  have hpair : ∀ w, SameOrbit k 0 w → 4 ≤ w → False := by
+    intro w hw h4
+    rcases sameOrbit_mem_pair k0 k2 (hk_perm.reach_of_sameOrbit h0S hw) with rfl | rfl <;> omega
+  have hBD3 : SameOrbit k B D := by
+    rw [hg1k] at hBD2
+    rcases (sameOrbit_swapImg hk_perm h0S hCS hnot).1 hBD2 with h' | ⟨hB' | hB', hD' | hD'⟩
+    · exact h'
+    · exact (hpair B hB' h4B).elim
+    · exact (hpair B hB' h4B).elim
+    · exact (hpair D hD' h4D).elim
+    · exact hB'.symm.trans hD'
+  exact heven hk_par (by omega) (by decide) hB hBD3
+
 /-- Both ends detached (all four neighbours outside the first edge): the first edge becomes an
 isolated `single`, vertex orbits gain four, face orbits gain four or stay (the latter exactly
 when its two sides are not cofacial). -/
@@ -599,7 +668,11 @@ theorem detach_both {es : List (Nat × Nat)} {p : Nat × Nat} {n : Nat} {rs : Ro
       H.size = rs.size ∧ H.rot 0 = 1 ∧ H.rot 1 = 0 ∧ H.rot 2 = 3 ∧ H.rot 3 = 2 ∧
       H.numVertexOrbits = rs.numVertexOrbits + 4 ∧
       (H.numFaceOrbits = rs.numFaceOrbits + 4 ∨
-        (H.numFaceOrbits = rs.numFaceOrbits ∧ ¬SameOrbit (rs.stepC 3) 2 0)) := by
+        (H.numFaceOrbits = rs.numFaceOrbits ∧ ¬SameOrbit (rs.stepC 3) 2 0 ∧
+          SameOrbit (H.stepC 3) (rs.rot 1) (rs.rot 3))) ∧
+      (∀ q, q < rs.size → 4 ≤ q → H.rot q =
+        if q = rs.rot 0 then rs.rot 1 else if q = rs.rot 1 then rs.rot 0 else
+        if q = rs.rot 2 then rs.rot 3 else if q = rs.rot 3 then rs.rot 2 else rs.rot q) := by
   have hm : rs.size = 4 * (es.length + 1) := by rw [h.size]; rfl
   have ht := h.total
   have hi := h.involution
@@ -661,9 +734,62 @@ theorem detach_both {es : List (Nat × Nat)} {p : Nat × Nat} {n : Nat} {rs : Ro
       rw [stepC_eq_rot hH1t hm1 (by decide) (by omega), e23, hH1_1]
     exact (sameOrbit_of_eq this).symm
   have hF2 : H1.numFaceOrbits + 2 = H.numFaceOrbits := d2.numFaceOrbits_split hm1 hside2
+  -- the rotation of `H` above the deleted edge, and cofaciality of `rot 1`, `rot 3` when the
+  -- sides of the edge were distinct faces
+  have hr0 := rot_lt ht hi (q := 0) (by omega)
+  have hr1 := rot_lt ht hi (q := 1) (by omega)
+  have hr2 := rot_lt ht hi (q := 2) (by omega)
+  have hr3 := rot_lt ht hi (q := 3) (by omega)
+  have hp0 := rot_mod2 ht ho (q := 0) (by omega)
+  have hp1 := rot_mod2 ht ho (q := 1) (by omega)
+  have hp2 := rot_mod2 ht ho (q := 2) (by omega)
+  have hp3 := rot_mod2 ht ho (q := 3) (by omega)
+  have hrr0 := rot_rot ht hi (q := 0) (by omega)
+  have hrr2 := rot_rot ht hi (q := 2) (by omega)
+  have h02 : rs.rot 0 ≠ rs.rot 2 := fun e => by
+    have := rot_inj ht hi (by omega) (by omega) e; omega
+  have h13 : rs.rot 1 ≠ rs.rot 3 := fun e => by
+    have := rot_inj ht hi (by omega) (by omega) e; omega
+  have hH1q : ∀ q, q < rs.size → H1.rot q = if q = 0 then 1 else if q = 1 then 0 else
+      if q = rs.rot 0 then rs.rot 1 else if q = rs.rot 1 then rs.rot 0 else rs.rot q :=
+    d1.rot_eq
+  have hHq : ∀ q, q < rs.size → H.rot q = if q = 2 then 3 else if q = 3 then 2 else
+      if q = H1.rot 2 then H1.rot 3 else if q = H1.rot 3 then H1.rot 2 else H1.rot q :=
+    fun q hq => d2.rot_eq q (by omega)
+  have hHrot : ∀ q, q < rs.size → 4 ≤ q → H.rot q =
+      if q = rs.rot 0 then rs.rot 1 else if q = rs.rot 1 then rs.rot 0 else
+      if q = rs.rot 2 then rs.rot 3 else if q = rs.rot 3 then rs.rot 2 else rs.rot q := by
+    intro q hq h4
+    rw [hHq q hq, hH1_2, hH1_3, hH1q q hq]
+    split_ifs <;> omega
+  have hcof : ¬SameOrbit (rs.stepC 3) 2 0 → SameOrbit (H.stepC 3) (rs.rot 1) (rs.rot 3) := by
+    intro hside
+    have e1 : H1.stepC 3 = swapImg (swapImg (rs.stepC 3) (1 ^^^ 3) (rs.rot 0 ^^^ 3))
+        (rs.rot 1 ^^^ 3) (rs.rot (rs.rot 0) ^^^ 3) :=
+      conj_stepC rs 1 (rs.rot 0) ht hi ho (by omega) hr0 (by omega) (by omega) hm (by decide)
+    have e2 : H.stepC 3 = swapImg (swapImg (H1.stepC 3) (3 ^^^ 3) (H1.rot 2 ^^^ 3))
+        (H1.rot 3 ^^^ 3) (H1.rot (H1.rot 2) ^^^ 3) :=
+      conj_stepC H1 3 (H1.rot 2) hH1t hH1i hH1o (by omega) (by rw [hH1_2]; omega)
+        (by rw [hH1_2]; omega) (by rw [hH1_3, hH1_2]; omega) hm1 (by decide)
+    have hH1C : H1.rot (rs.rot 2) = 2 := by
+      rw [hH1q _ hr2]; split_ifs <;> omega
+    have hstep3 : ∀ q, q < rs.size → rs.stepC 3 q = rs.rot (q ^^^ 3) :=
+      fun q hq => stepC_eq_rot ht hm (by decide) hq
+    have e03 : (0:Nat) ^^^ 3 = 3 := by decide
+    rw [e2, hH1_2, hH1_3, hH1C, e1, hrr0, e13, e33, e23]
+    refine sameOrbit_detach_merge (isPermOn_stepC ht hi hm (by decide))
+      (stepC_mod2 ht ho hm (by decide) (by decide)) (by omega) (by omega) (by omega) (by omega)
+      h1 h2 h3 h02 (Finset.mem_range.2 (by omega)) (Finset.mem_range.2 (by omega))
+      (Finset.mem_range.2 (by omega)) (Finset.mem_range.2 (hm ▸ xor_lt_mul4 (hm ▸ hr0) (by decide)))
+      (Finset.mem_range.2 (hm ▸ xor_lt_mul4 (hm ▸ hr1) (by decide)))
+      (Finset.mem_range.2 (hm ▸ xor_lt_mul4 (hm ▸ hr2) (by decide))) ?_ ?_ ?_ ?_ hside
+    · rw [hstep3 2 (by omega), e23]
+    · rw [hstep3 0 (by omega), e03]
+    · rw [hstep3 _ (hm ▸ xor_lt_mul4 (hm ▸ hr0) (by decide)), xor_xor_self, hrr0]
+    · rw [hstep3 _ (hm ▸ xor_lt_mul4 (hm ▸ hr2) (by decide)), xor_xor_self, hrr2]
   refine ⟨H, d2.conj_total', d2.conj_involution', d2.conj_oppositeDir',
     d2.conj_sameVertex' hH1sv (hv3.trans hv2.symm) hv2, hs2.trans hs1, ?_, ?_, ?_, ?_,
-    by omega, ?_⟩
+    by omega, ?_, hHrot⟩
   · rw [hH 0 (by omega)]; simp [hH1_0]
   · rw [hH 1 (by omega)]; simp [hH1_1]
   · rw [hH 2 (by omega)]; simp
@@ -674,7 +800,7 @@ theorem detach_both {es : List (Nat × Nat)} {p : Nat × Nat} {n : Nat} {rs : Ro
     · have hF1 : H1.numFaceOrbits + 2 = rs.numFaceOrbits := d1.numFaceOrbits_merge hm hside1
       right
       rw [e13] at hside1
-      exact ⟨by omega, hside1⟩
+      exact ⟨by omega, hside1, hcof hside1⟩
 
 /-- **Genus inequality**: every rotation system of `es` satisfies `F + 2V ≤ 2(2C + E)`. -/
 theorem genus_le : ∀ (es : List (Nat × Nat)) {n : Nat} {rs : RotationSystem},
@@ -822,7 +948,7 @@ theorem genus_le : ∀ (es : List (Nat × Nat)) {n : Nat} {rs : RotationSystem},
           by_contra hlt
           have h30 : rs.rot 3 = 0 := by omega
           have := hrr3; rw [h30] at this; omega
-        obtain ⟨H, hHt, hHi, hHo, hHsv, hHs, hH0, hH1, hH2, hH3, hHV, hHF⟩ :=
+        obtain ⟨H, hHt, hHi, hHo, hHsv, hHs, hH0, hH1, hH2, hH3, hHV, hHF, -⟩ :=
           detach_both h h0ge h1ge h2ge h3ge
         have hu : HasEdge es p.1 := hbig 0 (by omega) h0ge p.1 hv0
         rw [ite_eq_left hu, ite_eq_left (Or.inl huv.symm)] at hNI
@@ -831,7 +957,7 @@ theorem genus_le : ∀ (es : List (Nat × Nat)) {n : Nat} {rs : RotationSystem},
           hHo hHsv (hHs.trans h.size) (by intro q hq; interval_cases q <;> omega)
           (by rw [single_numVertexOrbits]; omega)
         rw [single_numFaceOrbits] at hb
-        rcases hHF with hHF | ⟨hHF, -⟩ <;> omega
+        rcases hHF with hHF | ⟨hHF, -, -⟩ <;> omega
     · -- two distinct endpoints
       have huv' : ¬p.2 = p.1 := fun e => huv e.symm
       have h03 : rs.rot 0 ≠ 3 := fun e => huv (by
@@ -921,7 +1047,7 @@ theorem genus_le : ∀ (es : List (Nat × Nat)) {n : Nat} {rs : RotationSystem},
           by_contra hlt
           have h32 : rs.rot 3 = 2 := by omega
           have := hrr3; rw [h32] at this; omega
-        obtain ⟨H, hHt, hHi, hHo, hHsv, hHs, hH0, hH1, hH2, hH3, hHV, hHF⟩ :=
+        obtain ⟨H, hHt, hHi, hHo, hHsv, hHs, hH0, hH1, hH2, hH3, hHV, hHF, -⟩ :=
           detach_both h h0ge h1ge h2ge h3ge
         have hu : HasEdge es p.1 := hbig 0 (by omega) h0ge p.1 hv0
         have hv : HasEdge es p.2 := hbig 2 (by omega) h2ge p.2 hv2
@@ -930,7 +1056,7 @@ theorem genus_le : ∀ (es : List (Nat × Nat)) {n : Nat} {rs : RotationSystem},
           hHo hHsv (hHs.trans h.size) (by intro q hq; interval_cases q <;> omega)
           (by rw [single_numVertexOrbits]; omega)
         rw [single_numFaceOrbits] at hb
-        rcases hHF with hHF | ⟨hHF, hside⟩
+        rcases hHF with hHF | ⟨hHF, hside, -⟩
         · have hC := numComponents_cons_le_succ hverts hp
           omega
         · have hC := numComponents_cons hverts hp huv (edgesConn_of_not_cofacial h h0ge h3ge hside)
