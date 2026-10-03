@@ -20,7 +20,7 @@ variable {g : Graph} {items : Items} {L : List ItemId}
 theorem ofItems_k : (ofItems g items L).k = L.length := rfl
 
 theorem ofItems_mem_iff
-    (hdisj : ∀ i ∈ L, ∀ j ∈ L, i ≠ j → ∀ e, items.EdgeBelow g i e → ¬items.EdgeBelow g j e)
+    (hdisj : ∀ i ∈ L, ∀ j ∈ L, i ≠ j → ∀ e, e < g.ne → items.EdgeBelow g i e → ¬items.EdgeBelow g j e)
     (hnodup : L.Nodup) {i e : Nat} :
     (ofItems g items L).Mem i e ↔ e < g.ne ∧ ∃ h : i < L.length, items.EdgeBelow g L[i] e := by
   simp only [Mem, ofItems]
@@ -32,7 +32,7 @@ theorem ofItems_mem_iff
       refine ⟨h, hb, fun j hj hbj => ?_⟩
       have hne : L[j] ≠ L[i] := fun heq => by
         have := (hnodup.getElem_inj_iff).1 heq; omega
-      exact hdisj _ (List.getElem_mem _) _ (List.getElem_mem _) hne e (by simpa using hbj) hb
+      exact hdisj _ (List.getElem_mem _) _ (List.getElem_mem _) hne e he (by simpa using hbj) hb
   · simp [he]
 
 theorem ofItems_x {i : Nat} (hi : i < L.length) {x y : Nat}
@@ -59,18 +59,18 @@ theorem rU_of_mem_rItems {i e : Nat} (hi : i ∈ rItems cur nxt)
   · exact .inl ⟨i, List.mem_append_right _ hi, hb⟩
 
 /-- The merged items are well-formed pieces inside `U`. -/
-theorem PieceItems.wf (hp : s.PieceItems (s.rPieceItems cur nxt)) (h2 : s.g.TwoConnected)
-    (hproper : ∃ e, e < s.g.ne ∧ ¬s.rU cur nxt e) :
-    (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).WF s.g ∧
-      ∀ i e, (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).Mem i e → s.rU cur nxt e := by
-  set L := s.rPieceItems cur nxt with hL
+theorem PieceItems.wf' {L : List ItemId} {U : Nat → Prop} (hp : s.PieceItems L)
+    (hsub : ∀ i ∈ L, ∀ e, Items.EdgeBelow s.g s.items i e → U e) (h2 : s.g.TwoConnected)
+    (hproper : ∃ e, e < s.g.ne ∧ ¬U e) :
+    (Pieces.ofItems s.g s.items L).WF s.g ∧
+      ∀ i e, (Pieces.ofItems s.g s.items L).Mem i e → U e := by
   have mem : ∀ {i e}, (Pieces.ofItems s.g s.items L).Mem i e ↔
       e < s.g.ne ∧ ∃ h : i < L.length, Items.EdgeBelow s.g s.items L[i] e :=
     Pieces.ofItems_mem_iff hp.disj hp.nodup
-  have sub : ∀ i e, (Pieces.ofItems s.g s.items L).Mem i e → s.rU cur nxt e := by
+  have sub : ∀ i e, (Pieces.ofItems s.g s.items L).Mem i e → U e := by
     intro i e h
     obtain ⟨-, hi, hb⟩ := mem.1 h
-    exact rU_of_mem_rItems (List.mem_of_mem_filter (List.getElem_mem hi)) hb
+    exact hsub _ (List.getElem_mem hi) e hb
   have memE : ∀ {i} (hi : i < L.length), ∀ e, e < s.g.ne →
       ((Pieces.ofItems s.g s.items L).Mem i e ↔ Items.EdgeBelow s.g s.items L[i] e) := by
     intro i hi e he
@@ -102,6 +102,12 @@ theorem PieceItems.wf (hp : s.PieceItems (s.rPieceItems cur nxt)) (h2 : s.g.TwoC
   · intro i hi
     obtain ⟨-, hne, -⟩ := Graph.twoAttached_union_classes h2 (att i hi) (ne i hi) (proper i hi)
     exact hne
+
+theorem PieceItems.wf (hp : s.PieceItems (s.rPieceItems cur nxt)) (h2 : s.g.TwoConnected)
+    (hproper : ∃ e, e < s.g.ne ∧ ¬s.rU cur nxt e) :
+    (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).WF s.g ∧
+      ∀ i e, (Pieces.ofItems s.g s.items (s.rPieceItems cur nxt)).Mem i e → s.rU cur nxt e :=
+  hp.wf' (fun _ hi _ hb => rU_of_mem_rItems (List.mem_of_mem_filter hi) hb) h2 hproper
 
 /-- The R case of loop 1 is an `RCloseShape`: structural fields from `Inv d` and the stack shape,
 content fields from `RContent`. -/

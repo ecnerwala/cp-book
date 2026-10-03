@@ -1,5 +1,6 @@
 import Spqr.Proofs.RSkel3
 import Spqr.Proofs.RInvTree
+import Spqr.RangesCloseTree
 
 /-!
 # The type-1 vertex close builds an `RSkel3` item
@@ -47,6 +48,88 @@ theorem getSide_vMerged {curV : Nat} {edgeDir dir : Bool} {c py vy : TEntry}
   cases edgeDir <;> cases dir <;>
     simp only [vMerged, getSide, setSides, Bool.not_true, Bool.not_false, ↓reduceIte] at hside ⊢ <;>
     first | rfl | exact hside.symm
+
+theorem vMerged_edges {g : Graph} {items : Items} {curV : Nat} {edgeDir : Bool} {c py vy : TEntry}
+    {e : Nat} :
+    (vMerged curV edgeDir c py vy).edges g items e ↔ ∃ i ∈ vItems c py vy, items.EdgeBelow g i e := by
+  cases edgeDir <;> simp [TEntry.edges, vMerged, setSides]
+
+theorem mem_vPieceItems_iff {c py vy : TEntry} {i : ItemId} :
+    i ∈ s.vPieceItems c py vy ↔
+      i ∈ s.entryPieceItems c ∨ i ∈ s.entryPieceItems py ∨ i ∈ s.entryPieceItems vy := by
+  simp only [vPieceItems, vItems, entryPieceItems, List.mem_filter, List.mem_append]
+  tauto
+
+theorem vPieceItems_perm {c py vy : TEntry} :
+    (s.vPieceItems c py vy).Perm
+      (s.entryPieceItems c ++ s.entryPieceItems py ++ s.entryPieceItems vy) := by
+  simp only [vPieceItems, vItems, entryPieceItems, ← List.filter_append]
+  apply List.Perm.filter
+  rw [List.perm_iff_count]; intro a; simp only [List.count_append]; omega
+
+/-- The merged items of three pairwise edge-disjoint settled entries are `PieceItems`. -/
+theorem vPieceItems_pieceItems {c py vy : TEntry} {rest : List TEntry}
+    (hts : s.tstack = c :: py :: vy :: rest)
+    (hdisj : s.tstack.Pairwise fun t t' => ∀ e, e < s.g.ne →
+      t.edges s.g s.items e → ¬t'.edges s.g s.items e)
+    (hc : s.EntryR dfs c) (hp : s.EntryR dfs py) (hy : s.EntryR dfs vy) :
+    s.PieceItems (s.vPieceItems c py vy) := by
+  rw [hts] at hdisj
+  obtain ⟨h1, h2⟩ := List.pairwise_cons.1 hdisj
+  obtain ⟨h3, -⟩ := List.pairwise_cons.1 h2
+  have dcp := h1 py (by simp)
+  have dcy := h1 vy (by simp)
+  have dpy := h3 vy (by simp)
+  have hc' := hc.pieces
+  have hp' := hp.pieces
+  have hy' := hy.pieces
+  have both : ∀ {t t' : TEntry},
+      (∀ e, e < s.g.ne → t.edges s.g s.items e → ¬t'.edges s.g s.items e) →
+      s.PieceItems (s.entryPieceItems t) →
+      ∀ i, i ∈ s.entryPieceItems t → i ∈ s.entryPieceItems t' → False := by
+    intro t t' hd ht i hi hi'
+    obtain ⟨e, he, hb⟩ := ht.ne i hi
+    exact hd e he (edges_of_entryPieceItems hi hb) (edges_of_entryPieceItems hi' hb)
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+  · refine vPieceItems_perm.nodup_iff.2 (List.nodup_append.2
+      ⟨List.nodup_append.2 ⟨hc'.nodup, hp'.nodup, ?_⟩, hy'.nodup, ?_⟩)
+    · intro i hi j hj hij; subst hij; exact both dcp hc' i hi hj
+    · intro i hi j hj hij; subst hij
+      rcases List.mem_append.1 hi with hi | hi
+      · exact both dcy hc' i hi hj
+      · exact both dpy hp' i hi hj
+  · intro i hi
+    rcases mem_vPieceItems_iff.1 hi with hi | hi | hi
+    exacts [hc'.vs i hi, hp'.vs i hi, hy'.vs i hi]
+  · intro i hi
+    rcases mem_vPieceItems_iff.1 hi with hi | hi | hi
+    exacts [hc'.ne i hi, hp'.ne i hi, hy'.ne i hi]
+  · intro i hi
+    rcases mem_vPieceItems_iff.1 hi with hi | hi | hi
+    exacts [hc'.conn i hi, hp'.conn i hi, hy'.conn i hi]
+  · intro i hi
+    rcases mem_vPieceItems_iff.1 hi with hi | hi | hi
+    exacts [hc'.attached i hi, hp'.attached i hi, hy'.attached i hi]
+  · intro i hi j hj hij e he hei hej
+    have cross : ∀ {t t' : TEntry},
+        (∀ e, e < s.g.ne → t.edges s.g s.items e → ¬t'.edges s.g s.items e) →
+        i ∈ s.entryPieceItems t → j ∈ s.entryPieceItems t' → False := fun hd hi hj =>
+      hd e he (edges_of_entryPieceItems hi hei) (edges_of_entryPieceItems hj hej)
+    have cross' : ∀ {t t' : TEntry},
+        (∀ e, e < s.g.ne → t.edges s.g s.items e → ¬t'.edges s.g s.items e) →
+        j ∈ s.entryPieceItems t → i ∈ s.entryPieceItems t' → False := fun hd hj hi =>
+      hd e he (edges_of_entryPieceItems hj hej) (edges_of_entryPieceItems hi hei)
+    rcases mem_vPieceItems_iff.1 hi with hi | hi | hi <;>
+      rcases mem_vPieceItems_iff.1 hj with hj | hj | hj
+    · exact hc'.disj i hi j hj hij e he hei hej
+    · exact cross dcp hi hj
+    · exact cross dcy hi hj
+    · exact cross' dcp hj hi
+    · exact hp'.disj i hi j hj hij e he hei hej
+    · exact cross dpy hi hj
+    · exact cross' dcy hj hi
+    · exact cross' dpy hj hi
+    · exact hy'.disj i hi j hj hij e he hei hej
 
 /-- The state after the merges and the retarget of a type-1, non-single vertex close. -/
 theorem cvS₅_type1 (curV : Nat) (edgeDir : Bool) (origTstack : Nat) {c py vy : TEntry}
@@ -184,22 +267,71 @@ pieces (`EntryR.pieces` of the settled entries, `RInvFront` at `feS₂`), the un
 `maximal`, `type1`, `bond`, `type2`) from run saturation and `RangesInv` interval ownership. -/
 theorem closeVert_type1_rCloseShape {D : Nat} (curV d lv : Nat) (kind : RetKind) (o : DfsOut)
     (origTstack : Nat) (ho : o.cls = .ret lv kind) (hk : kind ≠ .backEdge) (hlow : lv < d)
-    (hv : curV < s.g.nv) (hi : s.Inv' D) (hs : Shape s)
-    (hok : FinishOk D curV d lv o origTstack true s)
-    (hfront : Frontier (o := o) d origTstack s)
     (hshape : FinishRShape dfs curV d o origTstack true s)
-    (h2 : s.g.TwoConnected) (hsp : dfs.Spec s.g) (hrt : dfs.Rooted s.g)
-    (hd : dfs.depth curV = d) (hcur : s.stackVerts[d]! = curV)
-    (hanc : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! curV ∧ dfs.depth s.stackVerts[k]! = k)
-    (hR : s.RInvFront dfs curV d origTstack)
+    (h2 : s.g.TwoConnected) (hd : dfs.depth curV = d)
     (h1 : o.cls.isType1 = true) (hsingle : feSingle d o s = false)
-    {sub base : List TEntry} {c py vy : TEntry} (hbl : base.length = origTstack)
-    (hE : s.EarFinish curV d o true sub base)
-    (hC : EarClose curV d lv o true base s (feS₂ d o s) c [] py vy) :
+    {base : List TEntry} {c py vy : TEntry}
+    (hC : EarClose curV d lv o true base s (feS₂ d o s) c [] py vy)
+    {σ : List Nat} {n : Nat} (hcb : CloseBase σ n D curV d o origTstack true s)
+    (hc : CloseContent curV d o origTstack true s) :
     RCloseShape (feS₂ d o s).g dfs
       (Pieces.ofItems (feS₂ d o s).g (feS₂ d o s).items ((feS₂ d o s).vPieceItems c py vy))
       ((feS₂ d o s).vU c py vy) curV (feS₂ d o s).stackVerts[lv]! := by
-  sorry
+  have ht : o.cls.isTree = true := by
+    rw [ho]; cases kind <;> first | rfl | exact absurd rfl hk
+  have hlv : o.cls.lowval d = lv := by rw [ho]; rfl
+  have hlow' : o.cls.lowval d < d := by omega
+  have hts : (feS₂ d o s).tstack = c :: py :: vy :: base := by simpa using hC.tstack
+  obtain ⟨hEc, hEpy, hEvy, hht⟩ := hshape.content.v_close rfl h1 hsingle c py vy base hts
+  rw [hlv] at hht
+  have hdisj := hC.disj
+  rw [← hC.g] at hdisj
+  have hpi := vPieceItems_pieceItems hts hdisj hEc hEpy hEvy
+  obtain ⟨t, vc⟩ := closeCtx_v_site hcb hc ht hlow' rfl h1
+  rw [hsingle, cvS₅_type1 curV s.stackDir[d]! origTstack hts] at vc
+  obtain ⟨rest', hts'⟩ := vc.stack
+  obtain rfl : t = vMerged curV s.stackDir[d]! c py vy := (List.cons.inj hts').1.symm
+  have htop : (vMerged curV s.stackDir[d]! c py vy).topDepth = lv := by
+    rw [vMerged_topDepth]
+    have := hC.c_top; have := hC.py_top; have := hC.vy_top
+    omega
+  have hedges : ∀ e, (vMerged curV s.stackDir[d]! c py vy).edges (feS₂ d o s).g
+      ((feS₂ d o s).items.push ⟨.R, (none, none), []⟩) e ↔ (feS₂ d o s).vU c py vy e := by
+    intro e
+    rw [TEntry.edges_congr (fun _ _ _ => Items.Below_push_nil _ rfl) e, vU_iff_vItems, vMerged_edges]
+  have hproper : ∃ e, e < (feS₂ d o s).g.ne ∧ ¬(feS₂ d o s).vU c py vy e := by
+    obtain ⟨e, he, -, hnot⟩ := vc.pend curV (.inl rfl)
+    exact ⟨e, he, fun hU => hnot ((hedges e).2 hU)⟩
+  have hvok := (hcb.finishOk ho hlow).vert ht rfl
+  have hvadj := (hcb.finishR.1 lv kind ho hlow).vert ht rfl
+  rw [h1] at hvok hvadj
+  have st₂ := rangesInv_feS₂ hcb ht hlow'
+  have st₅ := RgStep.cvS₅ st₂.ranges st₂.step.shape hcb.nodup (st₂.hσ hcb.rgs.2.2)
+    (by rw [st₂.step.g]; exact hcb.book.v_lt) hvok hvadj
+  have hinv := st₅.step.inv
+  rw [hsingle, cvS₅_type1 curV s.stackDir[d]! origTstack hts] at hinv
+  have hconn := (hinv.entries [] _ base rfl).conn
+  have hatt := (hC.type1 h1).2
+  rw [← hC.g, ← hC.sv] at hatt
+  have h2' : (feS₂ d o s).g.TwoConnected := by rw [hC.g]; exact h2
+  obtain ⟨hwf, hsub⟩ := hpi.wf'
+    (fun i hi e hb => vU_iff_vItems.2 ⟨i, List.mem_of_mem_filter hi, hb⟩) h2' hproper
+  refine ⟨hwf, hsub, (Graph.ConnEdges.congr fun e _ => hedges e).1 hconn, ?_, ?_, ?_, ?_, hproper,
+    hht.single, hht.maximal, hht.type1, hht.bond, hht.type2⟩
+  · intro w e e' he he' hU hU' hw hw'
+    rcases hatt w ⟨e, he, hU, hw⟩ with h | h | h
+    · exact .inl h
+    · exact .inr h
+    · exact absurd (h e' he' hw') hU'
+  · obtain ⟨e, he, hE, hw⟩ := vc.touch.1
+    exact ⟨e, he, (hedges e).1 hE, hw⟩
+  · have h := vc.touch.2
+    rw [htop] at h
+    obtain ⟨e, he, hE, hw⟩ := h
+    exact ⟨e, he, (hedges e).1 hE, hw⟩
+  · have h := vc.ne
+    rw [htop] at h
+    exact h
 
 end WalkState
 

@@ -69,7 +69,7 @@ partial def l1Emu (D : Dfs) (d : Nat) (edgeDir : Bool) (s : WalkState) (fuel : N
 tree edge (`lowval < d`): `settled` (the `feS₁` frontier entries above `orig` are `EntryR` unless
 exempt), `s2_top` (`hv = false`: the `feS₂` top with `topDepth = d`, `vStart ≠ v` is `EntryR`),
 `vert_own` (`hv = false`: `VertFree v` after the P-check), the loop-1 fields (`l1Emu`), and the
-type-1 vertex close with `feSingle = false` (`v_entry`: `EntryR` of `c`, `py` at `feS₂`;
+type-1 vertex close with `feSingle = false` (`v_entry`: `EntryR` of `c`, `py`, `vy` at `feS₂`;
 `v_single`/`v_maximal`/`v_bond`/`v_type1`/`v_type2`: the HT content of `vU c py vy` at
 `(v, stackVerts[lv])`). -/
 def closeContent (D : Dfs) (v d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s : WalkState) :
@@ -95,6 +95,7 @@ def closeContent (D : Dfs) (v d : Nat) (o : DfsOut) (orig : Nat) (hv : Bool) (s 
     | c :: py :: vy :: _ =>
       for b in entryR D s₂ c do bad := ("v_entry", s!"c: {b}") :: bad
       for b in entryR D s₂ py do bad := ("v_entry", s!"py: {b}") :: bad
+      for b in entryR D s₂ vy do bad := ("v_entry", s!"vy: {b}") :: bad
       let vItems := ((c.spans.1 ++ py.spans.1) ++ vy.spans.1) ++ (vy.spans.2 ++ (py.spans.2 ++ c.spans.2))
       let Pi := vItems.filter fun i => Items.type s₂.items i != .V
       let Et := vItems.flatMap (belowList s₂)

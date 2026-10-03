@@ -1079,7 +1079,8 @@ the closed set is `U = rU = edges cur ∪ edges nxt`, the terminals are `nxt.vSt
 `stackVerts[d]`, and the sub-pieces are `Pieces.ofItems` of the merged non-`V` items
 (`rPieceItems`). `WalkState.RStep` records this shape plus what the ear structure says about it:
 `cur.vStart` is interior to `U`, both entries are nonempty, `U` is proper, and the merged items
-are pairwise edge-disjoint 2-terminal pieces (`PieceItems`). The invariant hypothesis is not
+are pairwise edge-disjoint 2-terminal pieces (`PieceItems`; its `disj` is stated for `e < ne` only, all
+`ofItems_mem_iff` needs). The invariant hypothesis is not
 `Inv d` (at the R branch `cur` is attached at `stackVerts[d+1] = cur.vStart`, so `Inv d` is
 contradictory there) but `EarInv.Inv' D` (§4.2b) with `stackVerts[k] = cur.vStart` for `d < k ≤ D`;
 at the branch `D = d+1`. `cur` is the top entry, so its `Term'` is `Term`; `nxt`'s extra `Term'`
@@ -1185,12 +1186,10 @@ edge set `vU c py vy`, its terminals `curV` and `stackVerts[min(c, py, vy).topDe
 stackVerts[lv]` (`c_top`/`py_top`/`vy_top`). `vClose_rSkel3` (proved, standard axioms) turns an
 `RCloseShape` for these data into `Items.RSkel3` of the built item, mirroring `RBranch.rSkel3`
 (`cvS₅_type1` computes the state, `getSide_vMerged` reads the children from `FinishTopOk.side`);
-`closeVert_type1_rSkel3` (`Proofs/RSkelWalk.lean`) is proved from it. The remaining content is the
-named admission `closeVert_type1_rCloseShape`: the `RCloseShape` itself (pieces pairwise
-edge-disjoint and 2-attached from `EntryR` at `feS₂`, union = the sub-ear at `(curV,
-stackVerts[lv])` from `EarClose.sub_edges`/`sub_cover`/`type1`, and the HT fields `single`/
-`maximal`/`type1`/`bond`/`type2` from run saturation and `RangesInv`).
-All four have only `propext`, `Classical.choice`, `Quot.sound` as axioms.
+`closeVert_type1_rSkel3` (`Proofs/RSkelWalk.lean`) is proved from it. `closeVert_type1_rCloseShape` is proved from `RCloseContent.v_close` (`EntryR` of `c`/`py`/`vy`
+and the HT fields), `CloseBase` (`Inv'` at `cvS₅` for `conn`, `CloseCtx.v_site` for
+`touch_*`/`ne`/`proper`) and `EarClose` (`disj`, `type1`); see §4.5 item 8.
+All five have only `propext`, `Classical.choice`, `Quot.sound` as axioms.
 The walk-level ownership argument that all later writes satisfy these frames remains open.
 
 **`dfsForest_rooted` (R-5, restated and proved).** As first stated —
@@ -1491,10 +1490,9 @@ sites), threaded from the Ranges site record `CbTree`/`CbOut` (`RangesSites.lean
 for `topDepth ≠ d + 1`, `parent_top`), `rSide_finish_content_site` (`settled`/`vert_own` fields,
 `unwrap` from `EarClose.py_top`), `feS₂_top_entryR` (`s2_top`), `loop1_rBranch_mid_ctx`/
 `loop1_rBranch_fields_ctx`/`loop1_rTop_ctx` (`l1_*`) — all `#print axioms` standard or `propext`
-only. Still admitted: `rSide_vertFree_site` (`VertFree v` at the `walkOut` entries / end of
-`walkOuts` with `VertBook v false` — a site with no Ranges record; checked as `rc.vert_free`) and
-`closeVert_type1_rCloseShape` (its HT fields are `v_close`'s `RHT`; the structural fields `wf`/
-`sub`/`conn`/`attached`/`touch_*`/`ne`/`proper` of the 3-entry union remain). The list below is the
+only; `closeVert_type1_rCloseShape` is proved as well (item 8 below). Still admitted:
+`rSide_vertFree_site` (`VertFree v` at the `walkOut` entries / end of `walkOuts` with
+`VertBook v false` — a site with no Ranges record; checked as `rc.vert_free`). The list below is the
 earlier per-admission analysis, kept for the discharge routes.
 
 **R site obligations (R-5 handoff to the backbone induction).** The remaining named R admissions,
@@ -1570,17 +1568,17 @@ dump-checked on seeds 0..400 × both modes + 6000 random multigraphs (`checks/RF
    gives `feS₂`'s stack `c :: py :: vy :: base` with `py.topDepth = lv < d`; `vert_own`
    (`hasVert = false`: `VertFree v (feP v d o s)`) — E2 at the site + transport through loops 1–2
    and the P-check (`L1Keep.edges`, `maybeUnwrapNxt_edges`, merge lemmas) + E4 for `e ≥ ne`.
-8. `closeVert_type1_rCloseShape` (`Proofs/RVert.lean`): `RCloseShape g dfs (Pieces.ofItems
+8. `closeVert_type1_rCloseShape` (`Proofs/RVert.lean`): proved. `RCloseShape g dfs (Pieces.ofItems
    (vPieceItems c py vy)) (vU c py vy) curV stackVerts[lv]` at `feS₂ d o s` of a type-1 tree-edge
-   site with `hasVert = true`, `feSingle = false`, `EarClose` stack `c :: py :: vy :: base`,
-   `base.length = origTstack`. `wf`/`sub`: `CloseCtx.v_site`'s `VSite` (`kinds`, `two`, `free`) +
-   `CloseInv.closed` (`child_two`, `att_vs`); `conn`/`attached`/`touch_s`/`touch_t`/`ne`:
-   `VSite.att`/`touch`/`ne` + `EarClose`'s `vert_touch`/`c_edge`; `proper`: `CloseCtx.path lv`
-   (an unprocessed edge at depth `lv`) with `RangesInv.processed`; `maximal`: `RangesInv.closed`
-   at `feS₂` + `EntryR.maximal` of `c` (item 1) — `py`'s items (`topDepth = lv < d`) are in no
-   `RInv*` record, so their maximality is R content on `closed`; `bond`: `EntryR.bond` of `c` +
-   `VSite.p_shape`; `single`: `RangesInv.ordered` + `EarClose` (the vertex entry holds the whole
-   child subtree); `type1`/`type2`: `EntryR.type1`/`type2` of `c` + laminarity closure (R content).
+   site with `hasVert = true`, `feSingle = false`, `EarClose` stack `c :: py :: vy :: base`. The HT
+   fields `single`/`maximal`/`type1`/`bond`/`type2` are `RCloseContent.v_close`'s `RHT`; `wf`/`sub`
+   from `PieceItems.wf'` on `vPieceItems_pieceItems` (`EntryR.pieces` of `c`, `py`, `vy` from
+   `v_close`, cross-entry edge-disjointness from `EarClose.disj`); `conn` from `Inv'` at `cvS₅`
+   (`RgStep.cvS₅` from `CloseBase`, as in `closeCtx_v_site`); `attached` from `EarClose.type1`;
+   `touch_s`/`touch_t`/`ne`/`proper` from `CloseCtx.v_site`'s `VSite` (`touch`/`ne`/`pend`) read
+   back through `vMerged_edges`/`Below_push_nil`. Takes `CloseBase`/`CloseContent`, threaded as
+   `CbTree`/`CbOuts`/`CbOut` through `RKTree`/`RKOuts`/`RKOut` (`rkTree`/`rkOuts`/`rkOut`,
+   `rkRootOut`) and `keepsR_finishEdge_site`/`closeVert_type1_rSkel3`.
 9. `walk_items_rThreeConnected` (`Proofs/RWalkItems.lean`): `Items.RThreeConnected g (g.walk tern
    (g.dfsForest vo eo)).items` for general `g.WF`. No site; block-local restatement of
    `walk_items_rThreeConnected_of_twoConnected` via `Blocks.lean` (`q_root_covers_block`,
@@ -2241,7 +2239,7 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,bottom,close,late,late_fo,loop1,loop1_side,
   loop1_touch,loops,lower,of_ctx}`, `tree_comp_shape`; Ranges `closeCtx_{bd_node,bd_vert,l1_site,
   p_site,v_site}`, `finishEdge_ownedD`, `finishEdge_vertCover`; R `closeBase_rContent`,
-  `entry_rContent`, `rSide_vertFree_site`, `closeVert_type1_rCloseShape` (the other R site
+  `entry_rContent`, `rSide_vertFree_site` (the other R site
   theorems are proved from `RCloseContent`/`REntryContent`, §4.5); ST `finishBoundary_stLive`. Not reachable:
   `loop1_rBranch_content`, `walkTree_rSide_spec`, `walk_items_rThreeConnected` (R-layer glue
   outside the tree theorems), the final-items hypotheses of `spqrTree_pieceSep`
@@ -2310,11 +2308,11 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `finish_core` through `closeBase_content`), the `ternarize` frame, ear-5's
   `OutFrame`/`CtxShape`/`TreeEndS`. `#print axioms`: `pushed_back_iff`/`pushed_tree_iff`
   `[propext]`; `PreOut.child` standard; `finish_core` reaches only `closeBase_content`;
-  `walkOutPre_out` only `rSide_vertFree_site`; `bbOut_step`/`backbone` reach exactly 25
+  `walkOutPre_out` only `rSide_vertFree_site`; `bbOut_step`/`backbone` reach exactly 24
   admissions: ear `earAt_tree_{bd_bridge,bd_comp,bd_side,bd_term,bottom,close,late,late_fo,loop1,
   loop1_side,loop1_touch,loops,lower,of_ctx}`, `tree_ret_shape`; Ranges `closeBase_content`; R
   `rSide_{entry,finish_content,vertFree}_site`, `loop1_rBranch_{fields,mid}_ctx`, `loop1_rTop_ctx`,
-  `feS₂_top_entryR`, `closeVert_type1_rCloseShape`; ST `walkOut_stLive`.
+  `feS₂_top_entryR`; ST `walkOut_stLive`.
 
 ## 5. Phase 3: relabel
 

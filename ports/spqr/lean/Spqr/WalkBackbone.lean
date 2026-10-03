@@ -935,7 +935,7 @@ theorem walkOut_inv_r (h : WalkInvOut G B v d outs₀ done (o :: rest) hasVert n
       have hK := kOut v 0 o false s G.g 1 0 s h.types (Nat.le_refl _) (by omega) (vertItem_ne_zero v)
         (fun w _ => vertItem_ne_zero w) (fun e _ => edgeItem_ne_zero G.g e) Keep.refl
       have hO := rootOut v o s S.book hts
-      have hR := rkRootOut G.dfs v o s h.inv h.shape S.book hts h2 R.spec R.rooted R.wf
+      have hR := rkRootOut G.dfs v o s G.σ n h.inv h.shape S.book S.cb hts h2 R.spec R.rooted R.wf
         (by rw [h.g_eq]; exact h.sv_size)
         (fun e cls c couts heq => by
           subst heq
@@ -964,7 +964,7 @@ theorem walkOut_inv_r (h : WalkInvOut G B v d outs₀ done (o :: rest) hasVert n
       have hside := S.rside h2 dp rfl
       have hW := rrOut v (dp + 1) o hasVert s G.F B h.inv h.shape S.guards S.book hside h2 R.spec R.rooted
         R.chain R.rwalk R.fB R.B_le R.hvB
-      have hK := rkOut v (dp + 1) o hasVert s G.F B h.inv h.shape S.guards S.book hside h2 R.spec R.rooted
+      have hK := rkOut v (dp + 1) o hasVert s G.σ n G.F B h.inv h.shape S.guards S.book S.cb hside h2 R.spec R.rooted
         R.chain R.rwalk R.fB R.B_le R.hvB R.skel
       refine wp_mono _ (wp_and hW hK) fun hv' s' ⟨⟨hw, hbk, hhvB, hg, hsv⟩, hskel⟩ _ => ?_
       exact {

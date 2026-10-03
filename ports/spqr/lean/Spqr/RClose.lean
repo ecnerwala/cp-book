@@ -52,7 +52,7 @@ structure PieceItems (s : WalkState) (L : List ItemId) : Prop where
   conn : ∀ i ∈ L, s.g.ConnEdges (Items.EdgeBelow s.g s.items i)
   attached : ∀ i ∈ L, ∀ x y, Items.vs s.items i = (some x, some y) →
     s.g.TwoAttached (Items.EdgeBelow s.g s.items i) x y
-  disj : ∀ i ∈ L, ∀ j ∈ L, i ≠ j → ∀ e, Items.EdgeBelow s.g s.items i e →
+  disj : ∀ i ∈ L, ∀ j ∈ L, i ≠ j → ∀ e, e < s.g.ne → Items.EdgeBelow s.g s.items i e →
     ¬Items.EdgeBelow s.g s.items j e
 
 /-- The stack at an R step of loop 1 (`loop1Type` returns `.R`): `cur` and `nxt` both return to

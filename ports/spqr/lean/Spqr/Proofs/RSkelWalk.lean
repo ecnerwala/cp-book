@@ -2,6 +2,7 @@ import Spqr.Proofs.RSkelFinish
 import Spqr.Proofs.RInvWalk
 import Spqr.Proofs.RLoop1
 import Spqr.Proofs.RVert
+import Spqr.RangesSites
 
 /-!
 # `Items.RSkelInv` through the walk (PROOF.md §4.5)
@@ -138,7 +139,9 @@ theorem closeVert_type1_rSkel3 {D : Nat} (curV d lv : Nat) (kind : RetKind) (o :
     (hd : dfs.depth curV = d) (hcur : s.stackVerts[d]! = curV)
     (hanc : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! curV ∧ dfs.depth s.stackVerts[k]! = k)
     (hR : s.RInvFront dfs curV d origTstack)
-    (h1 : o.cls.isType1 = true) (hsingle : feSingle d o s = false) :
+    (h1 : o.cls.isType1 = true) (hsingle : feSingle d o s = false)
+    {σ : List Nat} {n : Nat} (hcb : CloseBase σ n D curV d o origTstack true s)
+    (hc : CloseContent curV d o origTstack true s) :
     Items.RSkel3 s.g (feS₃ curV d o origTstack s).items
       (cvS₁ o.cls.isType1 origTstack (feSingle d o s) (feS₂ d o s)).items.size := by
   have ht : o.cls.isTree = true := by
@@ -164,8 +167,8 @@ theorem closeVert_type1_rSkel3 {D : Nat} (curV d lv : Nat) (kind : RetKind) (o :
   rw [h1, hsingle, cvS₅_type1 curV s.stackDir[d]! origTstack hts] at hfin
   have hside := hfin.side
   simp only [curE, List.head!_cons] at hside
-  have hRC := closeVert_type1_rCloseShape curV d lv kind o origTstack ho hk hlow hv hi hs hok
-    hfront hshape h2 hsp hrt hd hcur hanc hR h1 hsingle hbl hE hC
+  have hRC := closeVert_type1_rCloseShape curV d lv kind o origTstack ho hk hlow hshape h2 hd
+    h1 hsingle hC hcb hc
   rw [← htop] at hRC
   rw [← hC.g]
   show Items.RSkel3 (feS₂ d o s).g
@@ -190,7 +193,8 @@ theorem keepsR_finishEdge_site {D : Nat} (curV d lv : Nat) (kind : RetKind) (o :
     (hanc : ∀ k, k ≤ d → dfs.Anc s.stackVerts[k]! curV ∧ dfs.depth s.stackVerts[k]! = k)
     (hR : s.RInvFront dfs curV d origTstack)
     (hq : ∀ p, ¬ Items.IsParent s.items p (edgeItem s.g o.e))
-    (hchild : o.cls.isTree = true → s.stackVerts[d + 1]! = o.dest) :
+    (hchild : o.cls.isTree = true → s.stackVerts[d + 1]! = o.dest)
+    {σ : List Nat} {n : Nat} (hcb : CloseBase σ n D curV d o origTstack hasVert s) :
     KeepsR (finishEdge curV d o origTstack hasVert) s := by
   have hk : o.cls.isTree = true → kind ≠ .backEdge := fun ht h => by
     subst h; rw [ho] at ht; cases ht
@@ -225,7 +229,7 @@ theorem keepsR_finishEdge_site {D : Nat} (curV d lv : Nat) (kind : RetKind) (o :
   · intro ht hhv h1 hsingle
     subst hhv
     exact closeVert_type1_rSkel3 curV d lv kind o origTstack ho (hk ht) hlow hv hi hs hok hfront
-      (hshape (hk ht)) h2 hsp hrt hd hcur hanc hR h1 hsingle
+      (hshape (hk ht)) h2 hsp hrt hd hcur hanc hR h1 hsingle hcb (closeBase_content hcb)
 
 /-! ## The walk induction
 
@@ -233,9 +237,9 @@ The shape of `rrTree`/`rrOuts`/`rrOut` (`RInvWalk`), whose outputs (`RWalk`, `Bo
 `stackVerts` frames) supply the site facts of `keepsR_finishEdge_site`. -/
 
 abbrev RKTree (dfs : DfsData) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
-  ∀ (F : List RFrame) (dp : Nat), d = dp + 1 →
+  ∀ (σ : List Nat) (n : Nat) (F : List RFrame) (dp : Nat), d = dp + 1 →
     (∀ v outs, t = .node v outs → ({ s with stackVerts := s.stackVerts.set! d v } : WalkState).Inv' d) →
-    Shape s → GuardsTree t d s → BookTree t d s → RSideTree dfs t d s →
+    Shape s → GuardsTree t d s → BookTree t d s → CbTree σ n t d s → RSideTree dfs t d s →
     s.g.TwoConnected → dfs.Spec s.g → dfs.Rooted s.g →
     (∀ f ∈ F, f.2.2 ≤ s.tstack.length ∧ s.RInvG dfs f.1 f.2.1 f.2.2) →
     s.RInvTop dfs s.stackVerts[dp]! dp → Items.RSkelInv s.g s.items →
@@ -243,28 +247,28 @@ abbrev RKTree (dfs : DfsData) (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
 
 abbrev RKOuts (dfs : DfsData) (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) :
     Prop :=
-  ∀ (F : List RFrame) (B : Nat),
+  ∀ (σ : List Nat) (n : Nat) (F : List RFrame) (B : Nat),
     s.Inv' d → Shape s → GuardsOuts v d outs hasVert s → BookOuts v d outs hasVert s →
-    RSideOuts dfs v d outs hasVert s → s.g.TwoConnected → dfs.Spec s.g → dfs.Rooted s.g →
+    CbOuts σ n v d outs hasVert s → RSideOuts dfs v d outs hasVert s → s.g.TwoConnected → dfs.Spec s.g → dfs.Rooted s.g →
     AncChain dfs v d s → RWalk dfs F v d s → (∀ f ∈ F, f.2.2 ≤ B) → B ≤ s.tstack.length →
     (hasVert = true → B + 1 ≤ s.tstack.length) → Items.RSkelInv s.g s.items →
     wp (walkOuts v d outs hasVert) (fun _ s' => Items.RSkelInv s.g s'.items) s
 
 abbrev RKOut (dfs : DfsData) (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
-  ∀ (F : List RFrame) (B : Nat),
+  ∀ (σ : List Nat) (n : Nat) (F : List RFrame) (B : Nat),
     s.Inv' d → Shape s → GuardsOut v d o hasVert s → BookOut v d o hasVert s →
-    RSideOut dfs v d o hasVert s → s.g.TwoConnected → dfs.Spec s.g → dfs.Rooted s.g →
+    CbOut σ n v d o hasVert s → RSideOut dfs v d o hasVert s → s.g.TwoConnected → dfs.Spec s.g → dfs.Rooted s.g →
     AncChain dfs v d s → RWalk dfs F v d s → (∀ f ∈ F, f.2.2 ≤ B) → B ≤ s.tstack.length →
     (hasVert = true → B + 1 ≤ s.tstack.length) → Items.RSkelInv s.g s.items →
     wp (walkOut v d o hasVert) (fun _ s' => Items.RSkelInv s.g s'.items) s
 
 mutual
 theorem rkTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), RKTree dfs t d s
-  | .node v outs, d, s => fun F dp hdp hi hs hg hb hr h2 hsp hrt hF hpar hinv => by
+  | .node v outs, d, s => fun σ n F dp hdp hi hs hg hb hcb hr h2 hsp hrt hF hpar hinv => by
     subst hdp
     unfold walkTree
     simp only [wp_bind, wp_modify]
-    unfold GuardsTree at hg; unfold BookTree at hb; unfold RSideTree at hr
+    unfold GuardsTree at hg; unfold BookTree at hb; unfold CbTree at hcb; unfold RSideTree at hr
     obtain ⟨hanc, hstab, hvs, hr⟩ := hr
     simp only [Nat.add_sub_cancel] at hvs
     have hW₀ : RWalk dfs F v (dp + 1) { s with stackVerts := s.stackVerts.set! (dp + 1) v } :=
@@ -273,7 +277,7 @@ theorem rkTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), RKTree dfs t d s
         ⟨fun t ht hd hne => hstab t ht (hpar.entries t ht (by omega) fun h => by
           have := hvs t ht h; omega), hpar.disj⟩⟩
     refine wp_imp (wp_of_forall fun hv s₁ hK₁ => ?_)
-      (rkOuts v (dp + 1) outs false _ F s.tstack.length (hi v outs rfl) hs.frame' hg hb hr h2 hsp hrt
+      (rkOuts v (dp + 1) outs false _ σ n F s.tstack.length (hi v outs rfl) hs.frame' hg hb hcb hr h2 hsp hrt
         hanc hW₀ (fun f hf => (hF f hf).1) (le_refl _) (fun h => nomatch h) hinv)
     cases hv
     · simp only [Bool.false_eq_true, ↓reduceIte, wp_bind, wp_setStackDir, wp_pushVertTstack]
@@ -282,34 +286,34 @@ theorem rkTree : ∀ (t : DfsTree) (d : Nat) (s : WalkState), RKTree dfs t d s
 
 theorem rkOuts : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState),
     RKOuts dfs v d outs hasVert s
-  | v, d, [], hasVert, s => fun F B hi hs hg hb hr h2 hsp hrt hanc hW hB hBl hnv hinv => by
+  | v, d, [], hasVert, s => fun _ _ F B hi hs hg hb _ hr h2 hsp hrt hanc hW hB hBl hnv hinv => by
     unfold walkOuts
     rw [wp_pure]
     exact hinv
-  | v, d, o :: rest, hasVert, s => fun F B hi hs hg hb hr h2 hsp hrt hanc hW hB hBl hnv hinv => by
-    unfold GuardsOuts at hg; unfold BookOuts at hb; unfold RSideOuts at hr
+  | v, d, o :: rest, hasVert, s => fun σ n F B hi hs hg hb hcb hr h2 hsp hrt hanc hW hB hBl hnv hinv => by
+    unfold GuardsOuts at hg; unfold BookOuts at hb; unfold CbOuts at hcb; unfold RSideOuts at hr
     unfold walkOuts
     simp only [wp_bind]
-    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv' s' ⟨hi', hs'⟩ hg' hb' hr'
+    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv' s' ⟨hi', hs'⟩ hg' hb' hcb' hr'
         ⟨hW', hK', hn', hg'', hsv'⟩ hinv' => ?_)
-      (invOut v d o hasVert s hi hs hg.1 hb.1)) hg.2) hb.2) hr.2)
+      (invOut v d o hasVert s hi hs hg.1 hb.1)) hg.2) hb.2) hcb.2) hr.2)
       (rrOut v d o hasVert s F B hi hs hg.1 hb.1 hr.1 h2 hsp hrt hanc hW hB hBl hnv))
-      (rkOut v d o hasVert s F B hi hs hg.1 hb.1 hr.1 h2 hsp hrt hanc hW hB hBl hnv hinv)
+      (rkOut v d o hasVert s σ n F B hi hs hg.1 hb.1 hcb.1 hr.1 h2 hsp hrt hanc hW hB hBl hnv hinv)
     have hanc' : AncChain dfs v d s' :=
       ⟨(hsv' d (le_refl _)).trans hanc.1, fun k hk => by rw [hsv' k hk]; exact hanc.2 k hk⟩
     refine wp_imp (wp_of_forall fun hv'' s'' h => ?_)
-      (rkOuts v d rest hv' s' F B hi' hs' hg' hb' hr' (by rw [hg'']; exact h2) (by rw [hg'']; exact hsp)
+      (rkOuts v d rest hv' s' σ _ F B hi' hs' hg' hb' hcb' hr' (by rw [hg'']; exact h2) (by rw [hg'']; exact hsp)
         (by rw [hg'']; exact hrt) hanc' hW' hB hK'.1 hn' (by rw [hg'']; exact hinv'))
     rw [hg''] at h; exact h
 
 theorem rkOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), RKOut dfs v d o hasVert s
-  | v, d, o, hasVert, s => fun F B hi hs hg hb hr h2 hsp hrt hanc hW hB hBl hnv hinv => by
+  | v, d, o, hasVert, s => fun σ n F B hi hs hg hb hcb hr h2 hsp hrt hanc hW hB hBl hnv hinv => by
     rw [walkOut_eq, wp_bind]
-    unfold GuardsOut at hg; unfold BookOut at hb; unfold RSideOut at hr
+    unfold GuardsOut at hg; unfold BookOut at hb; unfold CbOut at hcb; unfold RSideOut at hr
     obtain ⟨hlow, hfree, hr⟩ := hr
-    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv₁ s₁ ⟨hi₁, hs₁⟩ hg₁ hb₁ hr₁
+    refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun hv₁ s₁ ⟨hi₁, hs₁⟩ hg₁ hb₁ hcb₁ hr₁
         ⟨hW₁, hK₁, hn₁, hhv₁, hpush₁, hg₁', hsv₁, hit₁⟩ => ?_)
-      (walkOutPre_inv hi hs hb.1)) hg) hb.2) hr) (walkOutPre_r hfree hW hBl hnv)
+      (walkOutPre_inv hi hs hb.1)) hg) hb.2) hcb) hr) (walkOutPre_r hfree hW hBl hnv)
     have hinv₁ : Items.RSkelInv s₁.g s₁.items := by rw [hg₁', hit₁]; exact hinv
     have hanc₁ : AncChain dfs v d s₁ := by rw [AncChain, hsv₁]; exact hanc
     have h2₁ : s₁.g.TwoConnected := by rw [hg₁']; exact h2
@@ -320,7 +324,7 @@ theorem rkOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), R
     rw [wp_bind, wp_tstackSize]
     cases o with
     | back e cls dest =>
-      try simp only at hg₁ hb₁
+      try simp only at hg₁ hb₁ hcb₁
       simp only
       have hk : kind = .backEdge := by
         cases kind with
@@ -344,13 +348,13 @@ theorem rkOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), R
       have hR : s₁.RInvFront dfs v d s₁.tstack.length := hW₁.top.toFront _
       have hkeep := keepsR_finishEdge_site v d lv .backEdge _ s₁.tstack.length true ho hl hb₁.v_lt
         hi₁ hs₁ hok hD hfront (fun h => absurd rfl h) h2₁ hsp₁ hrt₁ hhd hanc₁.1 hanc₁.2 hR hE.q_root
-        hE.sv_child
+        hE.sv_child hcb₁
       have := hkeep hinv₁
       rw [hg₁'] at this
       exact this
     | tree e cls child =>
       obtain ⟨c, couts⟩ := child
-      try simp only [wp_modify] at hg₁ hb₁ hr₁
+      try simp only [wp_modify] at hg₁ hb₁ hcb₁ hr₁
       simp only [wp_bind, wp_modify]
       set s₂ : WalkState := { s₁ with firstOccurrence := s₁.firstOccurrence.set! d s₁.g.ne } with hs₂
       have hW₂ : RWalk dfs F v d s₂ := RWalk.of_eq (s := s₁) rfl rfl rfl rfl hW₁
@@ -367,13 +371,13 @@ theorem rkOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), R
         rcases hf with rfl | hf
         · exact ⟨le_refl _, hW₂.top.toG _⟩
         · exact hW₂.frames f hf
-      refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun _ s₃ ⟨hg₃, hb₃⟩ hr₃ ⟨hi₃, hs₃⟩
-          ⟨hW₃, hK₃, hg₃', hsv₃⟩ hinv₃ => ?body) (wp_and hg₁.2 hb₁.2)) hr₁.2)
+      refine wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_imp (wp_of_forall fun _ s₃ ⟨hg₃, hb₃⟩ hcb₃ hr₃ ⟨hi₃, hs₃⟩
+          ⟨hW₃, hK₃, hg₃', hsv₃⟩ hinv₃ => ?body) (wp_and hg₁.2 hb₁.2)) hcb₁.2) hr₁.2)
         (invTree (.node c couts) (d + 1) s₂ hpre hs₁.frame' hg₁.1 hb₁.1))
         (rrTree (.node c couts) (d + 1) s₂ ((v, d, s₁.tstack.length) :: F) d rfl hpre hs₁.frame' hg₁.1
           hb₁.1 hr₁.1 h2₁ hsp₁ hrt₁ hframes hpar))
-        (rkTree (.node c couts) (d + 1) s₂ ((v, d, s₁.tstack.length) :: F) d rfl hpre hs₁.frame' hg₁.1
-          hb₁.1 hr₁.1 h2₁ hsp₁ hrt₁ hframes hpar hinv₁)
+        (rkTree (.node c couts) (d + 1) s₂ σ n ((v, d, s₁.tstack.length) :: F) d rfl hpre hs₁.frame' hg₁.1
+          hb₁.1 hcb₁.1 hr₁.1 h2₁ hsp₁ hrt₁ hframes hpar hinv₁)
       case body =>
         have hW₃ := hW₃ c couts rfl
         have hanc₃ : AncChain dfs v d s₃ :=
@@ -393,7 +397,7 @@ theorem rkOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), R
         have hR : s₃.RInvFront dfs v d s₁.tstack.length := ⟨hfr.entries, hfr.disj⟩
         have hinv₃' : Items.RSkelInv s₃.g s₃.items := by rw [hg₃']; exact hinv₃
         have hkeep := keepsR_finishEdge_site v d lv kind _ s₁.tstack.length hv₁ ho hl hb₃.v_lt hi₃ hs₃
-          hok hD hfront (fun _ => hr₃) h2₃ hsp₃ hrt₃ hhd hanc₃.1 hanc₃.2 hR hE.q_root hE.sv_child
+          hok hD hfront (fun _ => hr₃) h2₃ hsp₃ hrt₃ hhd hanc₃.1 hanc₃.2 hR hE.q_root hE.sv_child hcb₃
         have := hkeep hinv₃'
         rw [hg₃'.trans hg₁'] at this
         exact this

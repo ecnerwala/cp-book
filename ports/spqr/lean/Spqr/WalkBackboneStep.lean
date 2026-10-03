@@ -379,7 +379,7 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
             skel := by
               have := keepsR_finishEdge_site (dfs := G.dfs) (D := d) v d lv .backEdge _ _ hv₁ ho hl
                 hb₁.v_lt hp.inv hp.shape hok hD hfront (fun h' => absurd rfl h') h2₁ hsp₁ hrt₁ hhd
-                hanc₁.1 hanc₁.2 hRf hEf.q_root (fun ht => absurd ht (by rw [hnt]; decide))
+                hanc₁.1 hanc₁.2 hRf hEf.q_root (fun ht => absurd ht (by rw [hnt]; decide)) hcb₁
                 (by rw [hgeq₁, hit₁]; exact R.skel)
               rw [hgR]; exact this }
     obtain ⟨hSt, hRR⟩ := key
@@ -728,7 +728,7 @@ theorem bbOut_step (o : DfsOut) (v d : Nat) (hasVert : Bool)
             skel := by
               have := keepsR_finishEdge_site (dfs := G.dfs) (D := d + 1) v d lv kind _ _ hv₁ ho hl
                 hb₃.v_lt hend.inv hend.shape hok hD hfront (fun _ => hsh) h2₃ hsp₃ hrt₃ hhd
-                hanc₃.1 hanc₃.2 hRf hEf.q_root hEf.sv_child hskel₃
+                hanc₃.1 hanc₃.2 hRf hEf.q_root hEf.sv_child hcb₃ hskel₃
               rw [hgR]; exact this }
     obtain ⟨hSt, hRR⟩ := key
     refine ⟨fun h0 => hhv' (by rw [hhv₁, h0]; rfl), hK', hvF, ?_⟩

@@ -106,11 +106,11 @@ structure RCloseContent (dfs : DfsData) (curV d : Nat) (o : DfsOut) (origTstack 
     ∀ cur nxt rest, (rl1Iter d o s k).tstack = cur :: nxt :: rest →
     (rl1Iter d o s k).RTop dfs cur nxt
   /-- The type-1 vertex close with loop 2 fired (`feSingle = false`, stack `c :: py :: vy :: _` at
-  `feS₂`): `c` and `py` are settled, and the union `vU c py vy` with pieces `vPieceItems` has the
+  `feS₂`): `c`, `py` and `vy` are settled, and the union `vU c py vy` with pieces `vPieceItems` has the
   HT content at `(curV, stackVerts[lowval])`. -/
   v_close : hasVert = true → o.cls.isType1 = true → feSingle d o s = false →
     ∀ c py vy rest, (feS₂ d o s).tstack = c :: py :: vy :: rest →
-    (feS₂ d o s).EntryR dfs c ∧ (feS₂ d o s).EntryR dfs py ∧
+    (feS₂ d o s).EntryR dfs c ∧ (feS₂ d o s).EntryR dfs py ∧ (feS₂ d o s).EntryR dfs vy ∧
     RHT (feS₂ d o s).g dfs
       (Pieces.ofItems (feS₂ d o s).g (feS₂ d o s).items ((feS₂ d o s).vPieceItems c py vy))
       ((feS₂ d o s).vU c py vy) curV (feS₂ d o s).stackVerts[o.cls.lowval d]!

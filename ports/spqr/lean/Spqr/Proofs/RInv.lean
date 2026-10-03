@@ -100,12 +100,12 @@ theorem RBranch.pieceItems (hR : s.RTop dfs cur nxt) (hb : s.RBranch d cur nxt r
     rcases mem_rPieceItems_iff.1 hi with hi | hi
     · exact hc.attached i hi
     · exact hn.attached i hi
-  · intro i hi j hj hij e hei hej
+  · intro i hi j hj hij e he hei hej
     rcases mem_rPieceItems_iff.1 hi with hi | hi <;> rcases mem_rPieceItems_iff.1 hj with hj | hj
-    · exact hc.disj i hi j hj hij e hei hej
+    · exact hc.disj i hi j hj hij e he hei hej
     · exact hR.disj _ (edges_of_entryPieceItems hi hei) (edges_of_entryPieceItems hj hej)
     · exact hR.disj _ (edges_of_entryPieceItems hj hej) (edges_of_entryPieceItems hi hei)
-    · exact hn.disj i hi j hj hij e hei hej
+    · exact hn.disj i hi j hj hij e he hei hej
 
 theorem RBranch.rStep (hR : s.RTop dfs cur nxt) (hb : s.RBranch d cur nxt rest) :
     s.RStep d cur nxt rest :=

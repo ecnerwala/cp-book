@@ -103,7 +103,7 @@ theorem rkRootOut (dfs : DfsData) (v : Nat) (o : DfsOut) (s : WalkState) (σ : L
         ⟨hg₃', _, _, _, _⟩ => ?_)
         (wp_and hg.2 hb₁.2))
         (invTree (.node c couts) 1 s₂ hpre₂ hs₂' hg.1 hb₁.1))
-        (rkTree (.node c couts) 1 s₂ [] 0 rfl hpre₂ hs₂' hg.1 hb₁.1 hr h2 hsp hrt
+        (rkTree (.node c couts) 1 s₂ σ n [] 0 rfl hpre₂ hs₂' hg.1 hb₁.1 hcb.1 hr h2 hsp hrt
           (fun f hf => by simp at hf) hpar hinv))
         (walkTree_frame (.node c couts) 1 s₂ hT)
     have hD : (1 : Nat) = if (DfsOut.tree e cls (.node c couts)).cls.isTree then 0 + 1 else 0 := by
