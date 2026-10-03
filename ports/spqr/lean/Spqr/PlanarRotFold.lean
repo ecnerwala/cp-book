@@ -19,16 +19,17 @@ theorem RotInv.step {g : Graph} {s s' : PlanarRelabelState} (h : RotInv g s) (ty
     (hne : s'.base.neBounds = s.base.neBounds.push neEn) (hnv : s'.base.nvBounds = s.base.nvBounds.push nvEn)
     (hE : s'.base.nodeEdges.size = neEn) (hV : s'.base.nodeVerts.size = nvEn)
     (hrot : s'.aux.neRotAdj = s.aux.neRotAdj ++
-      layoutRot ty (nvEn - s.base.nodeVerts.size) s.base.nodeEdges.size neEn edgeVes mapRot (2 * g.ne)) :
+      layoutRot ty (nvEn - s.base.nodeVerts.size) s.base.nodeEdges.size neEn edgeVes mapRot (2 * g.ne))
+    (hnp : s'.aux.nodePlanar.size = s.aux.nodePlanar.size + 1) :
     RotInv g s' := by
-  obtain ⟨hg0, h1, h2, h3, h4, h5, ev, mr, hmr0, hR0, hb⟩ := h
+  obtain ⟨hg0, h1, h2, h3, h4, h5, ⟨ev, mr, hmr0, hR0, hb⟩, h6⟩ := h
   have hn1 : s.base.types.size + 1 = s.base.neBounds.size := h1.symm
   have hn2 : s.base.types.size + 1 = s.base.nvBounds.size := h2.symm
   have e1 : (s.base.nvBounds.push nvEn)[s.base.types.size + 1]! = nvEn := by rw [hn2, Array.getElem!_push_eq']
   have e2 : (s.base.neBounds.push neEn)[s.base.types.size + 1]! = neEn := by rw [hn1, Array.getElem!_push_eq']
   refine ⟨hg, by rw [hne, ht]; simp [h1], by rw [hnv, ht]; simp [h2], ?_, ?_, ?_,
-    fun m => if m = s.base.types.size then edgeVes else ev m,
-    fun m => if m = s.base.types.size then mapRot else mr m, ?_, ?_, ?_⟩
+    ⟨fun m => if m = s.base.types.size then edgeVes else ev m,
+    fun m => if m = s.base.types.size then mapRot else mr m, ?_, ?_, ?_⟩, by rw [hnp, h6, ht, Array.size_push]⟩
   · rw [hne, Array.getElem!_push_lt' _ _ _ (by omega)]; exact h3
   · rw [ht, hne, Array.size_push, hE, e2]
   · rw [ht, hnv, Array.size_push, hV, e1]
@@ -66,9 +67,10 @@ theorem RotInv.step' {g : Graph} {s s' : PlanarRelabelState} (h : RotInv g s) {t
     (hmr : ∀ ve, (mapRot ve).size = 4) (hR : ty = .R → edgeVes.length + 1 = neEn - neSt)
     (hg : s'.base.g = g) (ht : s'.base.types = s.base.types.push ty)
     (hne : s'.base.neBounds = s.base.neBounds.push neEn)
-    (hnv : s'.base.nvBounds = s.base.nvBounds.push s'.base.nodeVerts.size) : RotInv g s' := by
+    (hnv : s'.base.nvBounds = s.base.nvBounds.push s'.base.nodeVerts.size)
+    (hnp : s'.aux.nodePlanar.size = s.aux.nodePlanar.size + 1) : RotInv g s' := by
   subst hX hnV hSt hEn hm
-  exact RotInv.step h ty _ _ edgeVes mapRot hmr hR hg ht hne hnv rfl rfl hrot
+  exact RotInv.step h ty _ _ edgeVes mapRot hmr hR hg ht hne hnv rfl rfl hrot hnp
 
 theorem liftR_modify_snd (f : RelabelState → RelabelState) (s : PlanarRelabelState) :
     (liftR (modify f) s).2 = { s with base := f s.base } := by rw [liftR_eq]; rfl
@@ -114,53 +116,57 @@ theorem planarRelabel_rotInv (g : Graph) :
     unfold planarRelabel
     simp only [wp_bind, wp_liftR_get, wp_liftR_item]
     -- number `cur`
-    refine wp_abs _ fun s₁ hg₁ ht₁ hne₁ hnv₁ hE₁ hV₁ hR₁ => ?_
-    simp only [liftR_modify_snd] at hg₁ ht₁ hne₁ hnv₁ hE₁ hV₁ hR₁
+    refine wp_abs _ fun s₁ hg₁ ht₁ hne₁ hnv₁ hE₁ hV₁ hR₁ hN₁ => ?_
+    simp only [liftR_modify_snd] at hg₁ ht₁ hne₁ hnv₁ hE₁ hV₁ hR₁ hN₁
     try dsimp only
     -- V/Q bookkeeping
-    refine wp_jp_match1 _ _ _ _ _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
-      (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩) fun s₂ hf₂ => ?_
+    refine wp_jp_match1 _ _ _ _ _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+      (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩) fun s₂ hf₂ => ?_
     try simp only [wp_bind]
     refine wp_frame _ (fun s => PlanarRelabelM.Frame.setupNode _ _ _ s) fun planar s₃ hf₃ => ?_
     try simp only [wp_bind]
-    refine wp_frame _ (fun s => PlanarRelabelM.Frame.modifyAux _ s rfl) fun _ s₄ hf₄ => ?_
+    refine wp_abs _ fun s₄ hg₄ ht₄ hne₄ hnv₄ hE₄ hV₄ hR₄ hN₄ => ?_
+    simp only [modifyAux_snd] at hg₄ ht₄ hne₄ hnv₄ hE₄ hV₄ hR₄ hN₄
     try simp only [wp_liftR_get]
     -- node-verts
-    refine wp_abs _ fun s₅ hg₅ ht₅ hne₅ hnv₅ hE₅ hV₅ hR₅ => ?_
-    simp only [liftR_modify_snd, Array.size_append, List.size_toArray] at hg₅ ht₅ hne₅ hnv₅ hE₅ hV₅ hR₅
+    refine wp_abs _ fun s₅ hg₅ ht₅ hne₅ hnv₅ hE₅ hV₅ hR₅ hN₅ => ?_
+    simp only [liftR_modify_snd, Array.size_append, List.size_toArray] at hg₅ ht₅ hne₅ hnv₅ hE₅ hV₅ hR₅ hN₅
     try dsimp only
     -- R: vertex positions + flips
-    refine wp_jp_ite3 _ _ _ _ _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+    refine wp_jp_ite3 _ _ _ _ _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
       (fun _ s => PlanarRelabelM.Frame.applyFlips _ _ _ s) fun s₆ hf₆ => ?_
     try simp only [wp_bind]
     refine wp_liftR_orderedChildren _ _ fun children hch => ?_
     -- child slots
-    refine wp_frame _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+    refine wp_frame _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
       fun _ s₇ hf₇ => ?_
     try simp only [wp_liftR_get]
     try dsimp only
     -- R: rotEdgeNe
-    refine wp_jp_ite _ _ _ _ (fun s => PlanarRelabelM.Frame.modifyAux _ s rfl) fun s₈ hf₈ => ?_
+    refine wp_jp_ite _ _ _ _ (fun s => PlanarRelabelM.Frame.modifyAux _ s rfl rfl) fun s₈ hf₈ => ?_
     try simp only [wp_bind, wp_getAux]
     try dsimp only
     -- node edges / bounds
-    refine wp_abs _ fun s₉ hg₉ ht₉ hne₉ hnv₉ hE₉ hV₉ hR₉ => ?_
-    simp only [liftR_modify_snd, Array.size_append] at hg₉ ht₉ hne₉ hnv₉ hE₉ hV₉ hR₉
+    refine wp_abs _ fun s₉ hg₉ ht₉ hne₉ hnv₉ hE₉ hV₉ hR₉ hN₉ => ?_
+    simp only [liftR_modify_snd, Array.size_append] at hg₉ ht₉ hne₉ hnv₉ hE₉ hV₉ hR₉ hN₉
     -- rotation block
-    refine wp_abs _ fun s₁₀ hg₁₀ ht₁₀ hne₁₀ hnv₁₀ hE₁₀ hV₁₀ hR₁₀ => ?_
-    simp only [modifyAux_snd] at hg₁₀ ht₁₀ hne₁₀ hnv₁₀ hE₁₀ hV₁₀ hR₁₀
+    refine wp_abs _ fun s₁₀ hg₁₀ ht₁₀ hne₁₀ hnv₁₀ hE₁₀ hV₁₀ hR₁₀ hN₁₀ => ?_
+    simp only [modifyAux_snd] at hg₁₀ ht₁₀ hne₁₀ hnv₁₀ hE₁₀ hV₁₀ hR₁₀ hN₁₀
     try dsimp only
     have hinv₁₀ : RotInv g s₁₀ := by
-      refine RotInv.step' h hR₁₀ ?hX ?hnV ?hSt ?hEn ?hm ?hmr ?hR ?hg ?ht ?hne ?hnv
+      refine RotInv.step' h hR₁₀ ?hX ?hnV ?hSt ?hEn ?hm ?hmr ?hR ?hg ?ht ?hne ?hnv ?hnp
+      case hnp =>
+        simp only [hN₁₀, hN₉, hf₈.nodePlanar, hf₇.nodePlanar, hf₆.nodePlanar, hN₅, hN₄, hf₃.nodePlanar,
+          hf₂.nodePlanar, hN₁, Array.size_push]
       case hX =>
-        simp only [hR₉, hf₈.neRotAdj, hf₇.neRotAdj, hf₆.neRotAdj, hR₅, hf₄.neRotAdj, hf₃.neRotAdj, hf₂.neRotAdj, hR₁]
+        simp only [hR₉, hf₈.neRotAdj, hf₇.neRotAdj, hf₆.neRotAdj, hR₅, hR₄, hf₃.neRotAdj, hf₂.neRotAdj, hR₁]
       case hnV =>
-        simp only [hV₁₀, hV₉, hf₈.nodeVerts, hf₇.nodeVerts, hf₆.nodeVerts, hV₅, hf₄.nodeVerts, hf₃.nodeVerts,
+        simp only [hV₁₀, hV₉, hf₈.nodeVerts, hf₇.nodeVerts, hf₆.nodeVerts, hV₅, hV₄, hf₃.nodeVerts,
           hf₂.nodeVerts, hV₁]
       case hSt =>
-        simp only [hf₇.nodeEdges, hf₆.nodeEdges, hE₅, hf₄.nodeEdges, hf₃.nodeEdges, hf₂.nodeEdges, hE₁]
+        simp only [hf₇.nodeEdges, hf₆.nodeEdges, hE₅, hE₄, hf₃.nodeEdges, hf₂.nodeEdges, hE₁]
       case hEn =>
-        simp only [hE₁₀, hE₉, hf₈.nodeEdges, hf₇.nodeEdges, hf₆.nodeEdges, hE₅, hf₄.nodeEdges, hf₃.nodeEdges,
+        simp only [hE₁₀, hE₉, hf₈.nodeEdges, hf₇.nodeEdges, hf₆.nodeEdges, hE₅, hE₄, hf₃.nodeEdges,
           hf₂.nodeEdges, hE₁]
         rw [(layoutNode_sz _ _ _ _ _ _ _).1]
         omega
@@ -174,16 +180,16 @@ theorem planarRelabel_rotInv (g : Graph) :
         rw [Nat.add_sub_cancel_left]
         simp [hty, NodeType.isNode, List.countP_eq_length_filter]
       case hg =>
-        simp only [hg₁₀, hg₉, hf₈.g, hf₇.g, hf₆.g, hg₅, hf₄.g, hf₃.g, hf₂.g, hg₁, h.g_eq]
+        simp only [hg₁₀, hg₉, hf₈.g, hf₇.g, hf₆.g, hg₅, hg₄, hf₃.g, hf₂.g, hg₁, h.g_eq]
       case ht =>
-        simp only [ht₁₀, ht₉, hf₈.types, hf₇.types, hf₆.types, ht₅, hf₄.types, hf₃.types, hf₂.types, ht₁]
+        simp only [ht₁₀, ht₉, hf₈.types, hf₇.types, hf₆.types, ht₅, ht₄, hf₃.types, hf₂.types, ht₁]
       case hne =>
-        simp only [hne₁₀, hne₉, hf₈.neBounds, hf₇.neBounds, hf₆.neBounds, hne₅, hf₄.neBounds, hf₃.neBounds,
-          hf₂.neBounds, hne₁, hf₇.nodeEdges, hf₆.nodeEdges, hE₅, hf₄.nodeEdges,
+        simp only [hne₁₀, hne₉, hf₈.neBounds, hf₇.neBounds, hf₆.neBounds, hne₅, hne₄, hf₃.neBounds,
+          hf₂.neBounds, hne₁, hf₇.nodeEdges, hf₆.nodeEdges, hE₅, hE₄,
           hf₃.nodeEdges, hf₂.nodeEdges, hE₁]
       case hnv =>
-        simp only [hnv₁₀, hnv₉, hf₈.nvBounds, hf₇.nvBounds, hf₆.nvBounds, hnv₅, hf₄.nvBounds, hf₃.nvBounds,
-          hf₂.nvBounds, hnv₁, hV₁₀, hV₉, hf₈.nodeVerts, hf₇.nodeVerts, hf₆.nodeVerts, hV₅, hf₄.nodeVerts,
+        simp only [hnv₁₀, hnv₉, hf₈.nvBounds, hf₇.nvBounds, hf₆.nvBounds, hnv₅, hnv₄, hf₃.nvBounds,
+          hf₂.nvBounds, hnv₁, hV₁₀, hV₉, hf₈.nodeVerts, hf₇.nodeVerts, hf₆.nodeVerts, hV₅, hV₄,
           hf₃.nodeVerts, hf₂.nodeVerts, hV₁]
     -- cap twin
     refine wp_jp_ite _ _ _ _
@@ -201,7 +207,7 @@ theorem planarRelabel_rotInv (g : Graph) :
         exact ⟨_, rfl, ih c _ _ _ _ (RotInv.frame (by constructor <;> simp only [Array.size_modify]) hinv')⟩
     · intro b s' hinv'
       try dsimp only
-      exact wp_frame _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
+      exact wp_frame _ (fun s => PlanarRelabelM.Frame.liftR_modify _ s ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
         fun _ s'' hf => RotInv.frame hf hinv'
 
 end Spqr

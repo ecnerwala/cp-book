@@ -134,7 +134,7 @@ theorem rot_spec_of_inv (g : Graph) (T : PlanarSpqrTree) (s : PlanarRelabelState
           T.neRotAdj[4 * (T.toSpqrTree.neRange n).1 + j]! =
             (layoutRot (T.toSpqrTree.type n) (T.toSpqrTree.nVerts n) (T.toSpqrTree.neRange n).1
               (T.toSpqrTree.neRange n).2 edgeVes mapRot (2 * g.ne))[j]! := by
-  obtain ⟨_, h1, h2, h3, h4, h5, ev, mr, hmr, hR, hb⟩ := hinv
+  obtain ⟨_, h1, h2, h3, h4, h5, ⟨ev, mr, hmr, hR, hb⟩, _⟩ := hinv
   have hsz : T.toSpqrTree.size = s.base.types.size := congrArg Array.size hty
   have hRT : ∀ n, n < s.base.types.size → T.toSpqrTree.type n = .R →
       (ev n).length + 1 = T.toSpqrTree.nEdges n := by

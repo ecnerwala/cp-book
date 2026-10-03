@@ -202,14 +202,11 @@ theorem nodePlanar_complete (g : Graph) (ternarize : Bool) (vertOrder edgeOrder 
   sorry
 
 /-- `planarRelabel` pushes one `nodePlanar` flag per item (next to the `types` push), so the flag
-array has one entry per item. Admitted: the fact is the analogue of `RotInv.ne_size` and needs a
-field `nodePlanar.size = types.size` added to `RotInv` (`PlanarRotInv.lean`) and threaded through
-`RotInv.step` / the `Frame` lemmas of `PlanarRotFold.lean`. Without it `hall` could be vacuous, so
-`planarEmbed_sound` genuinely depends on it. -/
+array has one entry per item (`RotInv.np_size`). -/
 theorem planarTree_nodePlanar_size (g : Graph) (ternarize : Bool) (vertOrder edgeOrder : List Nat) :
     (g.planarTree ternarize vertOrder edgeOrder).nodePlanar.size =
-      (g.planarTree ternarize vertOrder edgeOrder).size := by
-  sorry
+      (g.planarTree ternarize vertOrder edgeOrder).size :=
+  (PlanarRot.finalState_inv g (g.planarWalk ternarize (g.dfsForestFast vertOrder edgeOrder))).np_size
 
 /-- The root piece contains every edge, and its local quarter-edge numbering permutes the
 original quarter-edges. Its closed planar embedding transports to the glued rotation. -/

@@ -89,11 +89,12 @@ structure Frame (s s' : PlanarRelabelState) : Prop where
   nodeEdges : s'.base.nodeEdges.size = s.base.nodeEdges.size
   nodeVerts : s'.base.nodeVerts.size = s.base.nodeVerts.size
   neRotAdj : s'.aux.neRotAdj = s.aux.neRotAdj
+  nodePlanar : s'.aux.nodePlanar = s.aux.nodePlanar
 
-theorem Frame.refl (s : PlanarRelabelState) : Frame s s := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+theorem Frame.refl (s : PlanarRelabelState) : Frame s s := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 theorem Frame.trans {s₁ s₂ s₃ : PlanarRelabelState} (h₁ : Frame s₁ s₂) (h₂ : Frame s₂ s₃) : Frame s₁ s₃ :=
   ⟨h₂.g.trans h₁.g, h₂.types.trans h₁.types, h₂.neBounds.trans h₁.neBounds, h₂.nvBounds.trans h₁.nvBounds,
-    h₂.nodeEdges.trans h₁.nodeEdges, h₂.nodeVerts.trans h₁.nodeVerts, h₂.neRotAdj.trans h₁.neRotAdj⟩
+    h₂.nodeEdges.trans h₁.nodeEdges, h₂.nodeVerts.trans h₁.nodeVerts, h₂.neRotAdj.trans h₁.neRotAdj, h₂.nodePlanar.trans h₁.nodePlanar⟩
 
 theorem wp_frame {Q : α → PlanarRelabelState → Prop} (m : PlanarRelabelM α)
     (hm : ∀ s, Frame s (m s).2) (hk : ∀ a s', Frame s s' → Q a s') : wp m Q s :=
@@ -105,8 +106,9 @@ theorem wp_abs {Q : Unit → PlanarRelabelState → Prop} (m : PlanarRelabelM Un
       s'.base.neBounds = (m s).2.base.neBounds → s'.base.nvBounds = (m s).2.base.nvBounds →
       s'.base.nodeEdges.size = (m s).2.base.nodeEdges.size →
       s'.base.nodeVerts.size = (m s).2.base.nodeVerts.size →
-      s'.aux.neRotAdj = (m s).2.aux.neRotAdj → Q () s') : wp m Q s :=
-  hk _ rfl rfl rfl rfl rfl rfl rfl
+      s'.aux.neRotAdj = (m s).2.aux.neRotAdj → s'.aux.nodePlanar = (m s).2.aux.nodePlanar → Q () s') :
+    wp m Q s :=
+  hk _ rfl rfl rfl rfl rfl rfl rfl rfl
 
 theorem wp_jp {Q : Unit → PlanarRelabelState → Prop} (m k : PlanarRelabelM Unit) (s : PlanarRelabelState)
     (h : ∀ s, ∃ s', Frame s s' ∧ (m s).2 = (k s').2)
@@ -188,21 +190,55 @@ theorem applyFlips_neRotAdj (g : Graph) (it : Item) (flips : List Bool) (s : Pla
   dsimp only
   first | (split <;> exact h) | (split_ifs <;> exact h)
 
+theorem setupNode_nodePlanar (g : Graph) (type : NodeType) (cur : ItemId) (s : PlanarRelabelState) :
+    (setupNode g type cur s).2.aux.nodePlanar = s.aux.nodePlanar := by
+  unfold setupNode; rw [liftAux_eq]
+  generalize s.aux = a
+  show ((match type with
+    | .S | .P | .R => _
+    | _ => _ : StateM PlanarRelabelAux Bool) a).2.nodePlanar = a.nodePlanar
+  split
+  all_goals first
+    | rfl
+    | (show ((match a.nodePlanarity[cur - (1 + g.nv + g.ne)]! with
+          | .planar m => _ | _ => _ : StateM PlanarRelabelAux Bool) a).2.nodePlanar = a.nodePlanar
+       generalize a.nodePlanarity[cur - (1 + g.nv + g.ne)]! = p
+       cases p
+       all_goals first
+         | rfl
+         | (rw [StateT_bind_pure_snd, Std.Legacy.Range.forIn_eq_forIn_range']
+            refine forIn_list_state_pres (fun a' => a'.nodePlanar = a.nodePlanar) _ _ _ ?_ a rfl
+            intro _ _ st h; exact h))
+
+theorem applyFlips_nodePlanar (g : Graph) (it : Item) (flips : List Bool) (s : PlanarRelabelState) :
+    (applyFlips g it flips s).2.aux.nodePlanar = s.aux.nodePlanar := by
+  unfold applyFlips; rw [liftAux_eq]
+  generalize s.aux = a
+  try rw [StateT_bind_pure_snd]
+  refine forIn_list_state_pres (fun a' => a'.nodePlanar = a.nodePlanar) _ _ _ ?_ a rfl
+  intro p b st h
+  obtain ⟨c, flip⟩ := p
+  dsimp only
+  first | (split <;> exact h) | (split_ifs <;> exact h)
+
 theorem Frame.setupNode (g : Graph) (type : NodeType) (cur : ItemId) (s : PlanarRelabelState) :
     Frame s (setupNode g type cur s).2 := by
   have hb := AuxOnlyR.setupNode g type cur s
   have ha := setupNode_neRotAdj g type cur s
-  exact ⟨by rw [hb], by rw [hb], by rw [hb], by rw [hb], by rw [hb], by rw [hb], ha⟩
+  have hn := setupNode_nodePlanar g type cur s
+  exact ⟨by rw [hb], by rw [hb], by rw [hb], by rw [hb], by rw [hb], by rw [hb], ha, hn⟩
 
 theorem Frame.applyFlips (g : Graph) (it : Item) (flips : List Bool) (s : PlanarRelabelState) :
     Frame s (applyFlips g it flips s).2 := by
   have hb := AuxOnlyR.applyFlips g it flips s
   have ha := applyFlips_neRotAdj g it flips s
-  exact ⟨by rw [hb], by rw [hb], by rw [hb], by rw [hb], by rw [hb], by rw [hb], ha⟩
+  have hn := applyFlips_nodePlanar g it flips s
+  exact ⟨by rw [hb], by rw [hb], by rw [hb], by rw [hb], by rw [hb], by rw [hb], ha, hn⟩
 
 theorem Frame.modifyAux (f : PlanarRelabelAux → PlanarRelabelAux) (s : PlanarRelabelState)
-    (h : (f s.aux).neRotAdj = s.aux.neRotAdj) : Frame s (modifyAux f s).2 :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, h⟩
+    (h : (f s.aux).neRotAdj = s.aux.neRotAdj) (hn : (f s.aux).nodePlanar = s.aux.nodePlanar) :
+    Frame s (modifyAux f s).2 :=
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, h, hn⟩
 
 end PlanarRelabelM
 
@@ -279,16 +315,17 @@ structure RotInv (g : Graph) (s : PlanarRelabelState) : Prop where
       (ev n).length + 1 = s.base.neBounds[n + 1]! - s.base.neBounds[n]!) ∧
     s.aux.neRotAdj = concatBlocks (rotBlock g.ne s.base.types s.base.nvBounds s.base.neBounds ev mr)
       s.base.types.size
+  np_size : s.aux.nodePlanar.size = s.base.types.size
 
 theorem RotInv.frame {g : Graph} {s s' : PlanarRelabelState} (hf : PlanarRelabelM.Frame s s')
     (h : RotInv g s) : RotInv g s' := by
-  obtain ⟨hg, h1, h2, h3, h4, h5, ev, mr, hmr, hR, hb⟩ := h
-  refine ⟨hf.g.trans hg, ?_, ?_, ?_, ?_, ?_, ev, mr, hmr, ?_, ?_⟩ <;>
-    simp only [hf.types, hf.neBounds, hf.nvBounds, hf.nodeEdges, hf.nodeVerts, hf.neRotAdj] <;>
+  obtain ⟨hg, h1, h2, h3, h4, h5, ⟨ev, mr, hmr, hR, hb⟩, h6⟩ := h
+  refine ⟨hf.g.trans hg, ?_, ?_, ?_, ?_, ?_, ⟨ev, mr, hmr, ?_, ?_⟩, ?_⟩ <;>
+    simp only [hf.types, hf.neBounds, hf.nvBounds, hf.nodeEdges, hf.nodeVerts, hf.neRotAdj, hf.nodePlanar] <;>
     assumption
 
 theorem RotInv.init (g : Graph) (w : PlanarWalkState) : RotInv g (PlanarRelabelState.init g w) :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun _ => [], fun _ _ => Array.replicate 4 none,
-    fun _ _ => by simp, fun n hn => by simp [PlanarRelabelState.init, RelabelState.init] at hn, rfl⟩
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, ⟨fun _ => [], fun _ _ => Array.replicate 4 none,
+    fun _ _ => by simp, fun n hn => by simp [PlanarRelabelState.init, RelabelState.init] at hn, rfl⟩, rfl⟩
 
 end Spqr
