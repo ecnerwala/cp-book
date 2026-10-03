@@ -3961,6 +3961,16 @@ theorem ctx_step_tree_ret_P {v d : Nat} {done : List (DfsOut × Bool)} {rest : L
         base bE sv sd s') sX := by
   sorry
 
+theorem spans_setSides_single (dir : Bool) (i : ItemId) :
+    (setSides dir [i] []).1 ++ (setSides dir [i] []).2 = [i] := by
+  unfold setSides; cases dir <;> rfl
+
+theorem mem_mergeInto_spans (u c : TEntry) (i : ItemId) :
+    i ∈ (TEntry.mergeInto u c).spans.1 ++ (TEntry.mergeInto u c).spans.2 ↔
+      i ∈ u.spans.1 ++ u.spans.2 ∨ i ∈ c.spans.1 ++ c.spans.2 := by
+  simp only [TEntry.mergeInto, List.mem_append]
+  tauto
+
 /-- The parent context after a returning tree out from `RetTop` and the final top `T`: `R` itself
 (the vertex entry was already pushed), or `V v` pushed above `R` (`isSingle`), or merged into `R`'s
 top entry. -/
@@ -3982,7 +3992,681 @@ theorem earCtx_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOu
     (hsv : s'.stackVerts = sX.stackVerts) (hsd : ∀ k, k < d → s'.stackDir[k]! = sX.stackDir[k]!)
     (hnx : s'.nxtEdgeIdx = sX.nxtEdgeIdx) :
     EarCtx v d (done ++ [(.tree e cls (.node y outs), hv₀)]) rest true base bE sv sd s' := by
-  sorry
+  have hC := H.ctx
+  have hnc := H.done_rest
+  have hv : v < s.g.nv := H.hv
+  have he : e < s.g.ne := H.e_lt
+  have hsz : 1 + s.g.nv + s.g.ne ≤ s.items.size := H.hsz
+  set C : DfsTree := .node y outs with hCdef
+  set o : DfsOut := .tree e cls C with ho
+  obtain ⟨-, hRg, hRsv, hRsd, hRsz, hRnx, hRkept, hRch, hRlt, hRroot, hRnew, hRtb, hRE, hRtouch,
+    hRdisj, hRsdisj, hRvs, hRvert, hRnoV⟩ := HR
+  rw [← hit] at hRsz hRkept hRch hRlt hRroot hRtb hRE hRtouch hRdisj hRvert hRnoV
+  rw [← hnx] at hRnx hRvert
+  have hg' : s'.g = s.g := hg.trans hRg
+  have hsvX : ∀ k, k ≤ d → s'.stackVerts[k]! = s.stackVerts[k]! := fun k hk => by
+    rw [hsv]; exact hRsv k hk
+  have hsdX : ∀ k, k < d → s'.stackDir[k]! = s.stackDir[k]! := fun k hk =>
+    (hsd k hk).trans (hRsd k hk)
+  have hvd : s.stackVerts[d]! = v := hC.sv_d
+  have hvne : ∀ k, k < d → v ≠ s.stackVerts[k]! := fun k hk h =>
+    hC.path k d hk (Nat.le_refl _) (by rw [hvd, h])
+  have hoR : o ∈ o :: rest := List.mem_cons_self ..
+  have hqf := fun e' (hs : subEdges o e') => hC.q_fresh o hoR e' hs
+  have hvf := fun x (hx : x ∈ C.verts) => hC.v_fresh o hoR e cls C rfl x hx
+  have hCv : ∀ x ∈ C.verts, x < s.g.nv := H.verts_lt
+  have hoe : ∀ e', subEdges o e' → e' < s.g.ne := by
+    rintro e' (h | h)
+    · exact h ▸ he
+    · exact H.edges_lt e' h
+  have hsube : subEdges o e := Or.inl rfl
+  -- L
+  have hLprop : ∀ t ∈ L, t.vStart = v ∧ t.topDepth = d ∧ t.firstIdx = s.nxtEdgeIdx ∧
+      t.spans.1 ++ t.spans.2 = [vertItem v] ∧ hasVert = false ∧ push = true := by
+    intro t ht
+    rw [H.hL] at ht
+    split at ht
+    · rw [List.mem_singleton] at ht; subst ht
+      exact ⟨rfl, rfl, rfl, spans_setSides_single _ _, (H.hpush.1 ‹_›).1, ‹_›⟩
+    · exact absurd ht List.not_mem_nil
+  have hhv0 : hv₀ = false → hasVert = false := fun h => by
+    subst h; exact (Bool.or_eq_false_iff.1 hb).1
+  have hpush0 : hv₀ = false → push = false := fun h => by
+    subst h; exact (Bool.or_eq_false_iff.1 hb).2
+  have hL0 : hv₀ = false → L = [] := fun h => by rw [H.hL, hpush0 h]; rfl
+  -- items untouched by the child
+  let Old : ItemId → Prop := fun j => j < s.items.size ∧ (∀ x ∈ C.verts, j ≠ vertItem x) ∧
+    (∀ e' ∈ C.edges, j ≠ edgeItem s.g e') ∧ j ≠ edgeItem s.g e
+  have hOldcl : ∀ a c, Old a → Items.IsParent s.items a c → Old c := by
+    intro a c _ hp
+    refine ⟨hC.ch_lt a c hp, fun x hx h => (hvf x hx).1 a (h ▸ hp),
+      fun e' he' h => (hqf e' (Or.inr he')).1 a (h ▸ hp), fun h => (hqf e hsube).1 a (h ▸ hp)⟩
+  have hkept : ∀ j, Old j → Items.ch s'.items j = Items.ch s.items j :=
+    fun j hj => (hRkept j hj.1 hj.2.1 hj.2.2.1 hj.2.2.2).1
+  have hPO : ∀ j, Old j → ∀ p, Items.IsParent s'.items p j ↔ Items.IsParent s.items p j :=
+    fun j hj => (hRkept j hj.1 hj.2.1 hj.2.2.1 hj.2.2.2).2
+  have hbelowO : ∀ a, Old a → ∀ i, Items.Below s'.items a i ↔ Items.Below s.items a i :=
+    fun a ha i => below_kept Old hOldcl hkept ha i
+  have hOld_v : Old (vertItem v) :=
+    ⟨by show 1 + v < _; omega, fun x hx h => H.v_nc ((vertItem_inj' h) ▸ hx),
+      fun _ _ => vertItem_ne_edgeItem' hv, vertItem_ne_edgeItem' hv⟩
+  have hOld_span : ∀ t ∈ s.tstack, ∀ i ∈ t.spans.1 ++ t.spans.2, Old i := by
+    intro t ht i hi
+    refine ⟨hC.span_lt t ht i hi, fun x hx h => (hvf x hx).2.2.1 t ht (h ▸ hi),
+      fun e' he' h => (hqf e' (Or.inr he')).2.2 t ht (h ▸ hi), fun h => (hqf e hsube).2.2 t ht (h ▸ hi)⟩
+  have hedges₀ : ∀ t ∈ s.tstack, TEntry.edges s.g s'.items t = TEntry.edges s.g s.items t := by
+    intro t ht
+    funext e'
+    exact propext (TEntry.edges_congr (fun i hi e'' => hbelowO i (hOld_span t ht i hi) _) e')
+  have hedges : ∀ t ∈ s.tstack, TEntry.edges s'.g s'.items t = TEntry.edges s.g s.items t := by
+    intro t ht; rw [hg']; exact hedges₀ t ht
+  have hEBv : ∀ e', Items.EdgeBelow s.g s'.items (vertItem v) e' ↔
+      Items.EdgeBelow s.g s.items (vertItem v) e' := fun e' => hbelowO _ hOld_v _
+  have hVE : ∀ e', e' < s.g.ne → (Items.EdgeBelow s.g s'.items (vertItem v) e' ↔
+      ∃ o' ∈ done, d ≤ o'.1.cls.lowval d ∧ subEdges o'.1 e') := fun e' he' => by
+    rw [hEBv]; exact hC.vert_edges e' he'
+  have hUe : ∀ t : TEntry, t.spans.1 ++ t.spans.2 = [vertItem v] → ∀ e',
+      TEntry.edges s.g s'.items t e' ↔ Items.EdgeBelow s.g s'.items (vertItem v) e' := by
+    intro t hts' e'
+    unfold TEntry.edges
+    rw [hts']
+    constructor
+    · rintro ⟨i, hi, h⟩; rw [List.mem_singleton] at hi; subst hi; exact h
+    · intro h; exact ⟨_, List.mem_singleton_self _, h⟩
+  have hLe : ∀ t ∈ L, ∀ e', TEntry.edges s.g s'.items t e' ↔
+      Items.EdgeBelow s.g s'.items (vertItem v) e' := fun t ht => hUe t (hLprop t ht).2.2.2.1
+  have hTVv : ∀ e', e' < s.g.ne → Items.EdgeBelow s.g s'.items (vertItem v) e' →
+      s.g.Touches (Items.EdgeBelow s.g s'.items (vertItem v)) v := by
+    intro e' he' h
+    obtain ⟨o', ho', hlo, -⟩ := (hVE e' he').1 h
+    exact ⟨o'.1.e, (H.inc o' ho').1, (hVE _ (H.inc o' ho').1).2 ⟨o', ho', hlo, subEdges_e _⟩,
+      (H.inc o' ho').2⟩
+  have hTV : ∀ x, s.g.Touches (Items.EdgeBelow s.g s'.items (vertItem v)) x →
+      ∃ o' ∈ done, ∃ e', e' < s.g.ne ∧ subEdges o'.1 e' ∧ s.g.Inc e' x := by
+    rintro x ⟨e', he', hb', hx⟩
+    obtain ⟨o', ho', -, hs⟩ := (hVE e' he').1 hb'
+    exact ⟨o', ho', e', he', hs, hx⟩
+  have hRspan_cls : ∀ c ∈ R, ∀ i ∈ c.spans.1 ++ c.spans.2, i < s.items.size →
+      (∃ x ∈ C.verts, i = vertItem x) ∨ (∃ e' ∈ C.edges, i = edgeItem s.g e') ∨ i = edgeItem s.g e :=
+    fun c hc i hi => (hRnew c hc i hi).2
+  have hRnoVv : ∀ c ∈ R, vertItem v ∉ c.spans.1 ++ c.spans.2 := by
+    intro c hc hi
+    rcases hRspan_cls c hc _ hi hOld_v.1 with ⟨x, hx, h⟩ | ⟨e', -, h⟩ | h
+    · exact H.v_nc ((vertItem_inj' h) ▸ hx)
+    · exact vertItem_ne_edgeItem' hv h
+    · exact vertItem_ne_edgeItem' hv h
+  have hRVdisj : ∀ e', e' < s.g.ne → (∃ c ∈ R, TEntry.edges s.g s'.items c e') →
+      ¬ Items.EdgeBelow s.g s'.items (vertItem v) e' := by
+    intro e' he' hc hb'
+    obtain ⟨o', ho', -, hs⟩ := (hVE e' he').1 hb'
+    exact H.nd o' ho' e' hs ((hRE e' he').1 hc)
+  have hRolddisj : ∀ e', e' < s.g.ne → (∃ c ∈ R, TEntry.edges s.g s'.items c e') →
+      ∀ t' ∈ s.tstack, ¬ TEntry.edges s.g s.items t' e' := by
+    intro e' he' hc t' ht' ⟨i, hi, hb'⟩
+    have hs := (hRE e' he').1 hc
+    have := Items.Below.eq_of_no_parent (hqf e' hs).1 hb'
+    subst this
+    exact (hqf e' hs).2.2 t' ht' hi
+  have hoD : (o, hv₀) ∈ done ++ [(o, hv₀)] := List.mem_append_right _ (List.mem_singleton_self _)
+  have hAVm : ∀ o', o' ∈ afterVert (done ++ [(o, hv₀)]) ↔
+      o' ∈ afterVert done ∨ (hv₀ = true ∧ o' = o) := by
+    intro o'
+    cases hv₀ <;> simp [afterVert, List.filter_append]
+  -- T
+  have hus : ∀ f dir, (⟨v, d, f, setSides dir [vertItem v] []⟩ : TEntry).spans.1 ++
+      (⟨v, d, f, setSides dir [vertItem v] []⟩ : TEntry).spans.2 = [vertItem v] :=
+    fun f dir => spans_setSides_single dir (vertItem v)
+  have hTmem : ∀ t ∈ T, t ∈ R ∨
+      (hv₀ = false ∧ t.vStart = v ∧ t.topDepth = d ∧ t.spans.1 ++ t.spans.2 = [vertItem v]) ∨
+      (hv₀ = false ∧ ∃ c ∈ R, TEntry.edges s.g s'.items c e ∧ t.vStart = c.vStart ∧
+        t.topDepth ≤ d ∧
+        (∀ i, i ∈ t.spans.1 ++ t.spans.2 ↔ i = vertItem v ∨ i ∈ c.spans.1 ++ c.spans.2) ∧
+        (∀ e', TEntry.edges s.g s'.items t e' ↔
+          Items.EdgeBelow s.g s'.items (vertItem v) e' ∨ TEntry.edges s.g s'.items c e')) := by
+    intro t ht
+    rcases hT with ⟨-, rfl⟩ | ⟨h0, f, dir, rfl | ⟨c, R', hR, rfl⟩⟩
+    · exact .inl ht
+    · rcases List.mem_cons.1 ht with rfl | ht
+      · exact .inr (.inl ⟨h0, rfl, rfl, hus f dir⟩)
+      · exact .inl ht
+    · obtain ⟨⟨c₀, R₀, hR₀, hce⟩, -⟩ := hRnoV h0
+      rw [hR] at hR₀
+      obtain ⟨rfl, rfl⟩ := List.cons.inj hR₀
+      rcases List.mem_cons.1 ht with rfl | ht
+      · refine .inr (.inr ⟨h0, c, by rw [hR]; exact List.mem_cons_self .., hce, rfl,
+          Nat.min_le_right _ _, fun i => ?_, fun e' => ?_⟩)
+        · rw [mem_mergeInto_spans, hus f dir, List.mem_singleton]
+        · rw [TEntry.edges_mergeInto, hUe _ (hus f dir)]
+      · exact .inl (by rw [hR]; exact List.mem_cons_of_mem _ ht)
+  have hTcov : ∀ c ∈ R, ∃ t ∈ T, ∀ e', TEntry.edges s.g s'.items c e' → TEntry.edges s.g s'.items t e' := by
+    intro c hc
+    rcases hT with ⟨-, rfl⟩ | ⟨-, f, dir, rfl | ⟨c₀, R', hR, rfl⟩⟩
+    · exact ⟨c, hc, fun _ h => h⟩
+    · exact ⟨c, List.mem_cons_of_mem _ hc, fun _ h => h⟩
+    · rw [hR] at hc
+      rcases List.mem_cons.1 hc with rfl | hc
+      · exact ⟨_, List.mem_cons_self .., fun e' h => (TEntry.edges_mergeInto _ _ _).2 (.inr h)⟩
+      · exact ⟨c, List.mem_cons_of_mem _ hc, fun _ h => h⟩
+  have hTvs : ∀ t ∈ T, t.vStart = v ∨ t.vStart ∈ C.verts := by
+    intro t ht
+    rcases hTmem t ht with h | ⟨-, h, -⟩ | ⟨-, c, hc, -, h, -⟩
+    · exact hRvs t h
+    · exact .inl h
+    · rw [h]; exact hRvs c hc
+  have hTspan : ∀ t ∈ T, ∀ i ∈ t.spans.1 ++ t.spans.2, (∃ c ∈ R, i ∈ c.spans.1 ++ c.spans.2) ∨ i = vertItem v := by
+    intro t ht i hi
+    rcases hTmem t ht with h | ⟨-, -, -, h⟩ | ⟨-, c, hc, -, -, -, h, -⟩
+    · exact .inl ⟨t, h, hi⟩
+    · rw [h, List.mem_singleton] at hi; exact .inr hi
+    · rcases (h i).1 hi with h' | h'
+      · exact .inr h'
+      · exact .inl ⟨c, hc, h'⟩
+  have hTedge : ∀ t ∈ T, ∀ e', TEntry.edges s.g s'.items t e' →
+      (∃ c ∈ R, TEntry.edges s.g s'.items c e') ∨ Items.EdgeBelow s.g s'.items (vertItem v) e' := by
+    intro t ht e' h
+    rcases hTmem t ht with h₁ | ⟨-, -, -, h₁⟩ | ⟨-, c, hc, -, -, -, -, h₁⟩
+    · exact .inl ⟨t, h₁, h⟩
+    · exact .inr ((hUe t h₁ e').1 h)
+    · rcases (h₁ e').1 h with h' | h'
+      · exact .inr h'
+      · exact .inl ⟨c, hc, h'⟩
+  have hTpwE : T.Pairwise fun t t' => ∀ e', e' < s.g.ne → TEntry.edges s.g s'.items t e' →
+      ¬ TEntry.edges s.g s'.items t' e' := by
+    rcases hT with ⟨-, rfl⟩ | ⟨h0, f, dir, rfl | ⟨c, R', hR, rfl⟩⟩
+    · exact hRdisj
+    · refine List.pairwise_cons.2 ⟨fun t' ht' e' he' h1 h2 => ?_, hRdisj⟩
+      exact hRVdisj e' he' ⟨t', ht', h2⟩ ((hUe _ (hus f dir) e').1 h1)
+    · subst hR
+      have hcR' := List.pairwise_cons.1 hRdisj
+      refine List.pairwise_cons.2 ⟨fun t' ht' e' he' h1 h2 => ?_, hcR'.2⟩
+      rcases (TEntry.edges_mergeInto _ _ _).1 h1 with h1 | h1
+      · exact hRVdisj e' he' ⟨t', List.mem_cons_of_mem _ ht', h2⟩ ((hUe _ (hus f dir) e').1 h1)
+      · exact hcR'.1 t' ht' e' he' h1 h2
+  have hTpwS : T.Pairwise fun t t' => ∀ i ∈ t.spans.1 ++ t.spans.2, i ∉ t'.spans.1 ++ t'.spans.2 := by
+    rcases hT with ⟨-, rfl⟩ | ⟨h0, f, dir, rfl | ⟨c, R', hR, rfl⟩⟩
+    · exact hRsdisj
+    · refine List.pairwise_cons.2 ⟨fun t' ht' i hi hi' => ?_, hRsdisj⟩
+      rw [hus f dir, List.mem_singleton] at hi; subst hi
+      exact hRnoVv t' ht' hi'
+    · subst hR
+      have hcR' := List.pairwise_cons.1 hRsdisj
+      refine List.pairwise_cons.2 ⟨fun t' ht' i hi hi' => ?_, hcR'.2⟩
+      rcases (mem_mergeInto_spans _ _ _).1 hi with h1 | h1
+      · rw [hus f dir, List.mem_singleton] at h1; subst h1
+        exact hRnoVv t' (List.mem_cons_of_mem _ ht') hi'
+      · exact hcR'.1 t' ht' i h1 hi'
+  -- the old top
+  obtain ⟨top, htop, hCT⟩ := hC.top
+  have hmemT : ∀ t ∈ top, t ∈ s.tstack := fun t ht => by
+    rw [htop]; exact List.mem_append_left _ ht
+  have hmemS : ∀ t ∈ s'.tstack, t ∈ T ∨ t ∈ L ∨ t ∈ s.tstack := by
+    intro t ht
+    rw [hts] at ht
+    rcases List.mem_append.1 ht with h | h
+    · exact .inl h
+    · exact .inr (List.mem_append.1 h)
+  have hmemTop : ∀ t ∈ T ++ L ++ top, t ∈ T ∨ t ∈ L ∨ t ∈ top := by
+    intro t ht
+    rcases List.mem_append.1 ht with h | h
+    · exact (List.mem_append.1 h).imp id Or.inl
+    · exact .inr (.inr h)
+  have hmemTop' : ∀ t ∈ T ++ L ++ top, t ∈ s'.tstack := by
+    intro t ht
+    rw [hts, htop]
+    rcases hmemTop t ht with h | h | h
+    · exact List.mem_append_left _ h
+    · exact List.mem_append_right _ (List.mem_append_left _ h)
+    · exact List.mem_append_right _ (List.mem_append_right _ (List.mem_append_left _ h))
+  have hVL : ∀ x, x ∈ DfsOut.vertsList (done.map (·.1)) →
+      x ∈ DfsOut.vertsList ((done ++ [(o, hv₀)]).map (·.1)) := by
+    intro x hx
+    rw [DfsOut.vertsList_eq] at hx ⊢
+    rw [List.map_append, List.flatMap_append]
+    exact List.mem_append_left _ hx
+  have hCVL : ∀ x ∈ C.verts, x ∈ DfsOut.vertsList ((done ++ [(o, hv₀)]).map (·.1)) := by
+    intro x hx
+    exact mem_vertsList.2 ⟨o, by rw [List.map_append]; exact List.mem_append_right _ (List.mem_singleton_self _),
+      e, cls, C, rfl, hx⟩
+  have hCE' : ∀ t ∈ s.tstack, CtxEntry v d s t → CtxEntry v d s' t := by
+    intro t ht h
+    obtain ⟨e', h1, h2⟩ := h.nonempty
+    exact
+      { vStart := h.vStart
+        depth := h.depth
+        nonempty := ⟨e', by rw [hg']; exact h1, by rw [hedges t ht]; exact h2⟩
+        touch_bot := by rw [hedges t ht, hg']; exact h.touch_bot
+        touch_top := by rw [hedges t ht, hg', hsvX _ h.depth.le]; exact h.touch_top
+        side := by rw [hsdX _ h.depth]; exact h.side
+        att := fun x hx hxv hni => by
+          rw [hedges t ht, hg'] at hx hni
+          obtain ⟨k, hk1, hk2, hk3⟩ := h.att x hx hxv hni
+          exact ⟨k, hk1, hk2, by rw [hsvX k hk2]; exact hk3⟩ }
+  have hCS' : ∀ t ∈ s.tstack, t.topDepth < d → CtxSingle v s t → CtxSingle v s' t := by
+    intro t ht hd h
+    obtain ⟨i, hi, hroot⟩ := h.item
+    exact
+      { item := ⟨i, by rw [hsdX _ hd]; exact hi, fun p hp =>
+          hroot p ((hPO i (hOld_span t ht i (by rw [hi]; unfold setSides; split <;> simp)) p).1 hp)⟩
+        att := by rw [hedges t ht, hg', hsvX _ hd.le]; exact h.att }
+  obtain ⟨above, below, hsp, hCE, hCS, hPW, hLow, hEdg, hBel⟩ := hCT.split
+  refine
+    { top := ⟨T ++ L ++ top, by rw [hts, htop]; simp only [List.append_assoc],
+        { split := ?_
+          bot := fun t ht k hk => by
+            rw [hsvX k hk.le]
+            rcases hmemTop t ht with h | h | h
+            · rcases hTvs t h with h' | h'
+              · rw [h']; exact hvne k hk
+              · exact fun h'' => (hvf _ h').2.2.2.1 k hk.le h''.symm
+            · rw [(hLprop t h).1]; exact hvne k hk
+            · exact hCT.bot t h k hk
+          vitems := fun t ht x hx hm => by
+            rw [hg'] at hx
+            rcases hmemTop t ht with h | h | h
+            · rcases hTspan t h _ hm with ⟨c, hc, hm'⟩ | h'
+              · rcases hRspan_cls c hc _ hm' (by show 1 + x < _; omega) with ⟨x', hx', h'⟩ | ⟨e', -, h'⟩ | h'
+                · exact .inr (hCVL x ((vertItem_inj' h') ▸ hx'))
+                · exact absurd h' (vertItem_ne_edgeItem' hx)
+                · exact absurd h' (vertItem_ne_edgeItem' hx)
+              · exact .inl (vertItem_inj' h')
+            · rw [(hLprop t h).2.2.2.1, List.mem_singleton] at hm
+              exact .inl (vertItem_inj' hm)
+            · exact (hCT.vitems t h x hx hm).imp id (hVL x)
+          qitems := fun t ht e' he' hm => by
+            rw [hg'] at he' hm
+            rcases hmemTop t ht with h | h | h
+            · rcases hTspan t h _ hm with ⟨c, hc, hm'⟩ | h'
+              · rcases hRspan_cls c hc _ hm' (by show 1 + s.g.nv + e' < _; omega) with
+                  ⟨x', hx', h'⟩ | ⟨e'', he'', h'⟩ | h'
+                · exact absurd h'.symm (vertItem_ne_edgeItem' (hCv x' hx'))
+                · exact ⟨(o, hv₀), hoD, Or.inr ((edgeItem_inj h') ▸ he'')⟩
+                · exact ⟨(o, hv₀), hoD, Or.inl (edgeItem_inj h')⟩
+              · exact absurd h'.symm (vertItem_ne_edgeItem' hv)
+            · rw [(hLprop t h).2.2.2.1, List.mem_singleton] at hm
+              exact absurd hm.symm (vertItem_ne_edgeItem' hv)
+            · obtain ⟨o', ho', hs⟩ := hCT.qitems t h e' he' hm
+              exact ⟨o', List.mem_append_left _ ho', hs⟩
+          edges := fun t ht e' he' hte => by
+            rw [hg'] at he' hte
+            rcases hmemTop t ht with h | h | h
+            · rcases hTedge t h e' hte with h' | h'
+              · exact ⟨(o, hv₀), hoD, (hRE e' he').1 h'⟩
+              · obtain ⟨o', ho', -, hs⟩ := (hVE e' he').1 h'
+                exact ⟨o', List.mem_append_left _ ho', hs⟩
+            · obtain ⟨o', ho', -, hs⟩ := (hVE e' he').1 ((hLe t h e').1 hte)
+              exact ⟨o', List.mem_append_left _ ho', hs⟩
+            · rw [hedges₀ t (hmemT t h)] at hte
+              obtain ⟨o', ho', hs⟩ := hCT.edges t h e' he' hte
+              exact ⟨o', List.mem_append_left _ ho', hs⟩
+          cover := fun o' ho' hl e' he' hs => by
+            rw [hg'] at he' ⊢
+            rcases List.mem_append.1 ho' with h | h
+            · obtain ⟨t, ht, hte⟩ := hCT.cover o' h hl e' he' hs
+              exact ⟨t, List.mem_append_right _ ht,
+                by rw [hedges₀ t (hmemT t ht)]; exact hte⟩
+            · rw [List.mem_singleton] at h; subst h
+              obtain ⟨c, hc, hce⟩ := (hRE e' he').2 hs
+              obtain ⟨t, ht, hte⟩ := hTcov c hc
+              exact ⟨t, List.mem_append_left _ (List.mem_append_left _ ht), hte e' hce⟩
+          ret := fun _ => ⟨(o, hv₀), hoD, hr⟩ }⟩
+      base_edges := ⟨hC.base_edges.1, fun k hk e' he' => by
+        rw [hg'] at he'
+        have hbm : base[k]! ∈ s.tstack := by
+          rw [htop, getElem!_pos base k hk]; exact List.mem_append_right _ (List.getElem_mem hk)
+        rw [hedges _ hbm]
+        exact hC.base_edges.2 k hk e' he'⟩
+      base_bot := hC.base_bot
+      sv := fun k hk => by rw [hsvX k hk]; exact hC.sv k hk
+      sd := fun k hk => by rw [hsdX k hk]; exact hC.sd k hk
+      sv_d := by rw [hsvX d (Nat.le_refl _)]; exact hvd
+      path := fun k k' h h' => by rw [hsvX k (Nat.le_of_lt (Nat.lt_of_lt_of_le h h')), hsvX k' h']; exact hC.path k k' h h'
+      v_root := fun p h => hC.v_root p ((hPO _ hOld_v p).1 h)
+      vert_free := fun _ _ _ => rfl
+      afterVert_ret := fun o' ho' => by
+        rcases (hAVm o').1 ho' with h | ⟨-, rfl⟩
+        · exact hC.afterVert_ret o' h
+        · exact hr
+      hv_ret := fun _ => ⟨(o, hv₀), hoD, hr⟩
+      noVert_after := fun h => nomatch h
+      vfirst := fun t ht hvt hnv => by
+        rcases hmemS t ht with h | h | h
+        · rcases hTmem t h with h₁ | ⟨-, -, -, h₁⟩ | ⟨-, c, hc, -, -, -, h₁, -⟩
+          · cases hh : hv₀ with
+            | true =>
+              obtain ⟨x, hRx, -, -, -, -, hxf2, -⟩ := hRvert hh
+              subst hRx
+              rw [List.mem_singleton] at h₁; subst h₁
+              exact hxf2
+            | false => exact absurd hvt ((hRnoV hh).2 t h₁).1
+          · exact absurd (by rw [h₁]; exact List.mem_singleton_self _) hnv
+          · exact absurd ((h₁ _).2 (.inl rfl)) hnv
+        · exact absurd (by rw [(hLprop t h).2.2.2.1]; exact List.mem_singleton_self _) hnv
+        · exact Nat.lt_of_lt_of_le (hC.vfirst t h hvt hnv) hRnx
+      vert_book := fun h => nomatch h
+      vert_disj := fun h => nomatch h
+      vert_edges := fun e' he' => by
+        rw [hg'] at he' ⊢
+        rw [hVE e' he']
+        constructor
+        · rintro ⟨o', ho', hl, hs⟩; exact ⟨o', List.mem_append_left _ ho', hl, hs⟩
+        · rintro ⟨o', ho', hl, hs⟩
+          rcases List.mem_append.1 ho' with h | h
+          · exact ⟨o', h, hl, hs⟩
+          · rw [List.mem_singleton] at h; subst h; exact absurd hl (Nat.not_le.2 hr)
+      touch_bot := fun t ht hne => by
+        rw [hg'] at hne ⊢
+        rcases hmemS t ht with h | h | h
+        · rcases hTmem t h with h₁ | ⟨-, hvs, -, h₁⟩ | ⟨-, c, hc, hce, hvs, -, -, h₁⟩
+          · exact hRtb t h₁ hne
+          · rw [hvs]
+            obtain ⟨e', he', hte⟩ := hne
+            obtain ⟨e₁, he₁, hb₁, hI₁⟩ := hTVv e' he' ((hUe t h₁ e').1 hte)
+            exact ⟨e₁, he₁, (hUe t h₁ e₁).2 hb₁, hI₁⟩
+          · rw [hvs]
+            obtain ⟨e₁, he₁, hb₁, hI₁⟩ := hRtb c hc ⟨e, he, hce⟩
+            exact ⟨e₁, he₁, (h₁ e₁).2 (.inr hb₁), hI₁⟩
+        · rw [(hLprop t h).1]
+          obtain ⟨e', he', hte⟩ := hne
+          obtain ⟨e₁, he₁, hb₁, hI₁⟩ := hTVv e' he' ((hLe t h e').1 hte)
+          exact ⟨e₁, he₁, (hLe t h e₁).2 hb₁, hI₁⟩
+        · rw [hedges₀ t h] at hne ⊢
+          exact hC.touch_bot t h hne
+      span_root := fun t ht i hi p hp => by
+        rcases hmemS t ht with h | h | h
+        · rcases hTspan t h i hi with ⟨c, hc, hi'⟩ | rfl
+          · exact hRroot c hc i hi' p hp
+          · exact hC.v_root p ((hPO _ hOld_v p).1 hp)
+        · rw [(hLprop t h).2.2.2.1, List.mem_singleton] at hi; subst hi
+          exact hC.v_root p ((hPO _ hOld_v p).1 hp)
+        · exact hC.span_root t h i hi p ((hPO i (hOld_span t h i hi) p).1 hp)
+      span_lt := fun t ht i hi => by
+        rcases hmemS t ht with h | h | h
+        · rcases hTspan t h i hi with ⟨c, hc, hi'⟩ | rfl
+          · exact hRlt c hc i hi'
+          · exact Nat.lt_of_lt_of_le hOld_v.1 hRsz
+        · rw [(hLprop t h).2.2.2.1, List.mem_singleton] at hi; subst hi
+          exact Nat.lt_of_lt_of_le hOld_v.1 hRsz
+        · exact Nat.lt_of_lt_of_le (hC.span_lt t h i hi) hRsz
+      ch_lt := hRch
+      disj := by
+        rw [hts, hg']
+        refine List.pairwise_append.2 ⟨hTpwE, ?_, fun t ht t' ht' e' he' h1 h2 => ?_⟩
+        · refine List.pairwise_append.2 ⟨?_, ?_, fun t ht t' ht' e' he' h1 h2 => ?_⟩
+          · rw [H.hL]; split <;> simp
+          · refine hC.disj.imp_of_mem fun {t t'} ht ht' h e' he' h1 h2 => ?_
+            rw [hedges₀ t ht] at h1
+            rw [hedges₀ t' ht'] at h2
+            exact h e' he' h1 h2
+          · rw [hedges₀ t' ht'] at h2
+            exact hC.vert_disj (hLprop t ht).2.2.2.2.1 t' ht' e' he' h2 ((hEBv e').1 ((hLe t ht e').1 h1))
+        · rcases hTedge t ht e' h1 with hR | hV
+          · rcases List.mem_append.1 ht' with h' | h'
+            · exact hRVdisj e' he' hR ((hLe t' h' e').1 h2)
+            · rw [hedges₀ t' h'] at h2
+              exact hRolddisj e' he' hR t' h' h2
+          · have h0 : hv₀ = false := by
+              rcases hTmem t ht with h₁ | ⟨h₁, -⟩ | ⟨h₁, -⟩
+              · exact absurd hV (hRVdisj e' he' ⟨t, h₁, h1⟩)
+              · exact h₁
+              · exact h₁
+            rcases List.mem_append.1 ht' with h' | h'
+            · exact absurd ((hLprop t' h').2.2.2.2.2.symm.trans (hpush0 h0)) (by decide)
+            · rw [hedges₀ t' h'] at h2
+              exact hC.vert_disj (hhv0 h0) t' h' e' he' h2 ((hEBv e').1 hV)
+      span_disj := by
+        rw [hts]
+        refine List.pairwise_append.2 ⟨hTpwS, ?_, fun t ht t' ht' i hi hi' => ?_⟩
+        · refine List.pairwise_append.2 ⟨by rw [H.hL]; split <;> simp, hC.span_disj,
+            fun t ht t' ht' i hi hi' => ?_⟩
+          rw [(hLprop t ht).2.2.2.1, List.mem_singleton] at hi; subst hi
+          exact Bool.false_ne_true ((hLprop t ht).2.2.2.2.1.symm.trans (hC.vert_free t' ht' hi'))
+        · rcases hTspan t ht i hi with ⟨c, hc, hic⟩ | rfl
+          · exact (hRnew c hc i hic).1 t' ht' hi'
+          · have h0 : hv₀ = false := by
+              rcases hTmem t ht with h₁ | ⟨h₁, -⟩ | ⟨h₁, -⟩
+              · exact absurd hi (hRnoVv t h₁)
+              · exact h₁
+              · exact h₁
+            rcases List.mem_append.1 ht' with h' | h'
+            · exact absurd ((hLprop t' h').2.2.2.2.2.symm.trans (hpush0 h0)) (by decide)
+            · exact Bool.false_ne_true ((hhv0 h0).symm.trans (hC.vert_free t' h' hi'))
+      q_fresh := fun o' ho' e' hs => by
+        obtain ⟨hns, he'⟩ := H.rest_nd o' ho' e' hs
+        obtain ⟨h1, h2, h3⟩ := hC.q_fresh o' (List.mem_cons_of_mem _ ho') e' hs
+        have hOq : Old (edgeItem s.g e') :=
+          ⟨by show 1 + s.g.nv + e' < _; omega, fun x hx h => vertItem_ne_edgeItem' (hCv x hx) h.symm,
+            fun e'' he'' h => hns (Or.inr ((edgeItem_inj h) ▸ he'')),
+            fun h => hns (Or.inl (edgeItem_inj h))⟩
+        rw [hg']
+        refine ⟨fun p hp => h1 p ((hPO _ hOq p).1 hp), by rw [hkept _ hOq]; exact h2, fun t ht hm => ?_⟩
+        rcases hmemS t ht with h | h | h
+        · rcases hTspan t h _ hm with ⟨c, hc, hm'⟩ | h'
+          · rcases hRspan_cls c hc _ hm' hOq.1 with ⟨x', hx', h'⟩ | ⟨e'', he'', h'⟩ | h'
+            · exact vertItem_ne_edgeItem' (hCv x' hx') h'.symm
+            · exact hns (Or.inr ((edgeItem_inj h') ▸ he''))
+            · exact hns (Or.inl (edgeItem_inj h'))
+          · exact vertItem_ne_edgeItem' hv h'.symm
+        · rw [(hLprop t h).2.2.2.1, List.mem_singleton] at hm
+          exact vertItem_ne_edgeItem' hv hm.symm
+        · exact h3 t h hm
+      v_fresh := fun o' ho' e₁ cls₁ child hoc w hw => by
+        obtain ⟨h1, h2, h3, h4, h5, h6⟩ :=
+          hC.v_fresh o' (List.mem_cons_of_mem _ ho') e₁ cls₁ child hoc w hw
+        obtain ⟨hwC, hwv⟩ := H.rest_nv o' ho' e₁ cls₁ child hoc w hw
+        have hwne : v ≠ w := fun h => h4 d (Nat.le_refl _) (hvd.trans h)
+        have hOw : Old (vertItem w) :=
+          ⟨by show 1 + w < _; omega, fun x hx h => hwC ((vertItem_inj' h) ▸ hx),
+            fun _ _ => vertItem_ne_edgeItem' hwv, vertItem_ne_edgeItem' hwv⟩
+        refine ⟨fun p hp => h1 p ((hPO _ hOw p).1 hp), by rw [hkept _ hOw]; exact h2,
+          fun t ht hm => ?_, fun k hk => by rw [hsvX k hk]; exact h4 k hk, fun t ht => ?_,
+          fun t ht hT => ?_⟩
+        · rcases hmemS t ht with h | h | h
+          · rcases hTspan t h _ hm with ⟨c, hc, hm'⟩ | h'
+            · rcases hRspan_cls c hc _ hm' hOw.1 with ⟨x', hx', h'⟩ | ⟨e'', -, h'⟩ | h'
+              · exact hwC ((vertItem_inj' h') ▸ hx')
+              · exact vertItem_ne_edgeItem' hwv h'
+              · exact vertItem_ne_edgeItem' hwv h'
+            · exact hwne (vertItem_inj' h').symm
+          · rw [(hLprop t h).2.2.2.1, List.mem_singleton] at hm
+            exact hwne (vertItem_inj' hm).symm
+          · exact h3 t h hm
+        · rcases hmemS t ht with h | h | h
+          · rcases hTvs t h with h' | h'
+            · rw [h']; exact hwne
+            · exact fun hh => hwC (hh ▸ h')
+          · rw [(hLprop t h).1]; exact hwne
+          · exact h5 t h
+        · rw [hg'] at hT
+          rcases hmemS t ht with h | h | h
+          · obtain ⟨e', he', hte, hI⟩ := hT
+            rcases hTedge t h e' hte with ⟨c, hc, hce⟩ | hV
+            · rcases hRtouch c hc w ⟨e', he', hce, hI⟩ with hh | hh | ⟨k, -, hk, hh⟩
+              · exact hwne hh.symm
+              · exact hwC hh
+              · exact h4 k hk hh.symm
+            · obtain ⟨o'', ho'', e'', -, hs, hx⟩ := hTV w ⟨e', he', hV, hI⟩
+              exact hnc o'' ho'' e'' hs w hx o' ho' e₁ cls₁ child hoc hw
+          · obtain ⟨e', he', hte, hI⟩ := hT
+            obtain ⟨o'', ho'', e'', -, hs, hx⟩ := hTV w ⟨e', he', (hLe t h e').1 hte, hI⟩
+            exact hnc o'' ho'' e'' hs w hx o' ho' e₁ cls₁ child hoc hw
+          · rw [hedges₀ t h] at hT
+            exact h6 t h hT }
+  -- split
+  simp only [↓reduceIte]
+  cases hv₀ with
+  | true =>
+    obtain ⟨x, hRx, hxv, hxd, hxside, hxf1, hxf2, hxtt, hxatt, hxt1⟩ := hRvert rfl
+    have hTR : T = R := by
+      rcases hT with ⟨-, h⟩ | ⟨h, -⟩
+      · exact h
+      · exact absurd h (by decide)
+    subst hTR
+    subst hRx
+    have hxm : x ∈ [x] := List.mem_singleton_self _
+    have hxe : TEntry.edges s.g s'.items x e := by
+      obtain ⟨t, ht, h⟩ := (hRE e he).2 hsube
+      rw [List.mem_singleton] at ht; subst ht; exact h
+    have hxCE : CtxEntry v d s' x :=
+      { vStart := hxv
+        depth := hxd ▸ hr
+        nonempty := ⟨e, by rw [hg']; exact he, by rw [hg']; exact hxe⟩
+        touch_bot := by rw [hg', ← hxv]; exact hRtb x hxm ⟨e, he, hxe⟩
+        touch_top := by rw [hg', hsvX _ (hxd ▸ hr.le), hxd]; exact hxtt
+        side := by rw [hxd, hsdX _ hr]; exact hxside
+        att := fun w hw hwv hni => by
+          rw [hg'] at hw hni
+          obtain ⟨k, hk1, hk2, hk3⟩ := hxatt w hw hwv hni
+          exact ⟨k, hxd ▸ hk1, hk2, by rw [hsvX k hk2]; exact hk3⟩ }
+    have hxCS : allType1 d x.topDepth (done ++ [(o, true)]) → CtxSingle v s' x := by
+      intro hA
+      have ht1 : cls.isType1 = true := hA o ((hAVm o).2 (.inr ⟨rfl, rfl⟩)) hxd.symm
+      obtain ⟨⟨i, hi⟩, hatt⟩ := hxt1 ht1
+      exact
+        { item := ⟨i, by rw [hxd, hsdX _ hr]; exact hi, fun p hp =>
+            hRroot x hxm i (by rw [hi]; unfold setSides; split <;> simp) p hp⟩
+          att := fun w hw => by
+            rw [hg'] at hw ⊢
+            rcases hatt w hw with h | h | h
+            · exact .inl h
+            · exact .inr (.inl (by rw [hxd, hsvX _ hr.le]; exact h))
+            · exact .inr (.inr h) }
+    have habm : ∀ t ∈ above, t ∈ top := by
+      intro t ht
+      by_cases hhv : hasVert = true
+      · rw [if_pos hhv] at hsp
+        obtain ⟨vt, htv, -⟩ := hsp
+        rw [htv]; exact List.mem_append_left _ ht
+      · rw [if_neg hhv] at hsp
+        exact absurd ht (hsp.1 ▸ List.not_mem_nil)
+    have habove : ∀ t' ∈ above, t'.topDepth ≤ x.topDepth ∧ t'.firstIdx < x.firstIdx := by
+      intro t' ht'
+      have hhv : hasVert = true := by
+        cases h : hasVert
+        · exact absurd ht' (by rw [if_neg (by rw [h]; decide)] at hsp; exact hsp.1 ▸ List.not_mem_nil)
+        · rfl
+      rw [if_pos hhv] at hsp
+      obtain ⟨vt, htv, -, -, -, h4, -⟩ := hsp
+      obtain ⟨o', ho', hto⟩ := hLow t' ht'
+      refine ⟨?_, ?_⟩
+      · rw [hxd, hto]
+        exact lowval_le_of_rank (hC.afterVert_ret o' ho') hr (H.rank _ (mem_afterVert ho'))
+      · exact Nat.lt_of_lt_of_le (hC.vfirst t' (hmemT t' (by rw [htv]; exact List.mem_append_left _ ht'))
+          (hCE t' ht').vStart (h4 t' ht')) hxf1
+    refine ⟨x :: above, below, ?_, ?_, ?_, ?_, ?_, ?_, hBel⟩
+    · by_cases hhv : hasVert = true
+      · rw [if_pos hhv] at hsp
+        obtain ⟨vt, htv, h1, h2, h3, h4, h5, h6⟩ := hsp
+        have hpf : push = false := by
+          cases hp : push
+          · rfl
+          · exact absurd (H.hpush.1 hp).1 (by rw [hhv]; decide)
+        have hL0 : L = [] := by rw [H.hL, hpf]; rfl
+        refine ⟨vt, by rw [hL0, htv]; rfl, h1, h2, h3, fun t ht => ?_, fun o' ho' => ?_,
+          fun o' ho' e' he' hs => ?_⟩
+        · rcases List.mem_cons.1 ht with rfl | ht
+          · exact hRnoVv t hxm
+          · exact h4 t ht
+        · rcases (hAVm o').1 ho' with ho' | ⟨-, rfl⟩
+          · exact (h5 o' ho').imp (fun ⟨t, ht, h⟩ => ⟨t, List.mem_cons_of_mem _ ht, h⟩) id
+          · exact .inl ⟨x, List.mem_cons_self .., hxd⟩
+        · rw [hg'] at he'
+          rcases (hAVm o').1 ho' with ho' | ⟨-, rfl⟩
+          · exact (h6 o' ho' e' he' hs).imp
+              (fun ⟨t, ht, h⟩ => ⟨t, List.mem_cons_of_mem _ ht,
+                by rw [hedges t (hmemT t (by rw [htv]; exact List.mem_append_left _ ht))]; exact h⟩)
+              (by rw [hedges vt (hmemT vt (by rw [htv]; exact List.mem_append_right _ (List.mem_cons_self ..)))]; exact id)
+          · obtain ⟨t, ht, h⟩ := (hRE e' he').2 hs
+            rw [List.mem_singleton] at ht; subst ht
+            exact .inl ⟨t, List.mem_cons_self .., by rw [hg']; exact h⟩
+      · have hhf : hasVert = false := by
+          cases h : hasVert with
+          | false => rfl
+          | true => exact absurd h hhv
+        rw [if_neg (by rw [hhf]; decide)] at hsp
+        obtain ⟨hab, htb⟩ := hsp
+        have hpt : push = true := by
+          cases hp : push
+          · exact absurd hb (by rw [hhf, hp]; decide)
+          · rfl
+        obtain ⟨u₀, hL1⟩ : ∃ u₀, L = [u₀] := by rw [H.hL, hpt]; exact ⟨_, rfl⟩
+        have hu := hLprop u₀ (by rw [hL1]; exact List.mem_singleton_self _)
+        have hAV0 := hC.noVert_after hhf
+        refine ⟨u₀, by rw [hL1, hab, htb]; rfl, hu.2.1 ▸ Nat.le_refl _,
+          by rw [hu.2.2.2.1]; exact List.mem_singleton_self _, fun _ => ⟨hu.2.1, hu.2.2.2.1⟩,
+          fun t ht => ?_, fun o' ho' => ?_, fun o' ho' e' he' hs => ?_⟩
+        · rcases List.mem_cons.1 ht with rfl | ht
+          · exact hRnoVv t hxm
+          · exact absurd ht (hab ▸ List.not_mem_nil)
+        · rcases (hAVm o').1 ho' with ho' | ⟨-, rfl⟩
+          · exact absurd ho' (hAV0 ▸ List.not_mem_nil)
+          · exact .inl ⟨x, List.mem_cons_self .., hxd⟩
+        · rw [hg'] at he'
+          rcases (hAVm o').1 ho' with ho' | ⟨-, rfl⟩
+          · exact absurd ho' (hAV0 ▸ List.not_mem_nil)
+          · obtain ⟨t, ht, h⟩ := (hRE e' he').2 hs
+            rw [List.mem_singleton] at ht; subst ht
+            exact .inl ⟨t, List.mem_cons_self .., by rw [hg']; exact h⟩
+    · intro t ht
+      rcases List.mem_cons.1 ht with rfl | ht
+      · exact hxCE
+      · exact hCE' t (hmemT t (habm t ht)) (hCE t ht)
+    · intro t ht hA
+      rcases List.mem_cons.1 ht with rfl | ht
+      · exact hxCS hA
+      · exact hCS' t (hmemT t (habm t ht)) (hCE t ht).depth
+          (hCS t ht fun o' ho' hl => hA o' ((hAVm o').2 (.inl ho')) hl)
+    · exact List.pairwise_cons.2 ⟨habove, hPW⟩
+    · intro t ht
+      rcases List.mem_cons.1 ht with rfl | ht
+      · exact ⟨o, (hAVm o).2 (.inr ⟨rfl, rfl⟩), hxd⟩
+      · obtain ⟨o', ho', h⟩ := hLow t ht
+        exact ⟨o', (hAVm o').2 (.inl ho'), h⟩
+    · intro t ht e' he' hte
+      rw [hg'] at he' hte
+      rcases List.mem_cons.1 ht with rfl | ht
+      · exact ⟨o, (hAVm o).2 (.inr ⟨rfl, rfl⟩), (hRE e' he').1 ⟨t, hxm, hte⟩⟩
+      · rw [hedges₀ t (hmemT t (habm t ht))] at hte
+        obtain ⟨o', ho', h⟩ := hEdg t ht e' he' hte
+        exact ⟨o', (hAVm o').2 (.inl ho'), h⟩
+  | false =>
+    have hhf := hhv0 rfl
+    have hL0' := hL0 rfl
+    have hAV0 := hC.noVert_after hhf
+    rw [if_neg (by rw [hhf]; decide)] at hsp
+    obtain ⟨hab, htb⟩ := hsp
+    have hAV' : afterVert (done ++ [(o, false)]) = [] := by
+      rw [List.eq_nil_iff_forall_not_mem]
+      intro o' ho'
+      rcases (hAVm o').1 ho' with h | ⟨h, -⟩
+      · exact (hAV0 ▸ List.not_mem_nil) h
+      · exact Bool.false_ne_true h
+    have hRnv : ∀ t ∈ R, t.vStart ≠ v := fun t ht => ((hRnoV rfl).2 t ht).1
+    rcases hT with ⟨h, -⟩ | ⟨-, f, dir, rfl | ⟨c, R', hR, rfl⟩⟩
+    · exact absurd h (by decide)
+    · refine ⟨[], R ++ top, ⟨⟨v, d, f, setSides dir [vertItem v] []⟩, by rw [hL0']; simp,
+        Nat.le_refl _, by rw [hus]; exact List.mem_singleton_self _, fun _ => ⟨rfl, hus f dir⟩,
+        fun t ht => absurd ht List.not_mem_nil, fun o' ho' => absurd ho' (hAV' ▸ List.not_mem_nil),
+        fun o' ho' => absurd ho' (hAV' ▸ List.not_mem_nil)⟩,
+        fun t ht => absurd ht List.not_mem_nil, fun t ht => absurd ht List.not_mem_nil,
+        List.Pairwise.nil, fun t ht => absurd ht List.not_mem_nil,
+        fun t ht => absurd ht List.not_mem_nil, fun t ht => ?_⟩
+      rcases List.mem_append.1 ht with h | h
+      · exact hRnv t h
+      · exact hBel t (htb ▸ h)
+    · subst hR
+      have hRnv' := hRnv
+      refine ⟨[], R' ++ top, ⟨TEntry.mergeInto ⟨v, d, f, setSides dir [vertItem v] []⟩ c,
+        by rw [hL0']; simp, Nat.min_le_right _ _,
+        (mem_mergeInto_spans _ _ _).2 (.inl (by rw [hus]; exact List.mem_singleton_self _)),
+        fun h => absurd h (hRnv' c (List.mem_cons_self ..)),
+        fun t ht => absurd ht List.not_mem_nil, fun o' ho' => absurd ho' (hAV' ▸ List.not_mem_nil),
+        fun o' ho' => absurd ho' (hAV' ▸ List.not_mem_nil)⟩,
+        fun t ht => absurd ht List.not_mem_nil, fun t ht => absurd ht List.not_mem_nil,
+        List.Pairwise.nil, fun t ht => absurd ht List.not_mem_nil,
+        fun t ht => absurd ht List.not_mem_nil, fun t ht => ?_⟩
+      rcases List.mem_append.1 ht with h | h
+      · exact hRnv' t (List.mem_cons_of_mem _ h)
+      · exact hBel t (htb ▸ h)
 
 /-- The tree-edge step for a returning child (`lowval < d`): `tree_ret_shape` after loops 1–3, then
 the P-check (`ctx_step_tree_ret_P`) and the first-edge vertex push, `earCtx_ret` over the final
@@ -4528,6 +5212,20 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
                 rw [hgs]
                 exact hw _ (mem_vertsList.2 ⟨_, List.mem_append_right _ (List.mem_cons_of_mem _ ho'),
                   e₁, cls₁, c, rfl, hw'⟩)
+              done_rest := fun o' ho' e' hs x hx o'' ho'' e₁ cls₁ child ho₁ hxC => by
+                have hm : o'.1 ∈ done.map (·.1) ++ DfsOut.tree e cls (.node y outs') :: rest :=
+                  List.mem_append_left _ (List.mem_map_of_mem ho')
+                have hxR : x ∈ rest.flatMap DfsOut.verts :=
+                  List.mem_flatMap.2 ⟨o'', ho'', by rw [ho₁]; exact hxC⟩
+                rw [hgs] at hx
+                rcases endsOut_wf g anc v o'.1 (hwf _ hm) (hends _ hm) e' hs x hx with h | rfl | h
+                · exact List.disjoint_of_nodup_append hndV h (List.mem_cons_of_mem _
+                    (List.mem_append_right _ (List.mem_append_right _ hxR)))
+                · exact (List.nodup_cons.1 hnd_vC).1
+                    (List.mem_append_right _ (List.mem_append_right _ hxR))
+                · exact List.disjoint_of_nodup_append (List.nodup_cons.1 hnd_vC).2
+                    (List.mem_flatMap.2 ⟨o'.1, List.mem_map_of_mem ho', h⟩)
+                    (List.mem_append_right _ hxR)
               items_kept := fun j hj hjv hje => by
                 have h := hik3 j (by subst hS₂; exact hj) hjv (by subst hS₂; exact hje)
                 subst hS₂; simpa [pushEnd] using h

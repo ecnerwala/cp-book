@@ -376,6 +376,9 @@ structure TreeSite (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOu
     ¬ subEdges (.tree e cls (.node y outs)) e' ∧ e' < s.g.ne
   rest_nv : ∀ o' ∈ rest, ∀ e₁ cls₁ c, o' = .tree e₁ cls₁ c →
     ∀ w ∈ c.verts, w ∉ (DfsTree.node y outs).verts ∧ w < s.g.nv
+  /-- The done outs' edges avoid the remaining subtrees' vertices. -/
+  done_rest : ∀ o' ∈ done, ∀ e', subEdges o'.1 e' → ∀ x, s.g.Inc e' x →
+    ∀ o'' ∈ rest, ∀ e₁ cls₁ child, o'' = .tree e₁ cls₁ child → x ∉ child.verts
   /-- The child's walk touches only its own items and the ones it allocates. -/
   items_kept : ∀ j, j < s.items.size → (∀ x ∈ (DfsTree.node y outs).verts, j ≠ vertItem x) →
     (∀ e' ∈ (DfsTree.node y outs).edges, j ≠ edgeItem s.g e') →
