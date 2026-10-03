@@ -6,7 +6,7 @@ import Spqr.EarFrame
 Frame of the `ternarize` flag through `walkOutPre` and `finishEdge`, by the same traversal as
 `EarFrame.lean`'s `keep_*` (no hypotheses: every primitive is a record update that leaves the
 flag alone). The backbone (`WalkBackbone.lean`) carries `s.ternarize = G.tern` from it, and
-`walk_ternarize` (`WalkItemsWF.lean`) is its public form.
+`walk_ternarize` (`WalkBackboneRoot.lean`) is its public form via `tern_walkForest`.
 -/
 
 namespace Spqr.WalkState
@@ -134,5 +134,62 @@ theorem tern_walkOutPre (v d : Nat) (o : DfsOut) (hasVert : Bool) (h₀ : s.tern
   unfold walkOutPre
   simp only [wp_bind, wp_stackDir, wp_setStackDir, wp_ite, wp_pushVertTstack, wp_pure]
   split <;> exact h₀
+
+/-! ### Through `walkTree` / `walkForest` -/
+
+abbrev TernTreeP (t : DfsTree) (d : Nat) (s : WalkState) : Prop :=
+  wp (walkTree t d) (fun _ s' => s'.ternarize = s.ternarize) s
+abbrev TernOutsP (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
+  wp (walkOuts v d outs hasVert) (fun _ s' => s'.ternarize = s.ternarize) s
+abbrev TernOutP (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState) : Prop :=
+  wp (walkOut v d o hasVert) (fun _ s' => s'.ternarize = s.ternarize) s
+
+mutual
+theorem ternTreeP : ∀ (t : DfsTree) (d : Nat) (s : WalkState), TernTreeP t d s
+  | .node v outs, d, s => by
+    unfold TernTreeP walkTree
+    simp only [wp_bind, wp_modify]
+    refine wp_mono _ (ternOutsP v d outs false _) fun hv s' h' => ?_
+    cases hv
+    · simp only [Bool.false_eq_true, ↓reduceIte, wp_bind, wp_setStackDir, wp_pushVertTstack]
+      exact h'
+    · exact h'
+
+theorem ternOutsP : ∀ (v d : Nat) (outs : List DfsOut) (hasVert : Bool) (s : WalkState),
+    TernOutsP v d outs hasVert s
+  | v, d, [], hasVert, s => by unfold TernOutsP walkOuts; simp only [wp_pure]
+  | v, d, o :: rest, hasVert, s => by
+    unfold TernOutsP walkOuts
+    simp only [wp_bind]
+    exact wp_mono _ (ternOutP v d o hasVert s) fun hv' s' h' =>
+      wp_mono _ (ternOutsP v d rest hv' s') fun _ s'' h'' => h''.trans h'
+
+theorem ternOutP : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState),
+    TernOutP v d o hasVert s
+  | v, d, o, hasVert, s => by
+    unfold TernOutP
+    rw [walkOut_eq, wp_bind]
+    refine wp_mono _ (tern_walkOutPre v d o hasVert rfl) fun hv' s₁ h₁ => ?_
+    unfold walkOutRest
+    rw [wp_bind, wp_tstackSize]
+    cases o with
+    | back e cls dest => exact tern_finishEdge _ _ _ _ _ h₁
+    | tree e cls child =>
+      simp only [wp_bind, wp_modify]
+      refine wp_mono _ (ternTreeP child (d + 1) _) fun _ s₃ h₃ => ?_
+      exact tern_finishEdge _ _ _ _ _ (h₃.trans h₁)
+end
+
+theorem tern_walkForest : ∀ (forest : List DfsTree) (s : WalkState),
+    wp (walkForest forest) (fun _ s' => s'.ternarize = s.ternarize) s
+  | [], _ => rfl
+  | t :: rest, s => by
+    show wp ((walkTree t 0 >>= fun _ => popTstack >>= fun top =>
+      modifyItem rootItem fun it => { it with ch := it.ch ++ top.spans.2 }) >>= fun _ =>
+      walkForest rest) _ s
+    simp only [wp_bind]
+    refine wp_mono _ (ternTreeP t 0 s) fun _ s₁ h₁ => ?_
+    simp only [wp_popTstack, wp_modifyItem]
+    exact wp_mono _ (tern_walkForest rest _) fun _ _ h₂ => h₂.trans h₁
 
 end Spqr.WalkState

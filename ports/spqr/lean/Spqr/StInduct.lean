@@ -853,4 +853,22 @@ theorem stForest (g : Graph) : ∀ (forest pre : List DfsTree) (s : WalkState) (
     · rw [refBlocks_snoc]
       rw [← List.append_assoc]; exact hI₂.congr rfl rfl
 
+theorem stItems_init (g : Graph) (tern : Bool) :
+    StItems g (WalkState.init g tern) (refBlocks g []) where
+  roots := by simp [WalkState.init, readStack, readL, readR]
+  nodup := by simp [WalkState.init, readStack, readL, readR]
+  bounded := by simp [WalkState.init, readStack, readL, readR]
+  chLt p c h := by simp [Items.IsParent, WalkState.init, Items.initialItems_ch] at h
+  chNodup p := by simp [WalkState.init, Items.initialItems_ch]
+  closed i hi ht := by
+    simp only [WalkState.init] at hi ht
+    rw [Items.initialItems_type] at ht
+    rw [Items.initialItems_size] at hi
+    split_ifs at ht <;> simp at ht
+  finished x i hx hb ht := by
+    rcases Relation.ReflTransGen.cases_tail hb with e | ⟨p, _, hp⟩
+    · subst e
+      rcases hx with hx | hx <;> rw [hx] at ht <;> simp at ht
+    · simp [Items.IsParent, WalkState.init, Items.initialItems_ch] at hp
+
 end Spqr

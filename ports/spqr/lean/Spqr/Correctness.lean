@@ -5,6 +5,7 @@ import Spqr.Proofs.Dfs
 import Spqr.RelabelRep
 import Spqr.WalkWF
 import Spqr.WalkItemsWF
+import Spqr.WalkBackboneRoot
 import Spqr.RelabelWF
 import Spqr.StOriented
 import Spqr.Proofs.RWalkItems

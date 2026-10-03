@@ -1641,8 +1641,8 @@ False candidates (recorded, restated):
   `Represents`: it is the separate predicates `Items.Canonical` / `SpqrTree.Canonical`, with
   `spqrTree_canonical : (g.spqrTree false vo eo).Canonical` (via `RelabelOK.canonical` /
   `relabelTree_canonical`) and the walk-side `walk_canonical` (`WalkItemsWF.lean`) for
-  `tern = false` only, a proved assembly over the named hypotheses `walk_canonInv`/`walk_ternarize`
-  (below).
+  `tern = false` only, a proved assembly over `walk_canonInv`/`walk_ternarize` (both derived from the
+  backbone, `WalkBackboneRoot.lean`, §4.7 stage 3a).
 
 `RangesWF.lean`: `wf_of_ranges : Items.Tree → Items.TypingFacts → Items.Ranges → Items.WF`
 (`endpoints_of_ranges`, `shapes_of_ranges`; standard axioms). `TypingFacts` = the `i_o_leaf`,
@@ -1784,8 +1784,9 @@ CanonInv (finishEdge … s)` (`RangesCanon.lean`, standard axioms) needs exactly
 loop-1 iterate `l1_site`) no child on the finished side has the type of the node being finished
 (`FinishCanon x s`; checker `checkCanon`, fields `canon_p`/`canon_v`/`canon_l1`, 0 violations
 0..3000 × both modes). Threading `CanonInv` to the final state is the backbone's: `walk_canonInv`
-(`CanonInv` of `g.walk tern (g.dfsForest vo eo)`) and the frame fact `walk_ternarize` are the
-named hypotheses, and `walk_canonical` is their assembly (`WalkItemsWF.lean`). `walk_q_children`
+(`CanonInv` of `g.walk tern (g.dfsForest vo eo)`) and the frame fact `walk_ternarize` are proved in
+`WalkBackboneRoot.lean` (§4.7 stage 3a: projections of `walk_rootInv` / `tern_walkForest`), and
+`walk_canonical` is their assembly. `walk_q_children`
 is `walk_items_wf.shapes.q_children`, restated over `g.dfsForest vo eo` under `g.WF`/`OrderOK`
 (its former arbitrary-forest form had no callers).
 
@@ -1807,8 +1808,8 @@ Checker (`checks/WalkInvCheck/Ranges.lean`): `checkPieceInv` evaluates every cla
 entry/end, before/after every `finishEdge` and (`PieceFacts` only) after every root append;
 `checkPiece` evaluates `ClosePiece` and the frame hypotheses of `finishEdge_piece`; fields
 `piece_*`, 0 violations 0..3000 × both modes. Threading to the final state is the backbone's:
-`walk_pieceInv : (g.walk tern (g.dfsForest vo eo)).PieceFacts` (`WalkPieceSep.lean`) is the named
-hypothesis and `walk_q_upper`/`walk_root_sep`/`walk_root_v`/`walk_q_child_vs`/`walk_p_child_vs`
+`walk_pieceInv : (g.walk tern (g.dfsForest vo eo)).PieceFacts` (`WalkPieceSep.lean`, =
+`walk_pieceFacts`, a projection of `walk_rootInv`, §4.7 stage 3a) is proved and `walk_q_upper`/`walk_root_sep`/`walk_root_v`/`walk_q_child_vs`/`walk_p_child_vs`
 are its projections.
 `walk_closeFacts` is the proved tree/typing assembly from `walk_closeInv`, not an independent
 close-facts admission.
@@ -2357,6 +2358,28 @@ the exit: `TreeEnd`, `Inv'`/`Shape`, `RgS σ (n + |edgePostorder|)`, `CloseInv`,
   `closeBase_canon`, `closeBase_piece`; R `rSide_{entry,vertFree,finish_content}_site`,
   `loop1_rBranch_{fields,mid}_ctx`, `loop1_rTop_ctx`, `feS₂_top_entryR`,
   `closeVert_type1_rCloseShape`; ST `walkOut_stLive`.
+* **Stage 3a — the forest level (`Spqr/WalkBackboneRoot.lean`).** `RootInv g tern forest pre s`
+  is the conjunction between the roots of `walkForest` (`RootState` + `Full (Pushed … pre)` +
+  `RangesInv σ |σ_pre| 0` + `CloseInv` + `CanonInv` + `ternarize = tern` + `PieceFacts` + the root
+  item's children are vertex items of `pre` + `RSkelInv` (2-connected) + `StItems (refBlocks g pre)`).
+  `RootInv.step` runs one root through `walkTree_inv` (the `WalkInv` entry built from `RootInv`:
+  `ctx_init_root`, `PieceFacts.root`, empty ghosts) and then the pop / append from `WalkInvEnd`
+  alone: `TreeEnd.root` (the stack is exactly `[⟨t.v, 0, _, ([], [vertItem t.v])⟩]`), `KeepF` for
+  the frame (`FreshItem.zero` for the root item, pointwise for `RootState.fresh`), `OwnedD.cover`/
+  `hi`/`lo` + `Place` for the separation hypothesis of `PieceFacts.rootAppend` (edges under the new
+  root child are exactly `t.edges`, edges under an old root child are pushed earlier), and the
+  per-layer root-append lemmas (`Inv'.modifyCh`, `Shape.modify`, `Full.root_append`,
+  `RangesInv.root_append`, `rootAppend_closeInv`, `CanonInv.modify_ch_nonSP`,
+  `RSkelInv.modify_root_of_ne`, `rootPop_st`). `forest_inv`/`walk_rootInv` iterate it from
+  `rootInv_init`; `WalkInvEnd.skel` added (`RSkelInv` at exit for every `d`, the `r` conjunct is
+  gated on `d = dp + 1`). Public results re-derived as projections: `walk_ternarize` (now a theorem,
+  `[propext, Quot.sound]`, via `tern_walkForest`/`ternTreeP` in `WalkTernFrame.lean`),
+  `walk_canonInv`, `walk_canonical`, `walk_pieceFacts` (= `walk_pieceInv`), `walk_rSkelInv'`,
+  `walk_stItems`, `walk_rangesInv'`, `walk_closeInv''`; the admissions `walk_ternarize`,
+  `walk_canonInv`, `walk_pieceInv` are gone (`stItems_init` moved from `StFinal.lean` to
+  `StInduct.lean`). The old `RootState.step`/`stForest`/`walk_closeInv'` routes are untouched for now
+  (their consumers switch to `walk_rootInv` when the per-layer inductions are retired). Reachable
+  from `walk_rootInv`: the same 23 as stage 2i.
 
 ## 5. Phase 3: relabel
 
@@ -2756,7 +2779,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | 4.5 Child-return induction `rrTree`/`rrOuts`/`rrOut` (`RWalk`: ancestor frames `RInvG` + `RInvTop` of the walked vertex; `BotKeep`/`finishEdge_bot_keep`), `walkTree_rReturn`, `walkTreeRReturnSpec`; side facts `RSideTree`/`RSideOuts`/`RSideOut` (`AncChain`, `EntryR` stability under `stackVerts.set!`, parent entries top out `≤ d-1`, non-root out-edges return, `VertFree`, `FinishRShape`) | `Proofs/RInvWalk.lean`, `checks/RFinishEdgeCheck.lean` (`anc`/`stab`/`entry`/`ret`/`vertown` lines) | induction and `walkTree_rReturn` proved from `finishEdge_rInvTop` + `finishEdge_rInvG_base` (non-standard axiom only via the admitted `finishEdge_tree_top_settled`); side facts dump-checked at every entry/site (seeds 0..400 × both modes + 6000 random, 0 failures); `walkTree_rSide` (R-4 statement correction: takes `BookTree` and the parent's ancestor chain, both root-threaded and supplied by `rkRootOut`; standalone form `walkTree_rSide_spec` kept for `WalkTreeRReturnSpec` only) proved in R-5 by `rsTree`/`rsOuts`/`rsOut` (`Proofs/RSide.lean`) modulo the three site admissions `rSide_entry_site`/`rSide_vertFree_site`/`rSide_finish_content_site` (R content; `FinishRShape.pend`/`ear` proved) |
 | 4.5 Child-return settling diagnostic and provisional contract | `Proofs/RInvFrame.lean`, `checks/RInvReturnCheck.lean` | `RReturn`/`WalkTreeRReturnSpec` stated without an admission; legacy conclusion still refuted; fixed base/settled-entry clauses kernel-checked (standard axioms); seeds 0..400 × both modes pass shape/disjointness, with content frames checked on the 91 block inputs (terminal-value frame observed for `topDepth ≤ d` only — seed 390's buried single-`Q` entries, R-5); preservation proof remains open |
 | 4.5 Schedule frontier: `Frontier`, `FrontiersTree` | `Proofs/RInvFrame.lean`, `EarFrontier.lean` | stated and threaded into `finishEdge_rInvTop`; ear export proved: `finishEdge_frontier` (from `FinishBook.ear` + `Inv'`/`Shape`), `walkTree_frontiers` (`FrontiersTree` under the `walkTree_inv'` hypotheses), standard axioms; R interval/saturation preservation remains open |
-| 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge_rangesInv` (`RangesStep.lean`, under `FinishAdj`) and `walkTree_rangesInv` (`RangesTree.lean`, under `GuardsTree`/`BookTree`/`RgTree`) proved; `finishBoundary_rangesInv` proved (`RangesTree.lean`); `finishEdge_ownedD` proved (`RangesOwned.lean`, over `OwnSite`: `OwnedD.of_split`/`of_boundary`, `Dec`, `OFrame`); `closeCtx_bd_vert`/`bd_node`/`p_site`/`v_site`/`l1_site` (`RangesCloseTree.lean`) proved from `CloseBase` and `CloseContent` (`RangesCloseContent.lean`; `checkContent` 0 violations 0..3000 × both modes), the named hypothesis `closeBase_content : CloseBase → CloseContent` left to the backbone induction; `finishEdge_vertCover` proved (`VSpan`, `RangesOwned.lean`); `walk_rootsCover` proved as the assembly over the former (`RangesCoverTree.lean`: `cvTree`/`cvOuts`/`cvOut`, `OwnedD.root`, `forest_rootsCover`, `walk_rootsCover'`) and `walk_closeInv` over the latter (`RangesCloseTree.lean`: `finishEdge_closeInv`, `ccTree`/`ccOuts`/`ccOut`, `CsTree` with `DfsSite` proved by `dsTree`, `CloseCtx.of_exports`, `forest_closeInv`, `walk_closeInv'`) and six checked per-site statements, `closeEars_closeAt`/`finishBack_closeAt` (leaf Q, `leafQ_closeInv`) and `finishBoundary_closeAt` (root Q, `CloseAt.rootQ`; new `CloseCtx` fields `dest_lt`/`bd_loop`/`bd_vert`/`bd_node`, checker `checkCtx`) and `finishP_closeAt` (P record `CloseAt.pNode'` via `PSite.closeInv`; new `CloseCtx` field `p_site : … → PSite`, checker `checkP`) and `closeVertTail_closeAt` (S/R record `CloseAt.node` via `VSite.closeInv`; new `CloseCtx` field `v_site : … → ∃ t, VSite`, checker `checkV`) and `loop1Body_closeAt` (same record via `CloseInv.l1S₁`/`maybeUnwrap`/`mergeTop` + `VSite.closeInv`; new `CloseCtx` field `l1_site`, checker `checkL1`) proved (`RangesCloseSites.lean`, 0 violations at every block boundary, seeds 0..400 × tern + tiny graphs); `ranges_of_rangesInv` (`RangesFinal.lean`) derives `convex` + node `att_vs` from `RangesInv`, the rest is `Items.CloseFacts`; saturation not a field (attachment-count forms false, §4.6); `Owned`/`finishP_ownership` (`RangesOwned.lean`, with `unwrap_edges`/`finishTop_edges`/`closeVert'_edges`): P-site coverage of `walk_rootsCover` proved (standard axioms), checker `checkOwned` (`own_*`) 0 failures 0..400 × both modes; `OwnedD`/`OwnSite`/`finishEdge_ownedD` (proved, standard axioms; `checkOwned` at `entry`/`pre`/`post`/`P`/`end`, 0 failures) and `VertCover`/`finishEdge_vertCover` (proved, standard axioms, via `VSpan` preserved by every `finishEdge` primitive; `checkVCover` `own_vcover` at `post`/`end`, 0 failures) the two steps of the proved `walk_rootsCover` induction (`RangesCoverTree.lean`); public site exports `cbTree`/`forest_closeBase`/`walk_closeBase` (`CloseBase` at every `finishEdge` pre-state) and `rangesInv_l1Iter`/`rangesInv_feS₂` (`RgStep` into loop-1 iterates / `feS₂` from `CloseBase`, standard axioms; checker `checkRI`) in `RangesSites.lean`; canonicity `WalkState.CanonInv`/`CloseCanon`/`FinishCanon`/`finishEdge_canon` (`RangesCanon.lean`, standard axioms; checker `checkCanon` `canon_p`/`canon_v`/`canon_l1` 0 violations 0..3000 × both modes), named hypotheses `walk_canonInv`/`walk_ternarize` for the backbone |
+| 4.6 walk-time range invariant `WalkState.RangesInv σ n D` (`Inv' D` + `processed`/`ordered`/`convex`/`closed`; `TEntry.piece`, `Items.BelowNoV_congr`/`_modify_of_not_below`): `RangesInv.alloc`/`pushVert`/`pushEdge`/`mergeTop` (local adjacency `hadj`)/`finishTop` | `RangesInv.lean`, `checks/RangesInvCheck.lean` | proved (standard axioms); 0 violations at every `finishEdge` (seeds 0..400 × tern + tiny graphs); `finishEdge_rangesInv` (`RangesStep.lean`, under `FinishAdj`) and `walkTree_rangesInv` (`RangesTree.lean`, under `GuardsTree`/`BookTree`/`RgTree`) proved; `finishBoundary_rangesInv` proved (`RangesTree.lean`); `finishEdge_ownedD` proved (`RangesOwned.lean`, over `OwnSite`: `OwnedD.of_split`/`of_boundary`, `Dec`, `OFrame`); `closeCtx_bd_vert`/`bd_node`/`p_site`/`v_site`/`l1_site` (`RangesCloseTree.lean`) proved from `CloseBase` and `CloseContent` (`RangesCloseContent.lean`; `checkContent` 0 violations 0..3000 × both modes), the named hypothesis `closeBase_content : CloseBase → CloseContent` left to the backbone induction; `finishEdge_vertCover` proved (`VSpan`, `RangesOwned.lean`); `walk_rootsCover` proved as the assembly over the former (`RangesCoverTree.lean`: `cvTree`/`cvOuts`/`cvOut`, `OwnedD.root`, `forest_rootsCover`, `walk_rootsCover'`) and `walk_closeInv` over the latter (`RangesCloseTree.lean`: `finishEdge_closeInv`, `ccTree`/`ccOuts`/`ccOut`, `CsTree` with `DfsSite` proved by `dsTree`, `CloseCtx.of_exports`, `forest_closeInv`, `walk_closeInv'`) and six checked per-site statements, `closeEars_closeAt`/`finishBack_closeAt` (leaf Q, `leafQ_closeInv`) and `finishBoundary_closeAt` (root Q, `CloseAt.rootQ`; new `CloseCtx` fields `dest_lt`/`bd_loop`/`bd_vert`/`bd_node`, checker `checkCtx`) and `finishP_closeAt` (P record `CloseAt.pNode'` via `PSite.closeInv`; new `CloseCtx` field `p_site : … → PSite`, checker `checkP`) and `closeVertTail_closeAt` (S/R record `CloseAt.node` via `VSite.closeInv`; new `CloseCtx` field `v_site : … → ∃ t, VSite`, checker `checkV`) and `loop1Body_closeAt` (same record via `CloseInv.l1S₁`/`maybeUnwrap`/`mergeTop` + `VSite.closeInv`; new `CloseCtx` field `l1_site`, checker `checkL1`) proved (`RangesCloseSites.lean`, 0 violations at every block boundary, seeds 0..400 × tern + tiny graphs); `ranges_of_rangesInv` (`RangesFinal.lean`) derives `convex` + node `att_vs` from `RangesInv`, the rest is `Items.CloseFacts`; saturation not a field (attachment-count forms false, §4.6); `Owned`/`finishP_ownership` (`RangesOwned.lean`, with `unwrap_edges`/`finishTop_edges`/`closeVert'_edges`): P-site coverage of `walk_rootsCover` proved (standard axioms), checker `checkOwned` (`own_*`) 0 failures 0..400 × both modes; `OwnedD`/`OwnSite`/`finishEdge_ownedD` (proved, standard axioms; `checkOwned` at `entry`/`pre`/`post`/`P`/`end`, 0 failures) and `VertCover`/`finishEdge_vertCover` (proved, standard axioms, via `VSpan` preserved by every `finishEdge` primitive; `checkVCover` `own_vcover` at `post`/`end`, 0 failures) the two steps of the proved `walk_rootsCover` induction (`RangesCoverTree.lean`); public site exports `cbTree`/`forest_closeBase`/`walk_closeBase` (`CloseBase` at every `finishEdge` pre-state) and `rangesInv_l1Iter`/`rangesInv_feS₂` (`RgStep` into loop-1 iterates / `feS₂` from `CloseBase`, standard axioms; checker `checkRI`) in `RangesSites.lean`; canonicity `WalkState.CanonInv`/`CloseCanon`/`FinishCanon`/`finishEdge_canon` (`RangesCanon.lean`, standard axioms; checker `checkCanon` `canon_p`/`canon_v`/`canon_l1` 0 violations 0..3000 × both modes), `walk_canonInv`/`walk_ternarize` derived from the backbone (`WalkBackboneRoot.lean`, §4.7 stage 3a) |
 | 5 relabel: `Items.WF → Items.ROriented → WF` | `relabelTree_wf` (`Correctness.lean`, = `RelabelAll.wf_tree`) | proved (`RelabelWF.lean`) |
 | 5 relabel: `relabelTree_represents : Items.WF → Items.RThreeConnected → Represents` (`Correctness.lean`, = `relabelTree_represents'`), `relabelTree_represents_of_r` (output-level R clause, used by `spqrTree_represents`); per field `RelabelOK.q_endpoints/twin_glue/nv_orig_inj/separation/interior/canonical/r_three_connected` | `RelabelRep.lean` | proved (every `RelabelOK.*` field is standard-axioms only); needs the `Items.WF` clauses `Endpoints.q_root`, `Shapes.o_parent`, `Shapes.s_order` (§5; checked by `check_repok`); `Items.RThreeConnected` is the item-level R statement (§4.5, `items_r_three_connected`), transported not proved |
 | 5 relabel, per-node layout: `Layout.Shape`/`Layout.Local` for F, V, Q-loop/O, Q/I, P, S, R (`shape_*`, `local_*`), exact rows (`runF_row`, `runLoop_row`, `runQI_row`, `runP_row`, `runS_row`, `run_entries`) | `LayoutShape.lean` | proved (standard axioms); `r_skeleton_nodup` discharges the R `Nodup` hypothesis from `r_shape` |
@@ -2764,7 +2787,7 @@ and `spqrTree_r_three_connected`, so its admissions are those of `walk_items_wf`
 | 5 relabel, CSR bounds: `relabelTree_adj : Items.WF → Items.ROriented → (∀ n, adjBounds[2 nvSt n] = 2 neSt n) ∧ adjBounds[2 |nodeVerts|] = |adjDat|` (the statement of `relabel_adj_spec`); `layout_local` (`Layout.Local` for every item's `nodeLayout`) | `RelabelAdj.lean` | proved; `relabel_adj_spec` itself stays admitted in `RelabelSpec.lean` only because that file cannot import its proof |
 | 5 relabel, `WF` assembly: `RelabelAll.wf_tree`, `preorder` (`child_idx`/`subtree_end` chain, `subtree_props`, `parent_eq_iff`), `only_root_F`, `shape` (`skeleton_eq` + `LayoutShape.shape_*`), `adj_bounds_mono`, `adj_dest`, `adj_incident'` (`global_bound`/`global_row`: global CSR rows = `Layout.Local` rows; `foreign_ne`, `row_filter`) | `RelabelWF.lean` | proved (standard axioms) |
 | 2/7 `Items.ROriented` of the walk output: `rOriented_of_stNumbered`, `walk_items_rOriented'` | `StOriented.lean` | proved from `walk_st` (+ `walk_items_wf`), under `g.WF`/`OrderOK` like `walk_st`; used by `spqrTree_wf'` (`Correctness.lean`); the hypothesis-free `spqrTree_wf` the planar layer uses is a named admission (§7.6) |
-| 2 walk→relabel interface `walk_items_wf : g.WF → OrderOK g.nv vo → OrderOK g.ne eo → Items.WF g (g.walk tern (g.dfsForest vo eo)).items` (`WalkItemsWF.lean`, above `WalkCover`/`WalkTyping`), and `spqrTree_eq` (`WalkWF.lean`, below the st layer) | `walk_items_wf = wf_of_ranges walk_tree.toTree walk_typing.toTypingFacts walk_ranges` (empty graph: `wf_initialItems`); admitted: `walk_rangesInv`/`walk_closeFacts` (§4.6; `walk_ranges` is derived), `walk_canonical` (`tern = false`, used by `spqrTree_canonical`) is the proved assembly over the named hypotheses `walk_canonInv`/`walk_ternarize` (step `finishEdge_canon` proved, `RangesCanon.lean`, §4.6); `spqrTree_eq` proved |
+| 2 walk→relabel interface `walk_items_wf : g.WF → OrderOK g.nv vo → OrderOK g.ne eo → Items.WF g (g.walk tern (g.dfsForest vo eo)).items` (`WalkItemsWF.lean`, above `WalkCover`/`WalkTyping`), and `spqrTree_eq` (`WalkWF.lean`, below the st layer) | `walk_items_wf = wf_of_ranges walk_tree.toTree walk_typing.toTypingFacts walk_ranges` (empty graph: `wf_initialItems`); admitted: `walk_rangesInv`/`walk_closeFacts` (§4.6; `walk_ranges` is derived), `walk_canonical` (`tern = false`, used by `spqrTree_canonical`) is the proved assembly over `walk_canonInv`/`walk_ternarize` (derived from the backbone, §4.7 stage 3a; step `finishEdge_canon` proved, `RangesCanon.lean`, §4.6); `spqrTree_eq` proved |
 | §4.6 final-state ranges `Items.Ranges g items σ` (piece-edge convexity in the DFS edge postorder + attachment facts), `wf_of_ranges : Tree → TypingFacts → Ranges → canonical → Items.WF` (`endpoints_of_ranges`, `shapes_of_ranges`); checker `check_ranges` (`CheckRanges.lean`) | `Ranges.lean`, `RangesWF.lean` | def / proved (standard axioms); every field 0 violations on seeds 0..400 + tiny graphs; corrected `s_shape` (`1 ≤`), `r_shape` (`5 ≤`), `q_children` (Q leaf child allowed) in `ItemSpec.lean` with counterexamples |
 | 7 st-order spec `StOrder`, `Items.StNumbered`, split `spqrTree_st = relabel_st ∘ walk_st` | `StSpec.lean`, `StWalk.lean` | def / proved split |
 | 5 relabel per-node interface `RelabelNode`/`RelabelLayout`/`RelabelIdx`, `Items.nvList`/`ordered`/`edgeChildren`/`PosOK`/`hasCap`/`nEdges`/`ROriented` | `RelabelSpec.lean` | def; `relabel_node_spec` proved in `RelabelMain.lean` (`Ghost.relabel_node_spec_proved`) |
@@ -3730,13 +3753,13 @@ facts about the final items are consumed: `Items.QUpper` (a child of `vertItem v
 children are V items), `Items.QChildVs` (a block-root Q's non-V child has `vs = (vs_Q.1, some w)`,
 or `(vs_Q.1, none)` for a loop), `Items.PChildVs` (a P's non-V children carry its `vs`). They are
 the fields of `PieceFacts` (`RangesPiece.lean`, §4.6), whose walk-state invariant `PieceInv d s` is
-kept by every primitive and by `finishEdge_piece`; the final-state form is the single named
-hypothesis `walk_pieceInv` (`WalkPieceSep.lean`), with `walk_q_upper`/`walk_root_sep`/`walk_root_v`/
+kept by every primitive and by `finishEdge_piece`; the final-state form `walk_pieceInv`
+(`WalkPieceSep.lean`) is derived from the backbone (`walk_pieceFacts`, §4.7 stage 3a), with `walk_q_upper`/`walk_root_sep`/`walk_root_v`/
 `walk_q_child_vs`/`walk_p_child_vs` its projections. Checker: `Ranges.checkFinal` on the final
 items (`ranges.q_upper`/`root_sep`/`root_v`/`q_child_vs`/`p_child_vs`) and `checkPieceInv`/`checkPiece`
 at every walk site (`piece_*`), 0 violations on seeds 0..3000 × both modes. `#print axioms
-spqrTree_pieceSep` reaches `sorryAx` only through `walk_pieceInv` and `walk_items_wf`/`walk_ranges`'
-existing admissions.
+spqrTree_pieceSep` reaches `sorryAx` only through the backbone's admissions (via `walk_pieceInv`) and
+`walk_items_wf`/`walk_ranges`' existing admissions.
 
 `embedItem_step_F` is proved in `PlanarEmbedF.lean` with the strengthened invariant.
 `only_root_F` reduces the item to index 0; `closeList_get` identifies each
@@ -4022,7 +4045,7 @@ permutation is needed. `nodeFold_capped` (`PlanarEmbedNodeFold.lean`) dispatches
 `R` case is `nodeFold_capped_R` (proved below via `main_R`; it takes the extra hypotheses
 `hclosed : NodeRotClosed` and `hcor : NodeCorners`).
 `#print axioms planarEmbed_sound` reaches `sorryAx` only through the walk/R-side admissions,
-`spqrTree_pieceSep`'s final-items hypothesis `walk_pieceInv`, `planarWalk_planarFinish` (the one
+`spqrTree_pieceSep`'s `walk_pieceInv` (the backbone's admissions, §4.7 stage 3a), `planarWalk_planarFinish` (the one
 remaining ingredient of `nodePlanar_sound_R`; the relabel-side `planarRelabelTree_relabelNodeR` is
 proved and `Items.WF` comes from `walk_items_wf` under `g.WF`/`OrderOK`); `planarTree_nodeRotClosed`
 and `planarTree_nodeCorners` are proved from the relabel rows (below) and reach `sorryAx` only
@@ -4108,7 +4131,7 @@ is the accepted `walk_items_wf`; its projection and edge-count transport add non
 | statement | file | status |
 |---|---|---|
 | quarter-edges, `RotationSystem`, `IsEmbedding`, `IsPlanarEmbedding`, `Planar` | `Planar.lean` | def |
-| `SpqrTree.PieceSep`, `spqrTree_pieceSep` | `PieceSep.lean`, `WalkPieceSep.lean`, `RelabelPieceSep.lean` | def / **assembled** (`RelabelOK.pieceSep`, every field `RelabelOK.pieceSep_<field>` standard-axiom) over the final-items hypothesis `walk_pieceInv` (`PieceFacts` = `Items.QUpper`/`RootSep`/`RootV`/`QChildVs`/`PChildVs`, kept as `PieceInv` by every primitive and `finishEdge_piece`, §4.6; `check_walkinv` `ranges.q_upper`/`root_sep`/`root_v`/`q_child_vs`/`p_child_vs`, 0 violations 0..3000 × both modes); `sorryAx` only through those and `walk_items_wf`'s admissions |
+| `SpqrTree.PieceSep`, `spqrTree_pieceSep` | `PieceSep.lean`, `WalkPieceSep.lean`, `RelabelPieceSep.lean` | def / **assembled** (`RelabelOK.pieceSep`, every field `RelabelOK.pieceSep_<field>` standard-axiom) over `walk_pieceInv` (derived from the backbone, §4.7 stage 3a; `PieceFacts` = `Items.QUpper`/`RootSep`/`RootV`/`QChildVs`/`PChildVs`, kept as `PieceInv` by every primitive and `finishEdge_piece`, §4.6; `check_walkinv` `ranges.q_upper`/`root_sep`/`root_v`/`q_child_vs`/`p_child_vs`, 0 violations 0..3000 × both modes); `sorryAx` only through those and `walk_items_wf`'s admissions |
 | `IsPlanarEmbedding.append` (vertex-disjoint edge lists in the same vertex numbering) | `Proofs/PlanarAppend.lean` | **proved** (`propext`, `Classical.choice`, `Quot.sound`) |
 | `IsPlanarEmbedding.oneSum_conj`, `IsPlanarEmbedding.splice` | `Proofs/PlanarOneSum.lean`, `Proofs/PlanarSplice.lean` | **proved** (standard axioms); the specified transposition gives the 1-sum rotation, and `splice` keeps the original vertex numbering when the pieces meet only at the attachment vertex |
 | `Piece.OpenEmbedding.splice`, `OpenEmbedding.frame`, `v_child_boundary` | `Proofs/PieceSplice.lean`, `PlanarEmbedVBoundary.lean` | **proved** (standard axioms); linking the inner ends of two open pieces agrees with the specified conjugated rotation and leaves exactly the two outer ends open; V children supply these open pieces |
@@ -4202,8 +4225,8 @@ Admitted, precisely (`#print axioms` reports `sorryAx` for each): the walk admis
 `planarWalk_planarFinish` (hence
 `nodePlanar_sound_R`; the relabel-side `planarRelabelTree_relabelNodeR` is proved and
 `planarWalk_items_wf'` is `walk_items_wf`); the nine per-step lemmas `*_inv` of `PlanarInvSteps.lean` (hence
-`planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`'s final-items hypothesis
-`walk_pieceInv` (§4.6) (hence `planarEmbed_sound`; `planarTree_nodeRotClosed` and `planarTree_nodeCorners` are proved
+`planarWalkOut_stackInv`); `nodePlanar_complete`; `spqrTree_pieceSep`'s `walk_pieceInv`
+(the backbone's admissions, §4.7 stage 3a) (hence `planarEmbed_sound`; `planarTree_nodeRotClosed` and `planarTree_nodeCorners` are proved
 modulo `planarWalk_planarFinish`; the old `GluedUpTo`-level
 `embedItem_step_Q`/`embedItem_step_node` and the unattempted `TwoSum.planar_left` converse have
 been removed); `spqrTree_planar`. The S and P

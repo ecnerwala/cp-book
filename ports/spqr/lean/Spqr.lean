@@ -134,6 +134,7 @@ import Spqr.RangesTree
 import Spqr.RangesFinal
 import Spqr.WalkBackbone
 import Spqr.WalkBackboneStep
+import Spqr.WalkBackboneRoot
 import Spqr.PlanarEmbedNodeR
 import Spqr.Proofs.PlanarWalkFacts
 import Spqr.PlanarRelabelNodeR

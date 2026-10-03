@@ -227,6 +227,7 @@ structure WalkInvEnd (G : TreeGhost) (t : DfsTree) (d : Nat) (s s' : WalkState) 
   r : s.g.TwoConnected → ∀ dp, d = dp + 1 →
     RWalk G.dfs G.F t.v d s' ∧ BotKeep s.tstack.length s s' ∧
       (∀ k, k < d → s'.stackVerts[k]! = s.stackVerts[k]!) ∧ Items.RSkelInv s'.g s'.items
+  skel : s.g.TwoConnected → Items.RSkelInv s'.g s'.items
   g_eq : s'.g = s.g
   sd_size : s'.stackDir.size = s.stackDir.size
   vStart : ∀ t' ∈ s'.tstack, t'.vStart ∈ t.verts ∨ ∃ t₀ ∈ segsStack G.segs, t'.vStart = t₀.vStart
@@ -1239,6 +1240,7 @@ theorem exit_true (hW : WalkInv G (.node v outs) d s)
         botKeep_of_base (A := []) (A' := new) (by simpa using hW.tstack) hts₂
           (le_of_eq (congrArg List.length hW.tstack)),
         fun k hk => Option.some.inj ((h.anc_sv k hk).symm.trans (hW.anc_sv k hk)), R.skel⟩
+    skel := fun h2 => (h.r (by rw [h.g_eq, ← hW.g_eq]; exact h2)).skel
     g_eq := h.g_eq.trans hW.g_eq.symm
     sd_size := h.sd_size.trans hW.sd_size.symm
     vStart := hvs
@@ -1338,6 +1340,7 @@ theorem exit_false (hW : WalkInv G (.node v outs) d s)
           (le_of_eq (congrArg List.length hW.tstack))).trans
           (botKeep_cons (s := { s₂ with stackDir := s₂.stackDir.set! d true }) rfl R.B_le),
         fun k hk => Option.some.inj ((h.anc_sv k hk).symm.trans (hW.anc_sv k hk)), R.skel⟩
+    skel := fun h2 => (h.r (by rw [h.g_eq, ← hW.g_eq]; exact h2)).skel
     g_eq := h.g_eq.trans hW.g_eq.symm
     sd_size := by simp; exact h.sd_size.trans hW.sd_size.symm
     vStart := by

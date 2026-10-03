@@ -4,21 +4,15 @@ import Spqr.Proofs.Dfs
 import Spqr.WalkItemsWF
 import Spqr.RelabelPieceSep
 import Spqr.RangesPiece
+import Spqr.WalkBackboneRoot
 
 namespace Spqr
 
-/-- Admitted (named hypothesis for the walk induction, `WalkBackbone.lean`): the final items satisfy
-`PieceFacts` (`RangesPiece.lean`). Within a tree the backbone carries `PieceInv d s` (`PieceFacts` plus
-the path clause `root_path`), kept by every primitive (`PieceInv.alloc`/`modify`/`modifyVs`/`setVert`/
-`exit`/`frame`/`pushVert`/`mergeTop`/`retarget`/…) and by `finishEdge_piece` from `CloseBase` +
-`CloseContent` + `ClosePiece`; a root append keeps `PieceFacts` (`PieceFacts.rootAppend`) and the next
-root re-enters `PieceInv 0` (`PieceFacts.root`). Checker `check_walkinv`: `checkPieceInv` at the tree
-entry/end, before/after every `finishEdge` and (`PieceFacts`) after every root append, `checkPiece` for
-`ClosePiece`, `Ranges.checkFinal` on the final items. -/
+/-- `PieceFacts` at the final walk state, from the backbone (`walk_pieceFacts`). -/
 theorem walk_pieceInv (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
-    (g.walk tern (g.dfsForest vo eo)).PieceFacts := by
-  sorry
+    (g.walk tern (g.dfsForest vo eo)).PieceFacts :=
+  walk_pieceFacts g hg tern vo eo hvo heo
 
 theorem walk_g' (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) : (g.walk tern (g.dfsForest vo eo)).g = g := by

@@ -282,24 +282,6 @@ theorem walk_ranges' (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
       fun e he => by simpa [List.mem_flatMap] using hecov e he
     exact ⟨_, walk_ranges g tern vo eo hg hvo heo hnv hb hcov⟩
 
-/-- Admitted (frame fact for the walk induction): the walk never writes `ternarize`. -/
-theorem walk_ternarize (g : Graph) (tern : Bool) (forest : List DfsTree) :
-    (g.walk tern forest).ternarize = tern := by
-  sorry
-
-/-- Admitted (named hypothesis for the walk induction): `CanonInv` at the final walk state. -/
-theorem walk_canonInv (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
-    (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
-    (g.walk tern (g.dfsForest vo eo)).CanonInv := by
-  sorry
-
-/-- Canonicity of the unternarized walk (`PROOF.md` §4.6; for `tern = true` P under P / S under S
-do occur, `check_ranges` seeds 0 and 386). -/
-theorem walk_canonical (g : Graph) (hg : g.WF) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
-    (heo : OrderOK g.ne eo) :
-    Items.Canonical (g.walk false (g.dfsForest vo eo)).items :=
-  walk_canonInv g hg false vo eo hvo heo (walk_ternarize g false _)
-
 /-- `Items.Shapes.q_children` for the walk: a `Q` item's children are `[]`, `[c]` or `[c, vertItem v]`
 with `c` a non-F/V node, a leaf if `Q`. -/
 theorem walk_q_children (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat)
