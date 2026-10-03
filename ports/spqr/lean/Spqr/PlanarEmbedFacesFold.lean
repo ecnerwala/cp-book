@@ -1,6 +1,7 @@
 import Spqr.PlanarEmbedFacesSteps
 import Spqr.PlanarEmbedQ
 import Spqr.PlanarNodeSpec
+import Spqr.PlanarEmbedNodeExec
 
 /-!
 # The fold of `planarEmbed` over the same-witness invariant `GluedFaces`
