@@ -677,10 +677,9 @@ theorem PreOut.child {e : Nat} {cls : OutClass} {c : Nat} {couts : List DfsOut} 
     exact ⟨h.e_lt _ (mem_subEdges_edgesList.2 ⟨_, hm, subEdges_e _⟩), inc_e_of_ends (h.ends _ hm)⟩
   have hn := h.nodup.of_append_right
   rw [h.verts_eq] at hn
-  have hnc : ∀ e', e' < s.g.ne → Items.EdgeBelow s.g s.items (vertItem v) e' →
+  have hdnc : ∀ o' ∈ done, ∀ e', subEdges o'.1 e' →
       ∀ x ∈ (DfsTree.node c couts).verts, ¬ s.g.Inc e' x := by
-    intro e' he' hb x hx hxi
-    obtain ⟨o', ho', -, hs⟩ := (h.ear.vert_edges e' he').1 hb
+    intro o' ho' e' hs x hx hxi
     have hm : o'.1 ∈ outs₀ := by
       rw [← h.split]; exact List.mem_append_left _ (List.mem_map_of_mem ho')
     rw [hg] at hxi
@@ -690,8 +689,12 @@ theorem PreOut.child {e : Nat} {cls : OutClass} {c : Nat} {couts : List DfsOut} 
     · exact hvnc hx
     · exact List.disjoint_of_nodup_append (List.nodup_cons.1 hn).2
         (mem_vertsList_of_verts (List.mem_map_of_mem ho') h1) (List.mem_append_left _ hx)
+  have hnc : ∀ e', e' < s.g.ne → Items.EdgeBelow s.g s.items (vertItem v) e' →
+      ∀ x ∈ (DfsTree.node c couts).verts, ¬ s.g.Inc e' x := fun e' he' hb x hx hxi => by
+    obtain ⟨o', ho', -, hs⟩ := (h.ear.vert_edges e' he').1 hb
+    exact hdnc o' ho' e' hs x hx hxi
   obtain ⟨sv', sd', hC₂⟩ := ctx_init_child h.ear hv' hc' hd₀ hsvsz hinc hnc hnd_c.of_append_right hsz
-    push _ hpush rfl
+    hdnc push _ hpush rfl
   obtain ⟨new₁, hts₁, hR₁, hI₁⟩ := hp₁.read
   have hsvE : s₁.stackVerts = s.stackVerts := by rw [hst]
   have htsE : s₁.tstack = (if push then
