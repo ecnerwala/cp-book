@@ -111,6 +111,7 @@ def main (args : List String) : IO Unit := do
         if isVs i v && !att i v then bad := bad + 1; fail s!"vs_att at Q leaf: i={i} v={v}"
     for c in ch i do
       if (ty c == .I || ty c == .O) && ty i != .Q then bad := bad + 1; fail s!"io_parent: p={i} c={c}"
+      if ty i == .V && ch c == [] then bad := bad + 1; fail s!"q_under_v: v={i} c={c}"
       if ty c == .S && ty i == .S then cand := cand + 1; IO.println s!"cand: canonical S/S: p={i} c={c} tern={tern}"
       if ty c == .P && ty i == .P then cand := cand + 1; IO.println s!"cand: canonical P/P: p={i} c={c} tern={tern}"
     if ty i == .P then

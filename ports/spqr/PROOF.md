@@ -741,7 +741,8 @@ vertex, each with `tern ∈ {0,1}`):
   (an I/O item's parent is a Q), `q_leaf` (a leaf Q's `vs` is its edge), `q_root` (a Q with children:
   `vs = (u, none)`, `u` on the edge; loop ⇒ `ch = [c]` with `vs c = (u, none)`; non-loop ⇒
   `ch = [c, vertItem w]`, `w < nv`, `{u, w}` = the edge, `vs c = (a, b)` a permutation of `(u, w)`;
-  `c ∉ {F, V}`, and `c` a leaf if it is a Q), `p_shape`, `s_order`, `r_shape` as in `Shapes`.
+  `c ∉ {F, V}`, and `c` a leaf if it is a Q), `q_under_v` (a child of a V item is a block root,
+  `ch c ≠ []`; consumed by the R coverage bridge), `p_shape`, `s_order`, `r_shape` as in `Shapes`.
 
 False candidates (recorded, restated):
 * *All* edges below a node form an interval of `σ` — **false**: seed 348, S node `{e2, e0}` at

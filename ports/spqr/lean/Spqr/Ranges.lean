@@ -78,6 +78,8 @@ structure Ranges (σ : List Nat) : Prop where
       ((g.edges[e]!).1 ≠ (g.edges[e]!).2 → ∃ w, w < g.nv ∧ PairEq (u, w) g.edges[e]! ∧
         items.ch (edgeItem g e) = [c, vertItem w] ∧
         ∃ a b, items.vs c = (some a, some b) ∧ PairEq (a, b) (u, w))
+  /-- A child of a V item is a block root (leaf Qs hang only under nodes and block-root Qs). -/
+  q_under_v : ∀ v c, v < g.nv → items.IsParent (vertItem v) c → items.ch c ≠ []
   /-- `P`: ≥ 2 virtual edges, all on the node's endpoints, no V children. -/
   p_shape : ∀ i, i < items.size → items.type i = .P →
     2 ≤ (items.virtualEdges i).length ∧ (∀ c, items.IsParent i c → items.type c ≠ .V) ∧
