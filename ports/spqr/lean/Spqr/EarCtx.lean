@@ -128,6 +128,10 @@ structure CtxTop (v d : Nat) (done : List (DfsOut × Bool)) (hasVert : Bool) (s 
     ∃ t ∈ top, t.edges s.g s.items e
   /-- Only returning outs leave entries (boundary outs pop everything they pushed). -/
   ret : top ≠ [] → ∃ o ∈ done, o.1.cls.lowval d < d
+  /-- An entry touching the path vertex `stackVerts[k]` (`k ≤ d`) was opened at depth `≤ k`
+  (`ctx_touch_k_*`). -/
+  touch_k : ∀ t ∈ top, ∀ k, k ≤ d → s.g.Touches (t.edges s.g s.items) s.stackVerts[k]! →
+    t.topDepth ≤ k
 
 /-- The between-edges invariant of `walkOuts v d` (see the module docstring). -/
 structure EarCtx (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut) (hasVert : Bool)
@@ -137,6 +141,9 @@ structure EarCtx (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut)
   base_edges : bE.length = base.length ∧
     ∀ k, k < base.length → ∀ e, e < s.g.ne → (base[k]!.edges s.g s.items e ↔ bE[k]! e)
   base_bot : ∀ t ∈ base, t.vStart ≠ v
+  /-- Enclosing entries hold no edge at `v` or inside its subtree (`ctx_base_touch`). -/
+  base_touch : ∀ k, k < base.length → ∀ x, s.g.Touches (bE[k]!) x →
+    x ≠ v ∧ x ∉ DfsOut.vertsList (done.map (·.1) ++ rest)
   sv : ∀ k, k ≤ d → s.stackVerts[k]! = sv[k]!
   sd : ∀ k, k < d → s.stackDir[k]! = sd[k]!
   sv_d : s.stackVerts[d]! = v
@@ -154,6 +161,9 @@ structure EarCtx (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut)
   vert_book : hasVert = false →
     s.g.ConnEdges (Items.EdgeBelow s.g s.items (vertItem v)) ∧
     s.g.TwoAttached (Items.EdgeBelow s.g s.items (vertItem v)) v v
+  /-- Edges below the vertex item (boundary outs) reach no proper ancestor (`ctx_vert_touch`). -/
+  vert_touch : ∀ k, k < d →
+    ¬ s.g.Touches (Items.EdgeBelow s.g s.items (vertItem v)) s.stackVerts[k]!
   vert_disj : hasVert = false → ∀ t ∈ s.tstack, ∀ e, e < s.g.ne → t.edges s.g s.items e →
     ¬ Items.EdgeBelow s.g s.items (vertItem v) e
   vert_edges : ∀ e, e < s.g.ne →

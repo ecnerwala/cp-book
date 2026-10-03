@@ -522,6 +522,8 @@ structure RetTop (v d : Nat) (s : WalkState) (e : Nat) (cls : OutClass) (y : Nat
     ¬ t'.edges s.g sX.items e'
   span_disj : R.Pairwise fun t t' => ∀ i ∈ t.spans.1 ++ t.spans.2, i ∉ t'.spans.1 ++ t'.spans.2
   vstart : ∀ t ∈ R, t.vStart = v ∨ t.vStart ∈ (DfsTree.node y outs).verts
+  touch_k : ∀ t ∈ R, ∀ k, k ≤ d → s.g.Touches (t.edges s.g sX.items) s.stackVerts[k]! →
+    t.topDepth ≤ k
   vert : hv = true → ∃ x, R = [x] ∧ x.vStart = v ∧ x.topDepth = cls.lowval d ∧
     getSide x.spans (!s.stackDir[cls.lowval d]!) = [] ∧
     s.nxtEdgeIdx ≤ x.firstIdx ∧ x.firstIdx < sX.nxtEdgeIdx ∧
@@ -776,7 +778,46 @@ theorem earAt_tree_bd_comp : (o₀).cls.isTree = true → d ≤ (o₀).cls.lowva
 
 theorem earAt_tree_bd_term : (o₀).cls.isTree = true → d ≤ (o₀).cls.lowval d → ∀ u ∈ (s₃).tstack.tail,
     (s₃).g.Touches (u.edges (s₃).g (s₃).items) v → u.vStart = v ∨ u.topDepth ≤ d := by
-  sorry
+  intro _ _ u hu htouch
+  have hC := H.ctx
+  have hC' := H.ctx'
+  obtain ⟨top', htop', hCT'⟩ := hC'.top
+  obtain ⟨top, htop, hCT⟩ := hC.top
+  have hvd : sE.stackVerts[d]! = v := (H.svlo d (Nat.le_refl _)).trans hC.sv_d
+  have hmem : u ∈ L' ++ sE.tstack := List.mem_of_mem_tail hu
+  have htE : sE.g.Touches (u.edges sE.g sE.items) sE.stackVerts[d]! := by rw [hvd]; exact htouch
+  rcases List.mem_append.1 hmem with h | h
+  · exfalso
+    rw [H.hL'] at h
+    split at h
+    · rw [List.mem_singleton] at h
+      subst h
+      obtain ⟨e', he', ⟨i, hi, hb⟩, hinc⟩ := htE
+      refine hC'.vert_touch d (Nat.lt_succ_self d) ⟨e', he', ?_, hinc⟩
+      cases dir' <;> simp [setSides] at hi <;> subst hi <;> exact hb
+    · nomatch h
+  · rw [htop'] at h
+    rcases List.mem_append.1 h with h | h
+    · exact .inr (hCT'.touch_k u h d (Nat.le_succ d) htE)
+    · obtain ⟨k, hk, hku⟩ := List.mem_iff_getElem.1 h
+      have hk! : (L ++ s.tstack)[k]! = u := by rw [getElem!_pos _ k hk]; exact hku
+      obtain ⟨e', he', hte, hinc⟩ := htE
+      have hbE : bE'[k]! e' := (hC'.base_edges.2 k hk e' he').1 (by rw [hk!]; exact hte)
+      rw [H.gE] at he' hinc; rw [H.svlo d (Nat.le_refl _)] at hinc
+      have hte' : u.edges s.g s.items e' := by rw [← hk!]; exact (H.hbE' k hk e' he').1 hbE
+      have hts : s.g.Touches (u.edges s.g s.items) s.stackVerts[d]! := ⟨e', he', hte', hinc⟩
+      rcases List.mem_append.1 h with h | h
+      · left; rw [H.hL] at h; split at h
+        · rw [List.mem_singleton] at h; subst h; rfl
+        · nomatch h
+      · rw [htop] at h
+        rcases List.mem_append.1 h with h | h
+        · exact .inr (hCT.touch_k u h d (Nat.le_refl _) hts)
+        · obtain ⟨j, hj, hju⟩ := List.mem_iff_getElem.1 h
+          have hj! : base[j]! = u := by rw [getElem!_pos base j hj]; exact hju
+          exact absurd rfl (hC.base_touch j hj v ⟨e', he',
+            (hC.base_edges.2 j hj e' he').1 (by rw [hj!]; exact hte'),
+            by rw [← hC.sv_d]; exact hinc⟩).1
 
 theorem earAt_tree_bd_side : (o₀).cls.isTree = true → d ≤ (o₀).cls.lowval d →
     if (o₀).cls.lowval d = d + 1 then ∀ t ∈ (s₃).tstack.head?, t.spans.1 = []
@@ -1180,6 +1221,8 @@ structure RetFrame (v d : Nat) (s : WalkState) (e : Nat) (cls : OutClass) (y : N
   touch : ∀ t ∈ R, ∀ x, s.g.Touches (t.edges s.g sX.items) x →
     x = v ∨ x ∈ (DfsTree.node y outs).verts ∨ ∃ k, cls.lowval d ≤ k ∧ k ≤ d ∧ x = s.stackVerts[k]!
   vstart : ∀ t ∈ R, t.vStart = v ∨ t.vStart ∈ (DfsTree.node y outs).verts
+  touch_k : ∀ t ∈ R, ∀ k, k ≤ d → s.g.Touches (t.edges s.g sX.items) s.stackVerts[k]! →
+    t.topDepth ≤ k
 
 /-- Admitted (dump-checked, `retCheck`): the frame of loops 1–2 (`RetFrame`) over the `EarClose`
 stack of the site's `EarFinish`; without the vertex entry its entries start in the child
@@ -1316,6 +1359,11 @@ theorem tree_ret_vert_of_wf (hr : cls.lowval d < d) (hb : (hasVert || push) = tr
         rw [hrE e']
         exact ⟨fun ⟨t, ht, hte⟩ => hsubE t ht e' he' hte, hcover e' he'⟩
       touch := htouchr
+      touch_k := fun t ht k hk hx => by
+        rw [List.mem_singleton] at ht; rw [ht] at hx ⊢; rw [hrtop]
+        obtain ⟨e', he', hre, hinc'⟩ := hx
+        obtain ⟨t', ht', hte⟩ := (hrE e').1 hre
+        exact Nat.le_trans ((hX rfl).2.2 t' ht') (F.touch_k t' ht' k hk ⟨e', he', hte, hinc'⟩)
       disj := List.pairwise_singleton ..
       span_disj := List.pairwise_singleton ..
       vstart := fun t ht => by rw [List.mem_singleton] at ht; rw [ht]; exact Or.inl rfl
@@ -1471,6 +1519,11 @@ theorem tree_ret_vert_of_wf (hr : cls.lowval d < d) (hb : (hasVert || push) = tr
         rw [hrE e' he']
         exact ⟨fun ⟨t, ht, hte⟩ => hsubE t ht e' he' hte, hcover e' he'⟩
       touch := htouchr
+      touch_k := fun t ht k hk hx => by
+        rw [List.mem_singleton] at ht; rw [ht] at hx ⊢; rw [hmtop]
+        obtain ⟨e', he', hre, hinc'⟩ := hx
+        obtain ⟨t', ht', hte⟩ := (hrE e' he').1 hre
+        exact Nat.le_trans ((hX rfl).2.2 t' ht') (F.touch_k t' ht' k hk ⟨e', he', hte, hinc'⟩)
       disj := List.pairwise_singleton ..
       span_disj := List.pairwise_singleton ..
       vstart := fun t ht => by rw [List.mem_singleton] at ht; rw [ht]; exact Or.inl rfl
@@ -1553,6 +1606,7 @@ theorem tree_ret_shape (hr : cls.lowval d < d) : ∃ R,
         disj := (List.pairwise_append.1 hdisj).1
         span_disj := (List.pairwise_append.1 hsdisj).1
         vstart := F.vstart
+        touch_k := F.touch_k
         vert := fun h => absurd h (by decide)
         noVert := fun _ => ⟨⟨c, mid ++ [py, vy], rfl, hce⟩, hnv rfl⟩ }⟩
   · simp only [↓reduceIte]

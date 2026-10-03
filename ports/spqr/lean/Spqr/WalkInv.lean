@@ -1408,7 +1408,8 @@ theorem ctx_init_root (t : DfsTree) (s : WalkState) (hwf : t.WF []) (hends : t.E
             fun t ht => (nomatch ht), fun t ht => (nomatch ht), fun t ht => (nomatch ht)⟩
           bot := fun t ht => (nomatch ht), vitems := fun t ht => (nomatch ht)
           qitems := fun t ht => (nomatch ht), edges := fun t ht => (nomatch ht)
-          cover := fun o ho => (nomatch ho), ret := fun h => absurd rfl h }⟩
+          cover := fun o ho => (nomatch ho), ret := fun h => absurd rfl h, touch_k := fun t ht => (nomatch ht) }⟩
+      base_touch := fun k hk => absurd hk (by simp)
       base_edges := ⟨rfl, fun k hk => absurd hk (by simp)⟩
       base_bot := fun t ht => (nomatch ht)
       noVert_after := fun _ => rfl
@@ -1429,6 +1430,7 @@ theorem ctx_init_root (t : DfsTree) (s : WalkState) (hwf : t.WF []) (hends : t.E
       vert_disj := fun _ t ht => absurd ht (hnil t)
       vert_edges := fun e _ => ⟨fun h => (edgeBelow_vert_nil hv hfr.1 e h).elim,
         fun ⟨_, ho, _⟩ => (nomatch ho)⟩
+      vert_touch := fun k hk => absurd hk (Nat.not_lt_zero _)
       touch_bot := fun t ht => absurd ht (hnil t)
       span_root := fun t ht => absurd ht (hnil t)
       span_lt := fun t ht => absurd ht (hnil t)
@@ -1462,6 +1464,7 @@ theorem ctx_init_child {v d : Nat} {done : List (DfsOut × Bool)} {rest : List D
     (hnc : ∀ e', e' < s.g.ne → Items.EdgeBelow s.g s.items (vertItem v) e' →
       ∀ x ∈ (DfsTree.node y outs).verts, ¬ s.g.Inc e' x)
     (hndc : (DfsTree.node y outs).verts.Nodup) (hsz : 1 + s.g.nv ≤ s.items.size)
+    (hdnc : ∀ o' ∈ done, ∀ e', subEdges o'.1 e' → ∀ x ∈ (DfsTree.node y outs).verts, ¬ s.g.Inc e' x)
     (push : Bool) (L : List TEntry)
     (hpush : push = true ↔ hasVert = false ∧ cls.lowval d < d ∧ cls.isType1 = true)
     (hL : L = if push then
@@ -1505,7 +1508,27 @@ theorem ctx_init_child {v d : Nat} {done : List (DfsOut × Bool)} {rest : List D
             fun t ht => (nomatch ht), fun t ht => (nomatch ht), fun t ht => (nomatch ht)⟩
           bot := fun t ht => (nomatch ht), vitems := fun t ht => (nomatch ht)
           qitems := fun t ht => (nomatch ht), edges := fun t ht => (nomatch ht)
-          cover := fun o ho => (nomatch ho), ret := fun h => absurd rfl h }⟩
+          cover := fun o ho => (nomatch ho), ret := fun h => absurd rfl h, touch_k := fun t ht => (nomatch ht) }⟩
+      base_touch := fun k hk x hx => by
+        rw [getElem!_map_fn _ _ k hk] at hx
+        obtain ⟨e', he', hte, hinc⟩ := hx
+        have hmem : (L ++ s.tstack)[k]! ∈ L ++ s.tstack := by
+          rw [getElem!_pos _ k hk]; exact List.getElem_mem hk
+        have hxC : x ∉ (DfsTree.node y outs).verts := fun hxC => by
+          obtain ⟨top, htop, hCT⟩ := hC.top
+          rcases List.mem_append.1 hmem with h | h
+          · exact hnc e' he' ((hLedges _ h e').1 hte) x hxC hinc
+          have h' : (L ++ s.tstack)[k]! ∈ top ++ base := by rw [← htop]; exact h
+          rcases List.mem_append.1 h' with h | h
+          · obtain ⟨o', ho', hs⟩ := hCT.edges _ h e' he' hte
+            exact hdnc o' ho' e' hs x hxC hinc
+          · obtain ⟨j, hj, hjt⟩ := List.mem_iff_getElem.1 h
+            have hj' : base[j]! = (L ++ s.tstack)[k]! := by rw [getElem!_pos base j hj]; exact hjt
+            refine (hC.base_touch j hj x ⟨e', he',
+              (hC.base_edges.2 j hj e' he').1 (by rw [hj']; exact hte), hinc⟩).2 ?_
+            exact mem_vertsList.2 ⟨_, List.mem_append_right _ (List.mem_cons_self ..), e, cls, _, rfl, hxC⟩
+        exact ⟨fun h => hxC (by rw [h]; exact List.mem_cons_self ..),
+          fun h => hxC (List.mem_cons_of_mem _ (by simpa using h))⟩
       base_edges := ⟨by simp, fun k hk e' _ => by rw [getElem!_map_fn _ _ k hk]⟩
       base_bot := fun t ht => by
         rcases List.mem_append.1 ht with h | h
@@ -1539,6 +1562,7 @@ theorem ctx_init_child {v d : Nat} {done : List (DfsOut × Bool)} {rest : List D
       vert_disj := fun _ _ _ e' _ _ hE => edgeBelow_vert_nil hy hfy.2.1 e' hE
       vert_edges := fun e' _ => ⟨fun h => (edgeBelow_vert_nil hy hfy.2.1 e' h).elim,
         fun ⟨_, ho, _⟩ => (nomatch ho)⟩
+      vert_touch := fun k _ ⟨e', _, h, _⟩ => edgeBelow_vert_nil hy hfy.2.1 e' h
       touch_bot := fun t ht ⟨e', he', hte⟩ => by
         rcases List.mem_append.1 ht with h | h
         · obtain ⟨o, ho, hlo, -⟩ := (hC.vert_edges e' he').1 ((hLedges t h e').1 hte)
@@ -1738,7 +1762,15 @@ theorem earCtx_selfLoop {v d : Nat} {done : List (DfsOut × Bool)} {rest : List 
             · rw [List.mem_singleton] at h
               subst h
               exact absurd hlt (Nat.not_lt.2 hge)
-          ret := fun h => (hCT.ret h).imp fun o ⟨ho, hl⟩ => ⟨List.mem_append_left _ ho, hl⟩ }⟩
+          ret := fun h => (hCT.ret h).imp fun o ⟨ho, hl⟩ => ⟨List.mem_append_left _ ho, hl⟩
+          touch_k := fun t ht k hk hx => by
+            rw [hg, hsv] at hx
+            obtain ⟨e', he', hte, hinc⟩ := hx
+            exact hCT.touch_k t ht k hk ⟨e', he', (hedges t (hmemT t ht) e').1 hte, hinc⟩ }⟩
+      base_touch := fun k hk x hx => by
+        rw [hg] at hx
+        have h := hC.base_touch k hk x hx
+        simpa using h
       base_edges := ⟨hC.base_edges.1, fun k hk e' he' => by
         rw [hg] at he' ⊢
         exact (hedges _ (hbase_mem k hk) e').trans (hC.base_edges.2 k hk e' he')⟩
@@ -1815,6 +1847,13 @@ theorem earCtx_selfLoop {v d : Nat} {done : List (DfsOut × Bool)} {rest : List 
         · exact hC.vert_disj rfl t ht e' he' ((hedges t ht e').1 hte) h
         · obtain ⟨i, hi, hb⟩ := (hedges t ht e').1 hte
           exact hqf.2.2 t ht (Items.Below.eq_of_no_parent hqf.1 hb ▸ hi)
+      vert_touch := fun k hk ⟨e', he', hb, hinc⟩ => by
+        rw [hg] at he' hb hinc; rw [hsv] at hinc
+        rcases (hEB_v e' he').1 hb with h | h
+        · exact hC.vert_touch k hk ⟨e', he', h, hinc⟩
+        · rw [h] at hinc
+          rcases hinc with h' | h' <;>
+            (rw [hend] at h'; exact hC.path k d hk (Nat.le_refl _) (h'.symm.trans hC.sv_d.symm))
       vert_edges := fun e' he' => by
         rw [hg] at he' ⊢
         rw [hEB_v e' he', hC.vert_edges e' he']
@@ -2393,7 +2432,32 @@ theorem earCtx_pushBack {v d : Nat} {done : List (DfsOut × Bool)} {rest : List 
             · rw [List.mem_singleton] at h
               subst h
               exact ⟨c, List.mem_cons_self .., (hce e').2 (hsub e' hs)⟩
-          ret := fun _ => ⟨(.back e dest cls, true), List.mem_append_right _ (List.mem_singleton_self _), hlt⟩ }⟩
+          ret := fun _ => ⟨(.back e dest cls, true), List.mem_append_right _ (List.mem_singleton_self _), hlt⟩
+          touch_k := fun t ht k hk hx => by
+            obtain ⟨e', he', hte, hinc⟩ := hx
+            rw [hg] at he' hinc; rw [hsv] at hinc
+            rcases List.mem_cons.1 ht with rfl | ht
+            · show cls.lowval d ≤ k
+              have h := (hce e').1 hte
+              subst h
+              rcases eq_of_inc_pairEq hend hinc with h | h
+              · rcases Nat.lt_or_ge k d with hkd | hkd
+                · exact absurd (h.trans hC.sv_d.symm) (hC.path k d hkd (Nat.le_refl _))
+                · omega
+              · rcases Nat.lt_trichotomy k (cls.lowval d) with hk' | hk' | hk'
+                · exact absurd (h.trans hdest.symm) (hC.path k _ hk' hlt.le)
+                · omega
+                · omega
+            · rcases List.mem_append.1 ht with ht | ht
+              · rw [(hLprop t ht).2.1]
+                rcases Nat.lt_or_ge k d with hkd | hkd
+                · exact absurd ⟨e', he', (hLe t ht e').1 hte, hinc⟩ (hC.vert_touch k hkd)
+                · exact hkd
+              · exact hCT.touch_k t ht k hk ⟨e', he', (hedges t e').1 hte, hinc⟩ }⟩
+      base_touch := fun k hk x hx => by
+        rw [hg] at hx
+        have h := hC.base_touch k hk x hx
+        simpa using h
       base_edges := ⟨hC.base_edges.1, fun k hk e' he' => by
         rw [hg] at he'
         exact (hedges _ e').trans (hC.base_edges.2 k hk e' he')⟩
@@ -2419,6 +2483,9 @@ theorem earCtx_pushBack {v d : Nat} {done : List (DfsOut × Bool)} {rest : List 
       hv_ret := fun _ => ⟨(o, true), hoD, hlt⟩
       vert_book := fun h => nomatch h
       vert_disj := fun h => nomatch h
+      vert_touch := fun k hk ⟨e', he', hb, hinc⟩ => by
+        rw [hg] at he' hinc; rw [hsv] at hinc
+        exact hC.vert_touch k hk ⟨e', he', (hEB _ e').1 hb, hinc⟩
       vert_edges := fun e' he' => by
         rw [hg] at he'
         rw [hEB, hC.vert_edges e' he']
@@ -2984,7 +3051,19 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
             · rw [h] at hte
               exact ⟨a₃, List.mem_cons_self .., (hce' e' he').2 (.inl hte)⟩
             · exact ⟨t, List.mem_cons_of_mem _ ht, (hedgesT t (hmemT' t ht) e').2 hte⟩
-          ret := fun _ => hC.hv_ret rfl }⟩
+          ret := fun _ => hC.hv_ret rfl
+          touch_k := fun t ht k hk hx => by
+            obtain ⟨e', he', hte, hinc⟩ := hx
+            rw [hg] at he' hinc; rw [hsv] at hinc
+            rcases List.mem_cons.1 ht with rfl | ht
+            · show lv ≤ k
+              rcases (hce' e' he').1 hte with h | h
+              · rw [← had]; exact hCT.touch_k a hamT k hk ⟨e', he', h, hinc⟩
+              · rw [← hcd]; exact hCT.touch_k c hcmT k hk ⟨e', he', h, hinc⟩
+            · exact hCT.touch_k t (hmemTop t ht) k hk ⟨e', he', (hedgesT t (hmemT' t ht) e').1 hte, hinc⟩ }⟩
+      base_touch := fun k hk x hx => by
+        rw [hg] at hx
+        exact hC.base_touch k hk x hx
       base_edges := ⟨hC.base_edges.1, fun k hk e' he' => by
         rw [hg] at he'
         exact (hedgesT _ (hbase_tl k hk) e').trans (hC.base_edges.2 k hk e' he')⟩
@@ -3012,6 +3091,9 @@ theorem earCtx_mergeP {v d lv : Nat} {done : List (DfsOut × Bool)} {rest : List
       vert_book := fun h => nomatch h
       vert_disj := fun h => nomatch h
       vert_edges := fun e' he' => by rw [hg] at he'; rw [hEBv]; exact hC.vert_edges e' he'
+      vert_touch := fun k hk ⟨e', he', hb, hinc⟩ => by
+        rw [hg] at he' hinc; rw [hsv] at hinc
+        exact hC.vert_touch k hk ⟨e', he', (hEBv e').1 hb, hinc⟩
       touch_bot := fun t ht hne => by
         rcases hmem' t ht with rfl | ht
         · exact hTc v hCEc.touch_bot
@@ -3865,7 +3947,15 @@ theorem earCtx_bridge {v d : Nat} {done : List (DfsOut × Bool)} {rest : List Df
             · rw [List.mem_singleton] at h
               subst h
               exact absurd hlt (Nat.not_lt.2 hge)
-          ret := fun h => (hCT.ret h).imp fun o ⟨ho, hl⟩ => ⟨List.mem_append_left _ ho, hl⟩ }⟩
+          ret := fun h => (hCT.ret h).imp fun o ⟨ho, hl⟩ => ⟨List.mem_append_left _ ho, hl⟩
+          touch_k := fun t ht k hk hx => by
+            rw [hg, hsv k hk] at hx
+            obtain ⟨e', he', hte, hinc⟩ := hx
+            exact hCT.touch_k t ht k hk ⟨e', he', (hedges t (hmemT t ht) e').1 hte, hinc⟩ }⟩
+      base_touch := fun k hk x hx => by
+        rw [hg] at hx
+        have h := hC.base_touch k hk x hx
+        simpa using h
       base_edges := ⟨hC.base_edges.1, fun k hk e' he' => by
         rw [hg] at he' ⊢
         exact (hedges _ (hbase_mem k hk) e').trans (hC.base_edges.2 k hk e' he')⟩
@@ -3978,6 +4068,13 @@ theorem earCtx_bridge {v d : Nat} {done : List (DfsOut × Bool)} {rest : List Df
         · obtain ⟨i, hi, hb'⟩ := (hedges t ht e').1 hte
           have hqf' := hC.q_fresh _ (List.mem_cons_self ..) e' h
           exact hqf'.2.2 t ht (Items.Below.eq_of_no_parent hqf'.1 hb' ▸ hi)
+      vert_touch := fun k hk ⟨e', he', hb, hinc⟩ => by
+        rw [hg] at he' hb hinc; rw [hsv k hk.le] at hinc
+        rcases (hEB_v e' he').1 hb with h | h
+        · exact hC.vert_touch k hk ⟨e', he', h, hinc⟩
+        · rcases H.ends hge e' h he' _ hinc with h' | h'
+          · exact hC.path k d hk (Nat.le_refl _) (h'.trans hC.sv_d.symm)
+          · exact (hC.v_fresh _ (List.mem_cons_self ..) e cls _ rfl _ h').2.2.2.1 k hk.le rfl
       vert_edges := fun e' he' => by
         rw [hg] at he' ⊢
         rw [hEB_v e' he', hC.vert_edges e' he']
@@ -4508,7 +4605,15 @@ theorem earCtx_comp {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsO
             · rw [List.mem_singleton] at h
               subst h
               exact absurd hlt (Nat.not_lt.2 hge)
-          ret := fun h => (hCT.ret h).imp fun o ⟨ho, hl⟩ => ⟨List.mem_append_left _ ho, hl⟩ }⟩
+          ret := fun h => (hCT.ret h).imp fun o ⟨ho, hl⟩ => ⟨List.mem_append_left _ ho, hl⟩
+          touch_k := fun t ht k hk hx => by
+            rw [hg, hsv k hk] at hx
+            obtain ⟨e', he', hte, hinc⟩ := hx
+            exact hCT.touch_k t ht k hk ⟨e', he', (hedges t (hmemT t ht) e').1 hte, hinc⟩ }⟩
+      base_touch := fun k hk x hx => by
+        rw [hg] at hx
+        have h := hC.base_touch k hk x hx
+        simpa using h
       base_edges := ⟨hC.base_edges.1, fun k hk e' he' => by
         rw [hg] at he' ⊢
         exact (hedges _ (hbase_mem k hk) e').trans (hC.base_edges.2 k hk e' he')⟩
@@ -4602,6 +4707,13 @@ theorem earCtx_comp {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsO
         · obtain ⟨i, hi, hb'⟩ := (hedges t ht e').1 hte
           have hqf' := hC.q_fresh _ (List.mem_cons_self ..) e' h
           exact hqf'.2.2 t ht (Items.Below.eq_of_no_parent hqf'.1 hb' ▸ hi)
+      vert_touch := fun k hk ⟨e', he', hb, hinc⟩ => by
+        rw [hg] at he' hb hinc; rw [hsv k hk.le] at hinc
+        rcases (hEB_v e' he').1 hb with h | h
+        · exact hC.vert_touch k hk ⟨e', he', h, hinc⟩
+        · rcases H.ends hge e' h he' _ hinc with h' | h'
+          · exact hC.path k d hk (Nat.le_refl _) (h'.trans hC.sv_d.symm)
+          · exact (hC.v_fresh _ (List.mem_cons_self ..) e cls _ rfl _ h').2.2.2.1 k hk.le rfl
       vert_edges := fun e' he' => by
         rw [hg] at he' ⊢
         rw [hEB_v e' he', hC.vert_edges e' he']
@@ -4881,8 +4993,8 @@ theorem earCtx_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOu
   set C : DfsTree := .node y outs with hCdef
   set o : DfsOut := .tree e cls C with ho
   obtain ⟨-, hRg, hRsv, hRsd, -, hRsz, hRnx, hRkept, hRch, hRlt, hRroot, hRnew, hRtb, hRE, hRtouch,
-    hRdisj, hRsdisj, hRvs, hRvert, hRnoV⟩ := HR
-  rw [← hit] at hRsz hRkept hRch hRlt hRroot hRtb hRE hRtouch hRdisj hRvert hRnoV
+    hRdisj, hRsdisj, hRvs, hRtk, hRvert, hRnoV⟩ := HR
+  rw [← hit] at hRsz hRkept hRch hRlt hRroot hRtb hRE hRtouch hRdisj hRtk hRvert hRnoV
   rw [← hnx] at hRnx hRvert
   have hg' : s'.g = s.g := hg.trans hRg
   have hsvX : ∀ k, k ≤ d → s'.stackVerts[k]! = s.stackVerts[k]! := fun k hk => by
@@ -5189,7 +5301,34 @@ theorem earCtx_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOu
               obtain ⟨c, hc, hce⟩ := (hRE e' he').2 hs
               obtain ⟨t, ht, hte⟩ := hTcov c hc
               exact ⟨t, List.mem_append_left _ (List.mem_append_left _ ht), hte e' hce⟩
-          ret := fun _ => ⟨(o, hv₀), hoD, hr⟩ }⟩
+          ret := fun _ => ⟨(o, hv₀), hoD, hr⟩
+          touch_k := fun t ht k hk hx => by
+            obtain ⟨e', he', hte, hinc⟩ := hx
+            rw [hg'] at he' hte hinc; rw [hsvX k hk] at hinc
+            have hVk : Items.EdgeBelow s.g s'.items (vertItem v) e' → d ≤ k := fun hb => by
+              rcases Nat.lt_or_ge k d with hkd | hkd
+              · exact absurd ⟨e', he', (hC.vert_edges e' he').2 ((hVE e' he').1 hb), hinc⟩
+                  (hC.vert_touch k hkd)
+              · exact hkd
+            rcases hmemTop t ht with h | h | h
+            · rcases hT with ⟨-, rfl⟩ | ⟨-, f, dir, rfl | ⟨c, R', hR, rfl⟩⟩
+              · exact hRtk t h k hk ⟨e', he', hte, hinc⟩
+              · rcases List.mem_cons.1 h with rfl | h
+                · exact hVk ((hUe _ (hus f dir) e').1 hte)
+                · exact hRtk t h k hk ⟨e', he', hte, hinc⟩
+              · rcases List.mem_cons.1 h with rfl | h
+                · show min c.topDepth d ≤ k
+                  rcases (TEntry.edges_mergeInto _ _ _).1 hte with h' | h'
+                  · exact Nat.le_trans (Nat.min_le_right _ _) (hVk ((hUe _ (hus f dir) e').1 h'))
+                  · exact Nat.le_trans (Nat.min_le_left _ _)
+                      (hRtk c (by rw [hR]; exact List.mem_cons_self ..) k hk ⟨e', he', h', hinc⟩)
+                · exact hRtk t (by rw [hR]; exact List.mem_cons_of_mem _ h) k hk ⟨e', he', hte, hinc⟩
+            · rw [(hLprop t h).2.1]; exact hVk ((hLe t h e').1 hte)
+            · exact hCT.touch_k t h k hk ⟨e', he', by rw [← hedges₀ t (hmemT t h)]; exact hte, hinc⟩ }⟩
+      base_touch := fun k hk x hx => by
+        rw [hg'] at hx
+        have h := hC.base_touch k hk x hx
+        simpa using h
       base_edges := ⟨hC.base_edges.1, fun k hk e' he' => by
         rw [hg'] at he'
         have hbm : base[k]! ∈ s.tstack := by
@@ -5225,6 +5364,9 @@ theorem earCtx_ret {v d : Nat} {done : List (DfsOut × Bool)} {rest : List DfsOu
         · exact Nat.lt_of_lt_of_le (hC.vfirst t h hvt hnv) hRnx
       vert_book := fun h => nomatch h
       vert_disj := fun h => nomatch h
+      vert_touch := fun k hk ⟨e', he', hb, hinc⟩ => by
+        rw [hg'] at he' hb hinc; rw [hsvX k hk.le] at hinc
+        exact hC.vert_touch k hk ⟨e', he', (hC.vert_edges e' he').2 ((hVE e' he').1 hb), hinc⟩
       vert_edges := fun e' he' => by
         rw [hg'] at he' ⊢
         rw [hVE e' he']
@@ -6567,7 +6709,8 @@ theorem cOut : ∀ (v d : Nat) (o : DfsOut) (hasVert : Bool) (s : WalkState), CO
             obtain ⟨o', ho', -, hs⟩ := (hC.vert_edges e' he').1 hb
             exact hdone_nc o' ho' e' hs x hi hx)
           (List.nodup_append.1 (List.nodup_append.1 (List.nodup_cons.1 hnd_vC).2).2.1).1
-          (by rw [hgs]; have := hT.size; omega) push L hpush hL
+          (by rw [hgs]; have := hT.size; omega)
+          (fun o' ho' e' hs x hx hi => hdone_nc o' ho' e' hs x hi hx) push L hpush hL
         obtain ⟨S₂, hS₂⟩ : ∃ S₂ : WalkState, S₂ = { s with
             stackDir := (s.stackDir.set! anc.length (if cls.lowval anc.length ≥ anc.length then false
               else !s.stackDir[cls.lowval anc.length]!)),

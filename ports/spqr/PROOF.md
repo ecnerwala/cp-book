@@ -837,23 +837,34 @@ the child's end push (`L'`/`push'`/`D₃`, `pushEnd`). Derived: `tstack`, `back_
 `boundary`, `base_touch`, `bd_noVert`. Named admissions (each the field verbatim over the site's
 `sub`, `EarCtxAt.lean`): `earAt_tree_loop1_side`, `earAt_tree_loop1_touch`, `earAt_tree_loop1`,
 `earAt_tree_bottom`, `earAt_tree_loops`, `earAt_tree_late`, `earAt_tree_late_fo`,
-`earAt_tree_close`, `earAt_tree_bd_term`, `earAt_tree_lower` — the chain-anchor clauses they
-need are not yet in `EarCtx`. Two candidates are dump-checked in `ctxCheck` (0 violations on
-0..3000 × tern): `ctx_below_touch_v` — a `below` entry (a returned child's own entries, `vStart`
-the child) touching `v` has `topDepth ≤ d` (what `bd_term` needs for the parent's stack); and
+`earAt_tree_close`, `earAt_tree_lower` — the chain-anchor clauses they
+need are not yet in `EarCtx`. Three touch clauses are now `EarCtx` fields (each dump-checked in
+`ctxCheck`, 0 violations on 0..3000 × tern, and re-established in `ctx_init_root`/`ctx_init_child`
+and every `earCtx_*` post-state lemma): `CtxTop.touch_k` — a `top` entry touching
+`stackVerts[k]` (`k ≤ d`) has `topDepth ≤ k` (`touch_k_above`/`touch_k_vt`/`touch_k_below`; it
+subsumes the earlier candidate `ctx_below_touch_v`; at a returning tree edge it is `RetTop.touch_k`
+over the post-loop entries, `r_touch_k` in `retCheck`, part of `tree_ret_frame`), `base_touch` —
+no enclosing `base` entry touches `v` or the processed subtree (`base_touch`), and `vert_touch` —
+no edge below `vertItem v` (the boundary outs' edges) reaches a proper ancestor `stackVerts[k]`,
+`k < d` (`vert_touch`; this is what makes `touch_k` hold for the entries holding `vertItem v`: the
+end push `L`, the fresh `(v, d)` entry and the `!hasVert` merge at a returning tree edge; at a
+bridge/component edge it is `TreeSite.ends` + `v_fresh`). Still a checker-only candidate:
 `ctx_bot_*` — once some done out returned, the bottom two entries of `top` are `EarBottom`
 (`d ≤ vy.topDepth`) at the lowest return depth: `vy` is the vertex entry of `v` or of a descendant
 (pushed first, so at the bottom), `py` directly above it is the single-parentless-item entry at
 the minimum `lowval` (the lowest-returning out is processed first), touching `vy.vStart` and
-`stackVerts[l]` (what `bottom` needs at the child's site). Neither is an `EarCtx` clause yet:
-each has to be re-established in every `ctx_step_*` post-state lemma. Proved from the child's end
+`stackVerts[l]` (what `bottom` needs at the child's site). Proved from the child's end
 shape:
 `earAt_tree_bd_bridge` (`lowval = d + 1` forces `cls = .bridge`; `bridge_bd` ⇒ `hv' = false`, the
 child's `top` is empty by `CtxTop.ret`, so `sub = L'` is the single end push `(y, d + 1)`) and
 `earAt_tree_bd_comp` (`d ≤ lowval ≠ d + 1` on a tree class forces `cls = .component`;
 `tree_comp_shape` gives `sub = [t₁, (y, d + 1)]` with `t₁.topDepth = d = lowval`), and
 `earAt_tree_bd_side` from the two (the end push is `setSides true [V y] []`, i.e. side 2; at a
-component edge `t₁.spans.2 = []` and `(y, d + 1)` has `spans.1 = []`). Elaboration
+component edge `t₁.spans.2 = []` and `(y, d + 1)` has `spans.1 = []`); and `earAt_tree_bd_term`
+from the touch clauses alone (every entry of the child's end stack touching `v = stackVerts[d]`:
+the end push `L'` by the child's `vert_touch`, the child's `top` by its `touch_k` at `d`, the
+parent's `L` has `vStart = v`, the parent's `top` by `touch_k` after transporting the edges through
+`hbE'`/`base_edges`, and the parent's `base` is excluded by `base_touch`). Elaboration
 caveat fixed alongside: the section hypothesis `hsub` of these lemmas was written with the local
 notation `s₃` inside a `variable` binder, which Lean elaborated to `pushEnd sorry sorry sorry`
 (hygiene: the notation's identifiers do not resolve inside `variable`); the hypothesis is now the

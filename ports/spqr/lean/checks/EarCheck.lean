@@ -499,6 +499,16 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
   -- at the lowest return depth (`d ≤ vy.topDepth` at the own level)
   for t in below do
     if touches s (E t) v && d < t.topDepth then out := bad "below_touch_v" (showT t) :: out
+  -- an entry touching the path vertex `stackVerts[k]` (`k ≤ d`) has `topDepth ≤ k`; `base` entries
+  -- avoid `v` and the whole subtree
+  for t in top do
+    for k in List.range (d+1) do
+      if touches s (E t) s.stackVerts[k]! && k < t.topDepth then
+        out := bad (if t.vStart == v then "touch_k_above" else if isV t then "touch_k_vt" else "touch_k_below")
+          s!"{showT t} k={k}" :: out
+  for (b, e₀) in List.zip base bE₀ do
+    for x in v :: DfsOut.vertsList ((done.map (·.1)) ++ rest) do
+      if touches s e₀ x then out := bad "base_touch" s!"{showT b} x={x}" :: out
   if hv && retDone ≠ [] then
     let l := (retDone.map (fun o => o.1.cls.lowval d)).foldl min d
     match top.reverse with
@@ -591,6 +601,8 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
   let bdE := bdDone.flatMap subEdgesL
   let EVt := vt.map (fun t => E t) |>.getD []
   let EV := edgesBelow s (vertItem v)
+  for k in List.range d do
+    if touches s EV s.stackVerts[k]! then out := bad "vert_touch" s!"k={k}" :: out
   for t in tops do
     if (E t).any (fun e => !retE.contains e) then out := bad "top_sub_edges" (showT t) :: out
   for e in retE do
@@ -762,6 +774,13 @@ def retCheck (seed v d : Nat) (o : DfsOut) (hv : Bool) (s₂ s : WalkState) : Li
       if touches sX ER x && x ≠ v && !child.verts.contains x &&
           !(List.range (d+1)).any (fun k => lowval ≤ k && s₂.stackVerts[k]! == x) then
         out := bad "touch" s!"x={x}" :: out
+    -- after loops 1-2 an entry touching the path vertex `stackVerts[k]` (`k ≤ d`) has `topDepth ≤ k`
+    let S₂' := WalkState.feS₂ d o s
+    let R₂' := S₂'.tstack.take (S₂'.tstack.length - orig)
+    for t in R₂' do
+      for k in List.range (d+1) do
+        if touches S₂' (entryEdges S₂' t) s₂.stackVerts[k]! && k < t.topDepth then
+          out := bad "r_touch_k" s!"{showT t} k={k}" :: out
     if hv then
       match R with
       | [x] =>
