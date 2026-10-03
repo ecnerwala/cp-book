@@ -433,19 +433,4 @@ theorem stInv_finishTstackTop_stItem (s : WalkState) (d : Nat) (ord : Nat → Na
       exact stInv_topClosable s d ord hinv t ht htd hside hclosed hne hvv htop)
     t ht hitem hnot
 
-/-- Phase 2: the walk's children lists are in s-t order (`PROOF.md` §7.6): they are the reference
-order (`walk_st'`) with oriented `vs` (`walk_vsOriented`), which is an st-order
-(`stItem_of_refOrder`, on the st-numbered reference blocks `refBlocks_st`, which needs `g.WF`
-and the order hypotheses like `dfsForest_spanning`). -/
-theorem walk_st (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
-    (heo : OrderOK g.ne eo) (hwf : Items.WF g (g.walk tern (g.dfsForest vo eo)).items) :
-    Items.StNumbered (g.walk tern (g.dfsForest vo eo)).items :=
-  fun i hi ht => stItem_of_refOrder g tern vo eo i hi ht hwf
-    (walk_st' g tern vo eo i hi ht) (walk_vsOriented g tern vo eo) (refBlocks_st hg hvo heo)
-    (refBlocks_root_edge hg hvo heo)
-
-theorem spqrTree_st (g : Graph) (hg : g.WF) (tern : Bool) (vo eo : List Nat) (hvo : OrderOK g.nv vo)
-    (heo : OrderOK g.ne eo) (hwf : Items.WF g (g.walk tern (g.dfsForest vo eo)).items) : (g.spqrTree tern vo eo).StOrder := by
-  rw [spqrTree_eq]; exact relabel_st g _ (walk_st g hg tern vo eo hvo heo hwf) hwf
-
 end Spqr
