@@ -153,6 +153,9 @@ structure EarCtx (v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut)
   touch_bot : ∀ t ∈ s.tstack, (∃ e, e < s.g.ne ∧ t.edges s.g s.items e) →
     s.g.Touches (t.edges s.g s.items) t.vStart
   span_root : ∀ t ∈ s.tstack, ∀ i ∈ t.spans.1 ++ t.spans.2, ∀ p, ¬ Items.IsParent s.items p i
+  /-- Span items are allocated, and children are allocated (`Shape.span`/`Shape.ch_lt`). -/
+  span_lt : ∀ t ∈ s.tstack, ∀ i ∈ t.spans.1 ++ t.spans.2, i < s.items.size
+  ch_lt : ∀ p c, Items.IsParent s.items p c → c < s.items.size
   disj : s.tstack.Pairwise fun t t' =>
     ∀ e, e < s.g.ne → t.edges s.g s.items e → ¬ t'.edges s.g s.items e
   span_disj : s.tstack.Pairwise fun t t' => ∀ i ∈ t.spans.1 ++ t.spans.2, i ∉ t'.spans.1 ++ t'.spans.2

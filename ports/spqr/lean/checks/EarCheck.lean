@@ -470,7 +470,12 @@ def ctxCheck (seed v d : Nat) (done : List (DfsOut × Bool)) (rest : List DfsOut
   for t in s.tstack do
     if (E t) ≠ [] && !touches s (E t) t.vStart then out := bad "touch_bot" (showT t) :: out
     for i in spanItems t do
+      if i ≥ s.items.size then out := bad "span_lt" (showT t) :: out
+    for i in spanItems t do
       if hasParent s i then out := bad "span_root" s!"{showT t} i={i}" :: out
+  for j in List.range s.items.size do
+    for c in s.items[j]!.ch do
+      if c ≥ s.items.size then out := bad "ch_lt" s!"{j}" :: out
   if hv && rest ≠ [] && !done.any (fun o => o.1.cls.lowval d < d) then out := bad "hv_ret" "" :: out
   if !hv && !(connB s (edgesBelow s (vertItem v)) && twoAttB s (edgesBelow s (vertItem v)) v v) then
     out := bad "vert_book" "" :: out
