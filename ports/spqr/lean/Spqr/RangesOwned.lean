@@ -206,21 +206,31 @@ theorem closeVert'_edges {curV : Nat} (hi : s.Inv' D) (hs : Shape s)
     rw [hit₅, hg₅] at h1
     rw [h1]; exact hall₂ u e
 
+/-- The exports `finishP_ownership`/`finishEdge_ownedD` consume at a `finishEdge` site. -/
+structure OwnSite (σ : List Nat) (n D curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool)
+    (s : WalkState) : Prop where
+  hD : D = if o.cls.isTree then d + 1 else d
+  nodup : σ.Nodup
+  rgs : RgS σ n D s
+  guards : FinishGuards d o origTstack hasVert s
+  book : FinishBook curV d o origTstack hasVert s
+  pos : σ[n]? = some o.e
+
 /-- P-site coverage at a `finishEdge` call: with the prefix owned (`Owned`), the merge base `nxt`
 (bottoming at `curV`, hence above the old entries) holds only edges of `curV`'s subtree, and the
 subtree's processed edges `n₀..n` are all on the stack, so `MergeBaseCover σ (min n₀ (n + 1)) (n + 1)`
 holds (checker: `checkOwned`, kinds `own_*`). -/
 theorem finishP_ownership {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
-    (h : CloseBase σ n D curV d o origTstack hasVert s)
+    (h : OwnSite σ n D curV d o origTstack hasVert s)
     {nR n₀ orig : Nat} {P : ItemId → Prop} {sts : List Nat}
     (ho : Owned σ nR n₀ n curV d orig P sts s) (hnR : nR ≤ n₀)
     (hsts : ∀ k, k ≤ d → sts[k]! ≤ n₀)
     (hhv : o.cls.lowval d < d → o.cls.isType1 = true → hasVert = true) :
     FinishPOwnership σ n curV d o origTstack hasVert s := by
   obtain ⟨sub, base, hlen, hE⟩ := h.book.ear
-  have hn : n < σ.length := (List.getElem?_eq_some_iff.1 h.site.pos).1
+  have hn : n < σ.length := (List.getElem?_eq_some_iff.1 h.pos).1
   have hσn : σ[n]! = o.e := by
-    rw [getElem!_pos σ n hn]; exact (List.getElem?_eq_some_iff.1 h.site.pos).2
+    rw [getElem!_pos σ n hn]; exact (List.getElem?_eq_some_iff.1 h.pos).2
   have hj : edgeItem s.g o.e < 1 + s.g.nv + s.g.ne := by
     show 1 + s.g.nv + o.e < _; have := h.book.e_lt; omega
   have st₀ : Step D curV s (feS₀ d o s) := Step.modifyVs h.rgs.1.inv h.rgs.2.1 (edgeItem s.g o.e) _ hj
@@ -470,16 +480,6 @@ structure OwnedD (σ sts origs : List Nat) (P : ItemId → Prop) (d n : Nat) (s 
   fresh : ∀ w, w < s.g.nv → ¬ P (vertItem w) → (∀ k, k ≤ d → w ≠ s.stackVerts[k]!) →
     Items.ch s.items (vertItem w) = []
 
-/-- The exports `finishP_ownership`/`finishEdge_ownedD` consume at a `finishEdge` site. -/
-structure OwnSite (σ : List Nat) (n D curV d : Nat) (o : DfsOut) (origTstack : Nat) (hasVert : Bool)
-    (s : WalkState) : Prop where
-  hD : D = if o.cls.isTree then d + 1 else d
-  nodup : σ.Nodup
-  rgs : RgS σ n D s
-  guards : FinishGuards d o origTstack hasVert s
-  book : FinishBook curV d o origTstack hasVert s
-  pos : σ[n]? = some o.e
-
 theorem CloseBase.toOwnSite {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
     (h : CloseBase σ n D curV d o origTstack hasVert s) : OwnSite σ n D curV d o origTstack hasVert s :=
   ⟨h.hD, h.nodup, h.rgs, h.guards, h.book, h.site.pos⟩
@@ -494,6 +494,19 @@ theorem finishEdge_ownedD {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVer
     (horigs : ∀ k, k ≤ d → origs[k]! ≤ origs[d]!) (horig : origs[d]! ≤ origTstack)
     (hpath : ∀ k, k < d → s.stackVerts[k]! ≠ curV) :
     OwnedD σ sts origs P d (n + 1) (after (finishEdge curV d o origTstack hasVert) s) := by
+  sorry
+
+/-- Every edge under `vertItem v` is held by an open entry. -/
+def VertCover (v : Nat) (s : WalkState) : Prop :=
+  ∀ e, e < s.g.ne → Items.EdgeBelow s.g s.items (vertItem v) e → ∃ t ∈ s.tstack, t.edges s.g s.items e
+
+/-- Once the vertex entry of `curV` is on the stack (`hasVert`), `finishEdge` keeps every edge under
+`vertItem curV` on the stack (`EarFinish.vert` at the pre-state: `vertItem curV` is spanned by a `base`
+entry; the merges and closes keep it spanned or put it under the pushed node). (Checker: `own_vcover`
+at `post`/`end`.) -/
+theorem finishEdge_vertCover {curV d : Nat} {o : DfsOut} {origTstack : Nat} {hasVert : Bool}
+    (h : OwnSite σ n D curV d o origTstack hasVert s) :
+    wp (finishEdge curV d o origTstack hasVert) (fun hv' s' => hv' = true → VertCover curV s') s := by
   sorry
 
 end WalkState

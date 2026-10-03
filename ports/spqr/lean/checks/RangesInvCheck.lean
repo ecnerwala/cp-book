@@ -516,7 +516,7 @@ def checkClose (seed : Nat) (site : String) (s : WalkState) : List V := Id.run d
 /-- Depth-indexed ownership invariant `OwnedD` (`RangesOwned.lean`) at the path vertex of depth `d`
 (`c.sts[k]`/`c.origs[k]` = schedule start / stack length at the entry of the path vertex of depth
 `k`, `c.visited` = placed vertices); `n` = number of processed edges. Checked at every vertex entry
-(`entry`), `finishEdge` pre/post state (`pre`/`post`, the latter with `n + 1`), P site (`P`) and
+(`entry`), `finishEdge` pre- and post-state (`pre`, `post` with `n + 1`), P site (`P`) and
 vertex end (`end`); `finishEdge_ownedD` is `pre` → `post`. -/
 structure OwnCtx where
   sts : List Nat
@@ -556,6 +556,14 @@ def checkOwned (seed : Nat) (σ : List Nat) (c : OwnCtx) (n v d : Nat) (site : S
     if !c.visited.contains w && s.items[vertItem w]!.ch != [] then out := fail "own_fresh" s!"w={w}" :: out
   return out
 
+def checkVCover (seed : Nat) (v : Nat) (site : String) (s : WalkState) : List V := Id.run do
+  let mut out := []
+  let owned := s.tstack.flatMap (entryEdges s)
+  for e in edgesBelow s (vertItem v) do
+    if !owned.contains e then
+      out := (⟨seed, s.ternarize, v, 0, site, "own_vcover", s!"e={e} stack={s.tstack.map showT}"⟩ : V) :: out
+  return out
+
 mutual
 partial def iTree (seed : Nat) (σ : List Nat) (n : Nat) (sts origs visited : List Nat) (t : DfsTree) (d : Nat)
     (s : WalkState) : WalkState × List V × List Nat :=
@@ -568,6 +576,7 @@ partial def iTree (seed : Nat) (σ : List Nat) (n : Nat) (sts origs visited : Li
     let vs := vs₀ ++ vs
     let nEnd := n + t.edgePostorder.length
     let vs := vs ++ checkOwned seed σ { c with visited := visited } nEnd v d "end" s
+    let vs := vs ++ if hv then checkVCover seed v "end" s else []
     let vs := vs ++ if hv then [] else checkVertPast seed σ v nEnd s
     let s := if hv then s else ((setStackDir d true *> pushVertTstack v d).run s).2
     (s, vs, visited)
@@ -600,6 +609,7 @@ partial def iOut (seed : Nat) (σ : List Nat) (c : OwnCtx) (v d : Nat) (o : DfsO
   let vs := vs ++ if hv then [] else checkVertPast seed σ v (σ.idxOf o.e) s
   let (hv', s) := (finishEdge v d o orig hv).run s
   let vs := vs ++ checkOwned seed σ c (σ.idxOf o.e + 1) v d "post" s
+  let vs := vs ++ if hv' then checkVCover seed v "post" s else []
   (hv', s, vs, visited)
 end
 

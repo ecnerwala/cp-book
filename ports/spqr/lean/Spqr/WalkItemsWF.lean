@@ -5,6 +5,7 @@ import Spqr.RangesClose
 import Spqr.RangesCloseSites
 import Spqr.RangesCloseTree
 import Spqr.RangesOwned
+import Spqr.RangesCoverTree
 
 /-! # `Items.WF` for the walk on a DFS forest
 
@@ -145,18 +146,19 @@ theorem wf_initialItems (g : Graph) (hnv : g.nv = 0) (hne : g.ne = 0) :
 
 /-! ### `Items.Ranges` -/
 
-/-- Admitted: at each actual P site, stack ownership covers the interval from the settled
-base piece through the child's postorder block (`FinishPCover`); at each unpushed vertex,
-its descendants have already been processed (`PushVertR`). The latter follows from `Place`
-once its pushed-edge predicate is bounded by the current postorder prefix. This bookkeeping
-is proved for each back/tree `CoverOut` by `coverOut_back` / `coverOut_tree`. The remaining
-P ownership and enclosing `CoverOuts` / `CoverTree` / `RootsCover` induction are not proved;
-no adjacency premise remains. -/
+/-- `RootsCover` of the forest walk: at each actual P site, stack ownership covers the interval
+from the settled base piece through the child's postorder block (`FinishPCover`,
+`finishP_ownership` from the depth-indexed `OwnedD`); at each unpushed vertex, its descendants
+have already been processed (`PushVertR`, from `Place`). Assembled by `walk_rootsCover'` over
+the `cvTree`/`cvOuts`/`cvOut` induction (`RangesCoverTree.lean`); the remaining admissions are
+the named steps `finishEdge_ownedD` and `finishEdge_vertCover` (`RangesOwned.lean`). -/
 theorem walk_rootsCover (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
     WalkState.RootsCover (edgePostorderForest (g.dfsForest vo eo)) 0
       (g.dfsForest vo eo) (WalkState.init g tern) := by
-  sorry
+  obtain ⟨hvp, hep⟩ := dfsForest_spanning' hg hvo heo
+  exact WalkState.walk_rootsCover' g tern _ (ForestOK.of_perm hvp hep)
+    (dfsForest_wf hg hvo heo) (dfsForest_ends g hg hvo heo)
 
 theorem walk_rangesInv (g : Graph) (tern : Bool) (vo eo : List Nat) (hg : g.WF)
     (hvo : OrderOK g.nv vo) (heo : OrderOK g.ne eo) :
