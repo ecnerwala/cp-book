@@ -491,11 +491,9 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 						} else if (as.top_ends[0] == -1) {
 							as.top_ends = bs.top_ends;
 							as.top_depths = bs.top_depths;
-						} else if (as.top_depths[1] > bs.top_depths[0]) {
-							// TODO: Certificate
-							a = std::unexpected(tstack_nonplanarity_t{});
-							return;
 						} else {
+							// Caller must check that we're planar
+							assert(as.top_depths[1] <= bs.top_depths[0]);
 							quarter_edge_matches[as.top_ends[1]] = bs.top_ends[0];
 							quarter_edge_matches[bs.top_ends[0]] = as.top_ends[1];
 							as.top_ends[1] = bs.top_ends[1];
@@ -785,29 +783,67 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 					}
 
 					if (cur_tstack().first_idx > first_occurrence[cur_depth]) {
-						while (cur_tstack().first_idx > first_occurrence[cur_depth]) {
-							if constexpr (with_planarity) {
-								if (nxt_tstack().first_idx > first_occurrence[cur_depth]) {
-									// We will put cur_depth on side 1 until the bottom
-									if (nxt_tstack().top_depth == cur_depth) {
-										flip_tstack_planarity(nxt_tstack());
-									}
-								} else if (cur_tstack().top_depth < cur_depth) {
-									if (nxt_tstack().planarity) {
-										if (nxt_tstack().planarity->sides[0].top_depths[1] == cur_depth) {
-											// We need to flip cur_tstack and nxt_tstack relative to each other.
-											// Flip the one with worse top_depth.
-											flip_tstack_planarity(cur_tstack().top_depth < nxt_tstack().top_depth ? nxt_tstack() : cur_tstack());
-										} else {
-											assert(nxt_tstack().planarity->sides[1].top_depths[1] == cur_depth);
-										}
-									}
-								}
-							}
-							merge_tstack_tops();
-						}
 						if constexpr (with_planarity) {
-							if (cur_tstack().planarity) {
+							[&]() -> void {
+								int source = int(tstack.size()) - 2;
+								while (tstack[source].first_idx > first_occurrence[cur_depth]) {
+									if (!tstack[source].planarity) {
+										// Set it somewhere so it can get copied down
+										cur_tstack().planarity = tstack[source].planarity;
+										return;
+									}
+									--source;
+								}
+								if (!tstack[source].planarity) {
+									cur_tstack().planarity = tstack[source].planarity;
+									return;
+								}
+
+								// last_top == cur_tstack().top_depth
+								int last_top = cur_depth;
+								while (int(tstack.size()) > source + 2) {
+									if (nxt_tstack().top_depth > cur_depth) {
+										// Vertex or tree edge, no conditions
+									} else if (nxt_tstack().top_depth == cur_depth) {
+										if (nxt_tstack().planarity->sides[1].top_depths[0] != -1) {
+											// Double-sided to cur_depth, conflicts with cur_tstack()
+											assert(last_top < cur_depth);
+											cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+											return;
+										}
+										// We will put cur_depth on side 1 until the bottom
+										flip_tstack_planarity(nxt_tstack());
+									} else {
+										if (nxt_tstack().planarity->sides[1].top_depths[0] != -1 && nxt_tstack().planarity->sides[1].top_depths[0] != cur_depth) {
+											// Non-empty on both sides, conflicts with source
+											cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+											return;
+										}
+										if (nxt_tstack().planarity->sides[0].top_depths[1] > last_top) {
+											// Nonlaminar with cur_tstack()
+											cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+											return;
+										}
+										last_top = nxt_tstack().top_depth;
+									}
+									merge_tstack_tops();
+								}
+
+								auto t0 = nxt_tstack().planarity->sides[0].top_depths[1];
+								auto t1 = nxt_tstack().planarity->sides[1].top_depths[1];
+								assert(t0 == cur_depth || t1 == cur_depth);
+								if (std::min(t0, t1) > last_top) {
+									assert(last_top < cur_depth);
+									cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+									return;
+								}
+								if (t0 == cur_depth) {
+									// We need to flip cur_tstack and nxt_tstack relative to each other.
+									// Flip the one with worse top_depth.
+									flip_tstack_planarity(cur_tstack().top_depth < nxt_tstack().top_depth ? nxt_tstack() : cur_tstack());
+								}
+								merge_tstack_tops();
+
 								// Prune off finished cur-side things
 								for (auto& side : cur_tstack().planarity->sides) {
 									assert(side.bot_ends[1] != -1);
@@ -828,7 +864,10 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 										}
 									}
 								}
-							}
+							}();
+						}
+						while (cur_tstack().first_idx > first_occurrence[cur_depth]) {
+							merge_tstack_tops();
 						}
 					}
 
@@ -839,23 +878,47 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 						if (!is_type_1) {
 							if constexpr (with_planarity) {
-								// The lowval side should be side 1, everything else goes on side 0.
-								// The exception is tstack[orig_tstack + 2], which could be == lowval on one/both sides,
-								// but is guaranteed to have *something* > lowval by non-type-1-ness
-								auto& t = tstack[orig_tstack + 2];
-								if (t.planarity) {
+								[&]() -> void {
+									// The lowval side should be side 1, everything else goes on side 0.
+									// The exception is tstack[orig_tstack + 2], which could be == lowval on one/both sides,
+									// but is guaranteed to have *something* > lowval by non-type-1-ness
+									auto& t = tstack[orig_tstack + 2];
+									if (!t.planarity) {
+										cur_tstack().planarity = t.planarity;
+										return;
+									}
 									assert(t.planarity->sides[0].top_depths[0] == t.top_depth);
+									assert(t.planarity->sides[0].top_depths[1] != -1);
 									if (t.planarity->sides[0].top_depths[1] == lowval) {
 										flip_tstack_planarity(t);
+									} else if (t.planarity->sides[1].top_depths[1] != -1 && t.planarity->sides[1].top_depths[1] != lowval) {
+										cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+										return;
 									}
-									assert(t.planarity->sides[0].top_depths[1] != -1);
 									assert(t.planarity->sides[0].top_depths[1] > lowval);
-								}
-								for (int i = orig_tstack + 3; i < int(tstack.size()); i++) {
-									if (tstack[i].top_depth == lowval) {
-										flip_tstack_planarity(tstack[i]);
+									int last_top = t.planarity->sides[0].top_depths[1];
+									for (int i = orig_tstack + 3; i < int(tstack.size()); i++) {
+										if (!tstack[i].planarity) {
+											cur_tstack().planarity = tstack[i].planarity;
+											return;
+										}
+										if (tstack[i].top_depth == lowval) {
+											flip_tstack_planarity(tstack[i]);
+										}
+										if (tstack[i].planarity->sides[1].top_depths[1] != -1 && tstack[i].planarity->sides[1].top_depths[1] != lowval) {
+											cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+											return;
+										}
+										int next_top = tstack[i].planarity->sides[0].top_depths[0];
+										if (next_top != -1) {
+											if (last_top > next_top) {
+												cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+												return;
+											}
+											last_top = tstack[i].planarity->sides[0].top_depths[1];
+										}
 									}
-								}
+								}();
 							}
 							while (int(tstack.size()) > orig_tstack + 3) {
 								merge_tstack_tops();
@@ -893,11 +956,10 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 								quarter_edge_matches[s1.bot_ends[0]] = s0.bot_ends[0];
 								s0.bot_ends[0] = s1.bot_ends[1];
 								if (s1.top_ends[0] != -1) {
-									if (s1.top_depths[1] != lowval) {
-										assert(!is_type_1);
-										cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
-										return;
-									}
+									// Caller must have checked that we're planar
+									assert(s1.top_depths[1] == lowval);
+
+									// This is always true
 									assert(s1.top_depths[0] == lowval);
 									quarter_edge_matches[s0.top_ends[0]] = s1.top_ends[0];
 									quarter_edge_matches[s1.top_ends[0]] = s0.top_ends[0];
