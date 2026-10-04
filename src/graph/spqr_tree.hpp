@@ -1791,17 +1791,26 @@ inline std::optional<planar_embedding> build_planar_embedding(
 
 				const int orig_tstack = s.orig_tstack;
 
-				if (is_tree) {
-					push_edge_tstack(cur_depth, e, true);
-				} else {
-					assert(is_type_1);
-					// The span lives on side !edge_dir
-					push_edge_tstack(lowval, e, false);
-					setmin(first_occurrence[lowval], nxt_edge_idx++);
-				}
+				auto finish_cur_depth_backedges = [&]() -> void {
+					if (cur_tstack().planarity) {
+						// Merge all backedges into the component
+						for (auto& side : cur_tstack().planarity->sides) {
+							assert(side.bot_ends[1] != -1);
+							if (side.top_ends[1] == -1) continue;
+							assert(side.top_depths[0] == cur_depth);
+							assert(side.top_depths[1] == cur_depth);
+							quarter_edge_matches[side.bot_ends[1]] = side.top_ends[1];
+							quarter_edge_matches[side.top_ends[1]] = side.bot_ends[1];
+							side.bot_ends[1] = side.top_ends[0];
+							side.top_depths = {-1, -1};
+							side.top_ends = {-1, -1};
+						}
+					}
+				};
 
 				// Whether cur_tstack() is a single edge
-				if (is_tree || lowval >= cur_depth) {
+				if (is_tree) {
+					push_edge_tstack(cur_depth, e, true);
 					// Tree OR self-loop
 					// The span lives on side edge_dir
 					while (int(tstack.size()) >= orig_tstack + 2 && nxt_tstack().top_depth >= cur_depth) {
@@ -1819,20 +1828,7 @@ inline std::optional<planar_embedding> build_planar_embedding(
 						}
 
 						merge_tstack_tops();
-						if (cur_tstack().planarity) {
-							// Merge all backedges into the component
-							for (auto& side : cur_tstack().planarity->sides) {
-								assert(side.bot_ends[1] != -1);
-								if (side.top_ends[1] == -1) continue;
-								assert(side.top_depths[0] == cur_depth);
-								assert(side.top_depths[1] == cur_depth);
-								quarter_edge_matches[side.bot_ends[1]] = side.top_ends[1];
-								quarter_edge_matches[side.top_ends[1]] = side.bot_ends[1];
-								side.bot_ends[1] = side.top_ends[0];
-								side.top_depths = {-1, -1};
-								side.top_ends = {-1, -1};
-							}
-						}
+						finish_cur_depth_backedges();
 					}
 
 					if (cur_tstack().first_idx > first_occurrence[cur_depth]) {
@@ -1944,6 +1940,14 @@ inline std::optional<planar_embedding> build_planar_embedding(
 							}
 							s1 = tstack_planarity_side_t{};
 						}();
+					}
+				} else {
+					assert(is_type_1);
+					// The span lives on side !edge_dir
+					push_edge_tstack(lowval, e, false);
+					setmin(first_occurrence[lowval], nxt_edge_idx++);
+					if (lowval == cur_depth) {
+						finish_cur_depth_backedges();
 					}
 				}
 
