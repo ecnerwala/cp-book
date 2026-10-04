@@ -1621,7 +1621,8 @@ inline std::optional<planar_embedding> build_planar_embedding(
 
 	{
 		int nxt_edge_idx = 0; // Counts backedges only
-		std::vector<bool> flip_edges(NE+1, false);
+		std::vector<int> postorder_edges; postorder_edges.reserve(NE);
+		std::vector<bool> postorder_flip(NE+1, false);
 
 		std::vector<int> first_occurrence(NV); // First backedge to this depth
 
@@ -1710,12 +1711,13 @@ inline std::optional<planar_embedding> build_planar_embedding(
 		};
 		auto push_edge_tstack = [&](int top_depth, int e, bool is_tree) -> int {
 			push_tstack(top_depth, make_edge_planarity(e, top_depth, is_tree));
+			postorder_edges.push_back(e >> 1);
 			return nxt_edge_idx++;
 		};
 		auto flip_tstack_planarity = [&](int i) -> void {
 			tstack_t& a = tstack[i];
-			flip_edges[a.first_idx].flip();
-			flip_edges[(i+1==int(tstack.size())) ? nxt_edge_idx : tstack[i+1].first_idx].flip();
+			postorder_flip[a.first_idx].flip();
+			postorder_flip[(i+1==int(tstack.size())) ? nxt_edge_idx : tstack[i+1].first_idx].flip();
 			if (a.planarity) {
 				std::swap(a.planarity->sides[0], a.planarity->sides[1]);
 			}
@@ -2000,10 +2002,16 @@ inline std::optional<planar_embedding> build_planar_embedding(
 		}
 		assert(nxt_edge_idx == NE);
 		{
+			std::vector<bool> edge_flip(NE);
 			bool planarity_flip = false;
 			for (int e = 0; e < NE; e++) {
-				planarity_flip ^= flip_edges[e];
-				if (planarity_flip) {
+				planarity_flip ^= postorder_flip[e];
+				edge_flip[postorder_edges[e]] = planarity_flip;
+			}
+			planarity_flip ^= postorder_flip[NE];
+			assert(!planarity_flip);
+			for (int e = 0; e < NE; e++) {
+				if (edge_flip[e]) {
 					std::swap(quarter_edge_matches[4*e + 0], quarter_edge_matches[4*e + 1]);
 					std::swap(quarter_edge_matches[4*e + 2], quarter_edge_matches[4*e + 3]);
 				}
@@ -2011,8 +2019,6 @@ inline std::optional<planar_embedding> build_planar_embedding(
 					quarter_edge_matches[4*e + z] = (quarter_edge_matches[4*e+z] >> 1 << 1) | !(z & 1);
 				}
 			}
-			planarity_flip ^= flip_edges[NE];
-			assert(!planarity_flip);
 		}
 	}
 	return planar_embedding{std::move(quarter_edge_matches)};
