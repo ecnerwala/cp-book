@@ -2290,9 +2290,6 @@ inline bool can_planar_embed(
 			// The convention is that sides[0].tops[0].depth == top_depth, i.e. at least one minimal return lives on side 0
 			std::array<tstack_planarity_side_t, 2> sides;
 		};
-		struct tstack_nonplanarity_t {
-			// TODO: What's the nonplanarity certificate look like?
-		};
 		auto merge_planarity_side = [&](tstack_planarity_side_t& as, const tstack_planarity_side_t& bs) -> void {
 			// If there's no bottom edges, then we must be an isolated vertex, so we can end early.
 			// Caller must check that we're planar
@@ -2384,7 +2381,7 @@ inline bool can_planar_embed(
 					return std::nullopt;
 				}
 			};
-			auto finish_edge = [&][[nodiscard]]() -> std::optional<tstack_nonplanarity_t> {
+			auto finish_edge = [&][[nodiscard]]() -> bool {
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
@@ -2408,7 +2405,7 @@ inline bool can_planar_embed(
 					}
 					assert(s.has_vert_tstack);
 					assert(int(tstack.size()) == orig_tstack);
-					return std::nullopt;
+					return true;
 				}
 
 				if (is_tree) {
@@ -2440,17 +2437,17 @@ inline bool can_planar_embed(
 								if (nxt_tstack().planarity.sides[1].tops[0].depth != -1) {
 									// Double-sided to cur_depth, conflicts with cur_tstack()
 									assert(last_top < cur_depth);
-									return tstack_nonplanarity_t{};
+									return false;
 								}
 								// Throw away the inner edge
 							} else {
 								if (nxt_tstack().planarity.sides[1].tops[0].depth != -1 && nxt_tstack().planarity.sides[1].tops[0].depth != cur_depth) {
 									// Non-empty on both sides, conflicts with source
-									return tstack_nonplanarity_t{};
+									return false;
 								}
 								if (nxt_tstack().planarity.sides[0].tops[1].depth > last_top) {
 									// Nonlaminar with cur_tstack()
-									return tstack_nonplanarity_t{};
+									return false;
 								}
 								if (last_top < cur_depth) {
 									auto nxt_planarity = nxt_tstack().planarity.sides[0];
@@ -2471,7 +2468,7 @@ inline bool can_planar_embed(
 						// Handles -1 correctly
 						if (std::min(t0, t1) > last_top) {
 							assert(last_top < cur_depth);
-							return tstack_nonplanarity_t{};
+							return false;
 						}
 						if (last_top < cur_depth) {
 							if (t0 == cur_depth) {
@@ -2525,7 +2522,7 @@ inline bool can_planar_embed(
 								if (t.planarity.sides[0].tops[1].depth == lowval) {
 									t.planarity.sides[0] = t.planarity.sides[1];
 								} else if (t.planarity.sides[1].tops[1].depth != -1 && t.planarity.sides[1].tops[1].depth != lowval) {
-									return tstack_nonplanarity_t{};
+									return false;
 								}
 								assert(t.planarity.sides[0].tops[1].depth > lowval);
 							}
@@ -2535,11 +2532,11 @@ inline bool can_planar_embed(
 									std::swap(tstack[i].planarity.sides[0], tstack[i].planarity.sides[1]);
 								}
 								if (tstack[i].planarity.sides[1].tops[1].depth != -1 && tstack[i].planarity.sides[1].tops[1].depth != lowval) {
-									return tstack_nonplanarity_t{};
+									return false;
 								}
 								int next_top = tstack[i].planarity.sides[0].tops[0].depth;
 								if (next_top != -1) {
-									if (cur_planarity.tops[1].depth > next_top) return tstack_nonplanarity_t{};
+									if (cur_planarity.tops[1].depth > next_top) return false;
 									merge_planarity_side(cur_planarity, tstack[i].planarity.sides[0]);
 								}
 							}
@@ -2569,7 +2566,7 @@ inline bool can_planar_embed(
 					push_vert_tstack(cur_depth);
 					s.has_vert_tstack = true;
 				}
-				return std::nullopt;
+				return true;
 			};
 			auto pop_vert = [&]() -> void {
 				auto& s = stk.back();
@@ -2583,11 +2580,11 @@ inline bool can_planar_embed(
 				if (stk.back().ch_idx == stk.back().ch_end) {
 					pop_vert();
 					if (stk.empty()) break;
-					if (auto res = finish_edge(); res) return false;
+					if (auto res = finish_edge(); !res) return false;
 				} else if (std::optional<int> nxt = start_edge(); nxt) {
 					push_vert(*nxt);
 				} else {
-					if (auto res = finish_edge(); res) assert(false);
+					if (auto res = finish_edge(); !res) assert(false);
 				}
 			}
 			assert(int(tstack.size()) == 1);
