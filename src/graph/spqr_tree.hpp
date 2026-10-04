@@ -1778,8 +1778,8 @@ inline std::optional<planar_embedding> build_planar_embedding(
 				if (lowval >= cur_depth || is_type_1) assert(s.has_vert_tstack);
 
 				s.orig_tstack = int(tstack.size());
-				first_occurrence[cur_depth] = NE;
 				if (is_tree) {
+					first_occurrence[cur_depth] = NE;
 					return nxt;
 				} else {
 					return std::nullopt;
