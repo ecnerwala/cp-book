@@ -741,20 +741,26 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				item_vs[edge_item(e)] = make_vs(nxt, cur_depth);
 
 				// Whether cur_tstack() is a single edge
-				bool is_single = true;
 				if (is_tree) {
 					// The span lives on side edge_dir
 					push_edge_tstack(nxt, cur_depth, e, true);
 					while (int(tstack.size()) >= orig_tstack + 2 && nxt_tstack().top_depth >= cur_depth) {
 						node_type type;
 						if (nxt_tstack().top_depth > cur_depth) {
+							// This is a vertex in the tstack
+
+							if (tstack.end()[-3].top_depth < cur_depth) {
+								// Not actually a good return, just stop
+								break;
+							}
+
 							// Just backfill this for maybe_unwrap
 							stack_dir[nxt_tstack().top_depth] = edge_dir;
 
 							// The tstack currently contains a tree-edge followed by a vertex; merge the vertex first
 							merge_tstack_tops();
 
-							type = node_type::S;
+							type = nxt_tstack().top_depth > cur_depth ? node_type::S : node_type::R;
 						} else if (nxt_tstack().v_start == cur_tstack().v_start) {
 							// This will be a P node
 							type = node_type::P;
@@ -790,8 +796,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 									if (nxt_tstack().top_depth == cur_depth) {
 										flip_tstack_planarity(nxt_tstack());
 									}
-								} else if (!is_single) {
-									assert(cur_tstack().top_depth < cur_depth);
+								} else if (cur_tstack().top_depth < cur_depth) {
 									if (nxt_tstack().planarity) {
 										if (nxt_tstack().planarity->sides[0].top_depths[1] == cur_depth) {
 											// We need to flip cur_tstack and nxt_tstack relative to each other.
@@ -804,7 +809,6 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 								}
 							}
 							merge_tstack_tops();
-							is_single = false;
 						}
 						if constexpr (with_planarity) {
 							if (cur_tstack().planarity) {
@@ -859,15 +863,13 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 							}
 							while (int(tstack.size()) > orig_tstack + 3) {
 								merge_tstack_tops();
-								is_single = false;
 							}
-							assert(!is_single);
 						}
 
 						assert(int(tstack.size()) == orig_tstack + 3);
 						int item;
 						if (is_type_1) {
-							item = maybe_unwrap_nxt(is_single ? node_type::S : node_type::R, false);
+							item = maybe_unwrap_nxt(cur_tstack().top_depth == cur_depth ? node_type::S : node_type::R, false);
 						} else {
 							// Just for the type checker
 							item = -1;
@@ -913,7 +915,6 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 						if (is_type_1) {
 							finish_tstack_top(item, false);
-							is_single = true;
 						}
 					}
 				} else {
@@ -939,10 +940,6 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 					push_vert_tstack(cur, cur_depth);
 					s.has_vert_tstack = true;
 					assert(!is_type_1);
-					if (!is_single) {
-						// Just eagerly merge the vertex into the R to avoid a later spurious finish_tstack
-						merge_tstack_tops();
-					}
 				}
 			};
 			auto pop_vert = [&]() -> void {
