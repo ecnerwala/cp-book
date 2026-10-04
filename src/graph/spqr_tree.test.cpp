@@ -526,6 +526,10 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 							check_planar_embedding(*fast_embedding, NV, edges, is_embedded);
 						}
 					}
+					{
+						bool has_embedding = wala::can_planar_embed(NV, edges, vert_order, edge_order);
+						REQUIRE(has_embedding == std::ranges::all_of(spqr.node_planar, std::identity{}));
+					}
 				}
 			}
 		}
