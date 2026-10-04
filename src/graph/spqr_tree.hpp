@@ -946,8 +946,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 						cur_tstack().spans = set_sides(!edge_dir, concat(cur_tstack().spans[0], cur_tstack().spans[1]), {});
 
 						if constexpr (with_planarity) {
-							[&]() -> void {
-								if (!cur_tstack().planarity) return;
+							if (cur_tstack().planarity) {
 								// precondition: side 1 should be the lowval only side
 								auto& sides = cur_tstack().planarity->sides;
 								auto& s0 = sides[0];
@@ -968,7 +967,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 									assert(s0.top_depths[0] == lowval);
 								}
 								s1 = tstack_planarity_side_t{};
-							}();
+							}
 						}
 
 						if (is_type_1) {
