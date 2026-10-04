@@ -518,8 +518,8 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						}
 					}
 					{
-						INFO("Checking fast embedding");
-						auto fast_embedding = wala::build_planar_embedding(NV, edges, vert_order, edge_order);
+						INFO("Checking direct full embedding");
+						auto fast_embedding = wala::planar_embed(NV, edges, vert_order, edge_order);
 						REQUIRE_FAST(bool(fast_embedding) == std::ranges::all_of(spqr.node_planar, std::identity{}));
 						if (fast_embedding) {
 							std::vector<bool> is_embedded(edges.size(), true);
