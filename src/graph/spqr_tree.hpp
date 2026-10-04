@@ -1805,6 +1805,14 @@ inline std::optional<planar_embedding> build_planar_embedding(
 					// Tree OR self-loop
 					// The span lives on side edge_dir
 					while (int(tstack.size()) >= orig_tstack + 2 && nxt_tstack().top_depth >= cur_depth) {
+						if (nxt_tstack().top_depth > cur_depth) {
+							if (tstack.end()[-3].top_depth < cur_depth) {
+								break;
+							}
+							// Merge the vertex in
+							merge_tstack_tops();
+						}
+
 						merge_tstack_tops();
 						if (cur_tstack().planarity) {
 							// Merge all backedges into the component
@@ -1823,16 +1831,13 @@ inline std::optional<planar_embedding> build_planar_embedding(
 					}
 
 					if (cur_tstack().first_idx > first_occurrence[cur_depth]) {
-						assert(nxt_tstack().top_depth < cur_depth);
-						merge_tstack_tops();
-						assert(cur_tstack().top_depth < cur_depth);
 						while (cur_tstack().first_idx > first_occurrence[cur_depth]) {
 							if (nxt_tstack().first_idx > first_occurrence[cur_depth]) {
 								// We will put cur_depth on side 1 until the bottom
 								if (nxt_tstack().top_depth == cur_depth) {
 									flip_tstack_planarity(nxt_tstack());
 								}
-							} else {
+							} else if (cur_tstack().top_depth < cur_depth) {
 								if (nxt_tstack().planarity) {
 									if (nxt_tstack().planarity->sides[0].top_depths[1] == cur_depth) {
 										// We need to flip cur_tstack and nxt_tstack relative to each other.
