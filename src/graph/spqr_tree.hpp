@@ -1795,8 +1795,9 @@ inline std::optional<planar_embedding> build_planar_embedding(
 					if (cur_tstack().planarity) {
 						// Merge all backedges into the component
 						for (auto& side : cur_tstack().planarity->sides) {
-							assert(side.bot_ends[1] != -1);
+							// in the self-loop case, sides[1].bot_ends[1] == -1; otherwise, it should never be -1
 							if (side.top_ends[1] == -1) continue;
+							assert(side.bot_ends[1] != -1);
 							assert(side.top_depths[0] == cur_depth);
 							assert(side.top_depths[1] == cur_depth);
 							quarter_edge_matches[side.bot_ends[1]] = side.top_ends[1];
