@@ -241,7 +241,7 @@ struct lowval_storted_skeleton_t {
 			return {lowval, is_tree, is_type_1 };
 		}
 	};
-	struct outedge_t { int src, dest; int e; packed_key_t key; };
+	struct outedge_t { int src, dest; int e_side; packed_key_t key; };
 	csr<outedge_t> outedges;
 
 	static lowval_storted_skeleton_t build(
@@ -290,8 +290,8 @@ struct lowval_storted_skeleton_t {
 			csr_builder<edge_t> adj_builder(std::move(adj_idx_builder));
 			for_each_in_order(NE, edge_order, [&](int e) -> void {
 				auto [u, v] = edges[e];
-				adj_builder.push(u) = {v, e};
-				if (u != v) adj_builder.push(v) = {u, e};
+				adj_builder.push(u) = {v, 2 * e + 0};
+				if (u != v) adj_builder.push(v) = {u, 2 * e + 1};
 			});
 			auto adj = std::move(adj_builder).finalize();
 
@@ -339,7 +339,7 @@ struct lowval_storted_skeleton_t {
 				assert(s.ch_idx < s.ch_end);
 				auto [nxt, e] = adj.dat[s.ch_idx];
 
-				if (e == s.prv_e || depth[nxt] > d) {
+				if ((e ^ 1) == s.prv_e || depth[nxt] > d) {
 					// skip the edge
 					s.ch_idx++; return;
 				}
@@ -398,7 +398,6 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 	std::span<const int> edge_order
 ) {
 	// std::min is by reference, which breaks some optimizations
-	auto min = [](auto a, auto b) { return a < b ? a : b; };
 	auto setmin = [](auto& a, auto b) { if (b < a) a = b; };
 
 	int NE = int(edges.size());
@@ -698,7 +697,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				auto& s = stk.back();
 				int cur = stack_verts[cur_depth];
 				assert(s.ch_idx < s.ch_end);
-				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
+				auto [_, nxt, e_side, key] = outedges.dat[s.ch_idx];
 				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
 
 				// edge_dir convention: false is forwards, true is backwards.
@@ -725,7 +724,8 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				int cur = stack_verts[cur_depth];
 				assert(s.ch_idx < s.ch_end);
 
-				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
+				auto [_, nxt, e_side, key] = outedges.dat[s.ch_idx];
+				int e = e_side >> 1;
 				s.ch_idx++;
 
 				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
@@ -1631,15 +1631,15 @@ inline std::optional<planar_embedding> planar_embed(
 				}
 			}
 		};
-		auto make_edge_planarity = [&](int e, int top_depth, bool is_tree) -> tstack_planarity_t {
-			edge_top_depths[e >> 1] = top_depth;
+		auto make_edge_planarity = [&](int e_side, int top_depth, bool is_tree) -> tstack_planarity_t {
+			edge_top_depths[e_side >> 1] = top_depth;
 			tstack_planarity_t p;
 			if (is_tree) {
-				p.sides[0].bot_ends = {2 * (e ^ 1) + 0, 2 * e + 1};
-				p.sides[1].bot_ends = {2 * (e ^ 1) + 1, 2 * e + 0};
+				p.sides[0].bot_ends = {2 * (e_side ^ 1) + 0, 2 * e_side + 1};
+				p.sides[1].bot_ends = {2 * (e_side ^ 1) + 1, 2 * e_side + 0};
 			} else {
-				p.sides[0].bot_ends = {2 * e + 0, 2 * e + 1};
-				p.sides[0].tops = {{{2 * (e ^ 1) + 1, top_depth}, {2 * (e ^ 1) + 0, top_depth}}};
+				p.sides[0].bot_ends = {2 * e_side + 0, 2 * e_side + 1};
+				p.sides[0].tops = {{{2 * (e_side ^ 1) + 1, top_depth}, {2 * (e_side ^ 1) + 0, top_depth}}};
 			}
 			return p;
 		};
@@ -1658,9 +1658,9 @@ inline std::optional<planar_embedding> planar_embed(
 		auto push_vert_tstack = [&](int top_depth) -> void {
 			push_tstack(top_depth, {});
 		};
-		auto push_edge_tstack = [&](int top_depth, int e, bool is_tree) -> int {
-			push_tstack(top_depth, make_edge_planarity(e, top_depth, is_tree));
-			postorder_edges.push_back(e >> 1);
+		auto push_edge_tstack = [&](int top_depth, int e_side, bool is_tree) -> int {
+			push_tstack(top_depth, make_edge_planarity(e_side, top_depth, is_tree));
+			postorder_edges.push_back(e_side >> 1);
 			return nxt_edge_idx++;
 		};
 		auto flip_tstack_planarity = [&](int i) -> void {
@@ -1711,7 +1711,7 @@ inline std::optional<planar_embedding> planar_embed(
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
-				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
+				auto [_, nxt, e_side, key] = outedges.dat[s.ch_idx];
 				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
 
 				if (lowval >= cur_depth || is_type_1) assert(s.has_vert_tstack);
@@ -1729,7 +1729,7 @@ inline std::optional<planar_embedding> planar_embed(
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
 
-				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
+				auto [_, nxt, e_side, key] = outedges.dat[s.ch_idx];
 				s.ch_idx++;
 
 				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
@@ -1776,7 +1776,7 @@ inline std::optional<planar_embedding> planar_embed(
 
 				if (lowval >= cur_depth) {
 					if (is_tree) {
-						push_edge_tstack(cur_depth, e, true);
+						push_edge_tstack(cur_depth, e_side, true);
 						if (lowval == cur_depth) {
 							// Merge the backedge
 							merge_tstack_tops();
@@ -1786,7 +1786,7 @@ inline std::optional<planar_embedding> planar_embed(
 						merge_tstack_tops();
 						join_bottoms_to_empty();
 					} else {
-						push_edge_tstack(lowval, e, false);
+						push_edge_tstack(lowval, e_side, false);
 						join_backedges_to_top();
 					}
 					assert(s.has_vert_tstack);
@@ -1796,7 +1796,7 @@ inline std::optional<planar_embedding> planar_embed(
 				}
 
 				if (is_tree) {
-					push_edge_tstack(cur_depth, e, true);
+					push_edge_tstack(cur_depth, e_side, true);
 					while (nxt_tstack().top_depth >= cur_depth) {
 						if (nxt_tstack().top_depth > cur_depth) {
 							if (tstack.end()[-3].top_depth < cur_depth) {
@@ -1928,11 +1928,11 @@ inline std::optional<planar_embedding> planar_embed(
 					}
 				} else {
 					assert(is_type_1);
-					int idx = push_edge_tstack(lowval, e, false);
+					int idx = push_edge_tstack(lowval, e_side, false);
 					setmin(first_occurrence[lowval], idx);
 				}
 
-				if (is_type_1 && nxt_tstack().top_depth == std::min(lowval, cur_depth)) {
+				if (is_type_1 && nxt_tstack().top_depth == lowval) {
 					assert(s.has_vert_tstack);
 					merge_tstack_tops();
 				}
@@ -2109,7 +2109,7 @@ inline bool can_planar_embed(
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
-				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
+				auto [_, nxt, e_side, key] = outedges.dat[s.ch_idx];
 				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
 
 				if (lowval >= cur_depth || is_type_1) assert(s.has_vert_tstack);
@@ -2127,7 +2127,8 @@ inline bool can_planar_embed(
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
 
-				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
+				auto [_, nxt, e_side, key] = outedges.dat[s.ch_idx];
+				int e = e_side >> 1;
 				s.ch_idx++;
 
 				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
