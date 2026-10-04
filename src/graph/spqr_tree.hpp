@@ -687,8 +687,9 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		std::vector<dfs_stack_t> stk; stk.reserve(NV);
 		for (auto rt : roots) {
 			auto push_vert = [&](int cur) -> void {
-				// stack_dir[cur_depth] must already be set
+				// stack_dir[cur_depth] must already be set for the lowval, so that we can push the vert tstack
 				int cur_depth = int(stk.size());
+				stack_verts[cur_depth] = cur;
 
 				int lo = outedges.bounds[cur];
 				int hi = outedges.bounds[cur+1];
