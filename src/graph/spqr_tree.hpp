@@ -1733,7 +1733,7 @@ inline std::optional<planar_embedding> build_planar_embedding(
 		std::vector<dfs_stack_t> stk; stk.reserve(NV);
 		for (auto rt : roots) {
 			auto push_vert = [&](int cur) -> void {
-				int cur_depth = int(stk.size()) - 1;
+				int cur_depth = int(stk.size());
 
 				int lo = outedges.bounds[cur];
 				int hi = outedges.bounds[cur+1];
