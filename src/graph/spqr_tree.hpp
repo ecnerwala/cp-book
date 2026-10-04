@@ -1646,7 +1646,7 @@ inline std::optional<planar_embedding> planar_embed(
 		struct tstack_nonplanarity_t {
 			// TODO: What's the nonplanarity certificate look like?
 		};
-		auto merge_planarity = [&][[nodiscard]](tstack_planarity_t& a, const tstack_planarity_t& b) -> std::optional<tstack_nonplanarity_t> {
+		auto merge_planarity = [&](tstack_planarity_t& a, const tstack_planarity_t& b) -> void {
 			for (int z = 0; z < 2; z++) {
 				auto& as = a.sides[z];
 				const auto& bs = b.sides[z];
@@ -1665,10 +1665,9 @@ inline std::optional<planar_embedding> planar_embed(
 					} else if (as.top_ends[0] == -1) {
 						as.top_ends = bs.top_ends;
 						as.top_depths = bs.top_depths;
-					} else if (as.top_depths[1] > bs.top_depths[0]) {
-						// TODO: Certificate
-						return tstack_nonplanarity_t{};
 					} else {
+						// Caller must check that we're planar
+						assert(as.top_depths[1] <= bs.top_depths[0]);
 						quarter_edge_matches[as.top_ends[1]] = bs.top_ends[0];
 						quarter_edge_matches[bs.top_ends[0]] = as.top_ends[1];
 						as.top_ends[1] = bs.top_ends[1];
@@ -1676,7 +1675,6 @@ inline std::optional<planar_embedding> planar_embed(
 					}
 				}
 			}
-			return std::nullopt;
 		};
 		auto make_edge_planarity = [&](int e, int top_depth, bool is_tree) -> tstack_planarity_t {
 			edge_top_depths[e >> 1] = top_depth;
@@ -1717,13 +1715,12 @@ inline std::optional<planar_embedding> planar_embed(
 			postorder_flip[(i+1==int(tstack.size())) ? nxt_edge_idx : tstack[i+1].first_idx].flip();
 			std::swap(a.planarity.sides[0], a.planarity.sides[1]);
 		};
-		auto merge_tstack_tops = [&][[nodiscard]]() -> std::optional<tstack_nonplanarity_t> {
+		auto merge_tstack_tops = [&]() -> void {
 			tstack_t& a = nxt_tstack();
 			const tstack_t& b = cur_tstack();
 			setmin(a.top_depth, b.top_depth);
-			auto res = merge_planarity(a.planarity, b.planarity);
+			merge_planarity(a.planarity, b.planarity);
 			tstack.pop_back();
-			return res;
 		};
 
 		struct dfs_stack_t {
@@ -1809,7 +1806,7 @@ inline std::optional<planar_embedding> planar_embed(
 					}
 				};
 
-				auto join_bottoms_to_empty = [&][[nodiscard]]() -> std::optional<tstack_nonplanarity_t> {
+				auto join_bottoms_to_empty = [&]() -> void {
 					// precondition: side 1 should be the lowval only side
 					auto& sides = cur_tstack().planarity.sides;
 					auto& s0 = sides[0];
@@ -1818,10 +1815,10 @@ inline std::optional<planar_embedding> planar_embed(
 					quarter_edge_matches[s1.bot_ends[0]] = s0.bot_ends[0];
 					s0.bot_ends[0] = s1.bot_ends[1];
 					if (s1.top_ends[0] != -1) {
-						if (s1.top_depths[1] != lowval) {
-							assert(!is_type_1);
-							return tstack_nonplanarity_t{};
-						}
+						// Caller must have checked that we're planar
+						assert(s1.top_depths[1] == lowval);
+
+						// This is always true
 						assert(s1.top_depths[0] == lowval);
 						quarter_edge_matches[s0.top_ends[0]] = s1.top_ends[0];
 						quarter_edge_matches[s1.top_ends[0]] = s0.top_ends[0];
@@ -1830,7 +1827,6 @@ inline std::optional<planar_embedding> planar_embed(
 						assert(s0.top_depths[0] == lowval);
 					}
 					s1 = tstack_planarity_side_t{};
-					return std::nullopt;
 				};
 
 				if (lowval >= cur_depth) {
@@ -1838,19 +1834,19 @@ inline std::optional<planar_embedding> planar_embed(
 						push_edge_tstack(cur_depth, e, true);
 						if (lowval == cur_depth) {
 							// Merge the backedge
-							if (auto res = merge_tstack_tops(); res) assert(false);
+							merge_tstack_tops();
 							join_backedges_to_top();
 						}
 						// Merge the vertex
-						if (auto res = merge_tstack_tops(); res) assert(false);
-						if (auto res = join_bottoms_to_empty(); res) assert(false);
+						merge_tstack_tops();
+						join_bottoms_to_empty();
 					} else {
 						push_edge_tstack(lowval, e, false);
 						join_backedges_to_top();
 					}
 					assert(s.has_vert_tstack);
 					// Merge into the vertex tstack
-					if (auto res = merge_tstack_tops(); res) assert(false);
+					merge_tstack_tops();
 					return std::nullopt;
 				}
 
@@ -1863,31 +1859,42 @@ inline std::optional<planar_embedding> planar_embed(
 								break;
 							}
 							// Merge the vertex in
-							if (auto res = merge_tstack_tops(); res) assert(false);
+							merge_tstack_tops();
 						}
 
-						if (auto res = merge_tstack_tops(); res) assert(false);
+						merge_tstack_tops();
 						join_backedges_to_top();
 					}
 
-					if (cur_tstack().first_idx > first_occurrence[cur_depth]) {
-						while (cur_tstack().first_idx > first_occurrence[cur_depth]) {
-							if (nxt_tstack().first_idx > first_occurrence[cur_depth]) {
-								// We will put cur_depth on side 1 until the bottom
-								if (nxt_tstack().top_depth == cur_depth) {
-									flip_tstack_planarity(int(tstack.size()) - 2);
-								}
-							} else if (cur_tstack().top_depth < cur_depth) {
-								if (nxt_tstack().planarity.sides[0].top_depths[1] == cur_depth) {
-									// We need to flip cur_tstack and nxt_tstack relative to each other.
-									// Flip the one with worse top_depth.
-									flip_tstack_planarity(cur_tstack().top_depth < nxt_tstack().top_depth ? int(tstack.size()) - 2 : int(tstack.size()) - 1);
-								} else {
-									assert(nxt_tstack().planarity.sides[1].top_depths[1] == cur_depth);
-								}
-							}
-							if (auto res = merge_tstack_tops(); res) return res;
+					auto check_and_merge_tstack_tops = [&]() -> bool {
+						for (int z = 0; z < 2; z++) {
+							int a = nxt_tstack().planarity.sides[z].top_depths[1];
+							int b = cur_tstack().planarity.sides[z].top_depths[0];
+							if (a != -1 && b != -1 && a > b) return false;
 						}
+						merge_tstack_tops();
+						return true;
+					};
+
+					if (cur_tstack().first_idx > first_occurrence[cur_depth]) {
+						while (nxt_tstack().first_idx > first_occurrence[cur_depth]) {
+							if (nxt_tstack().top_depth == cur_depth) {
+								// We will put cur_depth on side 1 until the bottom
+								flip_tstack_planarity(int(tstack.size()) - 2);
+							}
+							if (!check_and_merge_tstack_tops()) return tstack_nonplanarity_t{};
+						}
+						if (cur_tstack().top_depth < cur_depth) {
+							if (nxt_tstack().planarity.sides[0].top_depths[1] == cur_depth) {
+								// We need to flip cur_tstack and nxt_tstack relative to each other.
+								// Flip the one with worse top_depth.
+								flip_tstack_planarity(cur_tstack().top_depth < nxt_tstack().top_depth ? int(tstack.size()) - 2 : int(tstack.size()) - 1);
+							} else {
+								assert(nxt_tstack().planarity.sides[1].top_depths[1] == cur_depth);
+							}
+						}
+						if (!check_and_merge_tstack_tops()) return tstack_nonplanarity_t{};
+
 						// Prune off finished cur-side things
 						for (auto& side : cur_tstack().planarity.sides) {
 							assert(side.bot_ends[1] != -1);
@@ -1924,6 +1931,8 @@ inline std::optional<planar_embedding> planar_embed(
 								assert(t.planarity.sides[0].top_depths[0] == t.top_depth);
 								if (t.planarity.sides[0].top_depths[1] == lowval) {
 									flip_tstack_planarity(orig_tstack + 2);
+								} else if (t.planarity.sides[1].top_depths[1] != -1 && t.planarity.sides[1].top_depths[1] != lowval) {
+									return tstack_nonplanarity_t{};
 								}
 								assert(t.planarity.sides[0].top_depths[1] != -1);
 								assert(t.planarity.sides[0].top_depths[1] > lowval);
@@ -1932,22 +1941,25 @@ inline std::optional<planar_embedding> planar_embed(
 								if (tstack[i].top_depth == lowval) {
 									flip_tstack_planarity(i);
 								}
+								if (tstack[i].planarity.sides[1].top_depths[1] != -1 && tstack[i].planarity.sides[1].top_depths[1] != lowval) {
+									return tstack_nonplanarity_t{};
+								}
 							}
 							while (int(tstack.size()) > orig_tstack + 3) {
-								if (auto res = merge_tstack_tops(); res) return res;
+								if (!check_and_merge_tstack_tops()) return tstack_nonplanarity_t{};
 							}
 						}
 
 						assert(int(tstack.size()) == orig_tstack + 3);
 
 						// Merge with the backedge
-						if (auto res = merge_tstack_tops(); res) assert(false);
+						merge_tstack_tops();
 						// Merge with the vertex
-						if (auto res = merge_tstack_tops(); res) assert(false);
+						merge_tstack_tops();
 
 						assert(cur_tstack().top_depth == lowval);
 
-						if (auto res = join_bottoms_to_empty(); res) return res;
+						join_bottoms_to_empty();
 					}
 				} else {
 					assert(is_type_1);
@@ -1959,7 +1971,7 @@ inline std::optional<planar_embedding> planar_embed(
 				// This handles bridges and stuff too
 				if (is_type_1 && nxt_tstack().top_depth == std::min(lowval, cur_depth)) {
 					assert(s.has_vert_tstack);
-					if (auto res = merge_tstack_tops(); res) assert(false);
+					merge_tstack_tops();
 				}
 
 				if (!s.has_vert_tstack) {
