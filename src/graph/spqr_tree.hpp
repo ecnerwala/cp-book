@@ -687,6 +687,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		std::vector<dfs_stack_t> stk; stk.reserve(NV);
 		for (auto rt : roots) {
 			auto push_vert = [&](int cur) -> void {
+				// stack_dir[cur_depth] must already be set
 				int cur_depth = int(stk.size());
 
 				int lo = outedges.bounds[cur];
@@ -703,7 +704,6 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 						outedges.dat[lo] = e;
 						has_vert_tstack = false;
 					} else {
-						stack_dir[cur_depth] = (first_edge < hi) ? !stack_dir[outedges.dat[first_edge].key.unpack(cur_depth).lowval] : true;
 						push_vert_tstack(cur, cur_depth);
 						has_vert_tstack = true;
 					}
@@ -724,6 +724,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 				s.orig_tstack = int(tstack.size());
 				if (is_tree) {
+					stack_dir[cur_depth+1] = !stack_dir[std::min(lowval, cur_depth)];
 					first_occurrence[cur_depth] = NE;
 					return nxt;
 				} else {
@@ -1043,6 +1044,8 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				stk.pop_back();
 			};
 
+			// Set something arbitrary, this is the normal convention for block-roots
+			stack_dir[0] = true;
 			push_vert(rt);
 			while (true) {
 				if (stk.back().ch_idx == stk.back().ch_end) {
