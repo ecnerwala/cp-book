@@ -1945,7 +1945,7 @@ inline std::optional<planar_embedding> build_planar_embedding(
 				}
 
 				// This handles bridges and stuff too
-				if (is_type_1 && nxt_tstack().top_depth == lowval) {
+				if (is_type_1 && nxt_tstack().top_depth == std::min(lowval, cur_depth)) {
 					assert(s.has_vert_tstack);
 					merge_tstack_tops();
 				}
@@ -1976,6 +1976,17 @@ inline std::optional<planar_embedding> build_planar_embedding(
 					finish_edge();
 				}
 			}
+			assert(int(tstack.size()) == 1);
+			if (!tstack.back().planarity) return std::nullopt;
+			auto s0 = tstack.back().planarity->sides[0];
+			// Fold the root
+			int a = s0.bot_ends[0];
+			int b = s0.bot_ends[1];
+			if (a != -1) {
+				quarter_edge_matches[a] = b;
+				quarter_edge_matches[b] = a;
+			}
+			tstack.pop_back();
 		}
 	}
 	// TODO: Fix the parity so that CW is consistent?
