@@ -745,7 +745,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				if (is_tree) {
 					// The span lives on side edge_dir
 					push_edge_tstack(nxt, cur_depth, e, true);
-					while (nxt_tstack().top_depth >= cur_depth) {
+					while (int(tstack.size()) >= orig_tstack + 2 && nxt_tstack().top_depth >= cur_depth) {
 						node_type type;
 						if (nxt_tstack().top_depth > cur_depth) {
 							// Just backfill this for maybe_unwrap
@@ -922,6 +922,8 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 					push_edge_tstack(cur, lowval, e, false);
 					setmin(first_occurrence[lowval], nxt_edge_idx++);
 				}
+
+				assert(int(tstack.size()) >= orig_tstack + 1);
 
 				// NB: We can do this check in lots of ways, maybe there's a cleaner check
 				if (is_type_1) assert(s.has_vert_tstack && nxt_tstack().v_start == cur);
