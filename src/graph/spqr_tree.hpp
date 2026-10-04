@@ -687,15 +687,33 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		std::vector<dfs_stack_t> stk; stk.reserve(NV);
 		for (auto rt : roots) {
 			auto push_vert = [&](int cur) -> void {
-				stk.push_back({false, outedges.bounds[cur], outedges.bounds[cur+1], -1});
-				int cur_depth = int(stk.size()) - 1;
-				stack_verts[cur_depth] = cur;
+				int cur_depth = int(stk.size());
+
+				int lo = outedges.bounds[cur];
+				int hi = outedges.bounds[cur+1];
+				bool has_vert_tstack;
+				{
+					// Find the first same-BCC edge, and check it's type 2 (has lowval2), if so it's the ear tstack and we defer pushing ourselves.
+					int first_edge = lo;
+					while (first_edge < hi && outedges.dat[first_edge].key.is_new_block()) first_edge++;
+					if (first_edge < hi && outedges.dat[first_edge].key.is_type_2()) {
+						// Move first_edge to the beginning
+						auto e = outedges.dat[first_edge];
+						std::move_backward(outedges.dat.begin() + lo, outedges.dat.begin() + first_edge, outedges.dat.begin() + first_edge + 1);
+						outedges.dat[lo] = e;
+						has_vert_tstack = false;
+					} else {
+						stack_dir[cur_depth] = (first_edge < hi) ? !stack_dir[outedges.dat[first_edge].key.unpack(cur_depth).lowval] : true;
+						push_vert_tstack(cur, cur_depth);
+						has_vert_tstack = true;
+					}
+				}
+				stk.push_back({has_vert_tstack, lo, hi, -1});
 			};
 			// return true means jump to start_edge, return false means jump to finish_edge
 			auto start_edge = [&]() -> std::optional<int> {
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
-				int cur = stack_verts[cur_depth];
 				assert(s.ch_idx < s.ch_end);
 				auto [_, nxt, e_side, key] = outedges.dat[s.ch_idx];
 				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
@@ -703,12 +721,6 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				// edge_dir convention: false is forwards, true is backwards.
 				// That means that cur is on the edge_dir side and nxt is on the !edge_dir side.
 				stack_dir[cur_depth] = (lowval >= cur_depth ? false : !stack_dir[lowval]);
-
-				if (!s.has_vert_tstack && lowval < cur_depth && is_type_1) {
-					// Do this with the correct stack_dir set
-					push_vert_tstack(cur, cur_depth);
-					s.has_vert_tstack = true;
-				}
 
 				s.orig_tstack = int(tstack.size());
 				if (is_tree) {
@@ -1025,18 +1037,9 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				}
 			};
 			auto pop_vert = [&]() -> void {
-				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
-				int cur = stack_verts[cur_depth];
 				assert(s.ch_idx == s.ch_end);
-				if (!s.has_vert_tstack) {
-					// Either our parent is a bridge edge, or we're just a root.
-					// We'll just leave it on tstack for future cleanup, it'll just get popped of immediately.
-					// edge_dir == !stack_dir[lowval == cur_depth - 1] == true
-					stack_dir[cur_depth] = true;
-					push_vert_tstack(cur, cur_depth);
-					s.has_vert_tstack = true;
-				}
+				assert(s.has_vert_tstack);
 				stk.pop_back();
 			};
 
@@ -1697,7 +1700,9 @@ inline std::optional<planar_embedding> planar_embed(
 					while (first_edge < hi && outedges.dat[first_edge].key.is_new_block()) first_edge++;
 					if (first_edge < hi && outedges.dat[first_edge].key.is_type_2()) {
 						// Move first_edge to the beginning
-						std::rotate(outedges.dat.begin() + lo, outedges.dat.begin() + first_edge, outedges.dat.begin() + first_edge + 1);
+						auto e = outedges.dat[first_edge];
+						std::move_backward(outedges.dat.begin() + lo, outedges.dat.begin() + first_edge, outedges.dat.begin() + first_edge + 1);
+						outedges.dat[lo] = e;
 						has_vert_tstack = false;
 					} else {
 						push_vert_tstack(cur_depth);
@@ -2095,7 +2100,9 @@ inline bool can_planar_embed(
 					while (first_edge < hi && outedges.dat[first_edge].key.is_new_block()) first_edge++;
 					if (first_edge < hi && outedges.dat[first_edge].key.is_type_2()) {
 						// Move first_edge to the beginning
-						std::rotate(outedges.dat.begin() + lo, outedges.dat.begin() + first_edge, outedges.dat.begin() + first_edge + 1);
+						auto e = outedges.dat[first_edge];
+						std::move_backward(outedges.dat.begin() + lo, outedges.dat.begin() + first_edge, outedges.dat.begin() + first_edge + 1);
+						outedges.dat[lo] = e;
 						has_vert_tstack = false;
 					} else {
 						push_vert_tstack(cur_depth);
