@@ -1621,6 +1621,8 @@ inline std::optional<planar_embedding> build_planar_embedding(
 
 	{
 		int nxt_edge_idx = 0; // Counts backedges only
+		std::vector<bool> flip_edges(NE+1, false);
+
 		std::vector<int> first_occurrence(NV); // First backedge to this depth
 
 		std::vector<int> edge_top_depths(NE, -1);
@@ -1706,11 +1708,14 @@ inline std::optional<planar_embedding> build_planar_embedding(
 		auto push_vert_tstack = [&](int top_depth) -> void {
 			push_tstack(top_depth, {});
 		};
-		auto push_edge_tstack = [&](int top_depth, int e, bool is_tree) -> void {
+		auto push_edge_tstack = [&](int top_depth, int e, bool is_tree) -> int {
 			push_tstack(top_depth, make_edge_planarity(e, top_depth, is_tree));
+			return nxt_edge_idx++;
 		};
-		auto flip_tstack_planarity = [&](tstack_t& a) -> void {
-			// TODO: Could mark the edges as flipped
+		auto flip_tstack_planarity = [&](int i) -> void {
+			tstack_t& a = tstack[i];
+			flip_edges[a.first_idx].flip();
+			flip_edges[(i+1==int(tstack.size())) ? nxt_edge_idx : tstack[i+1].first_idx].flip();
 			if (a.planarity) {
 				std::swap(a.planarity->sides[0], a.planarity->sides[1]);
 			}
@@ -1834,14 +1839,14 @@ inline std::optional<planar_embedding> build_planar_embedding(
 							if (nxt_tstack().first_idx > first_occurrence[cur_depth]) {
 								// We will put cur_depth on side 1 until the bottom
 								if (nxt_tstack().top_depth == cur_depth) {
-									flip_tstack_planarity(nxt_tstack());
+									flip_tstack_planarity(int(tstack.size()) - 2);
 								}
 							} else if (cur_tstack().top_depth < cur_depth) {
 								if (nxt_tstack().planarity) {
 									if (nxt_tstack().planarity->sides[0].top_depths[1] == cur_depth) {
 										// We need to flip cur_tstack and nxt_tstack relative to each other.
 										// Flip the one with worse top_depth.
-										flip_tstack_planarity(cur_tstack().top_depth < nxt_tstack().top_depth ? nxt_tstack() : cur_tstack());
+										flip_tstack_planarity(cur_tstack().top_depth < nxt_tstack().top_depth ? int(tstack.size()) - 2 : int(tstack.size()) - 1);
 									} else {
 										assert(nxt_tstack().planarity->sides[1].top_depths[1] == cur_depth);
 									}
@@ -1887,14 +1892,14 @@ inline std::optional<planar_embedding> build_planar_embedding(
 								if (t.planarity) {
 									assert(t.planarity->sides[0].top_depths[0] == t.top_depth);
 									if (t.planarity->sides[0].top_depths[1] == lowval) {
-										flip_tstack_planarity(t);
+										flip_tstack_planarity(orig_tstack + 2);
 									}
 									assert(t.planarity->sides[0].top_depths[1] != -1);
 									assert(t.planarity->sides[0].top_depths[1] > lowval);
 								}
 								for (int i = orig_tstack + 3; i < int(tstack.size()); i++) {
 									if (tstack[i].top_depth == lowval) {
-										flip_tstack_planarity(tstack[i]);
+										flip_tstack_planarity(i);
 									}
 								}
 								while (int(tstack.size()) > orig_tstack + 3) {
@@ -1942,8 +1947,8 @@ inline std::optional<planar_embedding> build_planar_embedding(
 				} else {
 					assert(is_type_1);
 					// The span lives on side !edge_dir
-					push_edge_tstack(lowval, e, false);
-					setmin(first_occurrence[lowval], nxt_edge_idx++);
+					int idx = push_edge_tstack(lowval, e, false);
+					setmin(first_occurrence[lowval], idx);
 					if (lowval == cur_depth) {
 						finish_cur_depth_backedges();
 					}
@@ -1993,8 +1998,23 @@ inline std::optional<planar_embedding> build_planar_embedding(
 			}
 			tstack.pop_back();
 		}
+		assert(nxt_edge_idx == NE);
+		{
+			bool planarity_flip = false;
+			for (int e = 0; e < NE; e++) {
+				planarity_flip ^= flip_edges[e];
+				if (planarity_flip) {
+					std::swap(quarter_edge_matches[4*e + 0], quarter_edge_matches[4*e + 1]);
+					std::swap(quarter_edge_matches[4*e + 2], quarter_edge_matches[4*e + 3]);
+				}
+				for (int z = 0; z < 4; z++) {
+					quarter_edge_matches[4*e + z] = (quarter_edge_matches[4*e+z] >> 1 << 1) | !(z & 1);
+				}
+			}
+			planarity_flip ^= flip_edges[NE];
+			assert(!planarity_flip);
+		}
 	}
-	// TODO: Fix the parity so that CW is consistent?
 	return planar_embedding{std::move(quarter_edge_matches)};
 }
 
