@@ -747,8 +747,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 					while (int(tstack.size()) >= orig_tstack + 2 && nxt_tstack().top_depth >= cur_depth) {
 						node_type type;
 						if (nxt_tstack().top_depth > cur_depth) {
-							// This is a vertex in the tstack
-
+							// This is a vertex in the tstack, followed by either an S edge, possibly merged with other things
 							if (tstack.end()[-3].top_depth < cur_depth) {
 								// Not actually a good return, just stop
 								break;
@@ -756,8 +755,6 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 							// Just backfill this for maybe_unwrap
 							stack_dir[nxt_tstack().top_depth] = edge_dir;
-
-							// The tstack currently contains a tree-edge followed by a vertex; merge the vertex first
 							merge_tstack_tops();
 
 							type = nxt_tstack().top_depth > cur_depth ? node_type::S : node_type::R;
@@ -926,8 +923,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 				assert(int(tstack.size()) >= orig_tstack + 1);
 
-				// NB: We can do this check in lots of ways, maybe there's a cleaner check
-				if (is_type_1) assert(s.has_vert_tstack && nxt_tstack().v_start == cur);
+				// If is_type_1, the last entry on the tstack is either the vert_tstack, or the previous child as a unit
 				if (is_type_1 && nxt_tstack().top_depth == lowval) {
 					// This will be a P node
 					int item = maybe_unwrap_nxt(node_type::P, false);
