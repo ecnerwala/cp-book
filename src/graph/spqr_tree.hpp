@@ -1851,7 +1851,6 @@ inline std::optional<planar_embedding> planar_embed(
 				}
 
 				if (is_tree) {
-					// The span lives on side edge_dir
 					push_edge_tstack(cur_depth, e, true);
 					while (nxt_tstack().top_depth >= cur_depth) {
 						if (nxt_tstack().top_depth > cur_depth) {
@@ -1985,7 +1984,6 @@ inline std::optional<planar_embedding> planar_embed(
 					}
 				} else {
 					assert(is_type_1);
-					// The span lives on side !edge_dir
 					int idx = push_edge_tstack(lowval, e, false);
 					setmin(first_occurrence[lowval], idx);
 				}
