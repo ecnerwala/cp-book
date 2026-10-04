@@ -743,7 +743,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				if (is_tree) {
 					// The span lives on side edge_dir
 					push_edge_tstack(nxt, cur_depth, e, true);
-					while (int(tstack.size()) >= orig_tstack + 2 && nxt_tstack().top_depth >= cur_depth) {
+					while (nxt_tstack().top_depth >= cur_depth) {
 						node_type type;
 						if (nxt_tstack().top_depth > cur_depth) {
 							// This is a vertex in the tstack, followed by either an S edge, possibly merged with other things
@@ -1797,7 +1797,7 @@ inline std::optional<planar_embedding> planar_embed(
 
 				const int orig_tstack = s.orig_tstack;
 
-				auto finish_cur_depth_backedges = [&]() -> void {
+				auto join_backedges_to_top = [&]() -> void {
 					if (cur_tstack().planarity) {
 						// Merge all backedges into the component
 						for (auto& side : cur_tstack().planarity->sides) {
@@ -1815,16 +1815,57 @@ inline std::optional<planar_embedding> planar_embed(
 					}
 				};
 
+				auto join_bottoms_to_empty = [&]() -> void {
+					if (!cur_tstack().planarity) return;
+					// precondition: side 1 should be the lowval only side
+					auto& sides = cur_tstack().planarity->sides;
+					auto& s0 = sides[0];
+					auto& s1 = sides[1];
+					quarter_edge_matches[s0.bot_ends[0]] = s1.bot_ends[0];
+					quarter_edge_matches[s1.bot_ends[0]] = s0.bot_ends[0];
+					s0.bot_ends[0] = s1.bot_ends[1];
+					if (s1.top_ends[0] != -1) {
+						if (s1.top_depths[1] != lowval) {
+							assert(!is_type_1);
+							cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+							return;
+						}
+						assert(s1.top_depths[0] == lowval);
+						quarter_edge_matches[s0.top_ends[0]] = s1.top_ends[0];
+						quarter_edge_matches[s1.top_ends[0]] = s0.top_ends[0];
+						s0.top_ends[0] = s1.top_ends[1];
+						// Already true since the backedge was on side 0
+						assert(s0.top_depths[0] == lowval);
+					}
+					s1 = tstack_planarity_side_t{};
+				};
+
+				if (lowval >= cur_depth) {
+					if (is_tree) {
+						push_edge_tstack(cur_depth, e, true);
+						if (lowval == cur_depth) {
+							// Merge the backedge
+							merge_tstack_tops();
+							join_backedges_to_top();
+						}
+						// Merge the vertex
+						merge_tstack_tops();
+						join_bottoms_to_empty();
+					} else {
+						push_edge_tstack(lowval, e, false);
+						join_backedges_to_top();
+					}
+					assert(s.has_vert_tstack);
+					// Merge into the vertex tstack
+					merge_tstack_tops();
+					return;
+				}
+
 				if (is_tree) {
 					// The span lives on side edge_dir
 					push_edge_tstack(cur_depth, e, true);
-					while (int(tstack.size()) >= orig_tstack + 2 && nxt_tstack().top_depth >= cur_depth) {
+					while (nxt_tstack().top_depth >= cur_depth) {
 						if (nxt_tstack().top_depth > cur_depth) {
-							if (int(tstack.size()) == orig_tstack + 2) {
-								assert(lowval >= cur_depth);
-								merge_tstack_tops();
-								break;
-							}
 							if (tstack.end()[-3].top_depth < cur_depth) {
 								break;
 							}
@@ -1833,7 +1874,7 @@ inline std::optional<planar_embedding> planar_embed(
 						}
 
 						merge_tstack_tops();
-						finish_cur_depth_backedges();
+						join_backedges_to_top();
 					}
 
 					if (cur_tstack().first_idx > first_occurrence[cur_depth]) {
@@ -1882,78 +1923,48 @@ inline std::optional<planar_embedding> planar_embed(
 
 					if (is_type_1) assert(s.has_vert_tstack);
 					if (s.has_vert_tstack) {
-						if (lowval < cur_depth) {
-							// NB: tstack[orig_size] is the vertex and tstack[orig_size+1] is the backedge; maybe we should reverse them?
-							assert(int(tstack.size()) >= orig_tstack + 3);
+						// NB: tstack[orig_size] is the vertex and tstack[orig_size+1] is the backedge; maybe we should reverse them?
+						assert(int(tstack.size()) >= orig_tstack + 3);
 
-							if (!is_type_1) {
-								// The lowval side should be side 1, everything else goes on side 0.
-								// The exception is tstack[orig_tstack + 2], which could be == lowval on one/both sides,
-								// but is guaranteed to have *something* > lowval by non-type-1-ness
-								auto& t = tstack[orig_tstack + 2];
-								if (t.planarity) {
-									assert(t.planarity->sides[0].top_depths[0] == t.top_depth);
-									if (t.planarity->sides[0].top_depths[1] == lowval) {
-										flip_tstack_planarity(orig_tstack + 2);
-									}
-									assert(t.planarity->sides[0].top_depths[1] != -1);
-									assert(t.planarity->sides[0].top_depths[1] > lowval);
+						if (!is_type_1) {
+							// The lowval side should be side 1, everything else goes on side 0.
+							// The exception is tstack[orig_tstack + 2], which could be == lowval on one/both sides,
+							// but is guaranteed to have *something* > lowval by non-type-1-ness
+							auto& t = tstack[orig_tstack + 2];
+							if (t.planarity) {
+								assert(t.planarity->sides[0].top_depths[0] == t.top_depth);
+								if (t.planarity->sides[0].top_depths[1] == lowval) {
+									flip_tstack_planarity(orig_tstack + 2);
 								}
-								for (int i = orig_tstack + 3; i < int(tstack.size()); i++) {
-									if (tstack[i].top_depth == lowval) {
-										flip_tstack_planarity(i);
-									}
-								}
-								while (int(tstack.size()) > orig_tstack + 3) {
-									merge_tstack_tops();
+								assert(t.planarity->sides[0].top_depths[1] != -1);
+								assert(t.planarity->sides[0].top_depths[1] > lowval);
+							}
+							for (int i = orig_tstack + 3; i < int(tstack.size()); i++) {
+								if (tstack[i].top_depth == lowval) {
+									flip_tstack_planarity(i);
 								}
 							}
-
-							assert(int(tstack.size()) == orig_tstack + 3);
-
-							// Merge with the backedge
-							merge_tstack_tops();
-							// Merge with the vertex
-							merge_tstack_tops();
-
-							assert(cur_tstack().top_depth == lowval);
-						} else {
-							assert(int(tstack.size()) == orig_tstack + 1);
+							while (int(tstack.size()) > orig_tstack + 3) {
+								merge_tstack_tops();
+							}
 						}
 
-						[&]() -> void {
-							if (!cur_tstack().planarity) return;
-							// precondition: side 1 should be the lowval only side
-							auto& sides = cur_tstack().planarity->sides;
-							auto& s0 = sides[0];
-							auto& s1 = sides[1];
-							quarter_edge_matches[s0.bot_ends[0]] = s1.bot_ends[0];
-							quarter_edge_matches[s1.bot_ends[0]] = s0.bot_ends[0];
-							s0.bot_ends[0] = s1.bot_ends[1];
-							if (s1.top_ends[0] != -1) {
-								if (s1.top_depths[1] != lowval) {
-									assert(!is_type_1);
-									cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
-									return;
-								}
-								assert(s1.top_depths[0] == lowval);
-								quarter_edge_matches[s0.top_ends[0]] = s1.top_ends[0];
-								quarter_edge_matches[s1.top_ends[0]] = s0.top_ends[0];
-								s0.top_ends[0] = s1.top_ends[1];
-								// Already true since the backedge was on side 0
-								assert(s0.top_depths[0] == lowval);
-							}
-							s1 = tstack_planarity_side_t{};
-						}();
+						assert(int(tstack.size()) == orig_tstack + 3);
+
+						// Merge with the backedge
+						merge_tstack_tops();
+						// Merge with the vertex
+						merge_tstack_tops();
+
+						assert(cur_tstack().top_depth == lowval);
+
+						join_bottoms_to_empty();
 					}
 				} else {
 					assert(is_type_1);
 					// The span lives on side !edge_dir
 					int idx = push_edge_tstack(lowval, e, false);
 					setmin(first_occurrence[lowval], idx);
-					if (lowval == cur_depth) {
-						finish_cur_depth_backedges();
-					}
 				}
 
 				// This handles bridges and stuff too
