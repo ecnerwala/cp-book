@@ -252,7 +252,6 @@ struct lowval_storted_skeleton_t {
 	) {
 		// std::min is by reference, which breaks some optimizations
 		auto min = [](auto a, auto b) { return a < b ? a : b; };
-		auto setmin = [](auto& a, auto b) { if (b < a) a = b; };
 
 		int NE = int(edges.size());
 		assert(int(vert_order.size()) <= NV);
@@ -1560,7 +1559,6 @@ inline std::optional<planar_embedding> planar_embed(
 	std::span<const int> edge_order
 ) {
 	// std::min is by reference, which breaks some optimizations
-	auto min = [](auto a, auto b) { return a < b ? a : b; };
 	auto setmin = [](auto& a, auto b) { if (b < a) a = b; };
 
 	int NE = int(edges.size());
@@ -1628,8 +1626,7 @@ inline std::optional<planar_embedding> planar_embed(
 						assert(as.tops[1].depth <= bs.tops[0].depth);
 						quarter_edge_matches[as.tops[1].end] = bs.tops[0].end;
 						quarter_edge_matches[bs.tops[0].end] = as.tops[1].end;
-						as.tops[1].end = bs.tops[1].end;
-						as.tops[1].depth = bs.tops[1].depth;
+						as.tops[1] = bs.tops[1];
 					}
 				}
 			}
@@ -2011,7 +2008,6 @@ inline bool can_planar_embed(
 	std::span<const int> edge_order
 ) {
 	// std::min is by reference, which breaks some optimizations
-	auto min = [](auto a, auto b) { return a < b ? a : b; };
 	auto setmin = [](auto& a, auto b) { if (b < a) a = b; };
 
 	int NE = int(edges.size());
@@ -2023,14 +2019,10 @@ inline bool can_planar_embed(
 	// We're going to build a tree of all SPQR *nodes* + all original *vertices* (collectively *items*).
 	// Vertices will hang off the first SPQR node containing them, and blocks will be rooted at a topmost Q node for the top edge.
 
-	std::vector<int> prev_edge(NE, -1);
-
 	{
 		int nxt_edge_idx = 0; // Counts backedges only
 
 		std::vector<int> first_occurrence(NV); // First backedge to this depth
-
-		std::vector<int> edge_top_depths(NE, -1);
 
 		struct tstack_planarity_side_t {
 			// For each side, store pointers to the "linked lists" of the edges inside.
@@ -2048,16 +2040,15 @@ inline bool can_planar_embed(
 			// The convention is that sides[0].tops[0].depth == top_depth, i.e. at least one minimal return lives on side 0
 			std::array<tstack_planarity_side_t, 2> sides;
 		};
+		std::vector<tstack_planarity_side_t::top_t> prev_edge(NE, {-1, -1});
 		auto merge_planarity_side = [&](tstack_planarity_side_t& as, const tstack_planarity_side_t& bs) -> void {
 			// If there's no bottom edges, then we must be an isolated vertex, so we can end early.
 			// Caller must check that we're planar
 			assert(as.tops[1].depth <= bs.tops[0].depth);
-			prev_edge[bs.tops[0].end] = as.tops[1].end;
-			as.tops[1].end = bs.tops[1].end;
-			as.tops[1].depth = bs.tops[1].depth;
+			prev_edge[bs.tops[0].end] = as.tops[1];
+			as.tops[1] = bs.tops[1];
 		};
 		auto make_edge_planarity = [&](int e, int top_depth, bool is_tree) -> tstack_planarity_t {
-			edge_top_depths[e] = top_depth;
 			tstack_planarity_t p;
 			if (!is_tree) {
 				p.sides[0].tops = {{{e, top_depth}, {e, top_depth}}};
@@ -2201,9 +2192,8 @@ inline bool can_planar_embed(
 								}
 								if (last_top < cur_depth) {
 									auto nxt_planarity = nxt_tstack().planarity.sides[0];
-									prev_edge[cur_planarity.tops[0].end] = nxt_planarity.tops[1].end;
-									cur_planarity.tops[0].end = nxt_planarity.tops[0].end;
-									cur_planarity.tops[0].depth = nxt_planarity.tops[0].depth;
+									prev_edge[cur_planarity.tops[0].end] = nxt_planarity.tops[1];
+									cur_planarity.tops[0] = nxt_planarity.tops[0];
 								} else {
 									cur_planarity = nxt_tstack().planarity.sides[0];
 								}
@@ -2246,11 +2236,9 @@ inline bool can_planar_embed(
 						// Prune off finished cur-side things
 						for (auto& side : cur_tstack().planarity.sides) {
 							while (side.tops[1].depth == cur_depth) {
-								side.tops[1].end = prev_edge[side.tops[1].end];
-								if (side.tops[1].end != -1) {
-									side.tops[1].depth = edge_top_depths[side.tops[1].end];
-								} else {
-									side.tops = {};
+								side.tops[1] = prev_edge[side.tops[1].end];
+								if (side.tops[1].end == -1) {
+									side.tops[0] = {};
 								}
 							}
 						}
