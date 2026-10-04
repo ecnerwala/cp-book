@@ -224,6 +224,172 @@ struct planar_spqr_tree : spqr_tree {
 	}
 };
 
+// Phase 1: build a DFS skeleton with outedges sorted by lowval
+struct lowval_storted_skeleton_t {
+	std::vector<int> roots;
+	struct key_t { int lowval; bool is_tree; bool is_type_1; };
+	struct packed_key_t {
+		int v;
+		friend auto operator <=> (packed_key_t a, packed_key_t b) = default;
+		[[nodiscard]] bool is_new_block() const { return v < 6; }
+		[[nodiscard]] bool is_type_2() const { return v % 3 == 2; }
+		[[nodiscard]] key_t unpack(int cur_depth) const {
+			int lowval = v / 3 - 2; if (lowval < 0) lowval = cur_depth + ~lowval;
+			int kind = v % 3;
+			bool is_tree = kind != 1;
+			bool is_type_1 = kind <= 1;
+			return {lowval, is_tree, is_type_1 };
+		}
+	};
+	struct outedge_t { int src, dest; int e; packed_key_t key; };
+	csr<outedge_t> outedges;
+
+	static lowval_storted_skeleton_t build(
+		int NV,
+		const std::vector<std::array<int, 2>>& edges,
+		std::span<const int> vert_order,
+		std::span<const int> edge_order
+	) {
+		// std::min is by reference, which breaks some optimizations
+		auto min = [](auto a, auto b) { return a < b ? a : b; };
+		auto setmin = [](auto& a, auto b) { if (b < a) a = b; };
+
+		int NE = int(edges.size());
+		assert(int(vert_order.size()) <= NV);
+		assert(int(edge_order.size()) <= NE);
+
+		// Calls f(i) for i in order, then for the remaining i in [0, n) in increasing order.
+		auto for_each_in_order = [](int n, std::span<const int> order, auto f) -> void {
+			for (int i : order) f(i);
+			if (int(order.size()) == n) return;
+			if (order.empty()) {
+				for (int i = 0; i < n; i++) f(i);
+			} else if (order.size() == 1) {
+				for (int i = 0; i < n; i++) {
+					if (i != order[0]) f(i);
+				}
+			} else {
+				std::vector<bool> listed(n);
+				for (int i : order) listed[i] = true;
+				for (int i = 0; i < n; i++) {
+					if (!listed[i]) f(i);
+				}
+			}
+		};
+
+		std::vector<int> roots; roots.reserve(NV);
+		csr<outedge_t> outedges;
+		{
+			std::vector<int> depth(NV, -1);
+			// 1a: build a normal adjacency list for the initial lowval dfs
+			struct edge_t { int dest; int e; };
+			csr_index_builder adj_idx_builder(NV);
+			for (auto [u, v] : edges) {
+				adj_idx_builder.count(u);
+				if (u != v) adj_idx_builder.count(v);
+			}
+			csr_builder<edge_t> adj_builder(std::move(adj_idx_builder));
+			for_each_in_order(NE, edge_order, [&](int e) -> void {
+				auto [u, v] = edges[e];
+				adj_builder.push(u) = {v, e};
+				if (u != v) adj_builder.push(v) = {u, e};
+			});
+			auto adj = std::move(adj_builder).finalize();
+
+			std::vector<outedge_t> all_outedges; all_outedges.reserve(NE);
+			// Return the 2 lowvals from this subtree
+			struct dfs_stack_t {
+				int cur;
+				int prv_e;
+				std::array<int, 2> lowvals;
+				int ch_idx;
+				int ch_end;
+			};
+			std::vector<dfs_stack_t> stk; stk.reserve(NV);
+			auto push_vert = [&](int cur, int prv_e) -> void {
+				int d = int(stk.size());
+				depth[cur] = d;
+				stk.push_back({cur, prv_e, {d, d}, adj.bounds[cur], adj.bounds[cur+1]});
+			};
+			auto finish_edge = [&](bool is_tree, std::array<int, 2> n_lowvals) -> void {
+				int d = int(stk.size()) - 1;
+				auto& s = stk.back();
+				int cur = s.cur;
+				assert(s.ch_idx < s.ch_end);
+				auto [nxt, e] = adj.dat[s.ch_idx];
+				auto& lowvals = s.lowvals;
+				s.ch_idx++;
+
+				{
+					// Extra bit is 0 for type-1 children, 1 for backedges, 2 for children with lowval2
+					// Bridges have lowval -2 (kind 0), and components loops have lowval -1 (components are kind 0, loops are kind 1)
+					// We don't really need to distinguish backedges vs type-1 children, but do it just for fun?
+					int lowval = n_lowvals[0];
+					if (lowval >= d) lowval = ~(lowval - d);
+					int kind = 2 * (n_lowvals[1] < d) + !is_tree;
+					all_outedges.push_back({cur, nxt, e, packed_key_t{3 * (lowval + 2) + kind}});
+				}
+
+				// Keep the 2 distinct mins
+				if (n_lowvals[0] < lowvals[0]) lowvals = {n_lowvals[0], min(n_lowvals[1], lowvals[0])};
+				else lowvals[1] = min(lowvals[1], n_lowvals[0] == lowvals[0] ? n_lowvals[1] : n_lowvals[0]);
+			};
+			auto start_edge = [&]() -> void {
+				int d = int(stk.size()) - 1;
+				auto& s = stk.back();
+				assert(s.ch_idx < s.ch_end);
+				auto [nxt, e] = adj.dat[s.ch_idx];
+
+				if (e == s.prv_e || depth[nxt] > d) {
+					// skip the edge
+					s.ch_idx++; return;
+				}
+
+				bool is_tree = depth[nxt] == -1;
+				if (is_tree) {
+					push_vert(nxt, e);
+				} else {
+					finish_edge(false, {depth[nxt], d});
+				}
+			};
+			auto pop_vert = [&]() -> std::array<int, 2> {
+				auto lowvals = stk.back().lowvals;
+				stk.pop_back();
+				return lowvals;
+			};
+			for_each_in_order(NV, vert_order, [&](int rt) -> void {
+				if (depth[rt] == -1) {
+					roots.push_back(rt);
+					push_vert(rt, -1);
+					while (true) {
+						if (stk.back().ch_idx == stk.back().ch_end) {
+							auto lowvals = pop_vert();
+							if (stk.empty()) break;
+							finish_edge(true, lowvals);
+						} else {
+							start_edge();
+						}
+					}
+				}
+			});
+
+			csr_index_builder by_key_idx_builder(3*NV+6);
+			for (auto edge : all_outedges) by_key_idx_builder.count(edge.key.v);
+			csr_builder<outedge_t> by_key_builder(std::move(by_key_idx_builder));
+			for (auto edge : all_outedges) by_key_builder.push(edge.key.v) = edge;
+			csr<outedge_t> by_key = std::move(by_key_builder).finalize();
+
+			csr_index_builder by_src_idx_builder(NV);
+			for (auto edge : by_key.dat) by_src_idx_builder.count(edge.src);
+			csr_builder<outedge_t> by_src_builder(std::move(by_src_idx_builder), std::move(all_outedges));
+			for (auto edge : by_key.dat) by_src_builder.push(edge.src) = edge;
+			outedges = std::move(by_src_builder).finalize();
+		}
+
+		return {std::move(roots), std::move(outedges)};
+	}
+};
+
 template <bool with_planarity>
 std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build_impl(
 	int NV,
@@ -240,136 +406,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 	assert(int(vert_order.size()) <= NV);
 	assert(int(edge_order.size()) <= NE);
 
-	// Calls f(i) for i in order, then for the remaining i in [0, n) in increasing order.
-	auto for_each_in_order = [](int n, std::span<const int> order, auto f) -> void {
-		for (int i : order) f(i);
-		if (int(order.size()) == n) return;
-		if (order.empty()) {
-			for (int i = 0; i < n; i++) f(i);
-		} else if (order.size() == 1) {
-			for (int i = 0; i < n; i++) {
-				if (i != order[0]) f(i);
-			}
-		} else {
-			std::vector<bool> listed(n);
-			for (int i : order) listed[i] = true;
-			for (int i = 0; i < n; i++) {
-				if (!listed[i]) f(i);
-			}
-		}
-	};
-
-	std::vector<int> roots; roots.reserve(NV);
-	struct outedge_t { int src, dest; int e; int key; };
-	csr<outedge_t> outedges;
-
-	// Phase 1: build a sorted skeleton
-	{
-		std::vector<int> depth(NV, -1);
-		// 1a: build a normal adjacency list for the initial lowval dfs
-		struct edge_t { int dest; int e; };
-		csr_index_builder adj_idx_builder(NV);
-		for (auto [u, v] : edges) {
-			adj_idx_builder.count(u);
-			if (u != v) adj_idx_builder.count(v);
-		}
-		csr_builder<edge_t> adj_builder(std::move(adj_idx_builder));
-		for_each_in_order(NE, edge_order, [&](int e) -> void {
-			auto [u, v] = edges[e];
-			adj_builder.push(u) = {v, e};
-			if (u != v) adj_builder.push(v) = {u, e};
-		});
-		auto adj = std::move(adj_builder).finalize();
-
-		std::vector<outedge_t> all_outedges; all_outedges.reserve(NE);
-		// Return the 2 lowvals from this subtree
-		struct dfs_stack_t {
-			int cur;
-			int prv_e;
-			std::array<int, 2> lowvals;
-			int ch_idx;
-			int ch_end;
-		};
-		std::vector<dfs_stack_t> stk; stk.reserve(NV);
-		auto push_vert = [&](int cur, int prv_e) -> void {
-			int d = int(stk.size());
-			depth[cur] = d;
-			stk.push_back({cur, prv_e, {d, d}, adj.bounds[cur], adj.bounds[cur+1]});
-		};
-		auto finish_edge = [&](bool is_tree, std::array<int, 2> n_lowvals) -> void {
-			int d = int(stk.size()) - 1;
-			auto& s = stk.back();
-			int cur = s.cur;
-			assert(s.ch_idx < s.ch_end);
-			auto [nxt, e] = adj.dat[s.ch_idx];
-			auto& lowvals = s.lowvals;
-			s.ch_idx++;
-
-			{
-				// Extra bit is 0 for type-1 children, 1 for backedges, 2 for children with lowval2
-				// Bridges have lowval -2 (kind 0), and components loops have lowval -1 (components are kind 0, loops are kind 1)
-				// We don't really need to distinguish backedges vs type-1 children, but do it just for fun?
-				int lowval = n_lowvals[0];
-				if (lowval >= d) lowval = ~(lowval - d);
-				int kind = 2 * (n_lowvals[1] < d) + !is_tree;
-				all_outedges.push_back({cur, nxt, e, 3 * (lowval + 2) + kind});
-			}
-
-			// Keep the 2 distinct mins
-			if (n_lowvals[0] < lowvals[0]) lowvals = {n_lowvals[0], min(n_lowvals[1], lowvals[0])};
-			else lowvals[1] = min(lowvals[1], n_lowvals[0] == lowvals[0] ? n_lowvals[1] : n_lowvals[0]);
-		};
-		auto start_edge = [&]() -> void {
-			int d = int(stk.size()) - 1;
-			auto& s = stk.back();
-			assert(s.ch_idx < s.ch_end);
-			auto [nxt, e] = adj.dat[s.ch_idx];
-
-			if (e == s.prv_e || depth[nxt] > d) {
-				// skip the edge
-				s.ch_idx++; return;
-			}
-
-			bool is_tree = depth[nxt] == -1;
-			if (is_tree) {
-				push_vert(nxt, e);
-			} else {
-				finish_edge(false, {depth[nxt], d});
-			}
-		};
-		auto pop_vert = [&]() -> std::array<int, 2> {
-			auto lowvals = stk.back().lowvals;
-			stk.pop_back();
-			return lowvals;
-		};
-		for_each_in_order(NV, vert_order, [&](int rt) -> void {
-			if (depth[rt] == -1) {
-				roots.push_back(rt);
-				push_vert(rt, -1);
-				while (true) {
-					if (stk.back().ch_idx == stk.back().ch_end) {
-						auto lowvals = pop_vert();
-						if (stk.empty()) break;
-						finish_edge(true, lowvals);
-					} else {
-						start_edge();
-					}
-				}
-			}
-		});
-
-		csr_index_builder by_key_idx_builder(3*NV+6);
-		for (auto edge : all_outedges) by_key_idx_builder.count(edge.key);
-		csr_builder<outedge_t> by_key_builder(std::move(by_key_idx_builder));
-		for (auto edge : all_outedges) by_key_builder.push(edge.key) = edge;
-		csr<outedge_t> by_key = std::move(by_key_builder).finalize();
-
-		csr_index_builder by_src_idx_builder(NV);
-		for (auto edge : by_key.dat) by_src_idx_builder.count(edge.src);
-		csr_builder<outedge_t> by_src_builder(std::move(by_src_idx_builder), std::move(all_outedges));
-		for (auto edge : by_key.dat) by_src_builder.push(edge.src) = edge;
-		outedges = std::move(by_src_builder).finalize();
-	}
+	auto [roots, outedges] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
 
 	// Phase 2: do the big ear-decomposition-like walk
 
@@ -656,14 +693,6 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				int cur_depth = int(stk.size()) - 1;
 				stack_verts[cur_depth] = cur;
 			};
-			struct key_t { int lowval; bool is_tree; bool is_type_1; };
-			auto decode_key = [&](int cur_depth, int key) -> key_t {
-				int lowval = key / 3 - 2; if (lowval < 0) lowval = cur_depth + ~lowval;
-				int kind = key % 3;
-				bool is_tree = kind != 1;
-				bool is_type_1 = kind <= 1;
-				return {lowval, is_tree, is_type_1 };
-			};
 			// return true means jump to start_edge, return false means jump to finish_edge
 			auto start_edge = [&]() -> std::optional<int> {
 				int cur_depth = int(stk.size()) - 1;
@@ -671,7 +700,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				int cur = stack_verts[cur_depth];
 				assert(s.ch_idx < s.ch_end);
 				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
-				auto [lowval, is_tree, is_type_1] = decode_key(cur_depth, key);
+				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
 
 				// edge_dir convention: false is forwards, true is backwards.
 				// That means that cur is on the edge_dir side and nxt is on the !edge_dir side.
@@ -700,7 +729,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
 				s.ch_idx++;
 
-				auto [lowval, is_tree, is_type_1] = decode_key(cur_depth, key);
+				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
 
 				const int orig_tstack = s.orig_tstack;
 				const bool edge_dir = stack_dir[cur_depth];
@@ -1535,139 +1564,7 @@ inline std::optional<planar_embedding> planar_embed(
 	auto setmin = [](auto& a, auto b) { if (b < a) a = b; };
 
 	int NE = int(edges.size());
-	assert(int(vert_order.size()) <= NV);
-	assert(int(edge_order.size()) <= NE);
-
-	// Calls f(i) for i in order, then for the remaining i in [0, n) in increasing order.
-	auto for_each_in_order = [](int n, std::span<const int> order, auto f) -> void {
-		for (int i : order) f(i);
-		if (int(order.size()) == n) return;
-		if (order.empty()) {
-			for (int i = 0; i < n; i++) f(i);
-		} else if (order.size() == 1) {
-			for (int i = 0; i < n; i++) {
-				if (i != order[0]) f(i);
-			}
-		} else {
-			std::vector<bool> listed(n);
-			for (int i : order) listed[i] = true;
-			for (int i = 0; i < n; i++) {
-				if (!listed[i]) f(i);
-			}
-		}
-	};
-
-	std::vector<int> roots; roots.reserve(NV);
-	struct outedge_t { int src, dest; int e; int key; };
-	csr<outedge_t> outedges;
-
-	// Phase 1: build a sorted skeleton
-	{
-		std::vector<int> depth(NV, -1);
-		// 1a: build a normal adjacency list for the initial lowval dfs
-		struct edge_t { int dest; int e; };
-		csr_index_builder adj_idx_builder(NV);
-		for (auto [u, v] : edges) {
-			adj_idx_builder.count(u);
-			if (u != v) adj_idx_builder.count(v);
-		}
-		csr_builder<edge_t> adj_builder(std::move(adj_idx_builder));
-		for_each_in_order(NE, edge_order, [&](int e) -> void {
-			auto [u, v] = edges[e];
-			adj_builder.push(u) = {v, 2*e+0};
-			if (u != v) adj_builder.push(v) = {u, 2*e+1};
-		});
-		auto adj = std::move(adj_builder).finalize();
-
-		std::vector<outedge_t> all_outedges; all_outedges.reserve(NE);
-		// Return the 2 lowvals from this subtree
-		struct dfs_stack_t {
-			int cur;
-			int prv_e;
-			std::array<int, 2> lowvals;
-			int ch_idx;
-			int ch_end;
-		};
-		std::vector<dfs_stack_t> stk; stk.reserve(NV);
-		auto push_vert = [&](int cur, int prv_e) -> void {
-			int d = int(stk.size());
-			depth[cur] = d;
-			stk.push_back({cur, prv_e, {d, d}, adj.bounds[cur], adj.bounds[cur+1]});
-		};
-		auto finish_edge = [&](bool is_tree, std::array<int, 2> n_lowvals) -> void {
-			int d = int(stk.size()) - 1;
-			auto& s = stk.back();
-			int cur = s.cur;
-			assert(s.ch_idx < s.ch_end);
-			auto [nxt, e] = adj.dat[s.ch_idx];
-			auto& lowvals = s.lowvals;
-			s.ch_idx++;
-
-			{
-				// Extra bit is 0 for type-1 children, 1 for backedges, 2 for children with lowval2
-				// Bridges have lowval -2 (kind 0), and components loops have lowval -1 (components are kind 0, loops are kind 1)
-				// We don't really need to distinguish backedges vs type-1 children, but do it just for fun?
-				int lowval = n_lowvals[0];
-				if (lowval >= d) lowval = ~(lowval - d);
-				int kind = 2 * (n_lowvals[1] < d) + !is_tree;
-				all_outedges.push_back({cur, nxt, e, 3 * (lowval + 2) + kind});
-			}
-
-			// Keep the 2 distinct mins
-			if (n_lowvals[0] < lowvals[0]) lowvals = {n_lowvals[0], min(n_lowvals[1], lowvals[0])};
-			else lowvals[1] = min(lowvals[1], n_lowvals[0] == lowvals[0] ? n_lowvals[1] : n_lowvals[0]);
-		};
-		auto start_edge = [&]() -> void {
-			int d = int(stk.size()) - 1;
-			auto& s = stk.back();
-			assert(s.ch_idx < s.ch_end);
-			auto [nxt, e] = adj.dat[s.ch_idx];
-
-			if ((e ^ 1) == s.prv_e || depth[nxt] > d) {
-				// skip the edge
-				s.ch_idx++; return;
-			}
-
-			bool is_tree = depth[nxt] == -1;
-			if (is_tree) {
-				push_vert(nxt, e);
-			} else {
-				finish_edge(false, {depth[nxt], d});
-			}
-		};
-		auto pop_vert = [&]() -> std::array<int, 2> {
-			auto lowvals = stk.back().lowvals;
-			stk.pop_back();
-			return lowvals;
-		};
-		for_each_in_order(NV, vert_order, [&](int rt) -> void {
-			if (depth[rt] == -1) {
-				roots.push_back(rt);
-				push_vert(rt, -1);
-				while (true) {
-					if (stk.back().ch_idx == stk.back().ch_end) {
-						auto lowvals = pop_vert();
-						if (stk.empty()) break;
-						finish_edge(true, lowvals);
-					} else {
-						start_edge();
-					}
-				}
-			}
-		});
-
-		csr_index_builder by_key_idx_builder(3*NV+6);
-		for (auto edge : all_outedges) by_key_idx_builder.count(edge.key);
-		csr_builder<outedge_t> by_key_builder(std::move(by_key_idx_builder));
-		for (auto edge : all_outedges) by_key_builder.push(edge.key) = edge;
-		csr<outedge_t> by_key = std::move(by_key_builder).finalize();
-
-		csr_index_builder by_src_idx_builder(NV);
-		for (auto edge : by_key.dat) by_src_idx_builder.count(edge.src);
-		csr_builder<outedge_t> by_src_builder(std::move(by_src_idx_builder), std::move(all_outedges));
-		for (auto edge : by_key.dat) by_src_builder.push(edge.src) = edge;
-		outedges = std::move(by_src_builder).finalize();
-	}
+	auto [roots, outedges] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
 
 	// Phase 2: do the big ear-decomposition-like walk
 
@@ -1800,8 +1697,8 @@ inline std::optional<planar_embedding> planar_embed(
 				{
 					// Find the first same-BCC edge, and check it's type 2 (has lowval2), if so it's the ear tstack and we defer pushing ourselves.
 					int first_edge = lo;
-					while (first_edge < hi && outedges.dat[first_edge].key < 6) first_edge++;
-					if (first_edge < hi && outedges.dat[first_edge].key % 3 == 2) {
+					while (first_edge < hi && outedges.dat[first_edge].key.is_new_block()) first_edge++;
+					if (first_edge < hi && outedges.dat[first_edge].key.is_type_2()) {
 						// Move first_edge to the beginning
 						std::rotate(outedges.dat.begin() + lo, outedges.dat.begin() + first_edge, outedges.dat.begin() + first_edge + 1);
 						has_vert_tstack = false;
@@ -1812,21 +1709,13 @@ inline std::optional<planar_embedding> planar_embed(
 				}
 				stk.push_back({has_vert_tstack, lo, hi, -1});
 			};
-			struct key_t { int lowval; bool is_tree; bool is_type_1; };
-			auto decode_key = [&](int cur_depth, int key) -> key_t {
-				int lowval = key / 3 - 2; if (lowval < 0) lowval = cur_depth + ~lowval;
-				int kind = key % 3;
-				bool is_tree = kind != 1;
-				bool is_type_1 = kind <= 1;
-				return {lowval, is_tree, is_type_1};
-			};
 			// return true means jump to start_edge, return false means jump to finish_edge
 			auto start_edge = [&]() -> std::optional<int> {
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
 				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
-				auto [lowval, is_tree, is_type_1] = decode_key(cur_depth, key);
+				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
 
 				if (lowval >= cur_depth || is_type_1) assert(s.has_vert_tstack);
 
@@ -1846,7 +1735,7 @@ inline std::optional<planar_embedding> planar_embed(
 				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
 				s.ch_idx++;
 
-				auto [lowval, is_tree, is_type_1] = decode_key(cur_depth, key);
+				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
 
 				const int orig_tstack = s.orig_tstack;
 
@@ -2126,139 +2015,8 @@ inline bool can_planar_embed(
 	auto setmin = [](auto& a, auto b) { if (b < a) a = b; };
 
 	int NE = int(edges.size());
-	assert(int(vert_order.size()) <= NV);
-	assert(int(edge_order.size()) <= NE);
 
-	// Calls f(i) for i in order, then for the remaining i in [0, n) in increasing order.
-	auto for_each_in_order = [](int n, std::span<const int> order, auto f) -> void {
-		for (int i : order) f(i);
-		if (int(order.size()) == n) return;
-		if (order.empty()) {
-			for (int i = 0; i < n; i++) f(i);
-		} else if (order.size() == 1) {
-			for (int i = 0; i < n; i++) {
-				if (i != order[0]) f(i);
-			}
-		} else {
-			std::vector<bool> listed(n);
-			for (int i : order) listed[i] = true;
-			for (int i = 0; i < n; i++) {
-				if (!listed[i]) f(i);
-			}
-		}
-	};
-
-	std::vector<int> roots; roots.reserve(NV);
-	struct outedge_t { int src, dest; int e; int key; };
-	csr<outedge_t> outedges;
-
-	// Phase 1: build a sorted skeleton
-	{
-		std::vector<int> depth(NV, -1);
-		// 1a: build a normal adjacency list for the initial lowval dfs
-		struct edge_t { int dest; int e; };
-		csr_index_builder adj_idx_builder(NV);
-		for (auto [u, v] : edges) {
-			adj_idx_builder.count(u);
-			if (u != v) adj_idx_builder.count(v);
-		}
-		csr_builder<edge_t> adj_builder(std::move(adj_idx_builder));
-		for_each_in_order(NE, edge_order, [&](int e) -> void {
-			auto [u, v] = edges[e];
-			adj_builder.push(u) = {v, e};
-			if (u != v) adj_builder.push(v) = {u, e};
-		});
-		auto adj = std::move(adj_builder).finalize();
-
-		std::vector<outedge_t> all_outedges; all_outedges.reserve(NE);
-		// Return the 2 lowvals from this subtree
-		struct dfs_stack_t {
-			int cur;
-			int prv_e;
-			std::array<int, 2> lowvals;
-			int ch_idx;
-			int ch_end;
-		};
-		std::vector<dfs_stack_t> stk; stk.reserve(NV);
-		auto push_vert = [&](int cur, int prv_e) -> void {
-			int d = int(stk.size());
-			depth[cur] = d;
-			stk.push_back({cur, prv_e, {d, d}, adj.bounds[cur], adj.bounds[cur+1]});
-		};
-		auto finish_edge = [&](bool is_tree, std::array<int, 2> n_lowvals) -> void {
-			int d = int(stk.size()) - 1;
-			auto& s = stk.back();
-			int cur = s.cur;
-			assert(s.ch_idx < s.ch_end);
-			auto [nxt, e] = adj.dat[s.ch_idx];
-			auto& lowvals = s.lowvals;
-			s.ch_idx++;
-
-			{
-				// Extra bit is 0 for type-1 children, 1 for backedges, 2 for children with lowval2
-				// Bridges have lowval -2 (kind 0), and components loops have lowval -1 (components are kind 0, loops are kind 1)
-				// We don't really need to distinguish backedges vs type-1 children, but do it just for fun?
-				int lowval = n_lowvals[0];
-				if (lowval >= d) lowval = ~(lowval - d);
-				int kind = 2 * (n_lowvals[1] < d) + !is_tree;
-				all_outedges.push_back({cur, nxt, e, 3 * (lowval + 2) + kind});
-			}
-
-			// Keep the 2 distinct mins
-			if (n_lowvals[0] < lowvals[0]) lowvals = {n_lowvals[0], min(n_lowvals[1], lowvals[0])};
-			else lowvals[1] = min(lowvals[1], n_lowvals[0] == lowvals[0] ? n_lowvals[1] : n_lowvals[0]);
-		};
-		auto start_edge = [&]() -> void {
-			int d = int(stk.size()) - 1;
-			auto& s = stk.back();
-			assert(s.ch_idx < s.ch_end);
-			auto [nxt, e] = adj.dat[s.ch_idx];
-
-			if (e == s.prv_e || depth[nxt] > d) {
-				// skip the edge
-				s.ch_idx++; return;
-			}
-
-			bool is_tree = depth[nxt] == -1;
-			if (is_tree) {
-				push_vert(nxt, e);
-			} else {
-				finish_edge(false, {depth[nxt], d});
-			}
-		};
-		auto pop_vert = [&]() -> std::array<int, 2> {
-			auto lowvals = stk.back().lowvals;
-			stk.pop_back();
-			return lowvals;
-		};
-		for_each_in_order(NV, vert_order, [&](int rt) -> void {
-			if (depth[rt] == -1) {
-				roots.push_back(rt);
-				push_vert(rt, -1);
-				while (true) {
-					if (stk.back().ch_idx == stk.back().ch_end) {
-						auto lowvals = pop_vert();
-						if (stk.empty()) break;
-						finish_edge(true, lowvals);
-					} else {
-						start_edge();
-					}
-				}
-			}
-		});
-
-		csr_index_builder by_key_idx_builder(3*NV+6);
-		for (auto edge : all_outedges) by_key_idx_builder.count(edge.key);
-		csr_builder<outedge_t> by_key_builder(std::move(by_key_idx_builder));
-		for (auto edge : all_outedges) by_key_builder.push(edge.key) = edge;
-		csr<outedge_t> by_key = std::move(by_key_builder).finalize();
-
-		csr_index_builder by_src_idx_builder(NV);
-		for (auto edge : by_key.dat) by_src_idx_builder.count(edge.src);
-		csr_builder<outedge_t> by_src_builder(std::move(by_src_idx_builder), std::move(all_outedges));
-		for (auto edge : by_key.dat) by_src_builder.push(edge.src) = edge;
-		outedges = std::move(by_src_builder).finalize();
-	}
+	auto [roots, outedges] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
 
 	// Phase 2: do the big ear-decomposition-like walk
 
@@ -2343,8 +2101,8 @@ inline bool can_planar_embed(
 				{
 					// Find the first same-BCC edge, and check it's type 2 (has lowval2), if so it's the ear tstack and we defer pushing ourselves.
 					int first_edge = lo;
-					while (first_edge < hi && outedges.dat[first_edge].key < 6) first_edge++;
-					if (first_edge < hi && outedges.dat[first_edge].key % 3 == 2) {
+					while (first_edge < hi && outedges.dat[first_edge].key.is_new_block()) first_edge++;
+					if (first_edge < hi && outedges.dat[first_edge].key.is_type_2()) {
 						// Move first_edge to the beginning
 						std::rotate(outedges.dat.begin() + lo, outedges.dat.begin() + first_edge, outedges.dat.begin() + first_edge + 1);
 						has_vert_tstack = false;
@@ -2355,21 +2113,13 @@ inline bool can_planar_embed(
 				}
 				stk.push_back({has_vert_tstack, lo, hi, -1});
 			};
-			struct key_t { int lowval; bool is_tree; bool is_type_1; };
-			auto decode_key = [&](int cur_depth, int key) -> key_t {
-				int lowval = key / 3 - 2; if (lowval < 0) lowval = cur_depth + ~lowval;
-				int kind = key % 3;
-				bool is_tree = kind != 1;
-				bool is_type_1 = kind <= 1;
-				return {lowval, is_tree, is_type_1};
-			};
 			// return true means jump to start_edge, return false means jump to finish_edge
 			auto start_edge = [&]() -> std::optional<int> {
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
 				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
-				auto [lowval, is_tree, is_type_1] = decode_key(cur_depth, key);
+				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
 
 				if (lowval >= cur_depth || is_type_1) assert(s.has_vert_tstack);
 
@@ -2389,7 +2139,7 @@ inline bool can_planar_embed(
 				auto [_, nxt, e, key] = outedges.dat[s.ch_idx];
 				s.ch_idx++;
 
-				auto [lowval, is_tree, is_type_1] = decode_key(cur_depth, key);
+				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
 
 				const int orig_tstack = s.orig_tstack;
 
