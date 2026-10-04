@@ -2003,13 +2003,15 @@ inline std::optional<planar_embedding> build_planar_embedding(
 		assert(nxt_edge_idx == NE);
 		{
 			std::vector<bool> edge_flip(NE);
-			bool planarity_flip = false;
-			for (int e = 0; e < NE; e++) {
-				planarity_flip ^= postorder_flip[e];
-				edge_flip[postorder_edges[e]] = planarity_flip;
+			{
+				bool planarity_flip = false;
+				for (int e = 0; e < NE; e++) {
+					planarity_flip ^= postorder_flip[e];
+					edge_flip[postorder_edges[e]] = planarity_flip;
+				}
+				planarity_flip ^= postorder_flip[NE];
+				assert(!planarity_flip);
 			}
-			planarity_flip ^= postorder_flip[NE];
-			assert(!planarity_flip);
 			for (int e = 0; e < NE; e++) {
 				if (edge_flip[e]) {
 					std::swap(quarter_edge_matches[4*e + 0], quarter_edge_matches[4*e + 1]);
