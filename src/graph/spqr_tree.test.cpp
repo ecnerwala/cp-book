@@ -387,6 +387,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				// Now, check planarity guarantees.
 				{
 					auto check_planar_embedding = [](const wala::planar_embedding& pe, int V, const std::vector<std::array<int, 2>>& ends, const std::vector<bool>& is_embedded) {
+						CAPTURE(pe.rot_adj);
 						int E = int(ends.size());
 						assert(int(is_embedded.size()) == E);
 						REQUIRE_FAST(int(pe.rot_adj.size()) == 4 * E);
@@ -514,6 +515,15 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						if (full_embedding) {
 							std::vector<bool> is_embedded(edges.size(), true);
 							check_planar_embedding(*full_embedding, NV, edges, is_embedded);
+						}
+					}
+					{
+						INFO("Checking direct full embedding");
+						auto fast_embedding = wala::planar_embed(NV, edges, vert_order, edge_order);
+						REQUIRE_FAST(bool(fast_embedding) == std::ranges::all_of(spqr.node_planar, std::identity{}));
+						if (fast_embedding) {
+							std::vector<bool> is_embedded(edges.size(), true);
+							check_planar_embedding(*fast_embedding, NV, edges, is_embedded);
 						}
 					}
 				}
