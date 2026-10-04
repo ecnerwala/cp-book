@@ -740,7 +740,6 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 				item_vs[edge_item(e)] = make_vs(nxt, cur_depth);
 
-				// Whether cur_tstack() is a single edge
 				if (is_tree) {
 					// The span lives on side edge_dir
 					push_edge_tstack(nxt, cur_depth, e, true);
@@ -1809,11 +1808,9 @@ inline std::optional<planar_embedding> build_planar_embedding(
 					}
 				};
 
-				// Whether cur_tstack() is a single edge
 				if (is_tree) {
-					push_edge_tstack(cur_depth, e, true);
-					// Tree OR self-loop
 					// The span lives on side edge_dir
+					push_edge_tstack(cur_depth, e, true);
 					while (int(tstack.size()) >= orig_tstack + 2 && nxt_tstack().top_depth >= cur_depth) {
 						if (nxt_tstack().top_depth > cur_depth) {
 							if (int(tstack.size()) == orig_tstack + 2) {
