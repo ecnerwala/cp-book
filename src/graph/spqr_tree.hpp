@@ -829,8 +829,8 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 									merge_tstack_tops();
 								}
 
-								auto t0 = nxt_tstack().planarity->sides[0].top_depths[1];
-								auto t1 = nxt_tstack().planarity->sides[1].top_depths[1];
+								int t0 = nxt_tstack().planarity->sides[0].top_depths[1];
+								int t1 = nxt_tstack().planarity->sides[1].top_depths[1];
 								assert(t0 == cur_depth || t1 == cur_depth);
 								if (std::min(t0, t1) > last_top) {
 									assert(last_top < cur_depth);
@@ -1957,8 +1957,8 @@ inline std::optional<planar_embedding> planar_embed(
 							merge_tstack_tops();
 						}
 
-						auto t0 = nxt_tstack().planarity.sides[0].top_depths[1];
-						auto t1 = nxt_tstack().planarity.sides[1].top_depths[1];
+						int t0 = nxt_tstack().planarity.sides[0].top_depths[1];
+						int t1 = nxt_tstack().planarity.sides[1].top_depths[1];
 						assert(t0 == cur_depth || t1 == cur_depth);
 						if (std::min(t0, t1) > last_top) {
 							assert(last_top < cur_depth);
