@@ -1680,7 +1680,7 @@ inline std::optional<planar_embedding> build_planar_embedding(
 			}
 		};
 		auto make_edge_planarity = [&](int e, int top_depth, bool is_tree) -> tstack_maybe_planarity_t {
-			edge_top_depths[e] = top_depth;
+			edge_top_depths[e >> 1] = top_depth;
 			tstack_planarity_t p;
 			if (is_tree) {
 				p.sides[0].bot_ends = {2 * (e ^ 1) + 0, 2 * e + 1};
@@ -1806,6 +1806,11 @@ inline std::optional<planar_embedding> build_planar_embedding(
 					// The span lives on side edge_dir
 					while (int(tstack.size()) >= orig_tstack + 2 && nxt_tstack().top_depth >= cur_depth) {
 						if (nxt_tstack().top_depth > cur_depth) {
+							if (int(tstack.size()) == orig_tstack + 2) {
+								assert(lowval >= cur_depth);
+								merge_tstack_tops();
+								break;
+							}
 							if (tstack.end()[-3].top_depth < cur_depth) {
 								break;
 							}
@@ -1911,6 +1916,8 @@ inline std::optional<planar_embedding> build_planar_embedding(
 							merge_tstack_tops();
 
 							assert(cur_tstack().top_depth == lowval);
+						} else {
+							assert(int(tstack.size()) == orig_tstack + 1);
 						}
 
 						[&]() -> void {
@@ -1922,22 +1929,20 @@ inline std::optional<planar_embedding> build_planar_embedding(
 							quarter_edge_matches[s0.bot_ends[0]] = s1.bot_ends[0];
 							quarter_edge_matches[s1.bot_ends[0]] = s0.bot_ends[0];
 							s0.bot_ends[0] = s1.bot_ends[1];
-							if (lowval >= cur_depth) {
-								assert(s0.top_depths[0] == -1);
-								return;
-							}
-							if (s1.top_ends[0] != -1) {
-								if (s1.top_depths[1] != lowval) {
-									assert(!is_type_1);
-									cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
-									return;
+							if (lowval < cur_depth) {
+								if (s1.top_ends[0] != -1) {
+									if (s1.top_depths[1] != lowval) {
+										assert(!is_type_1);
+										cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+										return;
+									}
+									assert(s1.top_depths[0] == lowval);
+									quarter_edge_matches[s0.top_ends[0]] = s1.top_ends[0];
+									quarter_edge_matches[s1.top_ends[0]] = s0.top_ends[0];
+									s0.top_ends[0] = s1.top_ends[1];
+									// Already true since the backedge was on side 0
+									assert(s0.top_depths[0] == lowval);
 								}
-								assert(s1.top_depths[0] == lowval);
-								quarter_edge_matches[s0.top_ends[0]] = s1.top_ends[0];
-								quarter_edge_matches[s1.top_ends[0]] = s0.top_ends[0];
-								s0.top_ends[0] = s1.top_ends[1];
-								// Already true since the backedge was on side 0
-								assert(s0.top_depths[0] == lowval);
 							}
 							s1 = tstack_planarity_side_t{};
 						}();
