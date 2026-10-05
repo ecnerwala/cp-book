@@ -472,6 +472,9 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		return {{item << 1, item << 1}};
 	};
 
+	// Edge items are numbered in walk order for locality and relabelled back in phase 3.
+	fixed_vector<int> edge_orig(NE);
+	int num_finished_edges = 0;
 	std::vector<std::array<int, 2>> item_vs; item_vs.reserve(1 + NV + 2 * NE); item_vs.resize(1 + NV + NE, {-1, -1});
 	std::vector<item_list> item_ch; item_ch.reserve(1 + NV + 2 * NE); item_ch.resize(1 + NV + NE, item_list{});
 	std::vector<node_type> item_types; item_types.reserve(1 + NV + 2 * NE);
@@ -768,7 +771,8 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				assert(s.ch_idx < s.ch_end);
 
 				auto [_, nxt, e_side, key] = outedges.dat[s.ch_idx];
-				int e = e_side >> 1;
+				int e = num_finished_edges++;
+				edge_orig[e] = e_side >> 1;
 				s.ch_idx++;
 
 				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
@@ -1157,7 +1161,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				vert_index[orig_vert] = cur_idx;
 			} else if (cur_type == node_type::Q) {
 				assert(1 + NV <= cur_item && cur_item < 1 + NV + NE);
-				int orig_edge = cur_item - 1 - NV;
+				int orig_edge = edge_orig[cur_item - 1 - NV];
 				orig_id[cur_idx] = orig_edge;
 				edge_index[orig_edge] = cur_idx;
 				assert(item_vs[cur_item][0] != -1);
