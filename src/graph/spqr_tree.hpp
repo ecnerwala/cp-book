@@ -322,7 +322,7 @@ struct lowval_storted_skeleton_t {
 				{
 					// Extra bit is 0 for type-1 children, 1 for backedges, 2 for children with lowval2
 					// Bridges have lowval -2 (kind 0), and components loops have lowval -1 (components are kind 0, loops are kind 1)
-					// We don't really need to distinguish backedges vs type-1 children, but do it just for fun?
+					// We group all backedges together/last to avoid breaking a straight-line graph embedding
 					int lowval = n_lowvals[0];
 					if (lowval >= d) lowval = ~(lowval - d);
 					int kind = 2 * (n_lowvals[1] < d) + !is_tree;

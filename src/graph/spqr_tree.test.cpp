@@ -486,6 +486,33 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						// Worse embeddings can only have larger Euler characteristic
 						assert(num_face_cycles >= expected_face_cycles);
 						REQUIRE_FAST(num_face_cycles == expected_face_cycles);
+
+						// Final thing: check to make sure that all parallel edges are grouped together correctly;
+						// even though it's combinatorially valid, it would be impossible to form a straight-line drawing.
+						std::vector<std::pair<std::array<int, 2>, int>> darts; darts.reserve(2 * E);
+						for (int i = 0; i < E; i++) {
+							for (int z = 0; z < 2; z++) {
+								darts.push_back({{ends[i][z], ends[i][!z]}, 2 * i + z});
+							}
+						}
+						std::sort(darts.begin(), darts.end());
+						for (int i = 0, j = 0; i < int(darts.size()); i = j) {
+							while (j < int(darts.size()) && darts[j].first == darts[i].first) j++;
+							// Exclude self-loops
+							if (darts[i].first[0] == darts[i].first[1]) continue;
+							// Quick optimization
+							if (j - i == 1) continue;
+							CAPTURE(darts[i].first);
+							int num_cuts = 0;
+							for (int k = i; k < j; k++) {
+								int a = 2 * darts[k].second + 1;
+								int b = pe.rot_adj[a];
+								if (!(ends[b >> 2][(b >> 1) & 1] == ends[a >> 2][(a >> 1) & 1] && pe.rot_adj[a^3] == (b^3))) {
+									num_cuts++;
+								}
+							}
+							REQUIRE_FAST(num_cuts <= 1);
+						}
 					};
 					{
 						INFO("Checking partial embeddings");
