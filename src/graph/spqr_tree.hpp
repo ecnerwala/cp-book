@@ -826,19 +826,35 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 					if (cur_tstack().first_idx > first_occurrence[cur_depth]) {
 						if constexpr (with_planarity) {
 							[&] [[gnu::always_inline]] () -> void {
-								int source = int(tstack.size()) - 2;
-								while (tstack[source].first_idx > first_occurrence[cur_depth]) {
+								int source = int(tstack.size()) - 1;
+								do {
+									--source;
 									if (!tstack[source].planarity) {
 										// Set it somewhere so it can get copied down
 										cur_tstack().planarity = tstack[source].planarity;
 										return;
 									}
-									--source;
-								}
-								if (!tstack[source].planarity) {
-									cur_tstack().planarity = tstack[source].planarity;
-									return;
-								}
+								} while (tstack[source].first_idx > first_occurrence[cur_depth]);
+
+								// From planarity's perspective, we can view each tstack as one of 2 shapes:
+								// * tstack[i] can be a single "atom" branching off tstack[i].v_start. It can be:
+								//   * A single backedge (type 1)
+								//   * A subtree (possibly not biconnected) with at least 2 different-depth backedges on its outside (type 2)
+								// * tstack[i] can be a "chunk". Chunks contain:
+								//   * A core spanning from tstack[i].v_start (bot[0]) to tstack[i+1].v_start (bot[1]).
+								//     * The core is a cyclic outer face: it has 2 *disjoint* paths from bot[0] to bot[1]
+								//     * Each path can have backedges from its interior (not bot[0] or bot[1])
+								//     * side[0]'s path has a backedge to tstack[i].lowval
+								//   * Extra atoms on side 1, anchored at tstack[i].v_start
+								//     * these must have lowval < tstack[i].lowval, or can have lowval == tstack[i].lowval and be type 2
+								//     * these extra atoms are an entire suffix of v_start's: a chunk will always eat them all
+								//   * Most of the time, we can treat the side[1] core and the atoms all as separate backedges from tstack[i].v_start.
+								//     * The exception is when side[1].tops[1].depth == lowval: then it's forced to be a type 2 atom or part of the core, which matters.
+								//       * TODO: Can we easily distinguish the 2 cases?
+								// * tstack[i] can also be a tree vertex or a tree edge (trivial cases)
+								//
+								// Note that all atoms (including the chunk-extras) at one v_start must be sorted by (lowval, type).
+								// However, a chunk can occur later (closer to the top) than its (lowval, type) sort at its v_start.
 
 								// last_top == cur_tstack().top_depth
 								int last_top = cur_depth;
@@ -849,6 +865,19 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 										if (nxt_tstack().planarity->sides[1].tops[0].depth != -1) {
 											// Double-sided to cur_depth, conflicts with cur_tstack()
 											assert(last_top < cur_depth);
+											// nxt_tstack() is a chunk and both backedges are on the core
+											// K33 is:
+											// * cur_tstack().tops[0]
+											// * nxt_tstack().sides[0].tops[0].base
+											// * nxt_tstack().sides[1].tops[0].base
+											// + cur
+											// + nxt_tstack().v_start
+											// + cur_tstack().v_start
+											//
+											// nxt_tstack().v_start -> cur_tstack().tops[0] is the ear lowval loop
+											// cur_tstack().v_start -> cur_tstack().tops[0] is just along cur
+											// cur -> nxt_tstack().sides[*].tops[0].base is just the backedge
+											// The rest is the outer face of nxt_tstack()
 											cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
 											return;
 										}
@@ -857,11 +886,56 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 									} else {
 										if (nxt_tstack().planarity->sides[1].tops[0].depth != -1 && nxt_tstack().planarity->sides[1].tops[0].depth != cur_depth) {
 											// Non-empty on both sides, conflicts with source
-											cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+											// nxt_stack() is a chunk
+											if (nxt_tstack().planarity->sides[1].tops[0].depth == nxt_tstack().top_depth) {
+												// if it's core + type-2-atom
+												// by the atom ordering, we're guaranteed source->cur isn't from v_start
+												// * nxt_tstack().sides[0].tops[0].base
+												// * nxt_tstack().sides[1].tops[0].base_fork
+												// * source.base
+												// + cur
+												// + nxt_tstack().v_start
+												// + nxt_tstack().top_depth
+												//
+												// cut nxt_tstack().core.side[1]
+												// use nxt_tstack().sides[1].tops[0].prev to get from the fork to above cur down to cur
+												//
+												// otherwise it's double core
+												// * cur
+												// * nxt_tstack().sides[0].tops[0].base
+												// * nxt_tstack().sides[1].tops[0].base
+												// + cur_tstack().v_start
+												// + nxt_tstack().v_start
+												// + nxt_tstack().top_depth
+												// (cut the lowval ear edge)
+												//
+												cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+											} else {
+												// If it's an atom
+												// by atom ordering, we're guaranteed source->cur isn't from v_start
+												// * nxt_tstack().sides[0].tops[0].base
+												// * nxt_tstack().sides[1].tops[0].end (go up/down to cur/top_depth)
+												// * source.base
+												// + cur
+												// + nxt_tstack().v_start
+												// + nxt_tstack().top_depth
+												//
+												// otherwise it's double core
+												// * cur
+												// * nxt_tstack().sides[0].tops[0].base
+												// * nxt_tstack().sides[1].tops[0].base
+												// + cur_tstack().v_start
+												// + nxt_tstack().v_start
+												// + nxt_tstack().sides[1].tops[0].end (side 0 gets there from above)
+												// (cut the lowval ear edge)
+												cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
+											}
 											return;
 										}
+										// Implicitly excludes -1
 										if (nxt_tstack().planarity->sides[0].tops[1].depth > last_top) {
-											// Nonlaminar with cur_tstack()
+											assert(last_top < cur_depth);
+											// 3 conflicting edges with nxt_tstack(), cur_tstack(), and source
 											cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
 											return;
 										}
