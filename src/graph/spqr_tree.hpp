@@ -855,6 +855,16 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 								//
 								// Note that all atoms (including the chunk-extras) at one v_start must be sorted by (lowval, type).
 								// However, a chunk can occur later (closer to the top) than its (lowval, type) sort at its v_start.
+								//
+								// Notation for the K33 recipes below: lines "* x" and "+ y" are the 2 sides of the K33.
+								// Depths name the spine vertex at that depth.
+								// For a return edge e of tstack[i], e.base is its lower endpoint, and e.anchor is where e hangs off the ear:
+								// * if tstack[i] is a chunk, e.anchor = e.base, which exits along its core path down to tstack[i].v_start and up to tstack[i+1].v_start
+								// * if tstack[i] is an atom, e.anchor = tstack[i].v_start, which exits down/up the ear and into the atom to e.base
+								// Walking the ear through a chunk uses the core path *not* containing the anchor in use, so the 2 never collide.
+								// F denotes the entry providing cur_tstack().sides[0].tops[0], i.e. the return to last_top, with F.e its return edge.
+								// F.anchor is on the ear at or above nxt_tstack()'s top.
+								// Example graphs are edge lists in input order (the DFS follows it), with vertex 0 the root.
 
 								// last_top == cur_tstack().top_depth
 								int last_top = cur_depth;
@@ -935,7 +945,52 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 										// Implicitly excludes -1
 										if (nxt_tstack().planarity->sides[0].tops[1].depth > last_top) {
 											assert(last_top < cur_depth);
-											// 3 conflicting edges with nxt_tstack(), cur_tstack(), and source
+											// 3 conflicting edges: N.e := nxt_tstack().sides[0].tops[1] (depth h > last_top), F.e (depth last_top), and source -> cur.
+											// Spine: lowval < ... < last_top < h < cur.
+											// Ear: cur, F.anchor, nxt_tstack().v_start =: b, source.anchor, ..., lowval.
+											// If F.anchor != b (always when nxt_tstack() is a chunk):
+											// * F.anchor
+											// * source.anchor
+											// * h
+											// + b
+											// + cur
+											// + last_top
+											//
+											// F.anchor -> b is down the ear (through nxt_tstack()'s other core path), F.anchor -> cur is up the ear
+											// F.anchor -> last_top is F.e
+											// source.anchor -> b is up the ear, source.anchor -> cur is source -> cur, source.anchor -> last_top is the ear lowval loop
+											// h -> b is N.e then down nxt_tstack() to b, h -> cur and h -> last_top are along the spine
+											// e.g. 0-1 1-2 2-3 3-4 2-5 5-6 6-7 3-7 1-5 6-2 7-0 5-4
+											//
+											// If F.anchor == b, nxt_tstack() is a type-2 atom (a chunk at b would have eaten F) with a fork N.fork between its returns to L := nxt_tstack().top_depth and h.
+											// By the atom ordering, (last_top, F's type) >= (L, 2), so last_top >= L.
+											// If last_top > L:
+											// * L
+											// * b
+											// * h
+											// + cur
+											// + last_top
+											// + N.fork
+											//
+											// L -> cur is the ear lowval loop up to source.anchor, then source -> cur
+											// b -> cur is up the ear (through F's other core path if F is a chunk)
+											// b -> last_top is F.e, through F's core path / atom
+											// L -> last_top and h -> last_top are along the spine
+											// L -> N.fork and h -> N.fork are N's returns, b -> N.fork is N's tree path
+											// e.g. 0-1 1-2 2-3 3-4 4-5 5-6 6-0 6-4 5-7 7-1 7-3 5-2
+											//
+											// If last_top == L, F is a type-2 atom too, with fork F.fork and second return f2 > L.
+											// Let (D, E) := (N, F) if h >= f2 else (F, N), and hD := max(h, f2):
+											// * L
+											// * b
+											// * hD
+											// + cur
+											// + D.fork
+											// + E.fork
+											//
+											// hD -> E.fork is E's second return, then up the spine
+											// the rest is as above, with the forks in place of last_top
+											// e.g. 0-1 1-2 2-3 3-4 4-5 5-6 6-0 6-4 5-7 7-1 7-3 5-8 8-1 8-2
 											cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
 											return;
 										}
@@ -949,6 +1004,52 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 								assert(t0 == cur_depth || t1 == cur_depth);
 								if (std::min(t0, t1) > last_top) {
 									assert(last_top < cur_depth);
+									// nxt_tstack() =: S is the chunk owning source -> cur, spanning S.v_start =: b to cur_tstack().v_start =: t.
+									// Its deepest return on each side is at depth t0 / t1, both > last_top, and S.sides[0].tops[0] returns to L := S.top_depth.
+									// All 3 of S.sides[0].tops[1], S.sides[1].tops[1], and F.e conflict pairwise.
+									// If t0 == cur_depth and S.sides[1].tops[1] is an extra atom X at b (so t1 == cur_depth or t1 > last_top):
+									// * F.anchor
+									// * b
+									// * S.sides[0].tops[1].base =: x
+									// + cur
+									// + L
+									// + t
+									//
+									// F.anchor -> cur and F.anchor -> t are along the ear, F.anchor -> L is F.e then down the spine
+									// b -> cur is X's return then up the spine, b -> L is the ear lowval loop, b -> t is S.sides[1]'s core path
+									// x -> cur is its return, x -> L is down S.sides[0]'s core path to S.sides[0].tops[0].base then its return, x -> t is up S.sides[0]'s core path
+									// e.g. 0-1 1-2 2-3 3-4 4-5 5-6 6-0 4-1 5-7 7-4 7-2 7-3 5-3 (t1 == cur_depth)
+									// e.g. 0-1 1-2 2-3 3-4 4-5 5-6 6-7 7-0 5-1 6-8 8-5 8-2 8-4 6-3 (t1 < cur_depth)
+									//
+									// Otherwise both deepest returns are on the core (side 0's always is).
+									// If t0 == t1 == cur_depth (double core):
+									// * last_top
+									// * S.sides[0].tops[1].base
+									// * S.sides[1].tops[1].base
+									// + cur
+									// + b
+									// + t
+									//
+									// last_top -> cur is along the spine, last_top -> b is the ear lowval loop, last_top -> t is F.e then down the ear
+									// the bases -> cur are their returns, and -> b / t are along their core paths
+									// e.g. 0-1 1-2 2-3 3-4 4-8 8-5 5-6 6-0 4-1 5-7 7-4 7-2 7-3 8-3
+									//
+									// Otherwise exactly one side r has tr < cur_depth:
+									// * last_top
+									// * cur
+									// * S.sides[r].tops[1].base =: y
+									// + tr
+									// + F.anchor
+									// + b
+									//
+									// last_top -> tr and cur -> tr are along the spine
+									// last_top -> F.anchor is F.e, cur -> F.anchor is along the ear
+									// last_top -> b is the ear lowval loop, cur -> b is S.sides[1-r].tops[1] (core or extra) then down to b
+									// y -> tr is its return, y -> F.anchor is up its core path to t then the ear, y -> b is down its core path
+									// e.g. 0-1 0-5 1-2 1-4 2-3 3-4 3-5 4-5 5-6 6-2 6-4 (r = 0)
+									// e.g. 0-1 1-2 2-3 3-4 4-5 5-9 9-6 6-7 7-0 5-1 6-8 8-5 8-2 8-4 9-3 (r = 1)
+									//
+									// TODO: distinguishing the extra-atom case from the double core case is the TODO above.
 									cur_tstack().planarity = std::unexpected(tstack_nonplanarity_t{});
 									return;
 								}
