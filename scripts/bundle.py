@@ -6,6 +6,7 @@ Usage:
     scripts/bundle.py fft/series.hpp ds/seg_tree.hpp | xclip -selection clipboard  # or wl-copy
     scripts/bundle.py --minify fft/series.hpp > fft_series.min.cpp
     scripts/bundle.py --all -o dist/       # pregenerate all headers
+    scripts/bundle.py --verify-files verify_files.json  # docs views for competitive-verifier
 
 A thin wrapper over cpp-bundle and cpp-minify
 (https://github.com/ecnerwala/cpp-bundle, installed into the uv environment
@@ -22,6 +23,12 @@ token stream is checked against the input.
 --all writes bundled (and minified) copies of every src/ header to
 `<outdir>/bundled/` and `<outdir>/minified/`.
 
+--verify-files takes the output of `competitive-verifier oj-resolve --no-bundle`,
+writes bundled and minified copies of every listed file to `<outdir>`
+(default `.competitive-verifier/bundled/`, where oj-resolve's own bundler puts
+them) and records them in the json as the "bundled" / "minified" additional
+sources shown on the docs site.
+
 The output is wrapped in a single fold so the pasted block can be
 collapsed in an editor: an `#if 1` / `#endif` pair (treesitter and other
 syntax-aware folding) carrying `// region ...` / `// endregion` comments
@@ -31,6 +38,7 @@ Runs via `uv run` (or plain python3 with cpp-bundle / cpp-minify on PATH).
 """
 
 import argparse
+import json
 import pathlib
 import shlex
 import shutil
@@ -39,6 +47,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
+VERIFIER_BUNDLED = ROOT / ".competitive-verifier" / "bundled"
 REPO_URL = "https://github.com/ecnerwala/cp-book"
 
 CLANG_ARGS = ["-std=c++23", "-I", str(SRC)]
@@ -84,6 +93,20 @@ def bundle(paths: list[pathlib.Path], *, minify: bool) -> bytes:
     return code
 
 
+def relative_to_root(path: pathlib.Path) -> pathlib.Path:
+    try:
+        return path.resolve().relative_to(ROOT)
+    except ValueError:
+        return path
+
+
+def write_bundle(dest: pathlib.Path, paths: list[pathlib.Path], *, minify: bool) -> None:
+    code = bundle(paths, minify=minify)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    args = (["-m"] if minify else []) + [str(p) for p in paths]
+    dest.write_bytes(wrap_fold(code, args))
+
+
 def bundle_all(outdir: pathlib.Path) -> None:
     headers = sorted(
         p for p in SRC.rglob("*.hpp") if not p.name.endswith(".test.hpp")
@@ -92,16 +115,35 @@ def bundle_all(outdir: pathlib.Path) -> None:
     for header in headers:
         rel = header.relative_to(SRC)
         for name, minify in (("bundled", False), ("minified", True)):
-            dest = outdir / name / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
             try:
-                code = bundle([header], minify=minify)
+                write_bundle(outdir / name / rel, [rel], minify=minify)
             except subprocess.CalledProcessError:
                 failures.append(rel)
-                continue
-            args = (["-m"] if minify else []) + [str(rel)]
-            dest.write_bytes(wrap_fold(code, args))
         print(rel, file=sys.stderr)
+    if failures:
+        raise SystemExit("error: bundling failed for: " + " ".join(map(str, failures)))
+
+
+def bundle_verify_files(verify_json: pathlib.Path, outdir: pathlib.Path) -> None:
+    data = json.loads(verify_json.read_bytes())
+    failures = []
+    for path_str, entry in data["files"].items():
+        path = pathlib.Path(path_str)
+        minified = path.with_name(path.stem + ".min" + path.suffix)
+        sources = []
+        for name, minify, dest in (
+            ("bundled", False, outdir / path),
+            ("minified", True, outdir / minified),
+        ):
+            try:
+                write_bundle(dest, [path], minify=minify)
+            except subprocess.CalledProcessError:
+                failures.append(path)
+                break
+            sources.append({"name": name, "path": relative_to_root(dest).as_posix()})
+        entry["additonal_sources"] = sources  # competitive-verifier's spelling
+        print(path, file=sys.stderr)
+    verify_json.write_text(json.dumps(data, indent=2) + "\n")
     if failures:
         raise SystemExit("error: bundling failed for: " + " ".join(map(str, failures)))
 
@@ -120,19 +162,31 @@ def main() -> None:
         "-m", "--minify", action="store_true", help="minify the bundled output"
     )
     parser.add_argument(
-        "-o", "--output", type=pathlib.Path, help="output file (--all: output dir)"
+        "-o",
+        "--output",
+        type=pathlib.Path,
+        help="output file (--all / --verify-files: output dir)",
     )
     parser.add_argument(
         "--all",
         action="store_true",
         help="pregenerate bundled+minified copies of every src/ header",
     )
+    parser.add_argument(
+        "--verify-files",
+        type=pathlib.Path,
+        metavar="JSON",
+        help="add bundled+minified sources to an oj-resolve --no-bundle json (in place)",
+    )
     args = parser.parse_args()
 
-    if args.all:
+    if args.all or args.verify_files:
         if args.paths:
-            parser.error("--all takes no positional paths")
-        bundle_all(args.output or ROOT / "dist")
+            parser.error("--all/--verify-files take no positional paths")
+        if args.all:
+            bundle_all(args.output or ROOT / "dist")
+        if args.verify_files:
+            bundle_verify_files(args.verify_files, args.output or VERIFIER_BUNDLED)
         return
     if not args.paths:
         parser.error("no input files")

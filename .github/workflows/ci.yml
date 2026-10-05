@@ -85,27 +85,16 @@ jobs:
           uv sync --locked
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
+      # --no-bundle: the docs' bundled/minified views come from scripts/bundle.py below.
       - name: oj-resolve
-        uses: competitive-verifier/actions/oj-resolve@v2
-        with:
-          output-path: verify_files.json
-          include: |
-            src
-            verify
-          exclude: |
-            third_party
-          config: .competitive-verifier/config.toml
+        run: |
+          competitive-verifier oj-resolve --no-bundle --include src verify --exclude third_party \
+            --config .competitive-verifier/config.toml > verify_files.json
+          competitive-verifier oj-resolve --no-bundle --include src verify --exclude third_party \
+            --config .competitive-verifier/config-coverage.toml > verify_files-coverage.json
 
-      - name: oj-resolve (coverage environment)
-        uses: competitive-verifier/actions/oj-resolve@v2
-        with:
-          output-path: verify_files-coverage.json
-          include: |
-            src
-            verify
-          exclude: |
-            third_party
-          config: .competitive-verifier/config-coverage.toml
+      - name: Bundle for docs
+        run: uv run --locked scripts/bundle.py --verify-files verify_files.json
 
       - name: Upload verify_files.json
         uses: competitive-verifier/actions/upload-verify-artifact@v2
