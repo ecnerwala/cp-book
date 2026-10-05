@@ -11,8 +11,28 @@
 #include <expected>
 #include <type_traits>
 #include <variant>
+#include <memory>
 
 namespace wala {
+
+// Fixed-size array whose elements are default-initialized (not zeroed); for buffers that get fully overwritten.
+template <typename T> struct fixed_vector {
+	std::unique_ptr<T[]> ptr;
+	int sz = 0;
+	fixed_vector() = default;
+	explicit fixed_vector(int n) : ptr(std::make_unique_for_overwrite<T[]>(n)), sz(n) {}
+	fixed_vector(const fixed_vector& o) : fixed_vector(o.sz) { std::copy_n(o.ptr.get(), sz, ptr.get()); }
+	fixed_vector(fixed_vector&& o) noexcept : ptr(std::move(o.ptr)), sz(std::exchange(o.sz, 0)) {}
+	fixed_vector& operator=(fixed_vector o) noexcept { ptr = std::move(o.ptr); sz = o.sz; return *this; }
+	int size() const { return sz; }
+	T* begin() { return ptr.get(); }
+	T* end() { return ptr.get() + sz; }
+	const T* begin() const { return ptr.get(); }
+	const T* end() const { return ptr.get() + sz; }
+	T& operator[](int i) { return ptr[i]; }
+	const T& operator[](int i) const { return ptr[i]; }
+	friend bool operator==(const fixed_vector& a, const fixed_vector& b) { return std::ranges::equal(a, b); }
+};
 
 struct csr_index {
 	std::vector<int> bounds;
@@ -25,7 +45,7 @@ struct csr_index {
 };
 
 template <typename T> struct csr : csr_index {
-	std::vector<T> dat;
+	fixed_vector<T> dat;
 	std::span<T> operator [](int i) { return slice(i, dat); }
 	std::span<const T> operator [](int i) const { return slice(i, dat); }
 };
@@ -45,21 +65,22 @@ struct csr_index_builder {
 
 template <typename T> struct csr_builder {
 	csr_index idx;
-	std::vector<T> dat;
+	fixed_vector<T> dat;
 	csr_builder() = default;
-	explicit csr_builder(csr_index idx_, std::vector<T>&& dat_buf = {}) : idx(std::move(idx_)), dat(std::move(dat_buf)) {
-		dat.resize(idx.num_entries());
+	// dat_buf is reused as the storage if it already has the right size
+	explicit csr_builder(csr_index idx_, fixed_vector<T>&& dat_buf = {}) : idx(std::move(idx_)), dat(std::move(dat_buf)) {
+		if (dat.size() != idx.num_entries()) dat = fixed_vector<T>(idx.num_entries());
 		if (!idx.bounds.empty()) {
 			idx.bounds.pop_back();
 			idx.bounds.insert(idx.bounds.begin(), 0);
 		}
 	}
-	explicit csr_builder(csr_index_builder&& idx_builder, std::vector<T>&& dat_buf = {}) : idx{std::move(idx_builder.bounds)}, dat(std::move(dat_buf)) {
+	explicit csr_builder(csr_index_builder&& idx_builder, fixed_vector<T>&& dat_buf = {}) : idx{std::move(idx_builder.bounds)}, dat(std::move(dat_buf)) {
 		int l = 0;
 		for (int i = 1; i < int(idx.bounds.size()); i++) {
 			idx.bounds[i] = std::exchange(l, l + idx.bounds[i]);
 		}
-		dat.resize(l);
+		if (dat.size() != l) dat = fixed_vector<T>(l);
 	}
 	[[nodiscard]] T& push(int k) { return dat[idx.bounds[k+1]++]; }
 	[[nodiscard]] csr<T> finalize() && { return { std::move(idx), std::move(dat) }; }
@@ -244,7 +265,7 @@ struct lowval_storted_skeleton_t {
 	// src/dest are DFS preorder indices so that rows are laid out in DFS order; verts[preorder index] is the original vertex.
 	struct outedge_t { int src, dest; int e_side; packed_key_t key; };
 	csr<outedge_t> outedges;
-	std::vector<int> verts;
+	fixed_vector<int> verts;
 
 	static lowval_storted_skeleton_t build(
 		int NV,
@@ -280,7 +301,7 @@ struct lowval_storted_skeleton_t {
 
 		std::vector<int> roots; roots.reserve(NV);
 		csr<outedge_t> outedges;
-		std::vector<int> verts(NV);
+		fixed_vector<int> verts(NV);
 		int num_visited = 0;
 		{
 			std::vector<int> depth(NV, -1);
@@ -299,7 +320,8 @@ struct lowval_storted_skeleton_t {
 			});
 			auto adj = std::move(adj_builder).finalize();
 
-			std::vector<outedge_t> all_outedges; all_outedges.reserve(NE);
+			fixed_vector<outedge_t> all_outedges(NE);
+			int num_outedges = 0;
 			csr_index_builder by_src_idx_builder(NV);
 			int max_depth = 0;
 			// Return the 2 lowvals from this subtree
@@ -336,7 +358,7 @@ struct lowval_storted_skeleton_t {
 					int lowval = n_lowvals[0];
 					if (lowval >= d) lowval = ~(lowval - d);
 					int kind = 2 * (n_lowvals[1] < d) + !is_tree;
-					all_outedges.push_back({cur, nxt, e, packed_key_t{3 * (lowval + 2) + kind}});
+					all_outedges[num_outedges++] = {cur, nxt, e, packed_key_t{3 * (lowval + 2) + kind}};
 					by_src_idx_builder.count(cur);
 				}
 
@@ -378,6 +400,7 @@ struct lowval_storted_skeleton_t {
 				}
 			});
 
+			assert(num_outedges == NE);
 			// Keys are 3 * (lowval + 2) + kind with lowval < depth <= max_depth
 			csr_index_builder by_key_idx_builder(3 * (max_depth + 2));
 			for (auto edge : all_outedges) by_key_idx_builder.count(edge.key.v);
@@ -1083,7 +1106,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 		csr<int> ch;
 		ch.bounds.resize(tot_items + 1, 0);
-		ch.dat.resize(tot_items - 1);
+		ch.dat = fixed_vector<int>(tot_items - 1);
 
 		// Each node is a child, and additionally most non-block node has 2 cap verts; blocks have 1, and O nodes have 1
 		int tot_node_verts = NV + (tot_items - 1 - NV) * 2 - tot_blocks - tot_self_loops;
@@ -1097,7 +1120,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 		csr<node_adj_t> node_adj;
 		node_adj.bounds.resize(tot_node_verts * 2 + 1);
-		node_adj.dat.resize(tot_node_edges * 2);
+		node_adj.dat = fixed_vector<node_adj_t>(tot_node_edges * 2);
 
 		std::vector<bool> node_planar(with_planarity ? tot_items : 0);
 		std::vector<int> ne_rot_adj(with_planarity ? 4 * tot_node_edges : 0, -1);
