@@ -71,7 +71,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 					REQUIRE_FAST(spqr_np.orig_id == spqr.orig_id);
 					REQUIRE_FAST(spqr_np.ch.bounds == spqr.ch.bounds);
 					REQUIRE_FAST(spqr_np.ch.dat == spqr.ch.dat);
-					auto check_vectors_equal = [] <typename T> (const std::vector<T>& a, const std::vector<T>& b, auto proj) -> void {
+					auto check_vectors_equal = [] (const auto& a, const auto& b, auto proj) -> void {
 						REQUIRE_FAST(std::ranges::equal(a, b, {}, proj, proj));
 					};
 					check_vectors_equal(spqr_np.node_verts, spqr.node_verts, [](const spqr_tree::node_vert_t& x) { return std::tuple(x.node, x.vert); });
