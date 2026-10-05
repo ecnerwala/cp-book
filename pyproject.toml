@@ -2,7 +2,10 @@
 name = "cp-book"
 version = "0"
 requires-python = ">=3.12"
-dependencies = ["competitive-verifier"]
+dependencies = [
+    "competitive-verifier",
+    "cpp-bundler; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
 
 [dependency-groups]
 # coverage CI: gcovr + tree-sitter for scripts/coverage_fill_missing.py
@@ -17,3 +20,5 @@ required-version = ">=0.12"
 [tool.uv.sources]
 # Fork with cp-book integration patches; uv.lock pins the commit.
 competitive-verifier = { git = "https://github.com/ecnerwala/competitive-verifier.git", branch = "cp-book-integration" }
+# cpp-bundle / cpp-minify binaries for scripts/bundle.py (Linux x86_64 wheel from the GitHub release).
+cpp-bundler = { url = "https://github.com/ecnerwala/cpp-bundler/releases/download/v0.1.0/cpp_bundler-0.1.0-py3-none-manylinux_2_34_x86_64.whl" }

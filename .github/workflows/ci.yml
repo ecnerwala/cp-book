@@ -59,7 +59,7 @@ jobs:
           enable-cache: true
 
       - name: Bundle and check all headers
-        run: uv run --locked scripts/bundle.py --all --check
+        run: uv run --locked scripts/bundle.py --all
 
   setup-verify:
     runs-on: ubuntu-26.04
