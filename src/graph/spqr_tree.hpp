@@ -2111,8 +2111,10 @@ inline bool can_planar_embed(
 		auto push_vert_tstack = [&] [[gnu::always_inline]] (int top_depth) -> void {
 			push_tstack(top_depth, {});
 		};
-		auto push_edge_tstack = [&] [[gnu::always_inline]] (int top_depth, int e, bool is_tree) -> int {
-			push_tstack(top_depth, make_edge_planarity(e, top_depth, is_tree));
+		auto push_edge_tstack = [&] [[gnu::always_inline]] (int top_depth, bool is_tree) -> int {
+			// Edges are keyed by walk index rather than original id; nothing here is output, so no relabel is needed.
+			int idx = nxt_edge_idx;
+			push_tstack(top_depth, make_edge_planarity(idx, top_depth, is_tree));
 			return nxt_edge_idx++;
 		};
 
@@ -2171,7 +2173,6 @@ inline bool can_planar_embed(
 				assert(s.ch_idx < s.ch_end);
 
 				auto [_, nxt, e_side, key] = outedges.dat[s.ch_idx];
-				int e = e_side >> 1;
 				s.ch_idx++;
 
 				auto [lowval, is_tree, is_type_1] = key.unpack(cur_depth);
@@ -2194,7 +2195,7 @@ inline bool can_planar_embed(
 				}
 
 				if (is_tree) {
-					push_edge_tstack(cur_depth, e, true);
+					push_edge_tstack(cur_depth, true);
 					while (nxt_tstack().top_depth >= cur_depth) {
 						if (nxt_tstack().top_depth > cur_depth) {
 							if (tstack.end()[-3].top_depth < cur_depth) {
@@ -2333,7 +2334,7 @@ inline bool can_planar_embed(
 					}
 				} else {
 					assert(is_type_1);
-					int idx = push_edge_tstack(lowval, e, false);
+					int idx = push_edge_tstack(lowval, false);
 					setmin(first_occurrence[lowval], idx);
 				}
 
