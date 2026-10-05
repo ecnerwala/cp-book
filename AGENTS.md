@@ -21,8 +21,8 @@ programming reference library).
 - `scripts/bundle.py`: inlines library headers to produce a single
   submittable file; takes one or more headers/solutions, `--minify` for a
   compiler-directed minification pass, and `--all` to pregenerate
-  bundled+minified copies of every header (the docs site's bundled/minified
-  views come from oj-resolve's builtin bundling).
+  bundled+minified copies of every header, and `--verify-files` to attach
+  bundled+minified views of every file to oj-resolve's json for the docs site.
 - `.competitive-verifier/config.toml`: compiler settings for verification
   (g++, `-std=c++23`, `-I src`, `read_macros = false`).
 
@@ -36,8 +36,9 @@ cmake -B build && cmake --build build -j && ctest --test-dir build
 # so `git add` new verify files first). The second (sanitizer) environment
 # compiles through the scripts/toolchain/g++-sanitizer wrapper so it gets a
 # distinct name in the results.
-uv run competitive-verifier oj-resolve --include src verify --exclude third_party \
+uv run competitive-verifier oj-resolve --no-bundle --include src verify --exclude third_party \
     --config .competitive-verifier/config.toml > verify_files.json
+scripts/bundle.py --verify-files verify_files.json   # bundled/minified views for the docs
 uv run competitive-verifier verify --verify-json verify_files.json
 
 # Single-file submission with headers inlined

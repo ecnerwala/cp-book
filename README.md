@@ -29,13 +29,16 @@ so we need to bundle/minify them for submission.
 ```sh
 scripts/bundle.py verify/fft/convolution_mod.test.cpp > submission.cpp
 scripts/bundle.py fft/series.hpp ds/seg_tree.hpp   # bundle headers together
-scripts/bundle.py --minify fft/series.hpp          # compiler-directed minification
+scripts/bundle.py --minify fft/series.hpp          # strip comments/whitespace, <bits/stdc++.h> prelude
 scripts/bundle.py --all                            # pregenerate all headers
+scripts/bundle.py --verify-files verify_files.json # docs views for competitive-verifier
 ```
 
-The script runs in the repo's [uv](https://docs.astral.sh/uv/) project
-(`pyproject.toml` / `uv.lock`, which pin competitive-verifier). To run it
-offline, first populate the environment with
+The script wraps [cpp-bundle](https://github.com/ecnerwala/cpp-bundle)'s
+`cpp-bundle` / `cpp-minify`, installed (Linux x86_64) by the repo's
+[uv](https://docs.astral.sh/uv/) project (`pyproject.toml` / `uv.lock`, which
+also pin competitive-verifier); elsewhere, build them and put them on `PATH`.
+To run it offline, first populate the environment with
 ```sh
 uv sync
 ```
@@ -46,8 +49,9 @@ UV_OFFLINE=1 scripts/bundle.py ...
 uv run --offline scripts/bundle.py ...
 ```
 
-Bump the pinned competitive-verifier by editing `rev` in `pyproject.toml`
-and running
+Bump the pinned cpp-bundle by changing the wheel URL in `pyproject.toml`
+and running `uv lock`; bump competitive-verifier by editing `rev` in
+`pyproject.toml` and running
 ```sh
 uv lock --upgrade-package competitive-verifier
 ```
@@ -60,8 +64,9 @@ verified in CI with
 
 ```sh
 # Run verification locally
-uv run competitive-verifier oj-resolve --include src verify --exclude third_party \
+uv run competitive-verifier oj-resolve --no-bundle --include src verify --exclude third_party \
     --config .competitive-verifier/config.toml > verify_files.json
+scripts/bundle.py --verify-files verify_files.json   # bundled/minified views for the docs
 uv run competitive-verifier verify --verify-json verify_files.json
 ```
 
