@@ -846,7 +846,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 								//     * Each path can have backedges from its interior (not bot[0] or bot[1])
 								//     * side[0]'s path has a backedge to tstack[i].lowval
 								//   * Extra atoms on side 1, anchored at tstack[i].v_start
-								//     * these must have lowval < tstack[i].lowval, or can have lowval == tstack[i].lowval and be type 2
+								//     * these must have lowval > tstack[i].lowval, or can have lowval == tstack[i].lowval and be type 2
 								//     * these extra atoms are an entire suffix of v_start's: a chunk will always eat them all
 								//   * Most of the time, we can treat the side[1] core and the atoms all as separate backedges from tstack[i].v_start.
 								//     * The exception is when side[1].tops[1].depth == lowval: then it's forced to be a type 2 atom or part of the core, which matters.
