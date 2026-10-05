@@ -18,7 +18,10 @@ looked up in src/. Multiple inputs are bundled into one output.
 --minify additionally puts `#include <bits/stdc++.h>` and `#include <cassert>`
 (not part of `<bits/stdc++.h>` in recent g++) first, dropping the standard
 includes they cover, strips comments and collapses whitespace. The minified
-token stream is checked against the input.
+token stream is checked against the input. The result is wrapped in
+`// clang-format off` / `on` (so editors do not reflow it) and a
+`#pragma GCC diagnostic` push/pop silencing the indentation warnings that
+the dropped indentation would otherwise trigger.
 
 --all writes bundled (and minified) copies of every src/ header to
 `<outdir>/bundled/` and `<outdir>/minified/`.
@@ -52,6 +55,22 @@ REPO_URL = "https://github.com/ecnerwala/cp-book"
 
 CLANG_ARGS = ["-std=c++23", "-I", str(SRC)]
 MINIFY_PRELUDE = ["bits/stdc++.h", "cassert"]
+# -Wpragmas (GCC) and -Wunknown-warning-option (clang) keep each compiler quiet
+# about the other's warning names.
+MINIFY_HEAD = b"""\
+// clang-format off
+// @formatter:off
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wunknown-warning-option"
+#pragma GCC diagnostic ignored "-Wmisleading-indentation"
+#pragma GCC diagnostic ignored "-Wmultistatement-macros"
+"""
+MINIFY_TAIL = b"""\
+#pragma GCC diagnostic pop
+// clang-format on
+// @formatter:on
+"""
 
 
 def wrap_fold(code: bytes, args: list[str] | None = None) -> bytes:
@@ -90,6 +109,7 @@ def bundle(paths: list[pathlib.Path], *, minify: bool) -> bytes:
         code = subprocess.run(
             [tool("cpp-minify"), "--check"], input=code, check=True, stdout=subprocess.PIPE
         ).stdout
+        code = MINIFY_HEAD + code + MINIFY_TAIL
     return code
 
 
