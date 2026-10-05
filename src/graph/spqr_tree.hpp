@@ -258,7 +258,7 @@ struct lowval_storted_skeleton_t {
 		assert(int(edge_order.size()) <= NE);
 
 		// Calls f(i) for i in order, then for the remaining i in [0, n) in increasing order.
-		auto for_each_in_order = [](int n, std::span<const int> order, auto f) -> void {
+		auto for_each_in_order = [] [[gnu::always_inline]] (int n, std::span<const int> order, auto f) -> void {
 			for (int i : order) f(i);
 			if (int(order.size()) == n) return;
 			if (order.empty()) {
@@ -288,7 +288,7 @@ struct lowval_storted_skeleton_t {
 				if (u != v) adj_idx_builder.count(v);
 			}
 			csr_builder<edge_t> adj_builder(std::move(adj_idx_builder));
-			for_each_in_order(NE, edge_order, [&](int e) -> void {
+			for_each_in_order(NE, edge_order, [&] [[gnu::always_inline]] (int e) -> void {
 				auto [u, v] = edges[e];
 				adj_builder.push(u) = {v, 2 * e + 0};
 				if (u != v) adj_builder.push(v) = {u, 2 * e + 1};
@@ -305,12 +305,12 @@ struct lowval_storted_skeleton_t {
 				int ch_end;
 			};
 			std::vector<dfs_stack_t> stk; stk.reserve(NV);
-			auto push_vert = [&](int cur, int prv_e) -> void {
+			auto push_vert = [&] [[gnu::always_inline]] (int cur, int prv_e) -> void {
 				int d = int(stk.size());
 				depth[cur] = d;
 				stk.push_back({cur, prv_e, {d, d}, adj.bounds[cur], adj.bounds[cur+1]});
 			};
-			auto finish_edge = [&](bool is_tree, std::array<int, 2> n_lowvals) -> void {
+			auto finish_edge = [&] [[gnu::always_inline]] (bool is_tree, std::array<int, 2> n_lowvals) -> void {
 				int d = int(stk.size()) - 1;
 				auto& s = stk.back();
 				int cur = s.cur;
@@ -333,7 +333,7 @@ struct lowval_storted_skeleton_t {
 				if (n_lowvals[0] < lowvals[0]) lowvals = {n_lowvals[0], min(n_lowvals[1], lowvals[0])};
 				else lowvals[1] = min(lowvals[1], n_lowvals[0] == lowvals[0] ? n_lowvals[1] : n_lowvals[0]);
 			};
-			auto start_edge = [&]() -> void {
+			auto start_edge = [&] [[gnu::always_inline]] () -> void {
 				int d = int(stk.size()) - 1;
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
@@ -351,12 +351,12 @@ struct lowval_storted_skeleton_t {
 					finish_edge(false, {depth[nxt], d});
 				}
 			};
-			auto pop_vert = [&]() -> std::array<int, 2> {
+			auto pop_vert = [&] [[gnu::always_inline]] () -> std::array<int, 2> {
 				auto lowvals = stk.back().lowvals;
 				stk.pop_back();
 				return lowvals;
 			};
-			for_each_in_order(NV, vert_order, [&](int rt) -> void {
+			for_each_in_order(NV, vert_order, [&] [[gnu::always_inline]] (int rt) -> void {
 				if (depth[rt] == -1) {
 					roots.push_back(rt);
 					push_vert(rt, -1);
@@ -413,8 +413,8 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 	// As we build, we will represent the children of our nodes/vertices as linked lists.
 	constexpr int ROOT_ITEM = 0;
-	auto vert_item = [&](int v) -> int { return 1 + v; };
-	auto edge_item = [&](int e) -> int { return 1 + NV + e; };
+	auto vert_item = [&] [[gnu::always_inline]] (int v) -> int { return 1 + v; };
+	auto edge_item = [&] [[gnu::always_inline]] (int e) -> int { return 1 + NV + e; };
 
 	// Helpers for working with std::array<T, 2> - these compile to cmov's better than direct index access.
 
@@ -433,13 +433,13 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		[[nodiscard]] bool empty() const { return v[0] < 0; }
 	};
 	std::vector<int> ch_nxt; ch_nxt.reserve(1 + NV + NE + NE); ch_nxt.assign(1 + NV + NE, -1);
-	auto concat = [&](item_list a, item_list b) -> item_list {
+	auto concat = [&] [[gnu::always_inline]] (item_list a, item_list b) -> item_list {
 		if (b.empty()) return a;
 		if (a.empty()) return b;
 		ch_nxt[a.v[1] >> 1] = b.v[0] ^ (a.v[1] & 1);
 		return {{a.v[0], b.v[1]}};
 	};
-	auto unit_list = [&](int item) -> item_list {
+	auto unit_list = [&] [[gnu::always_inline]] (int item) -> item_list {
 		return {{item << 1, item << 1}};
 	};
 
@@ -462,7 +462,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 	int tot_self_loops = 0;
 
 	{
-		auto alloc_item = [&](node_type type) -> int {
+		auto alloc_item = [&] [[gnu::always_inline]] (node_type type) -> int {
 			int item = int(item_vs.size());
 			item_vs.push_back({});
 			item_ch.push_back({});
@@ -476,7 +476,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		std::vector<int> stack_verts(NV);
 		std::vector<int8_t> stack_dir(NV); // really bool, but I don't want vector<bool>
 
-		auto make_vs = [&](int v_start, int top_depth) -> std::array<int, 2> {
+		auto make_vs = [&] [[gnu::always_inline]] (int v_start, int top_depth) -> std::array<int, 2> {
 			return set_sides(stack_dir[top_depth], stack_verts[top_depth], v_start);
 		};
 
@@ -507,7 +507,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			// TODO: What's the nonplanarity certificate look like?
 		};
 		using tstack_maybe_planarity_t = std::conditional_t<with_planarity, std::expected<tstack_planarity_t, tstack_nonplanarity_t>, std::monostate>;
-		auto merge_planarity = [&](tstack_maybe_planarity_t& a, const tstack_maybe_planarity_t& b) -> void {
+		auto merge_planarity = [&] [[gnu::always_inline]] (tstack_maybe_planarity_t& a, const tstack_maybe_planarity_t& b) -> void {
 			if constexpr (with_planarity) {
 				if (!a) return;
 				if (!b) { a = b; return; }
@@ -539,7 +539,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				}
 			}
 		};
-		auto make_edge_planarity = [&](int item, int top_depth, bool is_tree) -> tstack_maybe_planarity_t {
+		auto make_edge_planarity = [&] [[gnu::always_inline]] (int item, int top_depth, bool is_tree) -> tstack_maybe_planarity_t {
 			if constexpr (with_planarity) {
 				assert(item >= 1 + NV);
 				int ve = item - (1 + NV);
@@ -566,21 +566,21 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			[[no_unique_address]] tstack_maybe_planarity_t planarity;
 		};
 		std::vector<tstack_t> tstack; tstack.reserve(NV + NE);
-		auto cur_tstack = [&]() -> tstack_t& { return tstack.end()[-1]; };
-		auto nxt_tstack = [&]() -> tstack_t& { return tstack.end()[-2]; };
+		auto cur_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-1]; };
+		auto nxt_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-2]; };
 
-		auto push_tstack = [&](int v_start, int top_depth, int item, tstack_maybe_planarity_t planarity) -> void {
+		auto push_tstack = [&] [[gnu::always_inline]] (int v_start, int top_depth, int item, tstack_maybe_planarity_t planarity) -> void {
 			tstack.emplace_back(v_start, top_depth, nxt_edge_idx, set_sides(stack_dir[top_depth], unit_list(item), {}), planarity);
 		};
-		auto push_vert_tstack = [&](int v, int top_depth) -> void {
+		auto push_vert_tstack = [&] [[gnu::always_inline]] (int v, int top_depth) -> void {
 			int item = vert_item(v);
 			push_tstack(v, top_depth, item, {});
 		};
-		auto push_edge_tstack = [&](int v_start, int top_depth, int e, bool is_tree) -> void {
+		auto push_edge_tstack = [&] [[gnu::always_inline]] (int v_start, int top_depth, int e, bool is_tree) -> void {
 			int item = edge_item(e);
 			push_tstack(v_start, top_depth, item, make_edge_planarity(item, top_depth, is_tree));
 		};
-		auto flip_tstack_planarity = [&](tstack_t& a) -> void {
+		auto flip_tstack_planarity = [&] [[gnu::always_inline]] (tstack_t& a) -> void {
 			if constexpr (with_planarity) {
 				a.spans[0].v[0] ^= 1;
 				a.spans[0].v[1] ^= 1;
@@ -591,7 +591,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				}
 			}
 		};
-		auto merge_tstack_tops = [&]() -> void {
+		auto merge_tstack_tops = [&] [[gnu::always_inline]] () -> void {
 			tstack_t& a = nxt_tstack();
 			const tstack_t& b = cur_tstack();
 			setmin(a.top_depth, b.top_depth);
@@ -603,7 +603,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			tstack.pop_back();
 		};
 
-		auto maybe_unwrap_nxt = [&](node_type type, bool is_tree) -> int {
+		auto maybe_unwrap_nxt = [&] [[gnu::always_inline]] (node_type type, bool is_tree) -> int {
 			tstack_t& t = nxt_tstack();
 
 			if (type == node_type::R) return alloc_item(type);
@@ -645,7 +645,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			}
 		};
 
-		auto finish_tstack_top = [&](int item, bool is_tree) -> void {
+		auto finish_tstack_top = [&] [[gnu::always_inline]] (int item, bool is_tree) -> void {
 			tstack_t& t = cur_tstack();
 			bool top_dir = stack_dir[t.top_depth];
 			assert(get_side(t.spans, !top_dir).empty());
@@ -686,7 +686,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		};
 		std::vector<dfs_stack_t> stk; stk.reserve(NV);
 		for (auto rt : roots) {
-			auto push_vert = [&](int cur) -> void {
+			auto push_vert = [&] [[gnu::always_inline]] (int cur) -> void {
 				// stack_dir[cur_depth] must already be set for the lowval, so that we can push the vert tstack
 				int cur_depth = int(stk.size());
 				stack_verts[cur_depth] = cur;
@@ -712,7 +712,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				stk.push_back({has_vert_tstack, lo, hi, -1});
 			};
 			// return true means jump to start_edge, return false means jump to finish_edge
-			auto start_edge = [&]() -> std::optional<int> {
+			auto start_edge = [&] [[gnu::always_inline]] () -> std::optional<int> {
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
@@ -732,7 +732,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 					return std::nullopt;
 				}
 			};
-			auto finish_edge = [&]() -> void {
+			auto finish_edge = [&] [[gnu::always_inline]] () -> void {
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
 				int cur = stack_verts[cur_depth];
@@ -825,7 +825,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 					if (cur_tstack().first_idx > first_occurrence[cur_depth]) {
 						if constexpr (with_planarity) {
-							[&]() -> void {
+							[&] [[gnu::always_inline]] () -> void {
 								int source = int(tstack.size()) - 2;
 								while (tstack[source].first_idx > first_occurrence[cur_depth]) {
 									if (!tstack[source].planarity) {
@@ -918,7 +918,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 						if (!is_type_1) {
 							if constexpr (with_planarity) {
-								[&]() -> void {
+								[&] [[gnu::always_inline]] () -> void {
 									// The lowval side should be side 1, everything else goes on side 0.
 									// The exception is tstack[orig_tstack + 2], which could be == lowval on one/both sides,
 									// but is guaranteed to have *something* > lowval by non-type-1-ness
@@ -1038,7 +1038,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 					assert(!is_type_1);
 				}
 			};
-			auto pop_vert = [&]() -> void {
+			auto pop_vert = [&] [[gnu::always_inline]] () -> void {
 				auto& s = stk.back();
 				assert(s.ch_idx == s.ch_end);
 				assert(s.has_vert_tstack);
@@ -1115,7 +1115,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			int cur_ne;
 		};
 		std::vector<dfs_stack_t> stk; stk.reserve(tot_items);
-		auto push_item = [&](int cur_item) -> void {
+		auto push_item = [&] [[gnu::always_inline]] (int cur_item) -> void {
 			int cur_idx = nxt_unassigned_idx++;
 			node_type cur_type = types[cur_idx] = item_types[cur_item];
 			bool planar = true;
@@ -1214,7 +1214,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			int ne_st = node_nes.bounds[cur_idx];
 			int ne_en = node_nes.bounds[cur_idx+1] = ne_st + n_edges;
 
-			auto set_ne = [&](int ne, std::array<int, 2> nvs, std::array<int, 2> nds, std::array<int, 4> rot_adjs) -> void {
+			auto set_ne = [&] [[gnu::always_inline]] (int ne, std::array<int, 2> nvs, std::array<int, 2> nds, std::array<int, 4> rot_adjs) -> void {
 				node_edges[ne].node = cur_idx;
 				node_edges[ne].nvs = nvs;
 				node_adj.dat[nds[0]] = {ne, nvs[1]};
@@ -1327,7 +1327,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 					assert(nxt_ne == ne_st + 1);
 					rot_edge_ne[2 * NE] = ne_st;
 				}
-				auto map_rot_edge = [&](int ve) -> std::array<int, 4> {
+				auto map_rot_edge = [&] [[gnu::always_inline]] (int ve) -> std::array<int, 4> {
 					if constexpr (!with_planarity) return {-1, -1, -1, -1};
 					if (!planar) return {-1, -1, -1, -1};
 					std::array<int, 4> res{};
@@ -1380,7 +1380,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			stk.push_back({cur_idx, ch_st, ch_en, cur_nv, cur_ne});
 		};
 
-		auto start_child = [&]() -> int {
+		auto start_child = [&] [[gnu::always_inline]] () -> int {
 			auto& [cur_idx, ch_idx, ch_en, cur_nv, cur_ne] = stk.back();
 			assert(ch_idx < ch_en);
 			int nxt_item = ch.dat[ch_idx];
@@ -1400,7 +1400,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			return nxt_item;
 		};
 
-		auto pop_item = [&]() -> void {
+		auto pop_item = [&] [[gnu::always_inline]] () -> void {
 			auto [cur_idx, ch_idx, ch_en, cur_nv, cur_ne] = stk.back(); stk.pop_back();
 			assert(ch_idx == ch_en);
 			subtree_end[cur_idx] = nxt_unassigned_idx;
@@ -1461,7 +1461,7 @@ inline std::optional<planar_embedding> planar_embed(const planar_spqr_tree& tree
 
 	int NE = int(tree.edge_index.size());
 	std::vector<int> rot_adj(4 * NE, -1);
-	auto link = [&](int a, int b) -> void {
+	auto link = [&] [[gnu::always_inline]] (int a, int b) -> void {
 		assert(a != -1 && b != -1);
 		assert(rot_adj[a] == -1 && rot_adj[b] == -1);
 		assert((a & 1) != (b & 1));
@@ -1531,7 +1531,7 @@ inline std::optional<planar_embedding> planar_embed(const planar_spqr_tree& tree
 				int tb = tree.ne_embedding.rot_adj[ta];
 				if (tb < ta) continue;
 
-				auto tree_qe_to_qe = [&](int t) -> int {
+				auto tree_qe_to_qe = [&] [[gnu::always_inline]] (int t) -> int {
 					return outer_e[tree.node_edges[tree.node_edges[t>>2].twin_ne].node][(t >> 1) & 1][t & 1];
 				};
 				int qb = tree_qe_to_qe(tb);
@@ -1610,7 +1610,7 @@ inline std::optional<planar_embedding> planar_embed(
 		struct tstack_nonplanarity_t {
 			// TODO: What's the nonplanarity certificate look like?
 		};
-		auto merge_planarity = [&](tstack_planarity_t& a, const tstack_planarity_t& b) -> void {
+		auto merge_planarity = [&] [[gnu::always_inline]] (tstack_planarity_t& a, const tstack_planarity_t& b) -> void {
 			for (int z = 0; z < 2; z++) {
 				auto& as = a.sides[z];
 				const auto& bs = b.sides[z];
@@ -1638,7 +1638,7 @@ inline std::optional<planar_embedding> planar_embed(
 				}
 			}
 		};
-		auto make_edge_planarity = [&](int e_side, int top_depth, bool is_tree) -> tstack_planarity_t {
+		auto make_edge_planarity = [&] [[gnu::always_inline]] (int e_side, int top_depth, bool is_tree) -> tstack_planarity_t {
 			edge_top_depths[e_side >> 1] = top_depth;
 			tstack_planarity_t p;
 			if (is_tree) {
@@ -1656,27 +1656,27 @@ inline std::optional<planar_embedding> planar_embed(
 			tstack_planarity_t planarity;
 		};
 		std::vector<tstack_t> tstack; tstack.reserve(NV + NE);
-		auto cur_tstack = [&]() -> tstack_t& { return tstack.end()[-1]; };
-		auto nxt_tstack = [&]() -> tstack_t& { return tstack.end()[-2]; };
+		auto cur_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-1]; };
+		auto nxt_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-2]; };
 
-		auto push_tstack = [&](int top_depth, tstack_planarity_t planarity) -> void {
+		auto push_tstack = [&] [[gnu::always_inline]] (int top_depth, tstack_planarity_t planarity) -> void {
 			tstack.emplace_back(top_depth, nxt_edge_idx, planarity);
 		};
-		auto push_vert_tstack = [&](int top_depth) -> void {
+		auto push_vert_tstack = [&] [[gnu::always_inline]] (int top_depth) -> void {
 			push_tstack(top_depth, {});
 		};
-		auto push_edge_tstack = [&](int top_depth, int e_side, bool is_tree) -> int {
+		auto push_edge_tstack = [&] [[gnu::always_inline]] (int top_depth, int e_side, bool is_tree) -> int {
 			push_tstack(top_depth, make_edge_planarity(e_side, top_depth, is_tree));
 			postorder_edges.push_back(e_side >> 1);
 			return nxt_edge_idx++;
 		};
-		auto flip_tstack_planarity = [&](int i) -> void {
+		auto flip_tstack_planarity = [&] [[gnu::always_inline]] (int i) -> void {
 			tstack_t& a = tstack[i];
 			postorder_flip[a.first_idx].flip();
 			postorder_flip[(i+1==int(tstack.size())) ? nxt_edge_idx : tstack[i+1].first_idx].flip();
 			std::swap(a.planarity.sides[0], a.planarity.sides[1]);
 		};
-		auto merge_tstack_tops = [&]() -> void {
+		auto merge_tstack_tops = [&] [[gnu::always_inline]] () -> void {
 			tstack_t& a = nxt_tstack();
 			const tstack_t& b = cur_tstack();
 			setmin(a.top_depth, b.top_depth);
@@ -1692,7 +1692,7 @@ inline std::optional<planar_embedding> planar_embed(
 		};
 		std::vector<dfs_stack_t> stk; stk.reserve(NV);
 		for (auto rt : roots) {
-			auto push_vert = [&](int cur) -> void {
+			auto push_vert = [&] [[gnu::always_inline]] (int cur) -> void {
 				int cur_depth = int(stk.size());
 
 				int lo = outedges.bounds[cur];
@@ -1716,7 +1716,7 @@ inline std::optional<planar_embedding> planar_embed(
 				stk.push_back({has_vert_tstack, lo, hi, -1});
 			};
 			// return true means jump to start_edge, return false means jump to finish_edge
-			auto start_edge = [&]() -> std::optional<int> {
+			auto start_edge = [&] [[gnu::always_inline]] () -> std::optional<int> {
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
@@ -1733,7 +1733,7 @@ inline std::optional<planar_embedding> planar_embed(
 					return std::nullopt;
 				}
 			};
-			auto finish_edge = [&][[nodiscard]]() -> std::optional<tstack_nonplanarity_t> {
+			auto finish_edge = [&] [[gnu::always_inline]] [[nodiscard]] () -> std::optional<tstack_nonplanarity_t> {
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
@@ -1745,7 +1745,7 @@ inline std::optional<planar_embedding> planar_embed(
 
 				const int orig_tstack = s.orig_tstack;
 
-				auto join_backedges_to_top = [&]() -> void {
+				auto join_backedges_to_top = [&] [[gnu::always_inline]] () -> void {
 					// Merge all backedges into the component
 					for (auto& side : cur_tstack().planarity.sides) {
 						// in the self-loop case, sides[1].bot_ends[1] == -1; otherwise, it should never be -1
@@ -1760,7 +1760,7 @@ inline std::optional<planar_embedding> planar_embed(
 					}
 				};
 
-				auto join_bottoms_to_empty = [&]() -> void {
+				auto join_bottoms_to_empty = [&] [[gnu::always_inline]] () -> void {
 					// precondition: side 1 should be the lowval only side
 					auto& sides = cur_tstack().planarity.sides;
 					auto& s0 = sides[0];
@@ -1954,7 +1954,7 @@ inline std::optional<planar_embedding> planar_embed(
 				}
 				return std::nullopt;
 			};
-			auto pop_vert = [&]() -> void {
+			auto pop_vert = [&] [[gnu::always_inline]] () -> void {
 				auto& s = stk.back();
 				assert(s.ch_idx == s.ch_end);
 				assert(s.has_vert_tstack);
@@ -2050,14 +2050,14 @@ inline bool can_planar_embed(
 			std::array<tstack_planarity_side_t, 2> sides;
 		};
 		std::vector<tstack_planarity_side_t::top_t> prev_edge(NE, {-1, -1});
-		auto merge_planarity_side = [&](tstack_planarity_side_t& as, const tstack_planarity_side_t& bs) -> void {
+		auto merge_planarity_side = [&] [[gnu::always_inline]] (tstack_planarity_side_t& as, const tstack_planarity_side_t& bs) -> void {
 			// If there's no bottom edges, then we must be an isolated vertex, so we can end early.
 			// Caller must check that we're planar
 			assert(as.tops[1].depth <= bs.tops[0].depth);
 			prev_edge[bs.tops[0].end] = as.tops[1];
 			as.tops[1] = bs.tops[1];
 		};
-		auto make_edge_planarity = [&](int e, int top_depth, bool is_tree) -> tstack_planarity_t {
+		auto make_edge_planarity = [&] [[gnu::always_inline]] (int e, int top_depth, bool is_tree) -> tstack_planarity_t {
 			tstack_planarity_t p;
 			if (!is_tree) {
 				p.sides[0].tops = {{{e, top_depth}, {e, top_depth}}};
@@ -2070,16 +2070,16 @@ inline bool can_planar_embed(
 			tstack_planarity_t planarity;
 		};
 		std::vector<tstack_t> tstack; tstack.reserve(NV + NE);
-		auto cur_tstack = [&]() -> tstack_t& { return tstack.end()[-1]; };
-		auto nxt_tstack = [&]() -> tstack_t& { return tstack.end()[-2]; };
+		auto cur_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-1]; };
+		auto nxt_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-2]; };
 
-		auto push_tstack = [&](int top_depth, tstack_planarity_t planarity) -> void {
+		auto push_tstack = [&] [[gnu::always_inline]] (int top_depth, tstack_planarity_t planarity) -> void {
 			tstack.emplace_back(top_depth, nxt_edge_idx, planarity);
 		};
-		auto push_vert_tstack = [&](int top_depth) -> void {
+		auto push_vert_tstack = [&] [[gnu::always_inline]] (int top_depth) -> void {
 			push_tstack(top_depth, {});
 		};
-		auto push_edge_tstack = [&](int top_depth, int e, bool is_tree) -> int {
+		auto push_edge_tstack = [&] [[gnu::always_inline]] (int top_depth, int e, bool is_tree) -> int {
 			push_tstack(top_depth, make_edge_planarity(e, top_depth, is_tree));
 			return nxt_edge_idx++;
 		};
@@ -2092,7 +2092,7 @@ inline bool can_planar_embed(
 		};
 		std::vector<dfs_stack_t> stk; stk.reserve(NV);
 		for (auto rt : roots) {
-			auto push_vert = [&](int cur) -> void {
+			auto push_vert = [&] [[gnu::always_inline]] (int cur) -> void {
 				int cur_depth = int(stk.size());
 
 				int lo = outedges.bounds[cur];
@@ -2116,7 +2116,7 @@ inline bool can_planar_embed(
 				stk.push_back({has_vert_tstack, lo, hi, -1});
 			};
 			// return true means jump to start_edge, return false means jump to finish_edge
-			auto start_edge = [&]() -> std::optional<int> {
+			auto start_edge = [&] [[gnu::always_inline]] () -> std::optional<int> {
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
@@ -2133,7 +2133,7 @@ inline bool can_planar_embed(
 					return std::nullopt;
 				}
 			};
-			auto finish_edge = [&][[nodiscard]]() -> bool {
+			auto finish_edge = [&] [[gnu::always_inline]] [[nodiscard]] () -> bool {
 				int cur_depth = int(stk.size()) - 1;
 				auto& s = stk.back();
 				assert(s.ch_idx < s.ch_end);
@@ -2318,7 +2318,7 @@ inline bool can_planar_embed(
 				}
 				return true;
 			};
-			auto pop_vert = [&]() -> void {
+			auto pop_vert = [&] [[gnu::always_inline]] () -> void {
 				auto& s = stk.back();
 				assert(s.ch_idx == s.ch_end);
 				assert(s.has_vert_tstack);
