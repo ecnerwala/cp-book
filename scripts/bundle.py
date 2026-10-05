@@ -8,7 +8,7 @@ Usage:
     scripts/bundle.py --all -o dist/       # pregenerate all headers
 
 A thin wrapper over cpp-bundle and cpp-minify
-(https://github.com/ecnerwala/cpp-bundler, installed into the uv environment
+(https://github.com/ecnerwala/cpp-bundle, installed into the uv environment
 by pyproject.toml). Every `#include "foo.hpp"` (resolved relative to the
 including file, then src/) is expanded in place; `#include <...>` lines stay,
 deduplicated. Header names relative to src/ (e.g. `fft/series.hpp`) are

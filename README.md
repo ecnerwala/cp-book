@@ -33,7 +33,7 @@ scripts/bundle.py --minify fft/series.hpp          # strip comments/whitespace, 
 scripts/bundle.py --all                            # pregenerate all headers
 ```
 
-The script wraps [cpp-bundler](https://github.com/ecnerwala/cpp-bundler)'s
+The script wraps [cpp-bundle](https://github.com/ecnerwala/cpp-bundle)'s
 `cpp-bundle` / `cpp-minify`, installed (Linux x86_64) by the repo's
 [uv](https://docs.astral.sh/uv/) project (`pyproject.toml` / `uv.lock`, which
 also pin competitive-verifier); elsewhere, build them and put them on `PATH`.
@@ -48,7 +48,7 @@ UV_OFFLINE=1 scripts/bundle.py ...
 uv run --offline scripts/bundle.py ...
 ```
 
-Bump the pinned cpp-bundler by changing the wheel URL in `pyproject.toml`
+Bump the pinned cpp-bundle by changing the wheel URL in `pyproject.toml`
 and running `uv lock`; bump competitive-verifier by editing `rev` in
 `pyproject.toml` and running
 ```sh
