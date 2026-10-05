@@ -506,8 +506,8 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 							int num_cuts = 0;
 							for (int k = i; k < j; k++) {
 								int a = 2 * darts[k].second + 1;
-								int b = pe.rot_adj[a];
-								if (!(ends[b >> 2][(b >> 1) & 1] == ends[a >> 2][(a >> 1) & 1] && pe.rot_adj[a^3] == (b^3))) {
+								// See if a is part of a 2-gon
+								if (pe.rot_adj[a^3] != (pe.rot_adj[a]^3)) {
 									num_cuts++;
 								}
 							}
