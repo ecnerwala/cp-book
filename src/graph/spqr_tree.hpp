@@ -241,8 +241,10 @@ struct lowval_storted_skeleton_t {
 			return {lowval, is_tree, is_type_1 };
 		}
 	};
+	// src/dest are DFS preorder indices so that rows are laid out in DFS order; verts[preorder index] is the original vertex.
 	struct outedge_t { int src, dest; int e_side; packed_key_t key; };
 	csr<outedge_t> outedges;
+	std::vector<int> verts;
 
 	static lowval_storted_skeleton_t build(
 		int NV,
@@ -278,6 +280,8 @@ struct lowval_storted_skeleton_t {
 
 		std::vector<int> roots; roots.reserve(NV);
 		csr<outedge_t> outedges;
+		std::vector<int> verts(NV);
+		int num_visited = 0;
 		{
 			std::vector<int> depth(NV, -1);
 			// 1a: build a normal adjacency list for the initial lowval dfs
@@ -296,26 +300,32 @@ struct lowval_storted_skeleton_t {
 			auto adj = std::move(adj_builder).finalize();
 
 			std::vector<outedge_t> all_outedges; all_outedges.reserve(NE);
+			csr_index_builder by_src_idx_builder(NV);
+			int max_depth = 0;
 			// Return the 2 lowvals from this subtree
 			struct dfs_stack_t {
-				int cur;
+				int id; // preorder index
 				int prv_e;
 				std::array<int, 2> lowvals;
 				int ch_idx;
 				int ch_end;
 			};
 			std::vector<dfs_stack_t> stk; stk.reserve(NV);
-			auto push_vert = [&] [[gnu::always_inline]] (int cur, int prv_e) -> void {
+			auto push_vert = [&] [[gnu::always_inline]] (int cur, int prv_e) -> int {
 				int d = int(stk.size());
 				depth[cur] = d;
-				stk.push_back({cur, prv_e, {d, d}, adj.bounds[cur], adj.bounds[cur+1]});
+				if (d > max_depth) max_depth = d;
+				int id = num_visited++;
+				verts[id] = cur;
+				stk.push_back({id, prv_e, {d, d}, adj.bounds[cur], adj.bounds[cur+1]});
+				return id;
 			};
-			auto finish_edge = [&] [[gnu::always_inline]] (bool is_tree, std::array<int, 2> n_lowvals) -> void {
+			auto finish_edge = [&] [[gnu::always_inline]] (bool is_tree, std::array<int, 2> n_lowvals, int nxt) -> void {
 				int d = int(stk.size()) - 1;
 				auto& s = stk.back();
-				int cur = s.cur;
+				int cur = s.id;
 				assert(s.ch_idx < s.ch_end);
-				auto [nxt, e] = adj.dat[s.ch_idx];
+				int e = adj.dat[s.ch_idx].e;
 				auto& lowvals = s.lowvals;
 				s.ch_idx++;
 
@@ -327,6 +337,7 @@ struct lowval_storted_skeleton_t {
 					if (lowval >= d) lowval = ~(lowval - d);
 					int kind = 2 * (n_lowvals[1] < d) + !is_tree;
 					all_outedges.push_back({cur, nxt, e, packed_key_t{3 * (lowval + 2) + kind}});
+					by_src_idx_builder.count(cur);
 				}
 
 				// Keep the 2 distinct mins
@@ -348,23 +359,18 @@ struct lowval_storted_skeleton_t {
 				if (is_tree) {
 					push_vert(nxt, e);
 				} else {
-					finish_edge(false, {depth[nxt], d});
+					finish_edge(false, {depth[nxt], d}, stk[depth[nxt]].id);
 				}
-			};
-			auto pop_vert = [&] [[gnu::always_inline]] () -> std::array<int, 2> {
-				auto lowvals = stk.back().lowvals;
-				stk.pop_back();
-				return lowvals;
 			};
 			for_each_in_order(NV, vert_order, [&] [[gnu::always_inline]] (int rt) -> void {
 				if (depth[rt] == -1) {
-					roots.push_back(rt);
-					push_vert(rt, -1);
+					roots.push_back(push_vert(rt, -1));
 					while (true) {
 						if (stk.back().ch_idx == stk.back().ch_end) {
-							auto lowvals = pop_vert();
+							auto s = stk.back();
+							stk.pop_back();
 							if (stk.empty()) break;
-							finish_edge(true, lowvals);
+							finish_edge(true, s.lowvals, s.id);
 						} else {
 							start_edge();
 						}
@@ -372,20 +378,19 @@ struct lowval_storted_skeleton_t {
 				}
 			});
 
-			csr_index_builder by_key_idx_builder(3*NV+6);
+			// Keys are 3 * (lowval + 2) + kind with lowval < depth <= max_depth
+			csr_index_builder by_key_idx_builder(3 * (max_depth + 2));
 			for (auto edge : all_outedges) by_key_idx_builder.count(edge.key.v);
 			csr_builder<outedge_t> by_key_builder(std::move(by_key_idx_builder));
 			for (auto edge : all_outedges) by_key_builder.push(edge.key.v) = edge;
 			csr<outedge_t> by_key = std::move(by_key_builder).finalize();
 
-			csr_index_builder by_src_idx_builder(NV);
-			for (auto edge : by_key.dat) by_src_idx_builder.count(edge.src);
 			csr_builder<outedge_t> by_src_builder(std::move(by_src_idx_builder), std::move(all_outedges));
 			for (auto edge : by_key.dat) by_src_builder.push(edge.src) = edge;
 			outedges = std::move(by_src_builder).finalize();
 		}
 
-		return {std::move(roots), std::move(outedges)};
+		return {std::move(roots), std::move(outedges), std::move(verts)};
 	}
 };
 
@@ -404,7 +409,8 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 	assert(int(vert_order.size()) <= NV);
 	assert(int(edge_order.size()) <= NE);
 
-	auto [roots, outedges] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
+	// Vertices are preorder indices until phase 3
+	auto [roots, outedges, verts] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
 
 	// Phase 2: do the big ear-decomposition-like walk
 
@@ -1123,7 +1129,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				assert(cur_item == 0);
 			} else if (cur_type == node_type::V) {
 				assert(1 <= cur_item && cur_item < 1 + NV);
-				int orig_vert = cur_item - 1;
+				int orig_vert = verts[cur_item - 1];
 				orig_id[cur_idx] = orig_vert;
 				vert_index[orig_vert] = cur_idx;
 			} else if (cur_type == node_type::Q) {
@@ -1132,7 +1138,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				orig_id[cur_idx] = orig_edge;
 				edge_index[orig_edge] = cur_idx;
 				assert(item_vs[cur_item][0] != -1);
-				edge_flipped[orig_edge] = item_vs[cur_item][0] != edges[orig_edge][0];
+				edge_flipped[orig_edge] = verts[item_vs[cur_item][0]] != edges[orig_edge][0];
 			} else {
 				assert(1 + NV + NE <= cur_item);
 				if constexpr (with_planarity) {
@@ -1425,7 +1431,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 		// Rewrite node_vertices to the correct index
 		for (auto& v : node_verts) {
-			v.vert = vert_index[v.vert];
+			v.vert = vert_index[verts[v.vert]];
 		}
 
 		spqr_tree res{
@@ -1569,7 +1575,7 @@ inline std::optional<planar_embedding> planar_embed(
 	auto setmin = [](auto& a, auto b) { if (b < a) a = b; };
 
 	int NE = int(edges.size());
-	auto [roots, outedges] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
+	auto [roots, outedges, verts] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
 
 	// Phase 2: do the big ear-decomposition-like walk
 
@@ -2021,7 +2027,7 @@ inline bool can_planar_embed(
 
 	int NE = int(edges.size());
 
-	auto [roots, outedges] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
+	auto [roots, outedges, verts] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
 
 	// Phase 2: do the big ear-decomposition-like walk
 
