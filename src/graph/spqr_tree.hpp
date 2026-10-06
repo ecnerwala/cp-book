@@ -797,11 +797,10 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 							merge_tstack_tops();
 
 							type = nxt_tstack().top_depth > cur_depth ? node_type::S : node_type::R;
-						} else if (nxt_tstack().v_start == cur_tstack().v_start) {
+						} else {
+							assert(nxt_tstack().v_start == cur_tstack().v_start);
 							// This will be a P node
 							type = node_type::P;
-						} else {
-							type = node_type::R;
 						}
 						int item = maybe_unwrap_nxt(type, type == node_type::S);
 						merge_tstack_tops();
@@ -1653,6 +1652,10 @@ inline std::optional<planar_embedding> planar_embed(
 	// Quarter edges for planar embedding building.
 	// Each edge has 4 entries by 4 * edge_id + 2 * source_vert + is_cw (is_cw is arbitrary)
 	std::vector<int> quarter_edge_matches(4 * NE, -1);
+	auto link_quarter_edges = [&](int a, int b) -> void {
+		quarter_edge_matches[a] = b;
+		quarter_edge_matches[b] = a;
+	};
 
 	{
 		int nxt_edge_idx = 0; // Counts backedges only
@@ -1694,8 +1697,7 @@ inline std::optional<planar_embedding> planar_embed(
 				} else if (as.bot_ends[0] == -1) {
 					as = bs;
 				} else {
-					quarter_edge_matches[as.bot_ends[1]] = bs.bot_ends[0];
-					quarter_edge_matches[bs.bot_ends[0]] = as.bot_ends[1];
+					link_quarter_edges(as.bot_ends[1], bs.bot_ends[0]);
 					as.bot_ends[1] = bs.bot_ends[1];
 
 					if (bs.tops[0].end == -1) {
@@ -1705,23 +1707,17 @@ inline std::optional<planar_embedding> planar_embed(
 					} else {
 						// Caller must check that we're planar
 						assert(as.tops[1].depth <= bs.tops[0].depth);
-						quarter_edge_matches[as.tops[1].end] = bs.tops[0].end;
-						quarter_edge_matches[bs.tops[0].end] = as.tops[1].end;
+						link_quarter_edges(as.tops[1].end, bs.tops[0].end);
 						as.tops[1] = bs.tops[1];
 					}
 				}
 			}
 		};
-		auto make_edge_planarity = [&] [[gnu::always_inline]] (int e_side, int top_depth, bool is_tree) -> tstack_planarity_t {
+		auto make_edge_planarity = [&] [[gnu::always_inline]] (int e_side, int top_depth) -> tstack_planarity_t {
 			edge_top_depths[e_side >> 1] = top_depth;
 			tstack_planarity_t p;
-			if (is_tree) {
-				p.sides[0].bot_ends = {2 * (e_side ^ 1) + 0, 2 * e_side + 1};
-				p.sides[1].bot_ends = {2 * (e_side ^ 1) + 1, 2 * e_side + 0};
-			} else {
-				p.sides[0].bot_ends = {2 * e_side + 0, 2 * e_side + 1};
-				p.sides[0].tops = {{{2 * (e_side ^ 1) + 1, top_depth}, {2 * (e_side ^ 1) + 0, top_depth}}};
-			}
+			p.sides[0].bot_ends = {2 * e_side + 0, 2 * e_side + 1};
+			p.sides[0].tops = {{{2 * (e_side ^ 1) + 1, top_depth}, {2 * (e_side ^ 1) + 0, top_depth}}};
 			return p;
 		};
 		struct tstack_t {
@@ -1739,8 +1735,8 @@ inline std::optional<planar_embedding> planar_embed(
 		auto push_vert_tstack = [&] [[gnu::always_inline]] (int top_depth) -> void {
 			push_tstack(top_depth, {});
 		};
-		auto push_edge_tstack = [&] [[gnu::always_inline]] (int top_depth, int e_side, bool is_tree) -> int {
-			push_tstack(top_depth, make_edge_planarity(e_side, top_depth, is_tree));
+		auto push_edge_tstack = [&] [[gnu::always_inline]] (int top_depth, int e_side) -> int {
+			push_tstack(top_depth, make_edge_planarity(e_side, top_depth));
 			postorder_edges.push_back(e_side >> 1);
 			return nxt_edge_idx++;
 		};
@@ -1822,13 +1818,12 @@ inline std::optional<planar_embedding> planar_embed(
 				auto join_backedges_to_top = [&] [[gnu::always_inline]] () -> void {
 					// Merge all backedges into the component
 					for (auto& side : cur_tstack().planarity.sides) {
-						// in the self-loop case, sides[1].bot_ends[1] == -1; otherwise, it should never be -1
+						// in the single-edge case, sides[1].bot_ends[1] == -1; otherwise, it should never be -1
 						if (side.tops[1].end == -1) continue;
 						assert(side.bot_ends[1] != -1);
 						assert(side.tops[0].depth == cur_depth);
 						assert(side.tops[1].depth == cur_depth);
-						quarter_edge_matches[side.bot_ends[1]] = side.tops[1].end;
-						quarter_edge_matches[side.tops[1].end] = side.bot_ends[1];
+						link_quarter_edges(side.bot_ends[1], side.tops[1].end);
 						side.bot_ends[1] = side.tops[0].end;
 						side.tops = {};
 					}
@@ -1839,8 +1834,7 @@ inline std::optional<planar_embedding> planar_embed(
 					auto& sides = cur_tstack().planarity.sides;
 					auto& s0 = sides[0];
 					auto& s1 = sides[1];
-					quarter_edge_matches[s0.bot_ends[0]] = s1.bot_ends[0];
-					quarter_edge_matches[s1.bot_ends[0]] = s0.bot_ends[0];
+					link_quarter_edges(s0.bot_ends[0], s1.bot_ends[0]);
 					s0.bot_ends[0] = s1.bot_ends[1];
 					if (s1.tops[0].end != -1) {
 						// Caller must have checked that we're planar
@@ -1848,8 +1842,7 @@ inline std::optional<planar_embedding> planar_embed(
 
 						// This is always true
 						assert(s1.tops[0].depth == lowval);
-						quarter_edge_matches[s0.tops[0].end] = s1.tops[0].end;
-						quarter_edge_matches[s1.tops[0].end] = s0.tops[0].end;
+						link_quarter_edges(s0.tops[0].end, s1.tops[0].end);
 						s0.tops[0].end = s1.tops[1].end;
 						// Already true since the backedge was on side 0
 						assert(s0.tops[0].depth == lowval);
@@ -1859,17 +1852,19 @@ inline std::optional<planar_embedding> planar_embed(
 
 				if (lowval >= cur_depth) {
 					if (is_tree) {
-						push_edge_tstack(cur_depth, e_side, true);
+						push_edge_tstack(cur_depth, e_side ^ 1);
 						if (lowval == cur_depth) {
 							// Merge the backedge
 							merge_tstack_tops();
-							join_backedges_to_top();
 						}
 						// Merge the vertex
 						merge_tstack_tops();
-						join_bottoms_to_empty();
+						link_quarter_edges(cur_tstack().planarity.sides[0].bot_ends[0], cur_tstack().planarity.sides[0].bot_ends[1]);
+						cur_tstack().planarity.sides[0].bot_ends[0] = cur_tstack().planarity.sides[0].tops[1].end;
+						cur_tstack().planarity.sides[0].bot_ends[1] = cur_tstack().planarity.sides[0].tops[0].end;
+						cur_tstack().planarity.sides[0].tops = {};
 					} else {
-						push_edge_tstack(lowval, e_side, false);
+						push_edge_tstack(lowval, e_side);
 						join_backedges_to_top();
 					}
 					assert(s.has_vert_tstack);
@@ -1879,7 +1874,7 @@ inline std::optional<planar_embedding> planar_embed(
 				}
 
 				if (is_tree) {
-					push_edge_tstack(cur_depth, e_side, true);
+					push_edge_tstack(cur_depth, e_side ^ 1);
 					while (nxt_tstack().top_depth >= cur_depth) {
 						if (nxt_tstack().top_depth > cur_depth) {
 							if (tstack.end()[-3].top_depth < cur_depth) {
@@ -1887,43 +1882,123 @@ inline std::optional<planar_embedding> planar_embed(
 							}
 							// Merge the vertex in
 							merge_tstack_tops();
+							if (nxt_tstack().top_depth > cur_depth) {
+								// S-type merge
+								link_quarter_edges(nxt_tstack().planarity.sides[0].tops[0].end, cur_tstack().planarity.sides[0].bot_ends[0]);
+								link_quarter_edges(nxt_tstack().planarity.sides[0].tops[1].end, cur_tstack().planarity.sides[0].bot_ends[1]);
+								nxt_tstack().planarity.sides[0].tops = cur_tstack().planarity.sides[0].tops;
+								nxt_tstack().top_depth = cur_depth;
+								tstack.pop_back();
+							} else {
+								assert(nxt_tstack().top_depth == cur_depth);
+								// R-type merge
+								// First, just merge cur_tstack() as a backedge
+								merge_tstack_tops();
+								// Fixup: flatten the R-node into a single backedge
+								link_quarter_edges(cur_tstack().planarity.sides[0].bot_ends[1], cur_tstack().planarity.sides[1].bot_ends[1]);
+								cur_tstack().planarity.sides[0].bot_ends[1] = cur_tstack().planarity.sides[1].bot_ends[0];
+								if (cur_tstack().planarity.sides[1].tops[1].end != -1) {
+									link_quarter_edges(cur_tstack().planarity.sides[0].tops[1].end, cur_tstack().planarity.sides[1].tops[1].end);
+									cur_tstack().planarity.sides[0].tops[1] = cur_tstack().planarity.sides[1].tops[0];
+								}
+								cur_tstack().planarity.sides[1] = {};
+							}
+						} else {
+							// P-type merge
+							merge_tstack_tops();
 						}
-
-						merge_tstack_tops();
-						join_backedges_to_top();
 					}
 
 					if (cur_tstack().first_idx > first_occurrence[cur_depth]) {
 						int source = int(tstack.size()) - 2;
 						while (tstack[source].first_idx > first_occurrence[cur_depth]) --source;
 
+						// We won't care about bot_ends[1] here at all
+						cur_tstack().planarity.sides[1].bot_ends[0] = std::exchange(cur_tstack().planarity.sides[0].bot_ends[1], -1);
+						assert(cur_tstack().planarity.sides[0].bot_ends[1] == -1);
+						assert(cur_tstack().planarity.sides[1].bot_ends[1] == -1);
+
 						// last_top == cur_tstack().top_depth
 						int last_top = cur_depth;
 						while (int(tstack.size()) > source + 2) {
+							assert(cur_tstack().planarity.sides[0].bot_ends[0] != -1);
+							assert(cur_tstack().planarity.sides[1].bot_ends[0] != -1);
+							assert(cur_tstack().planarity.sides[0].bot_ends[1] == -1);
+							assert(cur_tstack().planarity.sides[1].bot_ends[1] == -1);
 							if (nxt_tstack().top_depth > cur_depth) {
-								// Vertex or tree edge, no conditions
-							} else if (nxt_tstack().top_depth == cur_depth) {
-								if (nxt_tstack().planarity.sides[1].tops[0].depth != -1) {
-									// Double-sided to cur_depth, conflicts with cur_tstack()
+								// Vertex, check the edge instead
+								merge_tstack_tops();
+								if (nxt_tstack().top_depth > cur_depth) {
+									// Tree edge, always fine, just extend
+
+									assert(int(tstack.size()) > source + 2);
+									// last_top < cur_depth, since otherwise we would've merged above
 									assert(last_top < cur_depth);
-									return tstack_nonplanarity_t{};
+
+									link_quarter_edges(nxt_tstack().planarity.sides[0].tops[0].end, cur_tstack().planarity.sides[0].bot_ends[0]);
+									link_quarter_edges(nxt_tstack().planarity.sides[0].tops[1].end, cur_tstack().planarity.sides[1].bot_ends[0]);
+									nxt_tstack().planarity.sides[1].bot_ends[0] = nxt_tstack().planarity.sides[0].bot_ends[1];
+									nxt_tstack().planarity.sides[0].bot_ends[1] = -1;
+
+									nxt_tstack().planarity.sides[0].tops = cur_tstack().planarity.sides[0].tops;
+									nxt_tstack().planarity.sides[1].tops = cur_tstack().planarity.sides[1].tops;
+									nxt_tstack().top_depth = cur_tstack().top_depth;
+									tstack.pop_back();
+									assert(cur_tstack().planarity.sides[0].bot_ends[0] != -1);
+									assert(cur_tstack().planarity.sides[1].bot_ends[0] != -1);
+									assert(cur_tstack().planarity.sides[0].bot_ends[1] == -1);
+									assert(cur_tstack().planarity.sides[1].bot_ends[1] == -1);
+								} else {
+									// Chunk entry
+									if (int(tstack.size()) == source + 2) break;
+									assert(nxt_tstack().planarity.sides[1].bot_ends[0] != -1);
+									if (nxt_tstack().top_depth == cur_depth) {
+										assert(last_top < cur_depth);
+										if (nxt_tstack().planarity.sides[1].tops[0].end != -1) {
+											// Double-sided to cur_depth, conflicts with cur_tstack()
+											return tstack_nonplanarity_t{};
+										}
+										// We will put cur_depth on side 1 until the bottom
+										flip_tstack_planarity(int(tstack.size()) - 2);
+									} else {
+										if (nxt_tstack().planarity.sides[1].tops[0].end != -1 && nxt_tstack().planarity.sides[1].tops[0].depth != cur_depth) {
+											// Non-empty on both sides, conflicts with source
+											return tstack_nonplanarity_t{};
+										}
+										if (nxt_tstack().planarity.sides[0].tops[1].depth > last_top) {
+											// 3 nonlaminar edges with nxt_tstack(), cur_tstack(), source
+											return tstack_nonplanarity_t{};
+										}
+										last_top = nxt_tstack().top_depth;
+									}
+									merge_tstack_tops();
+									assert(cur_tstack().planarity.sides[0].bot_ends[0] != -1);
+									assert(cur_tstack().planarity.sides[1].bot_ends[0] != -1);
+									assert(cur_tstack().planarity.sides[0].bot_ends[1] == -1);
+									assert(cur_tstack().planarity.sides[1].bot_ends[1] == -1);
 								}
-								// We will put cur_depth on side 1 until the bottom
-								flip_tstack_planarity(int(tstack.size()) - 2);
 							} else {
-								if (nxt_tstack().planarity.sides[1].tops[0].depth != -1 && nxt_tstack().planarity.sides[1].tops[0].depth != cur_depth) {
-									// Non-empty on both sides, conflicts with source
-									return tstack_nonplanarity_t{};
+								// Single atom
+								assert(nxt_tstack().planarity.sides[1].bot_ends[0] == -1);
+								if (nxt_tstack().top_depth == cur_depth) {
+									// We will put cur_depth on side 1 until the bottom
+									flip_tstack_planarity(int(tstack.size()) - 2);
+								} else {
+									if (nxt_tstack().planarity.sides[0].tops[1].depth > last_top) {
+										// 3 nonlaminar edges with nxt_tstack(), cur_tstack(), source
+										return tstack_nonplanarity_t{};
+									}
+									last_top = nxt_tstack().top_depth;
 								}
-								if (nxt_tstack().planarity.sides[0].tops[1].depth > last_top) {
-									// Nonlaminar with cur_tstack()
-									return tstack_nonplanarity_t{};
-								}
-								last_top = nxt_tstack().top_depth;
+								merge_tstack_tops();
+								assert(cur_tstack().planarity.sides[0].bot_ends[0] != -1);
+								assert(cur_tstack().planarity.sides[1].bot_ends[0] != -1);
+								assert(cur_tstack().planarity.sides[0].bot_ends[1] == -1);
+								assert(cur_tstack().planarity.sides[1].bot_ends[1] == -1);
 							}
-							merge_tstack_tops();
 						}
 
+						assert(int(tstack.size()) == source + 2);
 						int t0 = nxt_tstack().planarity.sides[0].tops[1].depth;
 						int t1 = nxt_tstack().planarity.sides[1].tops[1].depth;
 						assert(t0 == cur_depth || t1 == cur_depth);
@@ -1931,32 +2006,49 @@ inline std::optional<planar_embedding> planar_embed(
 							assert(last_top < cur_depth);
 							return tstack_nonplanarity_t{};
 						}
-						if (t0 == cur_depth) {
+						if (t1 != cur_depth) {
+							assert(t0 == cur_depth);
 							// We need to flip cur_tstack and nxt_tstack relative to each other.
 							// Flip the one with worse top_depth.
 							flip_tstack_planarity(cur_tstack().top_depth < nxt_tstack().top_depth ? int(tstack.size()) - 2 : int(tstack.size()) - 1);
 						}
 						merge_tstack_tops();
 
-						// Prune off finished cur-side things
+						assert(cur_tstack().top_depth < cur_depth);
+
+						assert(cur_tstack().planarity.sides[0].tops[1].depth == cur_depth);
+						assert(cur_tstack().planarity.sides[1].tops[1].depth == cur_depth);
+						assert(cur_tstack().planarity.sides[0].bot_ends[1] == -1);
+						assert(cur_tstack().planarity.sides[1].bot_ends[1] == -1);
+
+						// Link inner ones
+						link_quarter_edges(cur_tstack().planarity.sides[0].tops[1].end, cur_tstack().planarity.sides[1].tops[1].end);
+
+						// Prune cur_depth things from tops of each end
 						for (auto& side : cur_tstack().planarity.sides) {
-							assert(side.bot_ends[1] != -1);
-							while (side.tops[1].depth == cur_depth) {
-								{
-									// Link these to bot_ends[1]
-									quarter_edge_matches[side.bot_ends[1]] = side.tops[1].end;
-									quarter_edge_matches[side.tops[1].end] = side.bot_ends[1];
-									side.bot_ends[1] = side.tops[1].end ^ 1;
-								}
-								side.tops[1].end = std::exchange(quarter_edge_matches[side.bot_ends[1]], -1);
-								if (side.tops[1].end != -1) {
-									quarter_edge_matches[side.tops[1].end] = -1;
-									side.tops[1].depth = edge_top_depths[side.tops[1].end >> 2];
-								} else {
+							assert(side.tops[1].depth == cur_depth);
+							auto t = side.tops[1].end;
+							while (true) {
+								int nt = quarter_edge_matches[t ^ 1];
+								if (nt == -1) {
+									side.bot_ends[1] = t^1;
 									side.tops = {};
+									break;
 								}
+								int nd = edge_top_depths[nt >> 2];
+								assert(nd <= cur_depth);
+								if (nd < cur_depth) {
+									quarter_edge_matches[nt] = -1;
+									quarter_edge_matches[t^1] = -1;
+									side.bot_ends[1] = t^1;
+									side.tops[1] = {nt, nd};
+									break;
+								}
+								t = nt;
 							}
 						}
+						assert(cur_tstack().planarity.sides[0].bot_ends[1] != -1);
+						assert(cur_tstack().planarity.sides[1].bot_ends[1] != -1);
 					}
 
 					if (is_type_1) assert(s.has_vert_tstack);
@@ -1964,37 +2056,83 @@ inline std::optional<planar_embedding> planar_embed(
 						// NB: tstack[orig_size] is the vertex and tstack[orig_size+1] is the backedge; maybe we should reverse them?
 						assert(int(tstack.size()) >= orig_tstack + 3);
 
+						if (cur_tstack().top_depth == cur_depth) {
+							// We're currently a backedge, expand to a 2-sided chunk
+							cur_tstack().planarity.sides[1].bot_ends[0] = cur_tstack().planarity.sides[0].bot_ends[1];
+							cur_tstack().planarity.sides[0].bot_ends[1] = cur_tstack().planarity.sides[0].tops[0].end;
+							cur_tstack().planarity.sides[1].bot_ends[1] = cur_tstack().planarity.sides[0].tops[1].end;
+							cur_tstack().planarity.sides[0].tops = {};
+						}
+
 						if (!is_type_1) {
 							// The lowval side should be side 1, everything else goes on side 0.
 							// The exception is tstack[orig_tstack + 2], which could be == lowval on one/both sides,
 							// but is guaranteed to have *something* > lowval by non-type-1-ness
-							auto& t = tstack[orig_tstack + 2];
-							{
-								assert(t.planarity.sides[0].tops[0].depth == t.top_depth);
-								assert(t.planarity.sides[0].tops[1].depth != -1);
-								if (t.planarity.sides[0].tops[1].depth == lowval) {
-									flip_tstack_planarity(orig_tstack + 2);
-								} else if (t.planarity.sides[1].tops[1].depth != -1 && t.planarity.sides[1].tops[1].depth != lowval) {
-									return tstack_nonplanarity_t{};
+							int last_top = cur_depth;
+							for (int i = int(tstack.size()); i >= orig_tstack + 2; --i) {
+								if (i == int(tstack.size()) || tstack[i].top_depth >= cur_depth) {
+									// We're a vertex
+									--i;
+									if (tstack[i].top_depth >= cur_depth) {
+										// S-type merge, nothing can break
+										if (i != int(tstack.size()) - 1) {
+											assert(i <= int(tstack.size()) - 3);
+											merge_tstack_tops();
+
+											link_quarter_edges(nxt_tstack().planarity.sides[0].tops[0].end, cur_tstack().planarity.sides[0].bot_ends[0]);
+											link_quarter_edges(nxt_tstack().planarity.sides[0].tops[1].end, cur_tstack().planarity.sides[1].bot_ends[0]);
+											nxt_tstack().planarity.sides[1].bot_ends[0] = nxt_tstack().planarity.sides[0].bot_ends[1];
+
+											nxt_tstack().planarity.sides[0].bot_ends[1] = cur_tstack().planarity.sides[0].bot_ends[1];
+											nxt_tstack().planarity.sides[1].bot_ends[1] = cur_tstack().planarity.sides[1].bot_ends[1];
+											nxt_tstack().planarity.sides[0].tops = cur_tstack().planarity.sides[0].tops;
+											nxt_tstack().planarity.sides[1].tops = cur_tstack().planarity.sides[1].tops;
+											nxt_tstack().top_depth = cur_tstack().top_depth;
+											tstack.pop_back();
+										}
+									} else {
+										// R-type chunk
+										assert(tstack[i].planarity.sides[1].bot_ends[0] != -1);
+										if (tstack[i].top_depth == lowval) {
+											if (i > orig_tstack + 2 || tstack[i].planarity.sides[0].tops[1].depth == lowval) {
+												flip_tstack_planarity(i);
+											}
+										}
+										int next_top = tstack[i].planarity.sides[0].tops[1].depth;
+										if (i == orig_tstack + 2) assert(next_top != -1 && next_top > lowval);
+										if (tstack[i].planarity.sides[1].tops[1].end != -1 && tstack[i].planarity.sides[1].tops[1].depth != lowval) {
+											return tstack_nonplanarity_t{};
+										}
+										if (next_top != -1) {
+											if (next_top > last_top) return tstack_nonplanarity_t{};
+											last_top = tstack[i].planarity.sides[0].tops[0].depth;
+										}
+
+										if (i != int(tstack.size()) - 1) {
+											assert(i <= int(tstack.size()) - 3);
+											merge_tstack_tops();
+											merge_tstack_tops();
+										}
+									}
+								} else {
+									assert(i <= int(tstack.size()) - 2);
+									// single atom
+									assert(tstack[i].planarity.sides[1].bot_ends[0] == -1);
+									if (i > orig_tstack + 2 && tstack[i].top_depth == lowval) {
+										if (tstack[i].planarity.sides[0].tops[1].depth > lowval) {
+											return tstack_nonplanarity_t{};
+										}
+										flip_tstack_planarity(i);
+									} else {
+										int next_top = tstack[i].planarity.sides[0].tops[1].depth;
+										assert(next_top != -1);
+										// Either i == orig_tstack + 2, or we flipped already
+										assert(next_top > lowval);
+										if (next_top > last_top) return tstack_nonplanarity_t{};
+										last_top = tstack[i].top_depth;
+									}
+									merge_tstack_tops();
 								}
-								assert(t.planarity.sides[0].tops[1].depth > lowval);
-							}
-							int last_top = t.planarity.sides[0].tops[1].depth;
-							for (int i = orig_tstack + 3; i < int(tstack.size()); i++) {
-								if (tstack[i].top_depth == lowval) {
-									flip_tstack_planarity(i);
-								}
-								if (tstack[i].planarity.sides[1].tops[1].depth != -1 && tstack[i].planarity.sides[1].tops[1].depth != lowval) {
-									return tstack_nonplanarity_t{};
-								}
-								int next_top = tstack[i].planarity.sides[0].tops[0].depth;
-								if (next_top != -1) {
-									if (last_top > next_top) return tstack_nonplanarity_t{};
-									last_top = tstack[i].planarity.sides[0].tops[1].depth;
-								}
-							}
-							while (int(tstack.size()) > orig_tstack + 3) {
-								merge_tstack_tops();
 							}
 						}
 
@@ -2011,7 +2149,7 @@ inline std::optional<planar_embedding> planar_embed(
 					}
 				} else {
 					assert(is_type_1);
-					int idx = push_edge_tstack(lowval, e_side, false);
+					int idx = push_edge_tstack(lowval, e_side);
 					setmin(first_occurrence[lowval], idx);
 				}
 
