@@ -139,9 +139,10 @@ template <typename T> struct bounded_stack {
 	void push_back(const T& v) { emplace_back(v); }
 	void push_back(T&& v) { emplace_back(std::move(v)); }
 	void pop_back() { assert(top > base); std::destroy_at(--top); }
-	void shrink_to(T* ntop) { assert(ntop <= top); std::destroy(ntop, top); top = ntop; }
+	void pop_to(T* ntop) { assert(ntop <= top); std::destroy(ntop, top); top = ntop; }
 	// Only support shrinking; bulk delete
-	void resize(int n) { shrink_to(base + n); }
+	void shrink_to(int n) { pop_to(base + n); }
+	void clear() { shrink_to(0); }
 };
 
 struct csr_index {
@@ -2738,7 +2739,7 @@ inline bool can_planar_embed(
 							assert(int(tstack.size()) == orig_tstack + 3);
 						}
 						tstack[orig_tstack] = tstack[orig_tstack+1];
-						tstack.resize(orig_tstack + 1);
+						tstack.shrink_to(orig_tstack + 1);
 						assert(cur_tstack().top_depth == lowval);
 					}
 				} else {
