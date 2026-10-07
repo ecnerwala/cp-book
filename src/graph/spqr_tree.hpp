@@ -1652,7 +1652,7 @@ inline std::optional<planar_embedding> planar_embed(
 	// Quarter edges for planar embedding building.
 	// Each edge has 4 entries by 4 * edge_id + 2 * source_vert + is_cw (is_cw is arbitrary)
 	std::vector<int> quarter_edge_matches(4 * NE, -1);
-	auto link_quarter_edges = [&](int a, int b) -> void {
+	auto link_quarter_edges = [&] [[gnu::always_inline]] (int a, int b) -> void {
 		quarter_edge_matches[a] = b;
 		quarter_edge_matches[b] = a;
 	};
