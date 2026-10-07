@@ -47,9 +47,9 @@ template <typename T> struct fixed_vector {
 	const T& back() const { return dat[sz-1]; }
 
 	// resize is only allowed to go from 0 -> nonzero
-	void resize(int n) { assert(empty()); *this = std::move(fixed_vector<T>(n)); }
-	void resize(int n, const T& v) { assert(empty()); *this = std::move(fixed_vector<T>(n, v)); }
-	void clear() { *this = std::move(fixed_vector<T>()); }
+	void resize(int n) { assert(empty()); *this = fixed_vector<T>(n); }
+	void resize(int n, const T& v) { assert(empty()); *this = fixed_vector<T>(n, v); }
+	void clear() { *this = fixed_vector<T>(); }
 
 	// TODO: Maybe fill in value-semantics? e.g. copy constructors, equality, etc.
 	friend bool operator == (const fixed_vector& a, const fixed_vector& b) { return std::ranges::equal(a, b); }
@@ -61,7 +61,7 @@ template <typename T> struct bounded_vector {
 	int cap = 0;
 
 	bounded_vector() = default;
-	~bounded_vector() { std::destroy_n(base, sz); std::allocator<T>().deallocate(base, cap); }
+	~bounded_vector() { std::destroy_n(base, sz); if (base) std::allocator<T>().deallocate(base, cap); }
 
 	friend void swap(bounded_vector& a, bounded_vector& b) noexcept { std::swap(a.base, b.base); std::swap(a.sz, b.sz); std::swap(a.cap, b.cap); }
 	bounded_vector(bounded_vector&& o) noexcept : bounded_vector() { swap(*this, o); }
@@ -109,7 +109,7 @@ template <typename T> struct bounded_stack {
 	T* cap = nullptr;
 
 	bounded_stack() = default;
-	~bounded_stack() { std::destroy(base, top); std::allocator<T>().deallocate(base, cap - base); }
+	~bounded_stack() { std::destroy(base, top); if (base) std::allocator<T>().deallocate(base, cap - base); }
 
 	friend void swap(bounded_stack& a, bounded_stack& b) noexcept { std::swap(a.base, b.base); std::swap(a.top, b.top); std::swap(a.cap, b.cap); }
 	bounded_stack(bounded_stack&& o) noexcept : bounded_stack() { swap(*this, o); }
@@ -183,7 +183,8 @@ template <typename T> struct csr_builder {
 	fixed_vector<T> dat;
 	csr_builder() = default;
 	explicit csr_builder(csr_index idx_, fixed_vector<T>&& dat_buf = {}) : idx(std::move(idx_)), dat(std::move(dat_buf)) {
-		dat.resize(idx.num_entries());
+		int l = idx.num_entries();
+		if (dat.size() != l) dat = fixed_vector<T>(l);
 		if (!idx.bounds.empty()) {
 			std::shift_right(idx.bounds.begin(), idx.bounds.end(), 1);
 			idx.bounds[0] = 0;
@@ -194,9 +195,7 @@ template <typename T> struct csr_builder {
 		for (int i = 1; i < int(idx.bounds.size()); i++) {
 			idx.bounds[i] = std::exchange(l, l + idx.bounds[i]);
 		}
-		if (dat.size() != l) {
-			dat = fixed_vector<T>(l);
-		}
+		if (dat.size() != l) dat = fixed_vector<T>(l);
 	}
 	[[nodiscard]] T& push(int k) { return dat[idx.bounds[k+1]++]; }
 	[[nodiscard]] csr<T> finalize() && { return { std::move(idx), std::move(dat) }; }
