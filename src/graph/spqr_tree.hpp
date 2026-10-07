@@ -46,11 +46,6 @@ template <typename T> struct fixed_vector {
 	T& back() { return dat[sz-1]; }
 	const T& back() const { return dat[sz-1]; }
 
-	// resize is only allowed to go from 0 -> nonzero
-	void resize(int n) { assert(empty()); *this = fixed_vector<T>(n); }
-	void resize(int n, const T& v) { assert(empty()); *this = fixed_vector<T>(n, v); }
-	void clear() { *this = fixed_vector<T>(); }
-
 	// TODO: Maybe fill in value-semantics? e.g. copy constructors, equality, etc.
 	friend bool operator == (const fixed_vector& a, const fixed_vector& b) { return std::ranges::equal(a, b); }
 };
@@ -184,18 +179,18 @@ template <typename T> struct csr_builder {
 	csr_builder() = default;
 	explicit csr_builder(csr_index idx_, fixed_vector<T>&& dat_buf = {}) : idx(std::move(idx_)), dat(std::move(dat_buf)) {
 		int l = idx.num_entries();
-		if (dat.size() != l) dat = fixed_vector<T>(l);
 		if (!idx.bounds.empty()) {
 			std::shift_right(idx.bounds.begin(), idx.bounds.end(), 1);
 			idx.bounds[0] = 0;
 		}
+		if (dat.size() != l) dat = fixed_vector<T>::uninit(l);
 	}
 	explicit csr_builder(csr_index_builder&& idx_builder, fixed_vector<T>&& dat_buf = {}) : idx{std::move(idx_builder.bounds)}, dat(std::move(dat_buf)) {
 		int l = 0;
 		for (int i = 1; i < int(idx.bounds.size()); i++) {
 			idx.bounds[i] = std::exchange(l, l + idx.bounds[i]);
 		}
-		if (dat.size() != l) dat = fixed_vector<T>(l);
+		if (dat.size() != l) dat = fixed_vector<T>::uninit(l);
 	}
 	[[nodiscard]] T& push(int k) { return dat[idx.bounds[k+1]++]; }
 	[[nodiscard]] csr<T> finalize() && { return { std::move(idx), std::move(dat) }; }
@@ -1290,22 +1285,22 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		fixed_vector<int> orig_id(tot_items, -1);
 
 		csr<int> ch;
-		ch.bounds.resize(tot_items + 1, 0);
-		ch.dat.resize(tot_items - 1);
+		ch.bounds = fixed_vector<int>(tot_items + 1, 0);
+		ch.dat = fixed_vector<int>(tot_items - 1);
 
 		// Each node is a child, and additionally most non-block node has 2 cap verts; blocks have 1, and O nodes have 1
 		int tot_node_verts = NV + (tot_items - 1 - NV) * 2 - tot_blocks - tot_self_loops;
 		fixed_vector<node_vert_t> node_verts(tot_node_verts);
-		csr_index node_nvs; node_nvs.bounds.resize(tot_items + 1);
+		csr_index node_nvs; node_nvs.bounds = fixed_vector<int>(tot_items + 1);
 		fixed_vector<int> vert_par_nv(tot_items, -1);
 
 		int tot_node_edges = (tot_items - 1 - NV - tot_blocks) * 2;
 		fixed_vector<node_edge_t> node_edges(tot_node_edges);
-		csr_index node_nes; node_nes.bounds.resize(tot_items + 1);
+		csr_index node_nes; node_nes.bounds = fixed_vector<int>(tot_items + 1);
 
 		csr<node_adj_t> node_adj;
-		node_adj.bounds.resize(tot_node_verts * 2 + 1);
-		node_adj.dat.resize(tot_node_edges * 2);
+		node_adj.bounds = fixed_vector<int>(tot_node_verts * 2 + 1);
+		node_adj.dat = fixed_vector<node_adj_t>(tot_node_edges * 2);
 
 		fixed_vector<bool> node_planar(with_planarity ? tot_items : 0);
 		fixed_vector<int> ne_rot_adj(with_planarity ? 4 * tot_node_edges : 0, -1);
