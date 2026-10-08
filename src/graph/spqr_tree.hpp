@@ -15,134 +15,340 @@
 
 namespace wala {
 
-template <typename T> struct fixed_vector {
-	std::unique_ptr<T[]> dat;
-	int sz = 0;
-	fixed_vector() = default;
-	explicit fixed_vector(int n) : dat(std::make_unique<T[]>(n)), sz(n) {}
-	static fixed_vector uninit(int n) {
-		static_assert(std::is_trivially_default_constructible_v<T>);
-		fixed_vector r;
-		r.dat = std::make_unique_for_overwrite<T[]>(n);
-		r.sz = n;
-		return r;
-	}
-	explicit fixed_vector(int n, const T& v) {
-		dat = std::make_unique_for_overwrite<T[]>(n);
-		sz = n;
-		// TODO: This is suboptimal for nontrivial types, but whatever
-		std::ranges::fill(*this, v);
-	}
-	int size() const { return sz; }
-	bool empty() const { return sz == 0; }
-	T* begin() { return dat.get(); }
-	T* end() { return dat.get() + sz; }
-	const T* begin() const { return dat.get(); }
-	const T* end() const { return dat.get() + sz; }
-	T& operator[] (int i) { return dat[i]; }
-	const T& operator[] (int i) const { return dat[i]; }
-	T& front() { return dat[0]; }
-	const T& front() const { return dat[0]; }
-	T& back() { return dat[sz-1]; }
-	const T& back() const { return dat[sz-1]; }
+inline constexpr struct with_capacity_t {} with_capacity;
+inline constexpr struct uninit_t {} uninit;
 
-	// TODO: Maybe fill in value-semantics? e.g. copy constructors, equality, etc.
+namespace detail {
+template <typename T> T* allocate(int n) { return n ? std::allocator<T>().allocate(n) : nullptr; }
+template <typename T> void deallocate(T* p, int n) { if (p) std::allocator<T>().deallocate(p, n); }
+inline void check_index([[maybe_unused]] int i, [[maybe_unused]] int n) {
+#ifdef _GLIBCXX_DEBUG
+	assert(0 <= i && i < n);
+#endif
+}
+} // namespace detail
+
+template <typename T> struct bounded_vector;
+template <typename T> struct bounded_stack;
+
+// Heap array whose length is fixed at construction.
+template <typename T> struct fixed_vector {
+	using value_type = T;
+	using size_type = int;
+	using difference_type = std::ptrdiff_t;
+	using iterator = T*;
+	using const_iterator = const T*;
+
+	T* base = nullptr;
+	int sz = 0;
+
+	fixed_vector() = default;
+	~fixed_vector() { std::destroy_n(base, sz); detail::deallocate(base, sz); }
+
+	friend void swap(fixed_vector& a, fixed_vector& b) noexcept { std::swap(a.base, b.base); std::swap(a.sz, b.sz); }
+	fixed_vector(fixed_vector&& o) noexcept : fixed_vector() { swap(*this, o); }
+	fixed_vector& operator= (fixed_vector&& o) noexcept { swap(*this, o); return *this; }
+	fixed_vector(const fixed_vector&) = delete;
+	fixed_vector& operator= (const fixed_vector&) = delete;
+
+	explicit fixed_vector(int n) : base(detail::allocate<T>(n)), sz(n) { std::uninitialized_value_construct_n(base, n); }
+	explicit fixed_vector(int n, const T& v) : base(detail::allocate<T>(n)), sz(n) { std::uninitialized_fill_n(base, n, v); }
+	explicit fixed_vector(uninit_t, int n) : base(detail::allocate<T>(n)), sz(n) {
+		static_assert(std::is_trivially_default_constructible_v<T>);
+	}
+	template <std::ranges::sized_range R>
+	fixed_vector(std::from_range_t, R&& r) : base(detail::allocate<T>(int(std::ranges::size(r)))), sz(int(std::ranges::size(r))) {
+		std::ranges::uninitialized_copy(r, std::span(base, sz));
+	}
+
+	[[nodiscard]] fixed_vector clone() const { return fixed_vector(std::from_range, *this); }
+
+	int size() const { return sz; }
+	[[nodiscard]] bool empty() const { return sz == 0; }
+	T* data() { return base; }
+	const T* data() const { return base; }
+	T* begin() { return base; }
+	T* end() { return base + sz; }
+	const T* begin() const { return base; }
+	const T* end() const { return base + sz; }
+	T& operator[] (int i) { detail::check_index(i, sz); return base[i]; }
+	const T& operator[] (int i) const { detail::check_index(i, sz); return base[i]; }
+	T& front() { assert(sz > 0); return base[0]; }
+	const T& front() const { assert(sz > 0); return base[0]; }
+	T& back() { assert(sz > 0); return base[sz-1]; }
+	const T& back() const { assert(sz > 0); return base[sz-1]; }
+
+	// The result is full (size == capacity)
+	[[nodiscard]] bounded_vector<T> into_bounded() &&;
+	[[nodiscard]] bounded_stack<T> into_stack() &&;
+
 	friend bool operator == (const fixed_vector& a, const fixed_vector& b) { return std::ranges::equal(a, b); }
 };
 
+// Vector whose capacity is fixed at construction; never reallocates.
 template <typename T> struct bounded_vector {
+	using value_type = T;
+	using size_type = int;
+	using difference_type = std::ptrdiff_t;
+	using iterator = T*;
+	using const_iterator = const T*;
+
 	T* base = nullptr;
 	int sz = 0;
 	int cap = 0;
 
 	bounded_vector() = default;
-	~bounded_vector() { std::destroy_n(base, sz); if (base) std::allocator<T>().deallocate(base, cap); }
+	~bounded_vector() { std::destroy_n(base, sz); detail::deallocate(base, cap); }
 
 	friend void swap(bounded_vector& a, bounded_vector& b) noexcept { std::swap(a.base, b.base); std::swap(a.sz, b.sz); std::swap(a.cap, b.cap); }
 	bounded_vector(bounded_vector&& o) noexcept : bounded_vector() { swap(*this, o); }
 	bounded_vector& operator= (bounded_vector&& o) noexcept { swap(*this, o); return *this; }
-
 	bounded_vector(const bounded_vector&) = delete;
 	bounded_vector& operator= (const bounded_vector&) = delete;
 
-	static bounded_vector with_capacity(int n) {
-		bounded_vector s;
-		s.base = std::allocator<T>().allocate(n);
-		s.sz = 0;
-		s.cap = n;
-		return s;
+	explicit bounded_vector(with_capacity_t, int n) : base(detail::allocate<T>(n)), sz(0), cap(n) {}
+	template <std::ranges::sized_range R>
+	bounded_vector(std::from_range_t, R&& r) : bounded_vector(with_capacity, int(std::ranges::size(r))) {
+		std::ranges::uninitialized_copy(r, std::span(base, cap));
+		sz = cap;
+	}
+
+	[[nodiscard]] bounded_vector clone() const {
+		bounded_vector r(with_capacity, cap);
+		std::uninitialized_copy_n(base, sz, r.base);
+		r.sz = sz;
+		return r;
 	}
 
 	int size() const { return sz; }
-	bool empty() const { return !sz; }
+	int capacity() const { return cap; }
+	[[nodiscard]] bool empty() const { return sz == 0; }
+	[[nodiscard]] bool full() const { return sz == cap; }
+	T* data() { return base; }
+	const T* data() const { return base; }
 	T* begin() { return base; }
 	T* end() { return base + sz; }
 	const T* begin() const { return base; }
 	const T* end() const { return base + sz; }
-	T& operator[] (int i) { return base[i]; }
-	const T& operator[] (int i) const { return base[i]; }
-	T& front() { return base[0]; }
-	const T& front() const { return base[0]; }
-	T& back() { return base[sz-1]; }
-	const T& back() const { return base[sz-1]; }
+	T& operator[] (int i) { detail::check_index(i, sz); return base[i]; }
+	const T& operator[] (int i) const { detail::check_index(i, sz); return base[i]; }
+	T& front() { assert(sz > 0); return base[0]; }
+	const T& front() const { assert(sz > 0); return base[0]; }
+	T& back() { assert(sz > 0); return base[sz-1]; }
+	const T& back() const { assert(sz > 0); return base[sz-1]; }
 
 	template <typename... Args>
 	T& emplace_back(Args&&... args) { assert(sz < cap); return *std::construct_at(base + sz++, std::forward<Args>(args)...); }
 	void push_back(const T& v) { emplace_back(v); }
 	void push_back(T&& v) { emplace_back(std::move(v)); }
 	void pop_back() { assert(sz > 0); std::destroy_at(base + --sz); }
-	void clear() { std::destroy(base, base + sz); sz = 0; }
-	void shrink_to(int n) { assert(0 <= n && n <= sz); std::destroy(base + n, base + sz); sz = n; }
-	void grow_to(int n, const T& v) { assert(sz <= n && n <= cap); std::uninitialized_fill(base + sz, base + n, v); sz = n; }
+	void truncate(int n) { assert(0 <= n && n <= sz); std::destroy(base + n, base + sz); sz = n; }
+	void truncate(T* nend) { truncate(int(nend - base)); }
+	void clear() { truncate(0); }
 	void grow_to(int n) { assert(sz <= n && n <= cap); std::uninitialized_value_construct(base + sz, base + n); sz = n; }
+	void grow_to(int n, const T& v) { assert(sz <= n && n <= cap); std::uninitialized_fill(base + sz, base + n, v); sz = n; }
+	void grow_to(uninit_t, int n) {
+		static_assert(std::is_trivially_default_constructible_v<T>);
+		assert(sz <= n && n <= cap); sz = n;
+	}
 	void assign(int n, const T& v) { clear(); grow_to(n, v); }
+
+	[[nodiscard]] fixed_vector<T> into_full_fixed() && {
+		assert(full());
+		fixed_vector<T> r;
+		r.base = std::exchange(base, nullptr);
+		r.sz = std::exchange(sz, 0);
+		cap = 0;
+		return r;
+	}
+	[[nodiscard]] bounded_stack<T> into_stack() &&;
+
+	friend bool operator == (const bounded_vector& a, const bounded_vector& b) { return std::ranges::equal(a, b); }
 };
 
+// bounded_vector with a pointer to the top instead of a size, for hot stacks.
 template <typename T> struct bounded_stack {
+	using value_type = T;
+	using size_type = int;
+	using difference_type = std::ptrdiff_t;
+	using iterator = T*;
+	using const_iterator = const T*;
+
 	T* base = nullptr;
 	T* top = nullptr;
 	T* cap = nullptr;
 
 	bounded_stack() = default;
-	~bounded_stack() { std::destroy(base, top); if (base) std::allocator<T>().deallocate(base, cap - base); }
+	~bounded_stack() { std::destroy(base, top); detail::deallocate(base, int(cap - base)); }
 
 	friend void swap(bounded_stack& a, bounded_stack& b) noexcept { std::swap(a.base, b.base); std::swap(a.top, b.top); std::swap(a.cap, b.cap); }
 	bounded_stack(bounded_stack&& o) noexcept : bounded_stack() { swap(*this, o); }
 	bounded_stack& operator= (bounded_stack&& o) noexcept { swap(*this, o); return *this; }
-
 	bounded_stack(const bounded_stack&) = delete;
 	bounded_stack& operator= (const bounded_stack&) = delete;
 
-	static bounded_stack with_capacity(int n) {
-		bounded_stack s;
-		s.base = std::allocator<T>().allocate(n);
-		s.top = s.base;
-		s.cap = s.base + n;
-		return s;
+	explicit bounded_stack(with_capacity_t, int n) : base(detail::allocate<T>(n)), top(base), cap(base + n) {}
+	template <std::ranges::sized_range R>
+	bounded_stack(std::from_range_t, R&& r) : bounded_stack(with_capacity, int(std::ranges::size(r))) {
+		std::ranges::uninitialized_copy(r, std::span(base, cap));
+		top = cap;
+	}
+
+	[[nodiscard]] bounded_stack clone() const {
+		bounded_stack r(with_capacity, capacity());
+		r.top = std::uninitialized_copy(base, top, r.base);
+		return r;
 	}
 
 	int size() const { return int(top - base); }
-	bool empty() const { return top == base; }
+	int capacity() const { return int(cap - base); }
+	[[nodiscard]] bool empty() const { return top == base; }
+	[[nodiscard]] bool full() const { return top == cap; }
+	T* data() { return base; }
+	const T* data() const { return base; }
 	T* begin() { return base; }
 	T* end() { return top; }
 	const T* begin() const { return base; }
 	const T* end() const { return top; }
-	T& operator[] (int i) { return base[i]; }
-	const T& operator[] (int i) const { return base[i]; }
-	T& front() { return base[0]; }
-	const T& front() const { return base[0]; }
-	T& back() { return top[-1]; }
-	const T& back() const { return top[-1]; }
+	T& operator[] (int i) { detail::check_index(i, size()); return base[i]; }
+	const T& operator[] (int i) const { detail::check_index(i, size()); return base[i]; }
+	T& front() { assert(top > base); return base[0]; }
+	const T& front() const { assert(top > base); return base[0]; }
+	T& back() { assert(top > base); return top[-1]; }
+	const T& back() const { assert(top > base); return top[-1]; }
 
 	template <typename... Args>
 	T& emplace_back(Args&&... args) { assert(top < cap); return *std::construct_at(top++, std::forward<Args>(args)...); }
 	void push_back(const T& v) { emplace_back(v); }
 	void push_back(T&& v) { emplace_back(std::move(v)); }
 	void pop_back() { assert(top > base); std::destroy_at(--top); }
-	void pop_to(T* ntop) { assert(ntop <= top); std::destroy(ntop, top); top = ntop; }
-	// Only support shrinking; bulk delete
-	void shrink_to(int n) { pop_to(base + n); }
-	void clear() { shrink_to(0); }
+	void truncate(T* ntop) { assert(base <= ntop && ntop <= top); std::destroy(ntop, top); top = ntop; }
+	void truncate(int n) { truncate(base + n); }
+	void clear() { truncate(base); }
+	void grow_to(int n) { assert(size() <= n && n <= capacity()); std::uninitialized_value_construct(top, base + n); top = base + n; }
+	void grow_to(int n, const T& v) { assert(size() <= n && n <= capacity()); std::uninitialized_fill(top, base + n, v); top = base + n; }
+	void grow_to(uninit_t, int n) {
+		static_assert(std::is_trivially_default_constructible_v<T>);
+		assert(size() <= n && n <= capacity()); top = base + n;
+	}
+	void assign(int n, const T& v) { clear(); grow_to(n, v); }
+
+	[[nodiscard]] fixed_vector<T> into_full_fixed() && {
+		assert(full());
+		fixed_vector<T> r;
+		r.sz = size();
+		r.base = std::exchange(base, nullptr);
+		top = cap = nullptr;
+		return r;
+	}
+	[[nodiscard]] bounded_vector<T> into_vector() && {
+		bounded_vector<T> r;
+		r.sz = size();
+		r.cap = capacity();
+		r.base = std::exchange(base, nullptr);
+		top = cap = nullptr;
+		return r;
+	}
+
+	friend bool operator == (const bounded_stack& a, const bounded_stack& b) { return std::ranges::equal(a, b); }
+};
+
+template <typename T> bounded_vector<T> fixed_vector<T>::into_bounded() && {
+	bounded_vector<T> r;
+	r.sz = r.cap = std::exchange(sz, 0);
+	r.base = std::exchange(base, nullptr);
+	return r;
+}
+template <typename T> bounded_stack<T> fixed_vector<T>::into_stack() && {
+	bounded_stack<T> r;
+	r.base = std::exchange(base, nullptr);
+	r.top = r.cap = r.base + std::exchange(sz, 0);
+	return r;
+}
+template <typename T> bounded_stack<T> bounded_vector<T>::into_stack() && {
+	bounded_stack<T> r;
+	r.base = std::exchange(base, nullptr);
+	r.top = r.base + std::exchange(sz, 0);
+	r.cap = r.base + std::exchange(cap, 0);
+	return r;
+}
+
+// std::vector equivalent: a bounded_vector that is replaced by a larger one when full.
+template <typename T> struct growable_vector {
+	using value_type = T;
+	using size_type = int;
+	using difference_type = std::ptrdiff_t;
+	using iterator = T*;
+	using const_iterator = const T*;
+
+	bounded_vector<T> buf;
+
+	growable_vector() = default;
+	explicit growable_vector(with_capacity_t, int n) : buf(with_capacity, n) {}
+	explicit growable_vector(int n) : buf(with_capacity, n) { buf.grow_to(n); }
+	explicit growable_vector(int n, const T& v) : buf(with_capacity, n) { buf.grow_to(n, v); }
+	explicit growable_vector(uninit_t, int n) : buf(with_capacity, n) { buf.grow_to(uninit, n); }
+	template <std::ranges::sized_range R>
+	growable_vector(std::from_range_t, R&& r) : buf(std::from_range, std::forward<R>(r)) {}
+	explicit growable_vector(bounded_vector<T>&& b) : buf(std::move(b)) {}
+
+	friend void swap(growable_vector& a, growable_vector& b) noexcept { swap(a.buf, b.buf); }
+	[[nodiscard]] growable_vector clone() const { return growable_vector(buf.clone()); }
+
+	int size() const { return buf.size(); }
+	int capacity() const { return buf.capacity(); }
+	[[nodiscard]] bool empty() const { return buf.empty(); }
+	T* data() { return buf.data(); }
+	const T* data() const { return buf.data(); }
+	T* begin() { return buf.begin(); }
+	T* end() { return buf.end(); }
+	const T* begin() const { return buf.begin(); }
+	const T* end() const { return buf.end(); }
+	T& operator[] (int i) { return buf[i]; }
+	const T& operator[] (int i) const { return buf[i]; }
+	T& front() { return buf.front(); }
+	const T& front() const { return buf.front(); }
+	T& back() { return buf.back(); }
+	const T& back() const { return buf.back(); }
+
+	// Moves the elements into a fresh bounded_vector of capacity n.
+	void reallocate(int n) {
+		assert(n >= buf.size());
+		bounded_vector<T> nbuf(with_capacity, n);
+		nbuf.sz = buf.size();
+		std::uninitialized_move_n(buf.base, buf.size(), nbuf.base);
+		swap(buf, nbuf);
+	}
+	void reserve(int n) { if (n > buf.capacity()) reallocate(n); }
+	void shrink_to_fit() { if (!buf.full()) reallocate(buf.size()); }
+	int grown_capacity() const { return std::max(2 * buf.capacity(), 4); }
+
+	template <typename... Args>
+	T& emplace_back(Args&&... args) {
+		if (!buf.full()) [[likely]] return buf.emplace_back(std::forward<Args>(args)...);
+		// Construct before relocating: args may alias an element
+		bounded_vector<T> nbuf(with_capacity, grown_capacity());
+		T& r = *std::construct_at(nbuf.base + buf.size(), std::forward<Args>(args)...);
+		std::uninitialized_move_n(buf.base, buf.size(), nbuf.base);
+		nbuf.sz = buf.size() + 1;
+		swap(buf, nbuf);
+		return r;
+	}
+	void push_back(const T& v) { emplace_back(v); }
+	void push_back(T&& v) { emplace_back(std::move(v)); }
+	void pop_back() { buf.pop_back(); }
+	void truncate(int n) { buf.truncate(n); }
+	void truncate(T* nend) { buf.truncate(nend); }
+	void clear() { buf.clear(); }
+	void grow_to(int n) { reserve(n); buf.grow_to(n); }
+	void grow_to(int n, const T& v) { reserve(n); buf.grow_to(n, v); }
+	void grow_to(uninit_t, int n) { reserve(n); buf.grow_to(uninit, n); }
+	void assign(int n, const T& v) { clear(); grow_to(n, v); }
+
+	[[nodiscard]] bounded_vector<T> into_bounded() && { return std::move(buf); }
+	[[nodiscard]] fixed_vector<T> into_fixed() && { shrink_to_fit(); return std::move(buf).into_full_fixed(); }
+
+	friend bool operator == (const growable_vector& a, const growable_vector& b) { return a.buf == b.buf; }
 };
 
 struct csr_index {
@@ -184,14 +390,14 @@ template <typename T> struct csr_builder {
 			std::shift_right(idx.bounds.begin(), idx.bounds.end(), 1);
 			idx.bounds[0] = 0;
 		}
-		if (dat.size() != l) dat = fixed_vector<T>::uninit(l);
+		if (dat.size() != l) dat = fixed_vector<T>(uninit, l);
 	}
 	explicit csr_builder(csr_index_builder&& idx_builder, fixed_vector<T>&& dat_buf = {}) : idx{std::move(idx_builder.bounds)}, dat(std::move(dat_buf)) {
 		int l = 0;
 		for (int i = 1; i < int(idx.bounds.size()); i++) {
 			idx.bounds[i] = std::exchange(l, l + idx.bounds[i]);
 		}
-		if (dat.size() != l) dat = fixed_vector<T>::uninit(l);
+		if (dat.size() != l) dat = fixed_vector<T>(uninit, l);
 	}
 	[[nodiscard]] T& push(int k) { return dat[idx.bounds[k+1]++]; }
 	[[nodiscard]] csr<T> finalize() && { return { std::move(idx), std::move(dat) }; }
@@ -408,7 +614,7 @@ struct lowval_storted_skeleton_t {
 			}
 		};
 
-		auto roots = bounded_vector<int>::with_capacity(NV);
+		bounded_vector<int> roots(with_capacity, NV);
 		csr<outedge_t> outedges;
 		{
 			fixed_vector<int> depth(NV, -1);
@@ -438,7 +644,7 @@ struct lowval_storted_skeleton_t {
 				int ch_end;
 			};
 
-			auto stk = bounded_stack<dfs_stack_t>::with_capacity(NV);
+			bounded_stack<dfs_stack_t> stk(with_capacity, NV);
 			auto push_vert = [&] [[gnu::always_inline]] (int cur, int prv_e) -> void {
 				int d = int(stk.size());
 				depth[cur] = d;
@@ -568,7 +774,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 		[[nodiscard]] bool empty() const { return v[0] < 0; }
 	};
-	auto ch_nxt = bounded_vector<int>::with_capacity(1 + NV + NE + NE);
+	bounded_vector<int> ch_nxt(with_capacity, 1 + NV + NE + NE);
 	ch_nxt.grow_to(1 + NV + NE, -1);
 	auto concat = [&] [[gnu::always_inline]] (item_list a, item_list b) -> item_list {
 		if (b.empty()) return a;
@@ -580,10 +786,10 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		return {{item << 1, item << 1}};
 	};
 
-	auto item_vs = bounded_vector<std::array<int, 2>>::with_capacity(1 + NV + 2 * NE);
+	bounded_vector<std::array<int, 2>> item_vs(with_capacity, 1 + NV + 2 * NE);
 	item_vs.grow_to(1 + NV + NE, {-1, -1});
-	auto item_ch = bounded_vector<item_list>::with_capacity(1 + NV + 2 * NE); item_ch.grow_to(1 + NV + NE, item_list{});
-	auto item_types = bounded_vector<node_type>::with_capacity(1 + NV + 2 * NE);
+	bounded_vector<item_list> item_ch(with_capacity, 1 + NV + 2 * NE); item_ch.grow_to(1 + NV + NE, item_list{});
+	bounded_vector<node_type> item_types(with_capacity, 1 + NV + 2 * NE);
 	item_types.grow_to(1, node_type::F);
 	item_types.grow_to(1 + NV, node_type::V);
 	item_types.grow_to(1 + NV + NE, node_type::Q);
@@ -593,7 +799,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 	// vedges are identified with what item they cap, numbered by (item - 1 - NV)
 	fixed_vector<int> quarter_edge_matches(with_planarity ? 8 * NE + 4 : 0, -1);
 	struct nonplanarity_certficate_t {};
-	auto node_planarity = bounded_vector<std::expected<std::array<int, 4>, nonplanarity_certficate_t>>::with_capacity(with_planarity ? NE : 0);
+	bounded_vector<std::expected<std::array<int, 4>, nonplanarity_certficate_t>> node_planarity(with_capacity, with_planarity ? NE : 0);
 
 	int tot_blocks = 0;
 	int tot_self_loops = 0;
@@ -702,7 +908,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			std::array<item_list, 2> spans;
 			[[no_unique_address]] tstack_maybe_planarity_t planarity;
 		};
-		auto tstack = bounded_stack<tstack_t>::with_capacity(NV + NE);
+		bounded_stack<tstack_t> tstack(with_capacity, NV + NE);
 		auto cur_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-1]; };
 		auto nxt_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-2]; };
 
@@ -821,7 +1027,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			int ch_end;
 			int orig_tstack;
 		};
-		auto stk = bounded_stack<dfs_stack_t>::with_capacity(NV);
+		bounded_stack<dfs_stack_t> stk(with_capacity, NV);
 		for (auto rt : roots) {
 			auto push_vert = [&] [[gnu::always_inline]] (int cur) -> void {
 				// stack_dir[cur_depth] must already be set for the lowval, so that we can push the vert tstack
@@ -1307,12 +1513,12 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		fixed_vector<int> ne_rot_adj(with_planarity ? 4 * tot_node_edges : 0, -1);
 
 		fixed_vector<int> vert_pos_buf(NV, -1);
-		auto cnts_buf = bounded_vector<int>::with_capacity(2 * NV);
+		bounded_vector<int> cnts_buf(with_capacity, 2 * NV);
 		struct ch_buf_t {
 			int loc;
 			int item_id;
 		};
-		auto ch_buf = bounded_vector<ch_buf_t>::with_capacity(tot_items);
+		bounded_vector<ch_buf_t> ch_buf(with_capacity, tot_items);
 		fixed_vector<int> rot_edge_ne(with_planarity ? 2 * NE + 1 : 0);
 
 		int nxt_unassigned_idx = 0;
@@ -1324,7 +1530,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			int cur_nv;
 			int cur_ne;
 		};
-		auto stk = bounded_stack<dfs_stack_t>::with_capacity(tot_items);
+		bounded_stack<dfs_stack_t> stk(with_capacity, tot_items);
 		auto push_item = [&] [[gnu::always_inline]] (int cur_item) -> void {
 			int cur_idx = nxt_unassigned_idx++;
 			node_type cur_type = types[cur_idx] = item_types[cur_item];
@@ -1822,7 +2028,7 @@ inline std::optional<planar_embedding> planar_embed(
 		struct tstack_nonplanarity_t {
 			// TODO: What's the nonplanarity certificate look like?
 		};
-		auto pstack = bounded_stack<planarity_side_t>::with_capacity(NE);
+		bounded_stack<planarity_side_t> pstack(with_capacity, NE);
 		auto merge_planarity_side = [&] [[gnu::always_inline]] (planarity_side_t& as, const planarity_side_t& bs) -> void {
 			assert(as.bot_ends[0] != -1);
 			assert(bs.bot_ends[0] != -1);
@@ -1852,7 +2058,7 @@ inline std::optional<planar_embedding> planar_embed(
 			int first_idx;
 			int pstack_sz;
 		};
-		auto tstack = bounded_stack<tstack_t>::with_capacity(NV + NE);
+		bounded_stack<tstack_t> tstack(with_capacity, NV + NE);
 		auto cur_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-1]; };
 		auto nxt_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-2]; };
 
@@ -1879,7 +2085,7 @@ inline std::optional<planar_embedding> planar_embed(
 			int ch_end;
 			int orig_tstack;
 		};
-		auto stk = bounded_stack<dfs_stack_t>::with_capacity(NV);
+		bounded_stack<dfs_stack_t> stk(with_capacity, NV);
 		for (auto rt : roots) {
 			auto push_vert = [&] [[gnu::always_inline]] (int cur) -> void {
 				int cur_depth = int(stk.size());
@@ -2506,7 +2712,7 @@ inline bool can_planar_embed(
 			int first_idx = -1;
 			tstack_planarity_t planarity;
 		};
-		auto tstack = bounded_stack<tstack_t>::with_capacity(NV + NE);
+		bounded_stack<tstack_t> tstack(with_capacity, NV + NE);
 		auto cur_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-1]; };
 		auto nxt_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-2]; };
 
@@ -2527,7 +2733,7 @@ inline bool can_planar_embed(
 			int ch_end;
 			int orig_tstack;
 		};
-		auto stk = bounded_stack<dfs_stack_t>::with_capacity(NV);
+		bounded_stack<dfs_stack_t> stk(with_capacity, NV);
 		for (auto rt : roots) {
 			auto push_vert = [&] [[gnu::always_inline]] (int cur) -> void {
 				int cur_depth = int(stk.size());
@@ -2733,7 +2939,7 @@ inline bool can_planar_embed(
 							assert(int(tstack.size()) == orig_tstack + 3);
 						}
 						tstack[orig_tstack] = tstack[orig_tstack+1];
-						tstack.shrink_to(orig_tstack + 1);
+						tstack.truncate(orig_tstack + 1);
 						assert(cur_tstack().top_depth == lowval);
 					}
 				} else {
