@@ -1,8 +1,130 @@
 #pragma once
 
 #include <array>
+#include <ranges>
+#include <memory>
 
 namespace wala {
+
+struct uninit_t {} uninit;
+struct with_capacity { int n; };
+
+template <typename T> struct vec {
+	T* base = nullptr;
+	int sz = 0;
+	vec() = default;
+	explicit vec(int n) : base(std::allocator<T>().allocate(n)), sz(n) { std::uninitialized_value_construct_n(base, n); }
+	explicit vec(int n, const T& v) : base(std::allocator<T>().allocate(n)), sz(n) { std::uninitialized_fill_n(base, n, v); }
+	explicit vec(int n, uninit_t) : base(std::allocator<T>().allocate(n)), sz(n) { static_assert(std::is_trivially_default_constructible_v<T>); }
+	template <std::ranges::sized_range R>
+	vec(std::from_range_t, R&& r) : base(std::allocator<T>().allocate(std::ranges::size(r))), sz(int(std::ranges::size(r))) {
+		std::ranges::uninitialized_copy(r, std::span(base, sz));
+	}
+	[[nodiscard]] vec<T> clone() const { return vec(std::from_range, *this); }
+	int size() const { return sz; }
+	bool empty() const { return sz == 0; }
+	T* data() { return base; }
+	const T* data() const { return base; }
+	T* begin() { return base; }
+	T* end() { return base + sz; }
+	const T* begin() const { return base; }
+	const T* end() const { return base + sz; }
+	T& operator[] (int i) { return base[i]; }
+	const T& operator[] (int i) const { return base[i]; }
+	T& front() { return base[0]; }
+	const T& front() const { return base[0]; }
+	T& back() { return base[sz-1]; }
+	const T& back() const { return base[sz-1]; }
+
+	friend bool operator == (const vec& a, const vec& b) { return std::ranges::equal(a, b); }
+};
+
+template <typename T> struct bounded_vec {
+	T* base = nullptr;
+	int sz = 0;
+	int cap = 0;
+
+	bounded_vec() = default;
+	~bounded_vec() { std::destroy_n(base, sz); if (base) std::allocator<T>().deallocate(base, cap); }
+
+	friend void swap(bounded_vec& a, bounded_vec& b) noexcept { std::swap(a.base, b.base); std::swap(a.sz, b.sz); std::swap(a.cap, b.cap); }
+	bounded_vec(bounded_vec&& o) noexcept : bounded_vec() { swap(*this, o); }
+	bounded_vec& operator= (bounded_vec&& o) noexcept { swap(*this, o); return *this; }
+
+	bounded_vec(const bounded_vec&) = delete;
+	bounded_vec& operator= (const bounded_vec&) = delete;
+
+	explicit bounded_vec(with_capacity cap) : base(std::allocator<T>().allocate(cap.n)), sz(0), cap(cap.n) {}
+
+	int size() const { return sz; }
+	bool empty() const { return !sz; }
+	T* data() { return base; }
+	const T* data() const { return base; }
+	T* begin() { return base; }
+	T* end() { return base + sz; }
+	const T* begin() const { return base; }
+	const T* end() const { return base + sz; }
+	T& operator[] (int i) { return base[i]; }
+	const T& operator[] (int i) const { return base[i]; }
+	T& front() { return base[0]; }
+	const T& front() const { return base[0]; }
+	T& back() { return base[sz-1]; }
+	const T& back() const { return base[sz-1]; }
+
+	template <typename... Args>
+	T& emplace_back(Args&&... args) { assert(sz < cap); return *std::construct_at(base + sz++, std::forward<Args>(args)...); }
+	void push_back(const T& v) { emplace_back(v); }
+	void push_back(T&& v) { emplace_back(std::move(v)); }
+	void pop_back() { assert(sz > 0); std::destroy_at(base + --sz); }
+	void clear() { std::destroy(base, base + sz); sz = 0; }
+	void shrink_to(int n) { assert(0 <= n && n <= sz); std::destroy(base + n, base + sz); sz = n; }
+	void grow_to(int n, const T& v) { assert(sz <= n && n <= cap); std::uninitialized_fill(base + sz, base + n, v); sz = n; }
+	void grow_to(int n) { assert(sz <= n && n <= cap); std::uninitialized_value_construct(base + sz, base + n); sz = n; }
+	void assign(int n, const T& v) { clear(); grow_to(n, v); }
+};
+
+template <typename T> struct bounded_stack {
+	T* base = nullptr;
+	T* top = nullptr;
+	T* cap = nullptr;
+
+	bounded_stack() = default;
+	~bounded_stack() { std::destroy(base, top); if (base) std::allocator<T>().deallocate(base, cap - base); }
+
+	friend void swap(bounded_stack& a, bounded_stack& b) noexcept { std::swap(a.base, b.base); std::swap(a.top, b.top); std::swap(a.cap, b.cap); }
+	bounded_stack(bounded_stack&& o) noexcept : bounded_stack() { swap(*this, o); }
+	bounded_stack& operator= (bounded_stack&& o) noexcept { swap(*this, o); return *this; }
+
+	bounded_stack(const bounded_stack&) = delete;
+	bounded_stack& operator= (const bounded_stack&) = delete;
+
+	explicit bounded_stack(with_capacity cap) : base(std::allocator<T>().allocate(cap.n)), top(base), cap(base + cap.n) {}
+
+	int size() const { return int(top - base); }
+	bool empty() const { return top == base; }
+	T* data() { return base; }
+	const T* data() const { return base; }
+	T* begin() { return base; }
+	T* end() { return top; }
+	const T* begin() const { return base; }
+	const T* end() const { return top; }
+	T& operator[] (int i) { return base[i]; }
+	const T& operator[] (int i) const { return base[i]; }
+	T& front() { return base[0]; }
+	const T& front() const { return base[0]; }
+	T& back() { return top[-1]; }
+	const T& back() const { return top[-1]; }
+
+	template <typename... Args>
+	T& emplace_back(Args&&... args) { assert(top < cap); return *std::construct_at(top++, std::forward<Args>(args)...); }
+	void push_back(const T& v) { emplace_back(v); }
+	void push_back(T&& v) { emplace_back(std::move(v)); }
+	void pop_back() { assert(top > base); std::destroy_at(--top); }
+	void pop_to(T* ntop) { assert(ntop <= top); std::destroy(ntop, top); top = ntop; }
+	// Only support shrinking; bulk delete
+	void shrink_to(int n) { pop_to(base + n); }
+	void clear() { shrink_to(0); }
+};
 
 template <typename T, int NDIMS> struct tensor_view {
 	static_assert(NDIMS >= 0, "NDIMS must be nonnegative");
@@ -72,48 +194,39 @@ template <typename T, int NDIMS> struct tensor {
 protected:
 	std::array<int, NDIMS> shape;
 	std::array<int, NDIMS> strides;
-	int len;
-	T* data;
+	vec<T> data;
 
 public:
-	tensor() : shape{0}, strides{0}, len(0), data(nullptr) {}
+	tensor() : shape{0}, strides{0}, data() {}
 
 	explicit tensor(std::array<int, NDIMS> shape_, const T& t = T()) {
 		shape = shape_;
-		len = 1;
+		int len = 1;
 		for (int i = NDIMS-1; i >= 0; i--) {
 			strides[i] = len;
 			len *= shape[i];
 		}
-		data = new T[len];
-		std::fill(data, data + len, t);
+		data = vec<T>(len, t);
 	}
 
-	tensor(const tensor& o) : shape(o.shape), strides(o.strides), len(o.len), data(new T[len]) {
-		for (int i = 0; i < len; i++) {
-			data[i] = o.data[i];
-		}
-	}
-
+	tensor(const tensor& o) : shape(o.shape), strides(o.strides), data(o.data.clone()) {}
 	tensor& operator=(tensor&& o) noexcept {
 		using std::swap;
 		swap(shape, o.shape);
 		swap(strides, o.strides);
-		swap(len, o.len);
 		swap(data, o.data);
 		return *this;
 	}
-	tensor(tensor&& o) : tensor() {
+	tensor(tensor&& o) noexcept : tensor() {
 		*this = std::move(o);
 	}
 	tensor& operator=(const tensor& o) {
 		return *this = tensor(o);
 	}
-	~tensor() { delete[] data; }
 
 	using view_t = tensor_view<T, NDIMS>;
 	view_t view() {
-		return tensor_view<T, NDIMS>(shape, strides, data);
+		return tensor_view<T, NDIMS>(shape, strides, data.data());
 	}
 	operator view_t() {
 		return view();
@@ -121,7 +234,7 @@ public:
 
 	using const_view_t = tensor_view<const T, NDIMS>;
 	const_view_t view() const {
-		return tensor_view<const T, NDIMS>(shape, strides, data);
+		return tensor_view<const T, NDIMS>(shape, strides, data.data());
 	}
 	operator const_view_t() const {
 		return view();
