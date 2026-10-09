@@ -9,6 +9,15 @@ namespace wala {
 struct uninit_t {} uninit;
 struct with_capacity { int n; };
 
+namespace detail {
+template <typename C, bool Const> struct contiguous_iterator_impl {
+	C::value_type* ptr = nullptr;
+#ifdef _GLIBCXX_DEBUG
+	C* container = nullptr;
+#endif
+};
+};
+
 template <typename T> struct vec {
 	T* base = nullptr;
 	int sz = 0;
@@ -56,15 +65,18 @@ template <typename T> struct bounded_vec {
 
 	explicit bounded_vec(with_capacity cap) : base(std::allocator<T>().allocate(cap.n)), sz(0), cap(cap.n) {}
 
-	int size() const { return sz; }
-	bool empty() const { return !sz; }
+	[[nodiscard]] int size() const { return sz; }
+	[[nodiscard]] bool empty() const { return !sz; }
+	[[nodiscard]] bool full() const { return sz == cap; }
 	T* data() { return base; }
 	const T* data() const { return base; }
 	T* begin() { return base; }
 	T* end() { return base + sz; }
 	const T* begin() const { return base; }
 	const T* end() const { return base + sz; }
-	T& operator[] (int i) { return base[i]; }
+	T& operator[] (int i) {
+		return base[i];
+	}
 	const T& operator[] (int i) const { return base[i]; }
 	T& front() { return base[0]; }
 	const T& front() const { return base[0]; }
