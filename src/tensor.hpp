@@ -6,19 +6,63 @@
 
 namespace wala {
 
+#ifdef _GLIBCXX_DEBUG
+inline constexpr bool WALA_DEBUG = true;
+#else
+inline constexpr bool WALA_DEBUG = false;
+#endif
+
+inline void debug_assert(bool b) {
+	if (!b) [[unlikely]] {
+		if constexpr (WALA_DEBUG) {
+			std::abort();
+		} else {
+			__builtin_unreachable();
+		}
+	}
+}
+
 struct uninit_t {} uninit;
 struct with_capacity { int n; };
 
 namespace detail {
+
 template <typename C, bool Const> struct contiguous_iterator_impl {
-	C::value_type* ptr = nullptr;
-#ifdef _GLIBCXX_DEBUG
-	C* container = nullptr;
-#endif
+	using Self = contiguous_iterator_impl;
+
+	using T = std::conditional_t<Const, const typename C::value_type, typename C::value_type>;
+	using iterator_concept = std::contiguous_iterator_tag;
+	using value_type = std::remove_const_t<T>;
+	using difference_type = std::ptrdiff_t;
+
+	T* p = nullptr;
+	[[no_unique_address]] std::conditional_t<WALA_DEBUG, const C*, std::monostate> c{};
+	contiguous_iterator_impl() = default;
+	contiguous_iterator_impl(T* p_, [[maybe_unused]] const C* c_) : p(p_) { if constexpr (WALA_DEBUG) c = c_; }
+	contiguous_iterator_impl(const contiguous_iterator_impl<C, false>& o) requires Const : p(o.p), c(o.c) {}
+	T& operator*() const { if constexpr (WALA_DEBUG) { c->check_iter(p); } return *p; }
+	T* operator->() const { if constexpr (WALA_DEBUG) { c->check_iter(p); } return p; }
+	T& operator[](difference_type n) const { return *(*this + n); }
+	Self& operator++() { ++p; return *this; }
+	Self operator++(int) { Self o = *this; operator++(); return o; }
+	Self& operator+=(difference_type n) { p += n; return *this; }
+	friend Self operator+(Self it, difference_type n) { return it += n; }
+	friend Self operator+(difference_type n, Self it) { return it += n; }
+	Self& operator-=(difference_type n) { p += n; return *this; }
+	friend Self operator-(Self it, difference_type n) { return it -= n; }
+	friend difference_type operator-(Self a, Self b) { return difference_type(a.p - b.p); }
+	friend auto operator<=>(Self, Self) = default; // TODO: Assert that c is equal?
 };
-};
+}
 
 template <typename T> struct vec {
+	static_assert(!std::is_const_v<T>);
+	using value_type = T;
+	using size_type = int;
+	using difference_type = std::ptrdiff_t;
+	using iterator = detail::contiguous_iterator_impl<vec, false>;
+	using const_iterator = detail::contiguous_iterator_impl<vec, true>;
+
 	T* base = nullptr;
 	int sz = 0;
 	vec() = default;
@@ -34,16 +78,25 @@ template <typename T> struct vec {
 	bool empty() const { return sz == 0; }
 	T* data() { return base; }
 	const T* data() const { return base; }
-	T* begin() { return base; }
-	T* end() { return base + sz; }
-	const T* begin() const { return base; }
-	const T* end() const { return base + sz; }
-	T& operator[] (int i) { return base[i]; }
-	const T& operator[] (int i) const { return base[i]; }
-	T& front() { return base[0]; }
-	const T& front() const { return base[0]; }
-	T& back() { return base[sz-1]; }
-	const T& back() const { return base[sz-1]; }
+	iterator begin() { return {base, this}; }
+	iterator end() { return {base + sz, this}; }
+	const_iterator begin() const { return {base, this}; }
+	const_iterator end() const { return {base + sz, this}; }
+	void check_index(int i) const {
+		debug_assert(0 <= i);
+		debug_assert(i < sz);
+	}
+	void check_iter(const T* p) const {
+		debug_assert(base <= p);
+		debug_assert(p < base + sz);
+	}
+	void check_nonempty() const { debug_assert(!empty()); }
+	T& operator[] (int i) { check_index(base + i); return base[i]; }
+	const T& operator[] (int i) const { check_index(base + i); return base[i]; }
+	T& front() { check_nonempty(); return base[0]; }
+	const T& front() const { check_nonempty(); return base[0]; }
+	T& back() { check_nonempty(); return base[sz-1]; }
+	const T& back() const { check_nonempty(); return base[sz-1]; }
 
 	friend bool operator == (const vec& a, const vec& b) { return std::ranges::equal(a, b); }
 };
@@ -63,7 +116,7 @@ template <typename T> struct bounded_vec {
 	bounded_vec(const bounded_vec&) = delete;
 	bounded_vec& operator= (const bounded_vec&) = delete;
 
-	explicit bounded_vec(with_capacity cap) : base(std::allocator<T>().allocate(cap.n)), sz(0), cap(cap.n) {}
+	explicit bounded_vec(with_capacity c) : base(std::allocator<T>().allocate(c.n)), sz(0), cap(c.n) {}
 
 	[[nodiscard]] int size() const { return sz; }
 	[[nodiscard]] bool empty() const { return !sz; }
@@ -110,7 +163,7 @@ template <typename T> struct bounded_stack {
 	bounded_stack(const bounded_stack&) = delete;
 	bounded_stack& operator= (const bounded_stack&) = delete;
 
-	explicit bounded_stack(with_capacity cap) : base(std::allocator<T>().allocate(cap.n)), top(base), cap(base + cap.n) {}
+	explicit bounded_stack(with_capacity c) : base(std::allocator<T>().allocate(c.n)), top(base), cap(base + c.n) {}
 
 	int size() const { return int(top - base); }
 	bool empty() const { return top == base; }
