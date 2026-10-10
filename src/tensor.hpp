@@ -31,6 +31,7 @@ template <typename C, bool Const> struct contiguous_iterator_impl {
 	using Self = contiguous_iterator_impl;
 
 	using T = std::conditional_t<Const, const typename C::value_type, typename C::value_type>;
+	using iterator_category = std::contiguous_iterator_tag;
 	using iterator_concept = std::contiguous_iterator_tag;
 	using value_type = std::remove_const_t<T>;
 	using difference_type = std::ptrdiff_t;
@@ -39,16 +40,19 @@ template <typename C, bool Const> struct contiguous_iterator_impl {
 	[[no_unique_address]] std::conditional_t<WALA_DEBUG, const C*, std::monostate> c{};
 	contiguous_iterator_impl() = default;
 	contiguous_iterator_impl(T* p_, [[maybe_unused]] const C* c_) : p(p_) { if constexpr (WALA_DEBUG) c = c_; }
+	contiguous_iterator_impl(const contiguous_iterator_impl& o) = default;
 	contiguous_iterator_impl(const contiguous_iterator_impl<C, false>& o) requires Const : p(o.p), c(o.c) {}
 	T& operator*() const { if constexpr (WALA_DEBUG) { c->check_iter(p); } return *p; }
 	T* operator->() const { if constexpr (WALA_DEBUG) { c->check_iter(p); } return p; }
 	T& operator[](difference_type n) const { return *(*this + n); }
 	Self& operator++() { ++p; return *this; }
 	Self operator++(int) { Self o = *this; operator++(); return o; }
+	Self& operator--() { --p; return *this; }
+	Self operator--(int) { Self o = *this; operator--(); return o; }
 	Self& operator+=(difference_type n) { p += n; return *this; }
 	friend Self operator+(Self it, difference_type n) { return it += n; }
 	friend Self operator+(difference_type n, Self it) { return it += n; }
-	Self& operator-=(difference_type n) { p += n; return *this; }
+	Self& operator-=(difference_type n) { p -= n; return *this; }
 	friend Self operator-(Self it, difference_type n) { return it -= n; }
 	friend difference_type operator-(Self a, Self b) { return difference_type(a.p - b.p); }
 	friend auto operator<=>(Self, Self) = default; // TODO: Assert that c is equal?
@@ -65,7 +69,14 @@ template <typename T> struct vec {
 
 	T* base = nullptr;
 	int sz = 0;
+
 	vec() = default;
+	~vec() { std::destroy_n(base, sz); if (base) std::allocator<T>().deallocate(base, sz); }
+
+	friend void swap(vec& a, vec& b) noexcept { std::swap(a.base, b.base); std::swap(a.sz, b.sz); }
+	vec(vec&& o) noexcept : vec() { swap(*this, o); }
+	vec& operator= (vec&& o) noexcept { swap(*this, o); return *this; }
+
 	explicit vec(int n) : base(std::allocator<T>().allocate(n)), sz(n) { std::uninitialized_value_construct_n(base, n); }
 	explicit vec(int n, const T& v) : base(std::allocator<T>().allocate(n)), sz(n) { std::uninitialized_fill_n(base, n, v); }
 	explicit vec(int n, uninit_t) : base(std::allocator<T>().allocate(n)), sz(n) { static_assert(std::is_trivially_default_constructible_v<T>); }
@@ -91,8 +102,8 @@ template <typename T> struct vec {
 		debug_assert(p < base + sz);
 	}
 	void check_nonempty() const { debug_assert(!empty()); }
-	T& operator[] (int i) { check_index(base + i); return base[i]; }
-	const T& operator[] (int i) const { check_index(base + i); return base[i]; }
+	T& operator[] (int i) { check_index(i); return base[i]; }
+	const T& operator[] (int i) const { check_index(i); return base[i]; }
 	T& front() { check_nonempty(); return base[0]; }
 	const T& front() const { check_nonempty(); return base[0]; }
 	T& back() { check_nonempty(); return base[sz-1]; }
