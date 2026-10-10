@@ -2062,6 +2062,17 @@ inline std::optional<planar_embedding> planar_embed(
 					flip_final_r();
 				};
 
+				auto get_r_r_inner = [&] [[gnu::always_inline]] () -> std::array<int, 2> {
+					assert(cur_tstack().pstack_sz == 2);
+					assert(nxt_tstack().pstack_sz == 2);
+					return {pstack.end()[-4].tops[1].depth, pstack.end()[-3].tops[1].depth};
+				};
+				auto get_r_r_outer_1 = [&] [[gnu::always_inline]] () -> int {
+					assert(cur_tstack().pstack_sz == 2);
+					assert(nxt_tstack().pstack_sz == 2);
+					return pstack.end()[-3].tops[0].depth;
+				};
+
 				auto merge_p_r_side_0 = [&] [[gnu::always_inline]] () -> void {
 					assert(cur_tstack().pstack_sz == 2);
 					assert(nxt_tstack().pstack_sz == 1);
@@ -2081,6 +2092,12 @@ inline std::optional<planar_embedding> planar_embed(
 					pstack.pop_back();
 					nxt_tstack().pstack_sz = 2;
 					tstack.pop_back();
+				};
+
+				auto get_p_r_inner = [&] [[gnu::always_inline]] () -> int {
+					assert(cur_tstack().pstack_sz == 2);
+					assert(nxt_tstack().pstack_sz == 1);
+					return pstack.end()[-3].tops[1].depth;
 				};
 
 				auto merge_p_p = [&] [[gnu::always_inline]] () -> void {
@@ -2174,11 +2191,10 @@ inline std::optional<planar_embedding> planar_embed(
 									// Chunk entry
 									// TODO: If we have separate atoms, handle this correctly
 									assert(nxt_tstack().pstack_sz == 2);
+									auto [t0, t1] = get_r_r_inner();
 									// -4 is side 0, -3 is side 1
 									if (tstack.end() == source + 2) {
 										// TODO: separate atom handling
-										int t0 = pstack.end()[-4].tops[1].depth;
-										int t1 = pstack.end()[-3].tops[1].depth;
 										assert(t0 == cur_depth || t1 == cur_depth);
 										assert(t0 != -1);
 										if (std::min(t0, t1) > last_top) {
@@ -2197,11 +2213,11 @@ inline std::optional<planar_embedding> planar_embed(
 										}
 										break;
 									}
+									int t1_outer = get_r_r_outer_1();
 									if (nxt_tstack().top_depth == cur_depth) {
 										assert(last_top < cur_depth);
 										// Never have any atoms here
-										assert(nxt_tstack().pstack_sz == 2);
-										if (pstack.end()[-3].tops[0].end != -1) {
+										if (t1_outer != -1) {
 											// Double-sided to cur_depth, conflicts with cur_tstack()
 											return tstack_nonplanarity_t{};
 										}
@@ -2210,11 +2226,11 @@ inline std::optional<planar_embedding> planar_embed(
 										merge_flip_r_r();
 									} else {
 										// TODO: With atoms, we should check pstack_idx+1
-										if (pstack.end()[-3].tops[0].end != -1 && pstack.end()[-3].tops[0].depth != cur_depth) {
+										if (t1_outer != -1 && t1_outer != cur_depth) {
 											// Non-empty on both sides, conflicts with source
 											return tstack_nonplanarity_t{};
 										}
-										if (pstack.end()[-4].tops[1].depth > last_top) {
+										if (t0 > last_top) {
 											// 3 nonlaminar edges with nxt_tstack(), cur_tstack(), source
 											return tstack_nonplanarity_t{};
 										}
@@ -2239,7 +2255,7 @@ inline std::optional<planar_embedding> planar_embed(
 									}
 									cur_tstack().top_depth = last_top;
 								} else {
-									if (pstack.end()[-3].tops[1].depth > last_top) {
+									if (get_p_r_inner() > last_top) {
 										// 3 nonlaminar edges with nxt_tstack(), cur_tstack(), source
 										return tstack_nonplanarity_t{};
 									}
@@ -2316,20 +2332,34 @@ inline std::optional<planar_embedding> planar_embed(
 										assert(t->pstack_sz == 2);
 										auto& s0 = pstack.end()[-2 * (t == tstack.end() - 2) - 2];
 										auto& s1 = pstack.end()[-2 * (t == tstack.end() - 2) - 1];
+										// TODO: Make this correct? auto [t0, t1] = get_r_r_inner();
+										int t0 = s0.tops[1].depth;
+										int t1 = s1.tops[1].depth;
+										if (t == orig_tstack_end + 2) assert(t0 > lowval || (t1 != -1 && t1 > lowval));
+										int next_top = t->top_depth;
+										assert(t0 != -1);
 										if (t->top_depth == lowval) {
-											if (t > orig_tstack_end + 2 || s0.tops[1].depth == lowval) {
+											if (t > orig_tstack_end + 2 || t0 == lowval) {
+												// TODO: Make this correct next_top = get_r_r_outer_1();
+												next_top = s1.tops[0].depth;
 												flip_tstack_planarity(t);
 												std::swap(s0, s1);
+												std::swap(t0, t1);
 											}
+											if (t1 != -1 && t1 != lowval) {
+												return tstack_nonplanarity_t{};
+											}
+										} else {
+											if (t1 != -1) {
+												assert(t1 > lowval);
+												return tstack_nonplanarity_t{};
+											}
+											assert(t0 != -1);
 										}
-										int next_top = s0.tops[1].depth;
-										if (t == orig_tstack_end + 2) assert(next_top != -1 && next_top > lowval);
-										if (s1.tops[1].end != -1 && s1.tops[1].depth != lowval) {
-											return tstack_nonplanarity_t{};
-										}
-										if (next_top != -1) {
-											if (next_top > last_top) return tstack_nonplanarity_t{};
-											last_top = s0.tops[0].depth;
+
+										if (t0 != -1) {
+											if (t0 > last_top) return tstack_nonplanarity_t{};
+											last_top = next_top;
 										}
 
 										if (t != tstack.end() - 1) {
@@ -2341,18 +2371,18 @@ inline std::optional<planar_embedding> planar_embed(
 									assert(t == tstack.end() - 2);
 									// single atom
 									assert(t->pstack_sz == 1);
+									int d = get_p_r_inner();
+									assert(d != -1);
 									if (t > orig_tstack_end + 2 && t->top_depth == lowval) {
-										if (pstack.end()[-3].tops[1].depth > lowval) {
+										if (d > lowval) {
 											return tstack_nonplanarity_t{};
 										}
+
 										// Merge into side 1
 										merge_p_r_side_1();
 									} else {
-										int next_top = pstack.end()[-3].tops[1].depth;
-										assert(next_top != -1);
 										// Either i == orig_tstack + 2, or we flipped already
-										assert(next_top > lowval);
-										if (next_top > last_top) return tstack_nonplanarity_t{};
+										if (d > last_top) return tstack_nonplanarity_t{};
 
 										// Just merge into side 0
 										last_top = t->top_depth;
