@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <numeric>
 #include <tuple>
+#include <string>
+#include <ranges>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -561,4 +563,85 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 			}
 		}
 	}
+}
+
+TEST_CASE("Containers", "[spqr_tree][containers]") {
+	using wala::fixed_vector;
+	using wala::bounded_vector;
+	using wala::bounded_stack;
+	using wala::growable_vector;
+	using wala::with_capacity;
+	using wala::uninit;
+
+	fixed_vector<int> a(3);
+	REQUIRE(a == fixed_vector<int>(3, 0));
+	fixed_vector<int> b(uninit, 4);
+	std::ranges::iota(b, 1);
+	REQUIRE(b == fixed_vector<int>(std::from_range, std::vector{1, 2, 3, 4}));
+	REQUIRE(b.clone() == b);
+	REQUIRE(b.clone().data() != b.data());
+	REQUIRE(std::ranges::equal(std::views::iota(1, 5) | std::ranges::to<fixed_vector<int>>(), b));
+
+	fixed_vector<std::string> s(2, "ab");
+	REQUIRE(s.front() == "ab");
+	REQUIRE(fixed_vector<std::string>(1).front().empty());
+
+	bounded_vector<int> v(with_capacity, 5);
+	REQUIRE(v.empty());
+	REQUIRE(v.capacity() == 5);
+	v.push_back(1); v.emplace_back(2);
+	v.grow_to(4, 7);
+	REQUIRE(v == bounded_vector<int>(std::from_range, std::vector{1, 2, 7, 7}));
+	v.grow_to(uninit, 5);
+	REQUIRE(v.full());
+	v.truncate(3);
+	REQUIRE(v.size() == 3);
+	v.truncate(v.end() - 1);
+	REQUIRE(v.back() == 2);
+	auto vc = v.clone();
+	REQUIRE(vc == v);
+	REQUIRE(vc.capacity() == 5);
+	v.assign(5, 9);
+	auto f = std::move(v).into_full_fixed();
+	REQUIRE(v.empty());
+	REQUIRE(f == fixed_vector<int>(5, 9));
+	auto st = std::move(f).into_stack();
+	REQUIRE(f.empty());
+	REQUIRE(st.full());
+	st.pop_back();
+	REQUIRE(st.size() == 4);
+	st.truncate(st.begin() + 1);
+	st.grow_to(2);
+	REQUIRE(st == bounded_stack<int>(std::from_range, std::vector{9, 0}));
+	auto v2 = std::move(st).into_vector();
+	REQUIRE(v2.capacity() == 5);
+	REQUIRE(v2.size() == 2);
+	REQUIRE(st.empty());
+	REQUIRE(std::move(v2.clone()).into_stack() == bounded_stack<int>(std::from_range, std::vector{9, 0}));
+
+	bounded_vector<std::string> bs(with_capacity, 2);
+	bs.emplace_back(3, 'x');
+	bs.push_back("y");
+	REQUIRE(std::move(bs).into_full_fixed() == fixed_vector<std::string>(std::from_range, std::vector<std::string>{"xxx", "y"}));
+
+	growable_vector<int> g;
+	for (int i = 0; i < 100; i++) g.push_back(i);
+	REQUIRE(g.size() == 100);
+	g.push_back(g[0]);
+	g.emplace_back(g.back());
+	REQUIRE(g.capacity() >= 102);
+	REQUIRE(g.back() == 0);
+	REQUIRE(std::ranges::equal(g | std::views::take(100), std::views::iota(0, 100)));
+	growable_vector<std::string> gs(2, "a");
+	gs.push_back(gs[0]);
+	for (int i = 0; i < 10; i++) gs.push_back(gs.back() + "b");
+	REQUIRE(gs.back().size() == 11);
+	gs.truncate(3);
+	gs.shrink_to_fit();
+	REQUIRE(gs.capacity() == 3);
+	REQUIRE(std::move(gs).into_fixed() == fixed_vector<std::string>(3, "a"));
+	growable_vector<int> g2(uninit, 3);
+	g2.grow_to(10, 1);
+	REQUIRE(g2.size() == 10);
+	REQUIRE(g2.clone() == g2);
 }
