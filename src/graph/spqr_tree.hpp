@@ -2048,6 +2048,19 @@ inline std::optional<planar_embedding> planar_embed(
 					pstack.pop_back();
 					tstack.pop_back();
 				};
+				auto merge_flip_r_r = [&] [[gnu::always_inline]] () -> void {
+					flip_tstack_planarity(tstack.end() - 2);
+					std::swap(pstack.end()[-4], pstack.end()[-3]);
+					merge_r_r();
+				};
+				auto flip_final_r = [&] [[gnu::always_inline]] () -> void {
+					flip_tstack_planarity(tstack.end() - 1);
+					std::swap(pstack.end()[-2], pstack.end()[-1]);
+				};
+				auto merge_r_r_flip = [&] [[gnu::always_inline]] () -> void {
+					merge_flip_r_r();
+					flip_final_r();
+				};
 
 				auto merge_p_r_side_0 = [&] [[gnu::always_inline]] () -> void {
 					assert(cur_tstack().pstack_sz == 2);
@@ -2173,13 +2186,11 @@ inline std::optional<planar_embedding> planar_embed(
 											return tstack_nonplanarity_t{};
 										}
 										if (t1 != cur_depth) {
-											flip_tstack_planarity(tstack.end() - 1);
-											std::swap(pstack.end()[-2], pstack.end()[-1]);
-											merge_r_r();
-											if (last_top < cur_tstack().top_depth) {
-												std::swap(pstack.end()[-2], pstack.end()[-1]);
-												flip_tstack_planarity(tstack.end() - 1);
-												cur_tstack().top_depth = last_top;
+											if (last_top < nxt_tstack().top_depth) {
+												nxt_tstack().top_depth = last_top;
+												merge_flip_r_r();
+											} else {
+												merge_r_r_flip();
 											}
 										} else {
 											merge_r_r();
@@ -2195,9 +2206,8 @@ inline std::optional<planar_embedding> planar_embed(
 											return tstack_nonplanarity_t{};
 										}
 										// Flip: we will put cur_depth on side 1 until the bottom
-										std::swap(pstack.end()[-4], pstack.end()[-3]);
-										flip_tstack_planarity(tstack.end() - 2);
 										nxt_tstack().top_depth = last_top;
+										merge_flip_r_r();
 									} else {
 										// TODO: With atoms, we should check pstack_idx+1
 										if (pstack.end()[-3].tops[0].end != -1 && pstack.end()[-3].tops[0].depth != cur_depth) {
@@ -2209,8 +2219,8 @@ inline std::optional<planar_embedding> planar_embed(
 											return tstack_nonplanarity_t{};
 										}
 										last_top = nxt_tstack().top_depth;
+										merge_r_r();
 									}
-									merge_r_r();
 								}
 							} else {
 								// Single atom
@@ -2221,8 +2231,7 @@ inline std::optional<planar_embedding> planar_embed(
 									if (tstack.end() == source + 1) {
 										if (cur_tstack().top_depth <= last_top) {
 											// Flip it back
-											std::swap(pstack.end()[-2], pstack.end()[-1]);
-											flip_tstack_planarity(tstack.end() - 1);
+											flip_final_r();
 										} else {
 											cur_tstack().top_depth = last_top;
 										}
