@@ -1947,20 +1947,6 @@ inline std::optional<planar_embedding> planar_embed(
 					tstack.pop_back();
 				};
 
-				auto merge_v_r = [&] [[gnu::always_inline]] () -> void {
-					assert(cur_tstack().pstack_sz == 2);
-					assert(nxt_tstack().pstack_sz <= 1);
-					if (nxt_tstack().pstack_sz) {
-						// TODO: Can inline further
-						merge_planarity_side(pstack.end()[-3], pstack.end()[-2]);
-						pstack.end()[-2] = pstack.end()[-1];
-						pstack.pop_back();
-					}
-					nxt_tstack().top_depth = cur_tstack().top_depth;
-					nxt_tstack().pstack_sz = 2;
-					tstack.pop_back();
-				};
-
 				auto merge_s_s = [&] [[gnu::always_inline]] () -> void {
 					assert(cur_tstack().pstack_sz == 1);
 					assert(nxt_tstack().pstack_sz == 1);
@@ -2000,6 +1986,36 @@ inline std::optional<planar_embedding> planar_embed(
 					// TODO: Can inline further
 					merge_planarity_side(pstack.end()[-2], pstack.end()[-1]);
 					pstack.pop_back();
+					tstack.pop_back();
+				};
+
+				auto expand_s_to_r = [&] [[gnu::always_inline]] (bool collapse_top) -> void {
+					assert(cur_tstack().pstack_sz == 1);
+					pstack.push_back({});
+					auto& s0 = pstack.end()[-2];
+					auto& s1 = pstack.end()[-1];
+					s1.bot_ends[0] = s0.bot_ends[1];
+					if (collapse_top) {
+						s0.bot_ends[1] = s0.tops[0].end;
+						s1.bot_ends[1] = s0.tops[1].end;
+						s0.tops = {};
+					} else {
+						s0.bot_ends[1] = -1;
+					}
+					cur_tstack().pstack_sz = 2;
+				};
+
+				auto merge_v_r = [&] [[gnu::always_inline]] () -> void {
+					assert(cur_tstack().pstack_sz == 2);
+					assert(nxt_tstack().pstack_sz <= 1);
+					if (nxt_tstack().pstack_sz) {
+						// TODO: Can inline further
+						merge_planarity_side(pstack.end()[-3], pstack.end()[-2]);
+						pstack.end()[-2] = pstack.end()[-1];
+						pstack.pop_back();
+					}
+					nxt_tstack().top_depth = cur_tstack().top_depth;
+					nxt_tstack().pstack_sz = 2;
 					tstack.pop_back();
 				};
 
@@ -2044,12 +2060,22 @@ inline std::optional<planar_embedding> planar_embed(
 				};
 
 				auto merge_p_r_side_1 = [&] [[gnu::always_inline]] () -> void {
+					flip_tstack_planarity(tstack.end() - 2);
 					assert(cur_tstack().pstack_sz == 2);
 					assert(nxt_tstack().pstack_sz == 1);
 					merge_planarity_side(pstack.end()[-3], pstack.end()[-1]);
 					std::swap(pstack.end()[-3], pstack.end()[-2]);
 					pstack.pop_back();
 					nxt_tstack().pstack_sz = 2;
+					tstack.pop_back();
+				};
+
+				auto merge_p_p = [&] [[gnu::always_inline]] () -> void {
+					assert(cur_tstack().pstack_sz == 1);
+					assert(nxt_tstack().pstack_sz == 1);
+					// TODO: Can inline further
+					merge_planarity_side(pstack.end()[-2], pstack.end()[-1]);
+					pstack.pop_back();
 					tstack.pop_back();
 				};
 
@@ -2116,9 +2142,7 @@ inline std::optional<planar_embedding> planar_embed(
 
 						// We won't care about bot_ends[1] here at all
 						// TODO: This shouldn't live on the pstack
-						pstack.push_back({});
-						pstack.end()[-1].bot_ends[0] = std::exchange(pstack.end()[-2].bot_ends[1], -1);
-						cur_tstack().pstack_sz = 2;
+						expand_s_to_r(false);
 
 						// last_top == cur_tstack().top_depth
 						int last_top = cur_depth;
@@ -2193,7 +2217,6 @@ inline std::optional<planar_embedding> planar_embed(
 								assert(nxt_tstack().pstack_sz == 1);
 								if (nxt_tstack().top_depth == cur_depth || tstack.end() == source + 2) {
 									// We will put cur_depth on side 1 until the bottom
-									flip_tstack_planarity(tstack.end() - 2);
 									merge_p_r_side_1();
 									if (tstack.end() == source + 1) {
 										if (cur_tstack().top_depth <= last_top) {
@@ -2257,15 +2280,7 @@ inline std::optional<planar_embedding> planar_embed(
 
 						if (cur_tstack().top_depth == cur_depth) {
 							// We're currently a backedge, expand to a 2-sided chunk
-							assert(cur_tstack().pstack_sz == 1);
-							pstack.push_back({});
-							auto& s0 = pstack.end()[-2];
-							auto& s1 = pstack.end()[-1];
-							s1.bot_ends[0] = s0.bot_ends[1];
-							s0.bot_ends[1] = s0.tops[0].end;
-							s1.bot_ends[1] = s0.tops[1].end;
-							s0.tops = {};
-							cur_tstack().pstack_sz = 2;
+							expand_s_to_r(true);
 						}
 
 						if (!is_type_1) {
@@ -2322,7 +2337,6 @@ inline std::optional<planar_embedding> planar_embed(
 											return tstack_nonplanarity_t{};
 										}
 										// Merge into side 1
-										flip_tstack_planarity(t);
 										merge_p_r_side_1();
 									} else {
 										int next_top = pstack.end()[-3].tops[1].depth;
@@ -2378,7 +2392,7 @@ inline std::optional<planar_embedding> planar_embed(
 
 				if (is_type_1 && nxt_tstack().top_depth == lowval) {
 					assert(s.has_vert_tstack);
-					merge_p_s();
+					merge_p_p();
 				}
 
 				if (!s.has_vert_tstack) {
