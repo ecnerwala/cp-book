@@ -546,4 +546,65 @@ template <typename T> struct bounded_stack : detail::insert_ops {
 	}
 };
 
+template <typename T> struct growable_vec : private bounded_vec<T> {
+	using base = bounded_vec<T>;
+	using typename base::value_type, typename base::size_type, typename base::difference_type, typename base::iterator, typename base::const_iterator;
+	// Inherit constructors
+	using base::bounded_vec;
+	using base::empty, base::size, base::capacity, base::data, base::begin, base::end, base::operator[], base::front, base::back;
+	// Needed for insert_ops and other consumers
+	using base::assert_valid_deref, base::assert_valid_index, base::assert_valid_insert, base::assert_nonempty;
+	using base::pop_back, base::shrink_by, base::shrink_to, base::clear;
+	// From insert_ops
+	using base::push_back, base::emplace, base::insert, base::insert_n, base::insert_range, base::erase, base::erase_n, base::emplace_front, base::push_front, base::pop_front;
+
+	friend void swap(growable_vec& a, growable_vec& b) noexcept { swap(static_cast<base&>(a), static_cast<base&>(b)); }
+
+	// Update capacity when running growing ops
+	void set_capacity(size_type n) {
+		debug_assert(n >= size(), "reserving less capacity {} than size {}", n, size());
+		base::operator=(base(with_capacity{n}, std::from_range, *this | std::views::as_rvalue));
+	}
+	void reserve_for(int n) {
+		int c = capacity();
+		if (n > c) {
+			set_capacity(std::max(2 * c, n));
+		}
+	}
+	void shrink_to_fit() { set_capacity(size()); }
+
+	template <typename... Args> requires std::constructible_from<T, Args&&...>
+	T& emplace_back(Args&&... args) {
+		reserve_for(size() + 1);
+		return base::emplace_back(std::forward<Args>(args)...);
+	}
+	template <std::ranges::input_range R>
+	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
+	std::ranges::subrange<iterator> append_range(R&& r) {
+		if constexpr (std::ranges::sized_range<R>) {
+			reserve_for(size() + size_type(std::ranges::size(r)));
+			return base::append_range(std::forward<R>(r));
+		} else {
+			size_type old_sz = size();
+			for (auto&& x : r) emplace_back(std::forward<decltype(x)>(x));
+			return {begin() + old_sz, end()};
+		}
+	}
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	std::ranges::subrange<iterator> grow_by(size_type n, const A&... a) {
+		reserve_for(size() + n);
+		return base::grow_by(n, a...);
+	}
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	std::ranges::subrange<iterator> grow_to(size_type n, const A&... a) {
+		reserve_for(n);
+		return base::grow_to(n, a...);
+	}
+
+	friend bool operator == (const growable_vec& a, const growable_vec& b) { return std::ranges::equal(a, b); }
+	friend auto operator <=> (const growable_vec& a, const growable_vec& b) {
+		return std::lexicographical_compare_three_way(a.begin(), a.end(), b.begin(), b.end());
+	}
+};
+
 } // namespace wala
