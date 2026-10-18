@@ -26,6 +26,12 @@ template <class C> concept contiguous_container =
 static_assert(contiguous_container<wala::vec<bool>>);
 static_assert(contiguous_container<wala::vec<int>>);
 static_assert(contiguous_container<wala::vec<std::string>>);
+static_assert(contiguous_container<wala::bounded_vec<bool>>);
+static_assert(contiguous_container<wala::bounded_vec<int>>);
+static_assert(contiguous_container<wala::bounded_vec<std::string>>);
+static_assert(contiguous_container<wala::bounded_stack<bool>>);
+static_assert(contiguous_container<wala::bounded_stack<int>>);
+static_assert(contiguous_container<wala::bounded_stack<std::string>>);
 
 TEST_CASE("vec", "[wala::vec]") {
 	// TODO
