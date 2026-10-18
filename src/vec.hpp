@@ -129,9 +129,9 @@ public:
 		std::ranges::uninitialized_copy(r, std::span(base, sz));
 	}
 
-	vec(std::initializer_list<T> list) : vec(std::from_range, list) {}
+	vec(std::initializer_list<T> list) requires std::copy_constructible<T> : vec(std::from_range, list) {}
 
-	[[nodiscard]] vec clone() const { return vec(std::from_range, *this); }
+	[[nodiscard]] vec clone() const requires std::copy_constructible<T> { return vec(std::from_range, *this); }
 
 	[[nodiscard]] bool empty() const { return !sz; }
 	[[nodiscard]] size_type size() const { return sz; }
@@ -201,10 +201,10 @@ template <typename T> struct bounded_vec {
 	template <std::ranges::sized_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
 	explicit bounded_vec(std::from_range_t f, R&& r) : bounded_vec(f, r, with_capacity{size_type(std::ranges::size(r))}) {}
-	bounded_vec(std::initializer_list<T> list) : bounded_vec(std::from_range, list) {}
-	bounded_vec(std::initializer_list<T> list, with_capacity c) : bounded_vec(std::from_range, list, c) {}
+	bounded_vec(std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_vec(std::from_range, list) {}
+	bounded_vec(std::initializer_list<T> list, with_capacity c) requires std::copy_constructible<T> : bounded_vec(std::from_range, list, c) {}
 
-	[[nodiscard]] bounded_vec clone() const { return bounded_vec(std::from_range, *this, with_capacity{cap}); }
+	[[nodiscard]] bounded_vec clone() const requires std::copy_constructible<T> { return bounded_vec(std::from_range, *this, with_capacity{cap}); }
 
 	[[nodiscard]] bool empty() const { return !sz; }
 	[[nodiscard]] size_type size() const { return sz; }
@@ -290,10 +290,10 @@ template <typename T> struct bounded_stack {
 	template <std::ranges::sized_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
 	explicit bounded_stack(std::from_range_t f, R&& r) : bounded_stack(f, r, with_capacity{size_type(std::ranges::size(r))}) {}
-	bounded_stack(std::initializer_list<T> list) : bounded_stack(std::from_range, list) {}
-	bounded_stack(std::initializer_list<T> list, with_capacity c) : bounded_stack(std::from_range, list, c) {}
+	bounded_stack(std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_stack(std::from_range, list) {}
+	bounded_stack(std::initializer_list<T> list, with_capacity c) requires std::copy_constructible<T> : bounded_stack(std::from_range, list, c) {}
 
-	[[nodiscard]] bounded_stack clone() const { return bounded_stack(std::from_range, *this, with_capacity{capacity()}); }
+	[[nodiscard]] bounded_stack clone() const requires std::copy_constructible<T> { return bounded_stack(std::from_range, *this, with_capacity{capacity()}); }
 
 	[[nodiscard]] bool empty() const { return top == base; }
 	[[nodiscard]] size_type size() const { return size_type(top - base); }
