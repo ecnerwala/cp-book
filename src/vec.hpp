@@ -257,18 +257,39 @@ template <typename T> struct bounded_vec {
 	const T& back() const { assert_nonempty(); return base[sz-1]; }
 
 	// Resizing ops
-	template <typename... Args> T& emplace_back(Args&&... args) {
+	// Add to the back
+	template <typename... Args> requires std::constructible_from<T, Args&&...>
+	T& emplace_back(Args&&... args) {
 		debug_assert(sz < cap, "pushing into full container (capacity {})", cap);
 		return *std::construct_at(base + sz++, std::forward<Args>(args)...);
 	}
-	void push_back(const T& v) { emplace_back(v); }
+	void push_back(const T& v) requires std::copy_constructible<T> { emplace_back(v); }
 	void push_back(T&& v) { emplace_back(std::move(v)); }
+	template <std::ranges::input_range R>
+	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
+	void append_range(R&& r) {
+		auto [in, out] = std::ranges::uninitialized_copy(r, std::ranges::subrange(base + sz, base + cap));
+		// Must have drained all of r
+		debug_assert(in == std::ranges::end(r), "range size exceeds capacity {}", cap);
+		sz = size_type(out - base);
+	}
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	void grow_by(size_type n, const A&... a) {
+		debug_assert(0 <= n, "growing container by negative {}", n);
+		debug_assert(sz + n <= cap, "growing container with size {} by {} exceeds capacity {}", sz, n, cap);
+		detail::uninitialized_construct(base + sz, base + sz + n, a...);
+		sz += n;
+	}
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	void grow_to(size_type n, const A&... a) {
+		debug_assert(sz <= n, "growing container with size {} to smaller target {}", sz, n);
+		debug_assert(n <= cap, "growing container to {} exceeds capacity {}", n, cap);
+		detail::uninitialized_construct(base + sz, base + n, a...);
+		sz = n;
+	}
+
+	// Remove from the back
 	void pop_back() { assert_nonempty(); std::destroy_at(base + --sz); }
-	template <class... Args> T& emplace_front(Args&&... args) { emplace_back(std::forward<Args>(args)...); std::ranges::rotate(*this, end() - 1); return front(); }
-	void push_front(const T& v) { emplace_front(v); }
-	void push_front(T&& v) { emplace_front(std::move(v)); }
-	void pop_front() { std::ranges::rotate(*this, begin() + 1); pop_back(); }
-	void clear() { shrink_to(0); }
 	void shrink_by(size_type n) {
 		debug_assert(0 <= n && n <= sz, "shrinking container with size {} by {}", sz, n);
 		std::destroy(base + sz - n, base + sz); sz -= n;
@@ -277,18 +298,49 @@ template <typename T> struct bounded_vec {
 		debug_assert(0 <= n && n <= sz, "shrinking container with size {} to {}", sz, n);
 		std::destroy(base + n, base + sz); sz = n;
 	}
-	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	void grow_by(size_type n, const A&... a) {
-		debug_assert(0 <= n, "growing container by negative {}", n);
-		debug_assert(sz + n <= cap, "growing container with size {} by {} exceeds capacity {}", sz, n, cap);
-		detail::uninitialized_construct(base + sz, base + sz + n, a...); sz += n;
+
+	// Add/remove to the middle
+	template <typename... Args> requires std::constructible_from<T, Args&&...> T& emplace(size_type i, Args&&... args) {
+		debug_assert(0 <= i && i <= sz, "inserting at {} is out of bounds of [0, {}]", i, sz);
+		debug_assert(sz + 1 <= cap, "container is full (capacity {})", cap);
+		emplace_back(std::forward<Args>(args)...);
+		std::rotate(base + i, base + sz - 1, base + sz);
+		return base[i];
 	}
+	void insert(size_type i, const T& v) requires std::copy_constructible<T> { emplace(i, v); }
+	void insert(size_type i, T&& v) { emplace(i, std::move(v)); }
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	void grow_to(size_type n, const A&... a) {
-		debug_assert(sz <= n, "growing container with size {} to smaller target {}", sz, n);
-		debug_assert(n <= cap, "growing container to {} exceeds capacity {}", n, cap);
-		detail::uninitialized_construct(base + sz, base + n, a...); sz = n;
+	void insert_n(size_type i, size_type n, const A&... a) {
+		debug_assert(0 <= i && i <= sz, "inserting at {} is out of bounds of [0, {}]", i, sz);
+		grow_by(n, a...);
+		std::rotate(base + i, base + sz - n, base + sz);
 	}
+	template <std::ranges::input_range R>
+	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
+	void insert_range(size_type i, R&& r) {
+		debug_assert(0 <= i && i <= sz, "inserting at {} is out of bounds of [0, {}]", i, sz);
+		T* old_end = base + sz;
+		append_range(std::forward<R>(r));
+		std::rotate(base + i, old_end, base + sz);
+	}
+
+	void erase(size_type i) {
+		assert_valid_index(i);
+		std::rotate(base + i, base + i + 1, base + sz);
+		pop_back();
+	}
+	void erase_n(size_type i, size_type n) {
+		debug_assert(0 <= i && i + n <= sz, "erasing {} elements at {} out of bounds of size {}", n, i, sz);
+		std::rotate(base + i, base + i + n, base + sz);
+		shrink_by(n);
+	}
+
+	template <typename... Args> requires std::constructible_from<T, Args&&...> T& emplace_front(Args&&... args) { return emplace(0, std::forward<Args>(args)...); }
+	void push_front(const T& v) requires std::copy_constructible<T> { emplace_front(v); }
+	void push_front(T&& v) { emplace_front(std::move(v)); }
+	void pop_front() { std::ranges::rotate(*this, begin() + 1); pop_back(); }
+
+	void clear() { shrink_to(0); }
 
 	friend bool operator == (const bounded_vec& a, const bounded_vec& b) { return std::ranges::equal(a, b); }
 	friend auto operator <=> (const bounded_vec& a, const bounded_vec& b) {
@@ -377,7 +429,7 @@ template <typename T> struct bounded_stack {
 	void push_back(const T& v) { emplace_back(v); }
 	void push_back(T&& v) { emplace_back(std::move(v)); }
 	void pop_back() { assert_nonempty(); std::destroy_at(--top); }
-	template <class... Args> T& emplace_front(Args&&... args) { emplace_back(std::forward<Args>(args)...); std::ranges::rotate(*this, end() - 1); return front(); }
+	template <typename... Args> T& emplace_front(Args&&... args) { emplace_back(std::forward<Args>(args)...); std::ranges::rotate(*this, end() - 1); return front(); }
 	void push_front(const T& v) { emplace_front(v); }
 	void push_front(T&& v) { emplace_front(std::move(v)); }
 	void pop_front() { std::ranges::rotate(*this, begin() + 1); pop_back(); }
