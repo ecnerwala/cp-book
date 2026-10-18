@@ -91,6 +91,11 @@ void finish_linear(
 	int lim = min(sz(out), min(s, n));
 	if (!cut) {
 		E::finish(std::move(p), out.subspan(0, lim), op);
+	} else if constexpr (std::same_as<Op, assign_op>) {
+		E::finish(std::move(p), out.subspan(0, lim), op);
+		T cn = out[0] - c0;
+		out[0] = c0;
+		if (sz(out) >= s) out[s-1] = cn;
 	} else {
 		T cn{};
 		E::finish(std::move(p), out.subspan(0, lim), cut_op<T, Op>{op, &out[0], c0, cn});
