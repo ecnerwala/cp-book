@@ -207,7 +207,10 @@ template <typename T> struct bounded_vec {
 	// Construction
 	explicit bounded_vec(with_capacity c) : cap(c.n), base(detail::allocate<T>(c.n)) {}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	explicit bounded_vec(with_capacity c, size_type n, const A&... a) : bounded_vec(c) { detail::uninitialized_construct(base, base + n, a...); sz = n; }
+	explicit bounded_vec(with_capacity c, size_type n, const A&... a) : bounded_vec(c) {
+		debug_assert(n <= c.n, "size {} exceeds capacity {}", n, c.n);
+		detail::uninitialized_construct(base, base + n, a...); sz = n;
+	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	explicit bounded_vec(size_type n, const A&... a) : bounded_vec(with_capacity{n}, n, a...) {}
 	template <std::ranges::input_range R>
@@ -283,7 +286,7 @@ template <typename T> struct bounded_vec {
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	void grow_to(size_type n, const A&... a) {
 		debug_assert(sz <= n, "growing container with size {} to smaller target {}", sz, n);
-		debug_assert(n <= cap, "growing container with to {} exceeds capacity {}", n, cap);
+		debug_assert(n <= cap, "growing container to {} exceeds capacity {}", n, cap);
 		detail::uninitialized_construct(base + sz, base + n, a...); sz = n;
 	}
 
@@ -317,7 +320,10 @@ template <typename T> struct bounded_stack {
 	// Construction
 	explicit bounded_stack(with_capacity c) : base(detail::allocate<T>(c.n)), top(base), lim(base + c.n) {}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	explicit bounded_stack(with_capacity c, size_type n, const A&... a) : bounded_stack(c) { detail::uninitialized_construct(base, base + n, a...); top = base + n; }
+	explicit bounded_stack(with_capacity c, size_type n, const A&... a) : bounded_stack(c) {
+		debug_assert(n <= c.n, "size {} exceeds capacity {}", n, c.n);
+		detail::uninitialized_construct(base, base + n, a...); top = base + n;
+	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	explicit bounded_stack(size_type n, const A&... a) : bounded_stack(with_capacity{n}, n, a...) {}
 	template <std::ranges::input_range R>
@@ -393,7 +399,7 @@ template <typename T> struct bounded_stack {
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	void grow_to(size_type n, const A&... a) {
 		debug_assert(top <= base + n, "growing container with size {} to smaller target {}", top - base, n);
-		debug_assert(base + n <= lim, "growing container with to {} exceeds capacity {}", n, lim - base);
+		debug_assert(base + n <= lim, "growing container to {} exceeds capacity {}", n, lim - base);
 		detail::uninitialized_construct(top, base + n, a...); top = base + n;
 	}
 
