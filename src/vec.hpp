@@ -363,16 +363,32 @@ template <typename T> struct bounded_vec : detail::insert_ops {
 		sz = n;
 		return {old_end, end()};
 	}
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	std::ranges::subrange<iterator> grow_to(iterator it, const A&... a) {
+		debug_assert(base + sz <= it.p, "growing container with size {} to smaller target {}", sz, it.p - base);
+		debug_assert(it.p <= base + cap, "growing container to {} exceeds capacity {}", it.p - base, cap);
+		auto old_end = end();
+		detail::uninitialized_construct(base + sz, it.p, a...);
+		sz = size_type(it.p - base);
+		return {old_end, end()};
+	}
 
 	// Remove from the back
 	void pop_back() { assert_nonempty(); std::destroy_at(base + --sz); }
 	void shrink_by(size_type n) {
 		debug_assert(0 <= n && n <= sz, "shrinking container with size {} by {}", sz, n);
-		std::destroy(base + sz - n, base + sz); sz -= n;
+		std::destroy(base + sz - n, base + sz);
+		sz -= n;
 	}
 	void shrink_to(size_type n) {
 		debug_assert(0 <= n && n <= sz, "shrinking container with size {} to {}", sz, n);
-		std::destroy(base + n, base + sz); sz = n;
+		std::destroy(base + n, base + sz);
+		sz = n;
+	}
+	void shrink_to(iterator it) {
+		debug_assert(base <= it.p && it.p <= base + sz, "shrinking container with size {} to {}", sz, it.p - base);
+		std::destroy(it.p, base + sz);
+		sz = size_type(it.p - base);
 	}
 
 	void clear() { shrink_to(0); }
@@ -494,6 +510,15 @@ template <typename T> struct bounded_stack : detail::insert_ops {
 		top = base + n;
 		return {old_end, end()};
 	}
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	std::ranges::subrange<iterator> grow_to(iterator it, const A&... a) {
+		debug_assert(top <= it.p, "growing container with size {} to smaller target {}", top - base, it.p - base);
+		debug_assert(it.p <= lim, "growing container to {} exceeds capacity {}", it.p - base, lim - base);
+		auto old_end = end();
+		detail::uninitialized_construct(top, it.p, a...);
+		top = it.p;
+		return {old_end, end()};
+	}
 
 	// Remove from the back
 	void pop_back() { assert_nonempty(); std::destroy_at(--top); }
@@ -506,6 +531,11 @@ template <typename T> struct bounded_stack : detail::insert_ops {
 		debug_assert(0 <= n && base + n <= top, "shrinking container with size {} to {}", top - base, n);
 		std::destroy(base + n, top);
 		top = base + n;
+	}
+	void shrink_to(iterator it) {
+		debug_assert(base <= it.p && it.p <= top, "shrinking container with size {} to {}", top - base, it.p - base);
+		std::destroy(it.p, top);
+		top = it.p;
 	}
 
 	void clear() { shrink_to(0); }
