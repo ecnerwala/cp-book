@@ -237,7 +237,11 @@ template <typename T> struct bounded_vec {
 	void push_front(T&& v) { emplace_front(std::move(v)); }
 	void pop_front() { std::ranges::rotate(*this, begin() + 1); pop_back(); }
 	void clear() { shrink_to(0); }
+	void shrink_by(size_type n) { debug_assert(0 <= n && n <= sz); std::destroy(base + sz - n, base + sz); sz -= n; }
 	void shrink_to(size_type n) { debug_assert(0 <= n && n <= sz); std::destroy(base + n, base + sz); sz = n; }
+	void grow_by(size_type n, uninit_t) requires std::is_trivially_default_constructible_v<T> { debug_assert(0 <= n && sz + n <= cap); sz += n; }
+	void grow_by(size_type n) { debug_assert(0 <= n && sz + n <= cap); std::uninitialized_value_construct(base + sz, base + sz + n); sz += n; }
+	void grow_by(size_type n, const T& v) { debug_assert(0 <= n && sz + n <= cap); std::uninitialized_fill(base + sz, base + sz + n, v); sz += n; }
 	void grow_to(size_type n, uninit_t) requires std::is_trivially_default_constructible_v<T> { debug_assert(sz <= n && n <= cap); sz = n; }
 	void grow_to(size_type n) { debug_assert(sz <= n && n <= cap); std::uninitialized_value_construct(base + sz, base + n); sz = n; }
 	void grow_to(size_type n, const T& v) { debug_assert(sz <= n && n <= cap); std::uninitialized_fill(base + sz, base + n, v); sz = n; }
