@@ -94,6 +94,12 @@ template <typename T> T* allocate(int n) {
 template <typename T> void deallocate(T* p, int n) {
 	if (p) std::allocator<T>().deallocate(p, std::size_t(n));
 }
+
+template <typename T> void uninitialized_construct(T* first, T* last) { std::uninitialized_value_construct(first, last); }
+template <typename T> void uninitialized_construct(T*, T*, uninit_t) requires std::is_trivially_default_constructible_v<T> {}
+template <typename T> void uninitialized_construct(T* first, T* last, const std::type_identity_t<T>& v) { std::uninitialized_fill(first, last, v); }
+template <typename T, typename... A> concept uninitialized_constructor = requires (T* p, const A&... a) { detail::uninitialized_construct(p, p, a...); };
+
 } // namespace detail
 
 template <typename T> struct vec {
@@ -120,9 +126,8 @@ private:
 	struct alloc_only { size_type n; };
 	explicit vec(alloc_only a) : sz(a.n), base(detail::allocate<T>(a.n)) {}
 public:
-	explicit vec(size_type n, uninit_t) requires std::is_trivially_default_constructible_v<T> : vec(alloc_only{n}) {}
-	explicit vec(size_type n) : vec(alloc_only{n}) { std::uninitialized_value_construct_n(base, sz); }
-	explicit vec(size_type n, const T& v) : vec(alloc_only{n}) { std::uninitialized_fill_n(base, sz, v); }
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	explicit vec(size_type n, const A&... a) : vec(alloc_only{n}) { detail::uninitialized_construct(base, base + n, a...); }
 
 	template <std::ranges::sized_range R> requires std::constructible_from<T, std::ranges::range_reference_t<R>>
 	vec(std::from_range_t, R&& r) : vec(alloc_only{size_type(std::ranges::size(r))}) {
@@ -182,15 +187,13 @@ template <typename T> struct bounded_vec {
 
 	// Construction
 	explicit bounded_vec(with_capacity c) : cap(c.n), base(detail::allocate<T>(c.n)) {}
-	explicit bounded_vec(size_type n, uninit_t, with_capacity c) requires std::is_trivially_default_constructible_v<T> : bounded_vec(c) { sz = n; }
-	explicit bounded_vec(size_type n, uninit_t u) requires std::is_trivially_default_constructible_v<T> : bounded_vec(n, u, with_capacity{n}) {}
-	explicit bounded_vec(size_type n, with_capacity c) : bounded_vec(c) { std::uninitialized_value_construct_n(base, sz = n); }
-	explicit bounded_vec(size_type n) : bounded_vec(n, with_capacity{n}) {}
-	explicit bounded_vec(size_type n, const T& v, with_capacity c) : bounded_vec(c) { std::uninitialized_fill_n(base, sz = n, v); }
-	explicit bounded_vec(size_type n, const T& v) : bounded_vec(n, v, with_capacity{n}) {}
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	explicit bounded_vec(with_capacity c, size_type n, const A&... a) : bounded_vec(c) { detail::uninitialized_construct(base, base + n, a...); sz = n; }
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	explicit bounded_vec(size_type n, const A&... a) : bounded_vec(with_capacity{n}, n, a...) {}
 	template <std::ranges::input_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	bounded_vec(std::from_range_t, R&& r, with_capacity c) : bounded_vec(c) {
+	bounded_vec(with_capacity c, std::from_range_t, R&& r) : bounded_vec(c) {
 		auto [in, out] = std::ranges::uninitialized_copy(r, std::ranges::subrange(base, base + cap));
 		// Must have drained all of r
 		debug_assert(in == std::ranges::end(r));
@@ -198,10 +201,10 @@ template <typename T> struct bounded_vec {
 	}
 	template <std::ranges::sized_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	bounded_vec(std::from_range_t f, R&& r) : bounded_vec(f, r, with_capacity{size_type(std::ranges::size(r))}) {}
+	bounded_vec(std::from_range_t f, R&& r) : bounded_vec(with_capacity{size_type(std::ranges::size(r))}, f, r) {}
 	bounded_vec(std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_vec(std::from_range, list) {}
-	bounded_vec(std::initializer_list<T> list, with_capacity c) requires std::copy_constructible<T> : bounded_vec(std::from_range, list, c) {}
-	bounded_vec(const bounded_vec& o) requires std::copy_constructible<T> : bounded_vec(std::from_range, o, with_capacity{o.cap}) {}
+	bounded_vec(with_capacity c, std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_vec(c, std::from_range, list) {}
+	bounded_vec(const bounded_vec& o) requires std::copy_constructible<T> : bounded_vec(with_capacity{o.cap}, std::from_range, o) {}
 	bounded_vec& operator=(const bounded_vec& o) requires std::copy_constructible<T> { *this = bounded_vec(o); return *this; }
 
 	[[nodiscard]] bool empty() const { return !sz; }
@@ -237,12 +240,10 @@ template <typename T> struct bounded_vec {
 	void clear() { shrink_to(0); }
 	void shrink_by(size_type n) { debug_assert(0 <= n && n <= sz); std::destroy(base + sz - n, base + sz); sz -= n; }
 	void shrink_to(size_type n) { debug_assert(0 <= n && n <= sz); std::destroy(base + n, base + sz); sz = n; }
-	void grow_by(size_type n, uninit_t) requires std::is_trivially_default_constructible_v<T> { debug_assert(0 <= n && sz + n <= cap); sz += n; }
-	void grow_by(size_type n) { debug_assert(0 <= n && sz + n <= cap); std::uninitialized_value_construct(base + sz, base + sz + n); sz += n; }
-	void grow_by(size_type n, const T& v) { debug_assert(0 <= n && sz + n <= cap); std::uninitialized_fill(base + sz, base + sz + n, v); sz += n; }
-	void grow_to(size_type n, uninit_t) requires std::is_trivially_default_constructible_v<T> { debug_assert(sz <= n && n <= cap); sz = n; }
-	void grow_to(size_type n) { debug_assert(sz <= n && n <= cap); std::uninitialized_value_construct(base + sz, base + n); sz = n; }
-	void grow_to(size_type n, const T& v) { debug_assert(sz <= n && n <= cap); std::uninitialized_fill(base + sz, base + n, v); sz = n; }
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	void grow_by(size_type n, const A&... a) { debug_assert(0 <= n && sz + n <= cap); detail::uninitialized_construct(base + sz, base + sz + n, a...); sz += n; }
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	void grow_to(size_type n, const A&... a) { debug_assert(sz <= n && n <= cap); detail::uninitialized_construct(base + sz, base + n, a...); sz = n; }
 
 	friend bool operator == (const bounded_vec& a, const bounded_vec& b) { return std::ranges::equal(a, b); }
 	friend auto operator <=> (const bounded_vec& a, const bounded_vec& b) {
@@ -273,15 +274,13 @@ template <typename T> struct bounded_stack {
 
 	// Construction
 	explicit bounded_stack(with_capacity c) : base(detail::allocate<T>(c.n)), top(base), lim(base + c.n) {}
-	explicit bounded_stack(size_type n, uninit_t, with_capacity c) requires std::is_trivially_default_constructible_v<T> : bounded_stack(c) { top = base + n; }
-	explicit bounded_stack(size_type n, uninit_t u) requires std::is_trivially_default_constructible_v<T> : bounded_stack(n, u, with_capacity{n}) {}
-	explicit bounded_stack(size_type n, with_capacity c) : bounded_stack(c) { std::uninitialized_value_construct(base, top = base + n); }
-	explicit bounded_stack(size_type n) : bounded_stack(n, with_capacity{n}) {}
-	explicit bounded_stack(size_type n, const T& v, with_capacity c) : bounded_stack(c) { std::uninitialized_fill(base, top = base + n, v); }
-	explicit bounded_stack(size_type n, const T& v) : bounded_stack(n, v, with_capacity{n}) {}
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	explicit bounded_stack(with_capacity c, size_type n, const A&... a) : bounded_stack(c) { detail::uninitialized_construct(base, base + n, a...); top = base + n; }
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	explicit bounded_stack(size_type n, const A&... a) : bounded_stack(with_capacity{n}, n, a...) {}
 	template <std::ranges::input_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	bounded_stack(std::from_range_t, R&& r, with_capacity c) : bounded_stack(c) {
+	bounded_stack(with_capacity c, std::from_range_t, R&& r) : bounded_stack(c) {
 		auto [in, out] = std::ranges::uninitialized_copy(r, std::ranges::subrange(base, lim));
 		// Must have drained all of r
 		debug_assert(in == std::ranges::end(r));
@@ -289,10 +288,10 @@ template <typename T> struct bounded_stack {
 	}
 	template <std::ranges::sized_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	bounded_stack(std::from_range_t f, R&& r) : bounded_stack(f, r, with_capacity{size_type(std::ranges::size(r))}) {}
+	bounded_stack(std::from_range_t f, R&& r) : bounded_stack(with_capacity{size_type(std::ranges::size(r))}, f, r) {}
 	bounded_stack(std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_stack(std::from_range, list) {}
-	bounded_stack(std::initializer_list<T> list, with_capacity c) requires std::copy_constructible<T> : bounded_stack(std::from_range, list, c) {}
-	bounded_stack(const bounded_stack& o) requires std::copy_constructible<T> : bounded_stack(std::from_range, o, with_capacity{o.capacity()}) {}
+	bounded_stack(with_capacity c, std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_stack(c, std::from_range, list) {}
+	bounded_stack(const bounded_stack& o) requires std::copy_constructible<T> : bounded_stack(with_capacity{o.capacity()}, std::from_range, o) {}
 	bounded_stack& operator=(const bounded_stack& o) requires std::copy_constructible<T> { *this = bounded_stack(o); return *this; }
 
 	[[nodiscard]] bool empty() const { return top == base; }
@@ -328,12 +327,10 @@ template <typename T> struct bounded_stack {
 	void clear() { std::destroy(base, top); top = base; }
 	void shrink_by(size_type n) { debug_assert(0 <= n && base <= top - n); std::destroy(top - n, top); top -= n; }
 	void shrink_to(size_type n) { debug_assert(0 <= n && base + n <= top); std::destroy(base + n, top); top = base + n; }
-	void grow_by(size_type n, uninit_t) requires std::is_trivially_default_constructible_v<T> { debug_assert(0 <= n && top + n <= lim); top += n; }
-	void grow_by(size_type n) { debug_assert(0 <= n && top + n <= lim); std::uninitialized_value_construct(top, top + n); top += n; }
-	void grow_by(size_type n, const T& v) { debug_assert(0 <= n && top + n <= lim); std::uninitialized_fill(top, top + n, v); top += n; }
-	void grow_to(size_type n, uninit_t) requires std::is_trivially_default_constructible_v<T> { debug_assert(top <= base + n && base + n <= lim); top = base + n; }
-	void grow_to(size_type n) { debug_assert(top <= base + n && base + n <= lim); std::uninitialized_value_construct(top, base + n); top = base + n; }
-	void grow_to(size_type n, const T& v) { debug_assert(top <= base + n && base + n <= lim); std::uninitialized_fill(top, base + n, v); top = base + n; }
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	void grow_by(size_type n, const A&... a) { debug_assert(0 <= n && top + n <= lim); detail::uninitialized_construct(top, top + n, a...); top += n; }
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	void grow_to(size_type n, const A&... a) { debug_assert(top <= base + n && base + n <= lim); detail::uninitialized_construct(top, base + n, a...); top = base + n; }
 
 	friend bool operator == (const bounded_stack& a, const bounded_stack& b) { return std::ranges::equal(a, b); }
 	friend auto operator <=> (const bounded_stack& a, const bounded_stack& b) {
