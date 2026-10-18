@@ -3,10 +3,13 @@
 #include <algorithm>
 #include <concepts>
 #include <cstdlib>
+#include <format>
 #include <initializer_list>
+#include <iostream>
 #include <iterator>
 #include <memory>
 #include <ranges>
+#include <source_location>
 #include <span>
 #include <variant>
 
@@ -18,9 +21,15 @@ constexpr bool WALA_DEBUG = true;
 constexpr bool WALA_DEBUG = false;
 #endif
 
-inline void debug_assert(bool b) {
+template <typename... A> struct fmt_loc {
+	std::format_string<A...> fmt;
+	std::source_location loc;
+	template <typename S> consteval fmt_loc(const S& s, std::source_location l = std::source_location::current()) : fmt(s), loc(l) {}
+};
+template <typename... A> void debug_assert(bool b, fmt_loc<std::type_identity_t<A>...> f, const A&... a) {
 	if (!b) [[unlikely]] {
 		if constexpr (WALA_DEBUG) {
+			std::cerr << f.loc.file_name() << ':' << f.loc.line() << ": wala: " << std::vformat(f.fmt.get(), std::make_format_args(a...)) << '\n';
 			std::abort();
 		} else {
 			__builtin_unreachable();
@@ -54,7 +63,11 @@ struct contiguous_iterator_impl {
 	template <bool OConst> requires (Const && !OConst) contiguous_iterator_impl(const contiguous_iterator_impl<C, OConst>& o)  : p(o.p), c(o.c) {}
 
 	void assert_valid_deref() const { if constexpr (WALA_DEBUG) { c->assert_valid_deref(p); } }
-	static void assert_same_container([[maybe_unused]] Self a, [[maybe_unused]] Self b) { if constexpr (WALA_DEBUG) { debug_assert(a.c == b.c); } }
+	static void assert_same_container([[maybe_unused]] Self a, [[maybe_unused]] Self b) {
+		if constexpr (WALA_DEBUG) {
+			debug_assert(a.c == b.c, "comparing two iterators from different containers");
+		}
+	}
 
 	T& operator * () const { assert_valid_deref(); return *p; }
 	T* operator -> () const { assert_valid_deref(); return p; }
@@ -88,7 +101,7 @@ namespace wala {
 
 namespace detail {
 template <typename T> T* allocate(int n) {
-	debug_assert(n >= 0);
+	debug_assert(n >= 0, "allocating negative {} items", n);
 	return n ? std::allocator<T>().allocate(std::size_t(n)) : nullptr;
 }
 template <typename T> void deallocate(T* p, int n) {
@@ -141,9 +154,15 @@ public:
 	[[nodiscard]] bool empty() const { return !sz; }
 	[[nodiscard]] size_type size() const { return sz; }
 
-	void assert_valid_deref(const T* p) const { debug_assert(base <= p); debug_assert(p < base + sz); }
-	void assert_valid_index(size_type i) const { debug_assert(0 <= i); debug_assert(i < sz); }
-	void assert_nonempty() const { debug_assert(sz > 0); }
+	void assert_valid_deref(const T* p) const {
+		debug_assert(base <= p && p < base + sz, "iterator position {} out of range [0, {})", p - base, sz);
+	}
+	void assert_valid_index(size_type i) const {
+		debug_assert(0 <= i && i < sz, "index {} out of range [0, {})", i, sz);
+	}
+	void assert_nonempty() const {
+		debug_assert(sz > 0, "container is empty");
+	}
 
 	T* data() { return base; }
 	const T* data() const { return base; }
@@ -196,7 +215,7 @@ template <typename T> struct bounded_vec {
 	bounded_vec(with_capacity c, std::from_range_t, R&& r) : bounded_vec(c) {
 		auto [in, out] = std::ranges::uninitialized_copy(r, std::ranges::subrange(base, base + cap));
 		// Must have drained all of r
-		debug_assert(in == std::ranges::end(r));
+		debug_assert(in == std::ranges::end(r), "range size exceeds capacity {}", c.n);
 		sz = size_type(out - base);
 	}
 	template <std::ranges::sized_range R>
@@ -211,9 +230,15 @@ template <typename T> struct bounded_vec {
 	[[nodiscard]] size_type size() const { return sz; }
 	[[nodiscard]] size_type capacity() const { return cap; }
 
-	void assert_valid_deref(const T* p) const { debug_assert(base <= p); debug_assert(p < base + sz); }
-	void assert_valid_index(size_type i) const { debug_assert(0 <= i); debug_assert(i < sz); }
-	void assert_nonempty() const { debug_assert(sz > 0); }
+	void assert_valid_deref(const T* p) const {
+		debug_assert(base <= p && p < base + sz, "iterator position {} out of range [0, {})", p - base, sz);
+	}
+	void assert_valid_index(size_type i) const {
+		debug_assert(0 <= i && i < sz, "index {} out of range [0, {})", i, sz);
+	}
+	void assert_nonempty() const {
+		debug_assert(sz > 0, "container is empty");
+	}
 
 	T* data() { return base; }
 	const T* data() const { return base; }
@@ -229,21 +254,38 @@ template <typename T> struct bounded_vec {
 	const T& back() const { assert_nonempty(); return base[sz-1]; }
 
 	// Resizing ops
-	template <typename... Args> T& emplace_back(Args&&... args) { debug_assert(sz < cap); return *std::construct_at(base + sz++, std::forward<Args>(args)...); }
+	template <typename... Args> T& emplace_back(Args&&... args) {
+		debug_assert(sz < cap, "pushing into full container (capacity {})", cap);
+		return *std::construct_at(base + sz++, std::forward<Args>(args)...);
+	}
 	void push_back(const T& v) { emplace_back(v); }
 	void push_back(T&& v) { emplace_back(std::move(v)); }
-	void pop_back() { debug_assert(sz > 0); std::destroy_at(base + --sz); }
+	void pop_back() { assert_nonempty(); std::destroy_at(base + --sz); }
 	template <class... Args> T& emplace_front(Args&&... args) { emplace_back(std::forward<Args>(args)...); std::ranges::rotate(*this, end() - 1); return front(); }
 	void push_front(const T& v) { emplace_front(v); }
 	void push_front(T&& v) { emplace_front(std::move(v)); }
 	void pop_front() { std::ranges::rotate(*this, begin() + 1); pop_back(); }
 	void clear() { shrink_to(0); }
-	void shrink_by(size_type n) { debug_assert(0 <= n && n <= sz); std::destroy(base + sz - n, base + sz); sz -= n; }
-	void shrink_to(size_type n) { debug_assert(0 <= n && n <= sz); std::destroy(base + n, base + sz); sz = n; }
+	void shrink_by(size_type n) {
+		debug_assert(0 <= n && n <= sz, "shrinking container with size {} by {}", sz, n);
+		std::destroy(base + sz - n, base + sz); sz -= n;
+	}
+	void shrink_to(size_type n) {
+		debug_assert(0 <= n && n <= sz, "shrinking container with size {} to {}", sz, n);
+		std::destroy(base + n, base + sz); sz = n;
+	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	void grow_by(size_type n, const A&... a) { debug_assert(0 <= n && sz + n <= cap); detail::uninitialized_construct(base + sz, base + sz + n, a...); sz += n; }
+	void grow_by(size_type n, const A&... a) {
+		debug_assert(0 <= n, "growing container by negative {}", n);
+		debug_assert(sz + n <= cap, "growing container with size {} by {} exceeds capacity {}", sz, n, cap);
+		detail::uninitialized_construct(base + sz, base + sz + n, a...); sz += n;
+	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	void grow_to(size_type n, const A&... a) { debug_assert(sz <= n && n <= cap); detail::uninitialized_construct(base + sz, base + n, a...); sz = n; }
+	void grow_to(size_type n, const A&... a) {
+		debug_assert(sz <= n, "growing container with size {} to smaller target {}", sz, n);
+		debug_assert(n <= cap, "growing container with to {} exceeds capacity {}", n, cap);
+		detail::uninitialized_construct(base + sz, base + n, a...); sz = n;
+	}
 
 	friend bool operator == (const bounded_vec& a, const bounded_vec& b) { return std::ranges::equal(a, b); }
 	friend auto operator <=> (const bounded_vec& a, const bounded_vec& b) {
@@ -283,7 +325,7 @@ template <typename T> struct bounded_stack {
 	bounded_stack(with_capacity c, std::from_range_t, R&& r) : bounded_stack(c) {
 		auto [in, out] = std::ranges::uninitialized_copy(r, std::ranges::subrange(base, lim));
 		// Must have drained all of r
-		debug_assert(in == std::ranges::end(r));
+		debug_assert(in == std::ranges::end(r), "range size exceeds capacity {}", c.n);
 		top = out;
 	}
 	template <std::ranges::sized_range R>
@@ -298,9 +340,15 @@ template <typename T> struct bounded_stack {
 	[[nodiscard]] size_type size() const { return size_type(top - base); }
 	[[nodiscard]] size_type capacity() const { return size_type(lim - base); }
 
-	void assert_valid_deref(const T* p) const { debug_assert(base <= p); debug_assert(p < top); }
-	void assert_valid_index(size_type i) const { debug_assert(0 <= i); debug_assert(i < size()); }
-	void assert_nonempty() const { debug_assert(top > base); }
+	void assert_valid_deref(const T* p) const {
+		debug_assert(base <= p && p < top, "iterator position {} out of range [0, {})", p - base, top - base);
+	}
+	void assert_valid_index(size_type i) const {
+		debug_assert(0 <= i && base + i < top, "index {} out of range [0, {})", i, top - base);
+	}
+	void assert_nonempty() const {
+		debug_assert(top > base, "container is empty");
+	}
 
 	T* data() { return base; }
 	const T* data() const { return base; }
@@ -316,21 +364,38 @@ template <typename T> struct bounded_stack {
 	const T& back() const { assert_nonempty(); return top[-1]; }
 
 	// Resizing ops
-	template <typename... Args> T& emplace_back(Args&&... args) { debug_assert(top < lim); return *std::construct_at(top++, std::forward<Args>(args)...); }
+	template <typename... Args> T& emplace_back(Args&&... args) {
+		debug_assert(top < lim, "pushing into full container (capacity {})", lim - base);
+		return *std::construct_at(top++, std::forward<Args>(args)...);
+	}
 	void push_back(const T& v) { emplace_back(v); }
 	void push_back(T&& v) { emplace_back(std::move(v)); }
-	void pop_back() { debug_assert(top > base); std::destroy_at(--top); }
+	void pop_back() { assert_nonempty(); std::destroy_at(--top); }
 	template <class... Args> T& emplace_front(Args&&... args) { emplace_back(std::forward<Args>(args)...); std::ranges::rotate(*this, end() - 1); return front(); }
 	void push_front(const T& v) { emplace_front(v); }
 	void push_front(T&& v) { emplace_front(std::move(v)); }
 	void pop_front() { std::ranges::rotate(*this, begin() + 1); pop_back(); }
 	void clear() { std::destroy(base, top); top = base; }
-	void shrink_by(size_type n) { debug_assert(0 <= n && base <= top - n); std::destroy(top - n, top); top -= n; }
-	void shrink_to(size_type n) { debug_assert(0 <= n && base + n <= top); std::destroy(base + n, top); top = base + n; }
+	void shrink_by(size_type n) {
+		debug_assert(0 <= n && base <= top - n, "shrinking container with size {} by {}", top - base, n);
+		std::destroy(top - n, top); top -= n;
+	}
+	void shrink_to(size_type n) {
+		debug_assert(0 <= n && base + n <= top, "shrinking container with size {} to {}", top - base, n);
+		std::destroy(base + n, top); top = base + n;
+	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	void grow_by(size_type n, const A&... a) { debug_assert(0 <= n && top + n <= lim); detail::uninitialized_construct(top, top + n, a...); top += n; }
+	void grow_by(size_type n, const A&... a) {
+		debug_assert(0 <= n, "growing container by negative {}", n);
+		debug_assert(top + n <= lim, "growing container with size {} by {} exceeds capacity {}", top - base, n, lim - base);
+		detail::uninitialized_construct(top, top + n, a...); top += n;
+	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	void grow_to(size_type n, const A&... a) { debug_assert(top <= base + n && base + n <= lim); detail::uninitialized_construct(top, base + n, a...); top = base + n; }
+	void grow_to(size_type n, const A&... a) {
+		debug_assert(top <= base + n, "growing container with size {} to smaller target {}", top - base, n);
+		debug_assert(base + n <= lim, "growing container with to {} exceeds capacity {}", n, lim - base);
+		detail::uninitialized_construct(top, base + n, a...); top = base + n;
+	}
 
 	friend bool operator == (const bounded_stack& a, const bounded_stack& b) { return std::ranges::equal(a, b); }
 	friend auto operator <=> (const bounded_stack& a, const bounded_stack& b) {
