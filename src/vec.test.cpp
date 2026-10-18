@@ -20,7 +20,7 @@ template <class C> concept contiguous_container =
 	&& std::same_as<std::ranges::range_size_t<C>, int>
 	&& std::same_as<std::ranges::range_difference_t<C>, int>
 	&& std::is_nothrow_move_constructible_v<C> && std::is_nothrow_move_assignable_v<C> && std::is_nothrow_swappable_v<C>
-	&& !std::is_copy_constructible_v<C> && !std::is_copy_assignable_v<C>
+	&& std::copyable<C> == std::copy_constructible<typename C::value_type>
 	&& std::equality_comparable<C>;
 
 static_assert(contiguous_container<wala::vec<bool>>);

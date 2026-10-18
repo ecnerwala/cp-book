@@ -128,10 +128,10 @@ public:
 	vec(std::from_range_t, R&& r) : vec(alloc_only{size_type(std::ranges::size(r))}) {
 		std::ranges::uninitialized_copy(r, std::span(base, sz));
 	}
-
 	vec(std::initializer_list<T> list) requires std::copy_constructible<T> : vec(std::from_range, list) {}
 
-	[[nodiscard]] vec clone() const requires std::copy_constructible<T> { return vec(std::from_range, *this); }
+	vec(const vec& o) requires std::copy_constructible<T> : vec(std::from_range, o) {}
+	vec& operator=(const vec& o) requires std::copy_constructible<T> { *this = vec(o); return *this; }
 
 	[[nodiscard]] bool empty() const { return !sz; }
 	[[nodiscard]] size_type size() const { return sz; }
@@ -176,8 +176,6 @@ template <typename T> struct bounded_vec {
 	friend void swap(bounded_vec& a, bounded_vec& b) noexcept { std::swap(a.sz, b.sz); std::swap(a.cap, b.cap); std::swap(a.base, b.base); }
 	bounded_vec(bounded_vec&& o) noexcept : bounded_vec() { swap(*this, o); }
 	bounded_vec& operator=(bounded_vec&& o) noexcept { swap(*this, o); return *this; }
-	bounded_vec(const bounded_vec&) = delete;
-	bounded_vec& operator=(const bounded_vec&) = delete;
 
 	// Destruction
 	~bounded_vec() { std::destroy_n(base, sz); detail::deallocate(base, cap); }
@@ -192,7 +190,7 @@ template <typename T> struct bounded_vec {
 	explicit bounded_vec(size_type n, const T& v) : bounded_vec(n, v, with_capacity{n}) {}
 	template <std::ranges::input_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	explicit bounded_vec(std::from_range_t, R&& r, with_capacity c) : bounded_vec(c) {
+	bounded_vec(std::from_range_t, R&& r, with_capacity c) : bounded_vec(c) {
 		auto [in, out] = std::ranges::uninitialized_copy(r, std::ranges::subrange(base, base + cap));
 		// Must have drained all of r
 		debug_assert(in == std::ranges::end(r));
@@ -200,11 +198,11 @@ template <typename T> struct bounded_vec {
 	}
 	template <std::ranges::sized_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	explicit bounded_vec(std::from_range_t f, R&& r) : bounded_vec(f, r, with_capacity{size_type(std::ranges::size(r))}) {}
+	bounded_vec(std::from_range_t f, R&& r) : bounded_vec(f, r, with_capacity{size_type(std::ranges::size(r))}) {}
 	bounded_vec(std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_vec(std::from_range, list) {}
 	bounded_vec(std::initializer_list<T> list, with_capacity c) requires std::copy_constructible<T> : bounded_vec(std::from_range, list, c) {}
-
-	[[nodiscard]] bounded_vec clone() const requires std::copy_constructible<T> { return bounded_vec(std::from_range, *this, with_capacity{cap}); }
+	bounded_vec(const bounded_vec& o) requires std::copy_constructible<T> : bounded_vec(std::from_range, o, with_capacity{o.cap}) {}
+	bounded_vec& operator=(const bounded_vec& o) requires std::copy_constructible<T> { *this = bounded_vec(o); return *this; }
 
 	[[nodiscard]] bool empty() const { return !sz; }
 	[[nodiscard]] size_type size() const { return sz; }
@@ -269,8 +267,6 @@ template <typename T> struct bounded_stack {
 	friend void swap(bounded_stack& a, bounded_stack& b) noexcept { std::swap(a.base, b.base); std::swap(a.top, b.top); std::swap(a.lim, b.lim); }
 	bounded_stack(bounded_stack&& o) noexcept : bounded_stack() { swap(*this, o); }
 	bounded_stack& operator=(bounded_stack&& o) noexcept { swap(*this, o); return *this; }
-	bounded_stack(const bounded_stack&) = delete;
-	bounded_stack& operator=(const bounded_stack&) = delete;
 
 	// Destruction
 	~bounded_stack() { std::destroy(base, top); detail::deallocate(base, int(lim - base)); }
@@ -285,7 +281,7 @@ template <typename T> struct bounded_stack {
 	explicit bounded_stack(size_type n, const T& v) : bounded_stack(n, v, with_capacity{n}) {}
 	template <std::ranges::input_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	explicit bounded_stack(std::from_range_t, R&& r, with_capacity c) : bounded_stack(c) {
+	bounded_stack(std::from_range_t, R&& r, with_capacity c) : bounded_stack(c) {
 		auto [in, out] = std::ranges::uninitialized_copy(r, std::ranges::subrange(base, lim));
 		// Must have drained all of r
 		debug_assert(in == std::ranges::end(r));
@@ -293,11 +289,11 @@ template <typename T> struct bounded_stack {
 	}
 	template <std::ranges::sized_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	explicit bounded_stack(std::from_range_t f, R&& r) : bounded_stack(f, r, with_capacity{size_type(std::ranges::size(r))}) {}
+	bounded_stack(std::from_range_t f, R&& r) : bounded_stack(f, r, with_capacity{size_type(std::ranges::size(r))}) {}
 	bounded_stack(std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_stack(std::from_range, list) {}
 	bounded_stack(std::initializer_list<T> list, with_capacity c) requires std::copy_constructible<T> : bounded_stack(std::from_range, list, c) {}
-
-	[[nodiscard]] bounded_stack clone() const requires std::copy_constructible<T> { return bounded_stack(std::from_range, *this, with_capacity{capacity()}); }
+	bounded_stack(const bounded_stack& o) requires std::copy_constructible<T> : bounded_stack(std::from_range, o, with_capacity{o.capacity()}) {}
+	bounded_stack& operator=(const bounded_stack& o) requires std::copy_constructible<T> { *this = bounded_stack(o); return *this; }
 
 	[[nodiscard]] bool empty() const { return top == base; }
 	[[nodiscard]] size_type size() const { return size_type(top - base); }

@@ -89,7 +89,7 @@ public:
 		v = vec<T>(len, t);
 	}
 
-	tensor(const tensor& o) : shape(o.shape), strides(o.strides), v(o.v.clone()) {}
+	tensor(const tensor& o) : shape(o.shape), strides(o.strides), v(o.v) {}
 
 	tensor& operator=(tensor&& o) noexcept {
 		using std::swap;
