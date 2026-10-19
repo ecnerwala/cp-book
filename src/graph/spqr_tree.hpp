@@ -178,7 +178,7 @@ struct planar_spqr_tree : spqr_tree {
 };
 
 // Phase 1: build a DFS skeleton with outedges sorted by lowval
-struct lowval_storted_skeleton_t {
+struct lowval_sorted_skeleton_t {
 	bounded_vec<int> roots;
 	struct key_t { int lowval; bool is_tree; bool is_type_1; };
 	struct packed_key_t {
@@ -197,7 +197,7 @@ struct lowval_storted_skeleton_t {
 	struct outedge_t { int src, dest; int e_side; packed_key_t key; };
 	csr<outedge_t> outedges;
 
-	static lowval_storted_skeleton_t build(
+	static lowval_sorted_skeleton_t build(
 		int NV,
 		std::span<const std::array<int, 2>> edges,
 		std::span<const int> vert_order,
@@ -357,7 +357,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 	assert(int(vert_order.size()) <= NV);
 	assert(int(edge_order.size()) <= NE);
 
-	auto [roots, outedges] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
+	auto [roots, outedges] = lowval_sorted_skeleton_t::build(NV, edges, vert_order, edge_order);
 
 	// Phase 2: do the big ear-decomposition-like walk
 
@@ -1591,7 +1591,7 @@ inline std::optional<planar_embedding> planar_embed(
 	auto setmin = [](auto& a, auto b) { if (b < a) a = b; };
 
 	int NE = int(edges.size());
-	auto [roots, outedges] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
+	auto [roots, outedges] = lowval_sorted_skeleton_t::build(NV, edges, vert_order, edge_order);
 
 	// Phase 2: do the big ear-decomposition-like walk
 
@@ -2043,7 +2043,7 @@ inline bool can_planar_embed(
 
 	int NE = int(edges.size());
 
-	auto [roots, outedges] = lowval_storted_skeleton_t::build(NV, edges, vert_order, edge_order);
+	auto [roots, outedges] = lowval_sorted_skeleton_t::build(NV, edges, vert_order, edge_order);
 
 	// Phase 2: do the big ear-decomposition-like walk
 
