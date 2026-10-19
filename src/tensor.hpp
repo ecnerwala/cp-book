@@ -72,38 +72,33 @@ template <typename T, int NDIMS> struct tensor {
 	static_assert(NDIMS >= 0, "NDIMS must be nonnegative");
 
 protected:
-	std::array<int, NDIMS> shape;
-	std::array<int, NDIMS> strides;
+	std::array<int, NDIMS> shape{};
+	std::array<int, NDIMS> strides{};
 	vec<T> v;
 
 public:
-	tensor() : shape{0}, strides{0}, v() {}
+	tensor() = default;
 
-	explicit tensor(std::array<int, NDIMS> shape_, const T& t = T()) {
-		shape = shape_;
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	explicit tensor(std::array<int, NDIMS> shape_, const A&... a) : shape(shape_) {
 		int len = 1;
 		for (int i = NDIMS-1; i >= 0; i--) {
 			strides[i] = len;
 			len *= shape[i];
 		}
-		v = vec<T>(len, t);
+		v = vec<T>(len, a...);
 	}
 
-	tensor(const tensor& o) : shape(o.shape), strides(o.strides), v(o.v) {}
-
-	tensor& operator=(tensor&& o) noexcept {
+	friend void swap(tensor& a, tensor& b) noexcept {
 		using std::swap;
-		swap(shape, o.shape);
-		swap(strides, o.strides);
-		swap(v, o.v);
-		return *this;
+		swap(a.shape, b.shape);
+		swap(a.strides, b.strides);
+		swap(a.v, b.v);
 	}
-	tensor(tensor&& o) noexcept : tensor() {
-		*this = std::move(o);
-	}
-	tensor& operator=(const tensor& o) {
-		return *this = tensor(o);
-	}
+	tensor(tensor&& o) noexcept : tensor() { swap(*this, o); }
+	tensor& operator=(tensor&& o) noexcept { swap(*this, o); return *this; }
+	tensor(const tensor& o) = default;
+	tensor& operator=(const tensor& o) = default;
 
 	using view_t = tensor_view<T, NDIMS>;
 	view_t view() {
