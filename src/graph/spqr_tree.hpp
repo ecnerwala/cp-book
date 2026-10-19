@@ -1,69 +1,22 @@
 #pragma once
 
 #include <algorithm>
-#include <vector>
 #include <array>
-#include <span>
-#include <utility>
 #include <cassert>
-#include <ranges>
-#include <ostream>
 #include <expected>
+#include <functional>
+#include <optional>
+#include <ostream>
+#include <ranges>
+#include <span>
 #include <type_traits>
+#include <utility>
 #include <variant>
+#include <vector>
+
+#include "containers/csr.hpp"
 
 namespace wala {
-
-struct csr_index {
-	std::vector<int> bounds;
-	std::ranges::iota_view<int, int> indices(int i) const { return std::views::iota(bounds[i], bounds[i+1]); }
-	template <std::ranges::contiguous_range R> auto slice(int i, R&& base) const {
-		return std::span(base).subspan(bounds[i], bounds[i+1] - bounds[i]);
-	}
-	int num_rows() const { return bounds.empty() ? 0 : int(bounds.size()) - 1; }
-	int num_entries() const { return bounds.empty() ? 0 : bounds.back(); }
-};
-
-template <typename T> struct csr : csr_index {
-	std::vector<T> dat;
-	std::span<T> operator [](int i) { return slice(i, dat); }
-	std::span<const T> operator [](int i) const { return slice(i, dat); }
-};
-
-struct csr_index_builder {
-	std::vector<int> bounds;
-	csr_index_builder() = default;
-	explicit csr_index_builder(int N) : bounds(N+1) {}
-	void count(int k) { bounds[k+1]++; }
-	csr_index finalize() && {
-		for (int i = 1; i < int(bounds.size()); i++) {
-			bounds[i] += bounds[i-1];
-		}
-		return {std::move(bounds)};
-	}
-};
-
-template <typename T> struct csr_builder {
-	csr_index idx;
-	std::vector<T> dat;
-	csr_builder() = default;
-	explicit csr_builder(csr_index idx_, std::vector<T>&& dat_buf = {}) : idx(std::move(idx_)), dat(std::move(dat_buf)) {
-		dat.resize(idx.num_entries());
-		if (!idx.bounds.empty()) {
-			idx.bounds.pop_back();
-			idx.bounds.insert(idx.bounds.begin(), 0);
-		}
-	}
-	explicit csr_builder(csr_index_builder&& idx_builder, std::vector<T>&& dat_buf = {}) : idx{std::move(idx_builder.bounds)}, dat(std::move(dat_buf)) {
-		int l = 0;
-		for (int i = 1; i < int(idx.bounds.size()); i++) {
-			idx.bounds[i] = std::exchange(l, l + idx.bounds[i]);
-		}
-		dat.resize(l);
-	}
-	[[nodiscard]] T& push(int k) { return dat[idx.bounds[k+1]++]; }
-	[[nodiscard]] csr<T> finalize() && { return { std::move(idx), std::move(dat) }; }
-};
 
 struct planar_spqr_tree;
 
@@ -295,7 +248,7 @@ struct lowval_storted_skeleton_t {
 			});
 			auto adj = std::move(adj_builder).finalize();
 
-			std::vector<outedge_t> all_outedges; all_outedges.reserve(NE);
+			bounded_vec<outedge_t> all_outedges(with_capacity{NE});
 			// Return the 2 lowvals from this subtree
 			struct dfs_stack_t {
 				int cur;
@@ -380,7 +333,7 @@ struct lowval_storted_skeleton_t {
 
 			csr_index_builder by_src_idx_builder(NV);
 			for (auto edge : by_key.dat) by_src_idx_builder.count(edge.src);
-			csr_builder<outedge_t> by_src_builder(std::move(by_src_idx_builder), std::move(all_outedges));
+			csr_builder<outedge_t> by_src_builder(std::move(by_src_idx_builder), std::move(all_outedges).into_vec());
 			for (auto edge : by_key.dat) by_src_builder.push(edge.src) = edge;
 			outedges = std::move(by_src_builder).finalize();
 		}
@@ -1149,23 +1102,19 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		std::vector<node_type> types(tot_items, node_type::F);
 		std::vector<int> orig_id(tot_items, -1);
 
-		csr<int> ch;
-		ch.bounds.resize(tot_items + 1, 0);
-		ch.dat.resize(tot_items - 1);
+		csr<int> ch(tot_items, tot_items - 1);
 
 		// Each node is a child, and additionally most non-block node has 2 cap verts; blocks have 1, and O nodes have 1
 		int tot_node_verts = NV + (tot_items - 1 - NV) * 2 - tot_blocks - tot_self_loops;
 		std::vector<node_vert_t> node_verts(tot_node_verts);
-		csr_index node_nvs; node_nvs.bounds.resize(tot_items + 1);
+		csr_index node_nvs(tot_items);
 		std::vector<int> vert_par_nv(tot_items, -1);
 
 		int tot_node_edges = (tot_items - 1 - NV - tot_blocks) * 2;
 		std::vector<node_edge_t> node_edges(tot_node_edges);
-		csr_index node_nes; node_nes.bounds.resize(tot_items + 1);
+		csr_index node_nes(tot_items);
 
-		csr<node_adj_t> node_adj;
-		node_adj.bounds.resize(tot_node_verts * 2 + 1);
-		node_adj.dat.resize(tot_node_edges * 2);
+		csr<node_adj_t> node_adj(tot_node_verts * 2, tot_node_edges * 2);
 
 		std::vector<bool> node_planar(with_planarity ? tot_items : 0);
 		std::vector<int> ne_rot_adj(with_planarity ? 4 * tot_node_edges : 0, -1);
