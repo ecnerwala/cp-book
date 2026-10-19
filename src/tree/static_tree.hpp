@@ -1,7 +1,10 @@
 #pragma once
 
-#include "yc.hpp"
+#include <vector>
+
+#include "containers/vec.hpp"
 #include "ds/rmq.hpp"
+#include "yc.hpp"
 
 namespace wala {
 
@@ -10,17 +13,17 @@ struct static_forest_t {
 
 private:
 	// original label to preorder
-	std::vector<int> idx;
+	vec<int> idx;
 
 	// all keys/values are by preorder relabelling
-	std::vector<int> preorder;
-	std::vector<int> depth;
-	std::vector<int> par;
-	std::vector<int> sz;
-	std::vector<int> heavy_par;
-	std::vector<int> heavy_dist;
+	vec<int> preorder;
+	vec<int> depth;
+	vec<int> par;
+	vec<int> sz;
+	vec<int> heavy_par;
+	vec<int> heavy_dist;
 
-	std::vector<int> depth_val_to_idx;
+	vec<int> depth_val_to_idx;
 	RangeMinQuery<int> depth_val_rmq;
 
 public:
@@ -38,9 +41,9 @@ public:
 	{
 		{
 			int nxt_idx = 0;
-			std::vector<int> depth_freq(N, 0);
-			std::vector<int> depth_val(N, -1);
-			std::vector<int> heavy_child(N, -1);
+			vec<int> depth_freq(N, 0);
+			vec<int> depth_val(N, -1);
+			vec<int> heavy_child(N, -1);
 			auto build_one_tree = [&](int rt) -> void {
 				std::y_combinator([&](auto self, int cur, int prv) -> int {
 					int cur_sz = 1;
