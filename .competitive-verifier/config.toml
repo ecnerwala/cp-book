@@ -1,6 +1,5 @@
 [languages.cpp]
 read_macros = false
-bundle_hoist_system_includes = true
 
 # Checking environment: ASan + UBSan (roughly 2x overhead).
 [[languages.cpp.environments]]
