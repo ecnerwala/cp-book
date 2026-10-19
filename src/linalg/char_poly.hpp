@@ -4,14 +4,16 @@
 #include <bitset>
 #include <cassert>
 
+#include "containers/vec.hpp"
+
 namespace wala {
 
 // Compute the characteristic polynomial of a square matrix A over some field.
 // Not numerically stable at all.
 // Takes argument by value, use std::move if you can.
-template <typename num> std::vector<num> charPoly(std::vector<std::vector<num>> A) {
+template <typename num> vec<num> charPoly(std::vector<std::vector<num>> A) {
 	int N = int(A.size());
-	std::vector<num> res; res.reserve(N+1);
+	bounded_vec<num> res(with_capacity{N+1});
 	res.push_back(num(1));
 	for (int i = 0, deg = 0; i < N; i++) {
 		auto& Ai = A[i];
@@ -19,7 +21,7 @@ template <typename num> std::vector<num> charPoly(std::vector<std::vector<num>> 
 		int c = i+1;
 		while (c < N && Ai[c] == num(0)) c++;
 		if (c == N) {
-			res.resize(i+2, num(0));
+			res.grow_to(i+2, num(0));
 			for (int x = deg; x >= 0; x--) {
 				num v = res[x];
 				for (int y = x+1, z = i; z >= deg; z--, y++) {
@@ -69,8 +71,8 @@ template <typename num> std::vector<num> charPoly(std::vector<std::vector<num>> 
 			Ai1[k+1] += Ai[k];
 		}
 	}
-	reverse(res.begin(), res.end());
-	return res;
+	std::reverse(res.begin(), res.end());
+	return std::move(res).into_vec();
 }
 
 // Compute the characteristic polynomial of a square matrix A over F2.
