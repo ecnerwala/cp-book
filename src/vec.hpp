@@ -641,8 +641,11 @@ template <typename T> struct growable_vec : private bounded_vec<T> {
 
 	template <typename... Args> requires std::constructible_from<T, Args&&...>
 	T& emplace_back(Args&&... args) {
+		if (size() < capacity()) return base::emplace_back(std::forward<Args>(args)...);
+		// args may refer to our own elements, so construct before reallocating
+		T x(std::forward<Args>(args)...);
 		reserve_for(size() + 1);
-		return base::emplace_back(std::forward<Args>(args)...);
+		return base::emplace_back(std::move(x));
 	}
 	template <std::ranges::input_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
@@ -658,13 +661,16 @@ template <typename T> struct growable_vec : private bounded_vec<T> {
 	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	std::ranges::subrange<iterator> grow_by(size_type n, const A&... a) {
+		if (size() + n <= capacity()) return base::grow_by(n, a...);
+		// a may refer to our own elements, so copy before reallocating
+		std::tuple<A...> c(a...);
 		reserve_for(size() + n);
-		return base::grow_by(n, a...);
+		return std::apply([&](const A&... x) { return base::grow_by(n, x...); }, c);
 	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	std::ranges::subrange<iterator> grow_to(size_type n, const A&... a) {
-		reserve_for(n);
-		return base::grow_to(n, a...);
+		debug_assert(size() <= n, "growing container with size {} to smaller target {}", size(), n);
+		return grow_by(n - size(), a...);
 	}
 
 	friend bool operator == (const growable_vec& a, const growable_vec& b) { return std::ranges::equal(a, b); }
