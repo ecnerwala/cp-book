@@ -2,7 +2,7 @@
 
 #include <array>
 
-#include "vec.hpp"
+#include "containers/vec.hpp"
 
 namespace wala {
 

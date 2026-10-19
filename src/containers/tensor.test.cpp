@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "tensor.hpp"
+#include "containers/tensor.hpp"
 
 #include <string>
 
