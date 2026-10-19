@@ -2,6 +2,8 @@
 
 #include <array>
 
+#include "vec.hpp"
+
 namespace wala {
 
 template <typename T, int NDIMS> struct tensor_view {
@@ -70,50 +72,37 @@ template <typename T, int NDIMS> struct tensor {
 	static_assert(NDIMS >= 0, "NDIMS must be nonnegative");
 
 protected:
-	std::array<int, NDIMS> shape;
-	std::array<int, NDIMS> strides;
-	int len;
-	T* data;
+	std::array<int, NDIMS> shape{};
+	std::array<int, NDIMS> strides{};
+	vec<T> v;
 
 public:
-	tensor() : shape{0}, strides{0}, len(0), data(nullptr) {}
+	tensor() = default;
 
-	explicit tensor(std::array<int, NDIMS> shape_, const T& t = T()) {
-		shape = shape_;
-		len = 1;
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	explicit tensor(std::array<int, NDIMS> shape_, const A&... a) : shape(shape_) {
+		int len = 1;
 		for (int i = NDIMS-1; i >= 0; i--) {
 			strides[i] = len;
 			len *= shape[i];
 		}
-		data = new T[len];
-		std::fill(data, data + len, t);
+		v = vec<T>(len, a...);
 	}
 
-	tensor(const tensor& o) : shape(o.shape), strides(o.strides), len(o.len), data(new T[len]) {
-		for (int i = 0; i < len; i++) {
-			data[i] = o.data[i];
-		}
-	}
-
-	tensor& operator=(tensor&& o) noexcept {
+	friend void swap(tensor& a, tensor& b) noexcept {
 		using std::swap;
-		swap(shape, o.shape);
-		swap(strides, o.strides);
-		swap(len, o.len);
-		swap(data, o.data);
-		return *this;
+		swap(a.shape, b.shape);
+		swap(a.strides, b.strides);
+		swap(a.v, b.v);
 	}
-	tensor(tensor&& o) : tensor() {
-		*this = std::move(o);
-	}
-	tensor& operator=(const tensor& o) {
-		return *this = tensor(o);
-	}
-	~tensor() { delete[] data; }
+	tensor(tensor&& o) noexcept : tensor() { swap(*this, o); }
+	tensor& operator=(tensor&& o) noexcept { swap(*this, o); return *this; }
+	tensor(const tensor& o) = default;
+	tensor& operator=(const tensor& o) = default;
 
 	using view_t = tensor_view<T, NDIMS>;
 	view_t view() {
-		return tensor_view<T, NDIMS>(shape, strides, data);
+		return tensor_view<T, NDIMS>(shape, strides, v.data());
 	}
 	operator view_t() {
 		return view();
@@ -121,7 +110,7 @@ public:
 
 	using const_view_t = tensor_view<const T, NDIMS>;
 	const_view_t view() const {
-		return tensor_view<const T, NDIMS>(shape, strides, data);
+		return tensor_view<const T, NDIMS>(shape, strides, v.data());
 	}
 	operator const_view_t() const {
 		return view();
