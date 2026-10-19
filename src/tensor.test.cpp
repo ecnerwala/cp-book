@@ -88,3 +88,12 @@ TEST_CASE("Tensor copy and move", "[wala::tensor]") {
 	r = std::move(q);
 	REQUIRE(**r[1] == 5);
 }
+
+TEST_CASE("Tensor braced fill value", "[wala::tensor]") {
+	wala::tensor<std::array<int, 2>, 2> t({2, 2}, {-1, -1});
+	REQUIRE(t[{1, 1}] == std::array<int, 2>{-1, -1});
+	wala::tensor<std::string, 1> u({3}, "x");
+	REQUIRE(*u[2] == "x");
+	wala::tensor<int, 2> w({2, 3}, 7);
+	REQUIRE(w[{1, 2}] == 7);
+}

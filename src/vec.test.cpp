@@ -50,6 +50,44 @@ static_assert(contiguous_container<wala::growable_vec<int>>);
 static_assert(contiguous_container<wala::growable_vec<std::string>>);
 static_assert(contiguous_container<wala::growable_vec<std::unique_ptr<std::string>>>);
 
+TEST_CASE("braced fill values", "[wala::vec]") {
+	using P = std::array<int, 2>;
+	wala::vec<P> a(2, {-1, -1});
+	REQUIRE(a == wala::vec<P>{{-1, -1}, {-1, -1}});
+	wala::vec<P> z(2, {});
+	REQUIRE(z == wala::vec<P>{{0, 0}, {0, 0}});
+	wala::vec<std::string> s(2, "x");
+	REQUIRE(s == wala::vec<std::string>{"x", "x"});
+
+	wala::bounded_vec<P> b(wala::with_capacity{6}, 2, {1, 2});
+	REQUIRE(b == wala::bounded_vec<P>{{1, 2}, {1, 2}});
+	REQUIRE(b.capacity() == 6);
+	b.grow_by(1, {3, 4});
+	b.grow_to(4, {});
+	b.insert_n(0, 1, {5, 6});
+	REQUIRE(b == wala::bounded_vec<P>{{5, 6}, {1, 2}, {1, 2}, {3, 4}, {0, 0}});
+	b.grow_to(b.end() + 1, {7, 8});
+	REQUIRE(b.back() == P{7, 8});
+	wala::bounded_vec<P> b2(3, {9, 9});
+	REQUIRE(b2.capacity() == 3);
+	REQUIRE(b2[2] == P{9, 9});
+
+	wala::bounded_stack<P> c(wala::with_capacity{4}, 1, {1, 1});
+	c.grow_by(1, {2, 2});
+	c.grow_to(3, {3, 3});
+	c.grow_to(c.end() + 1, {4, 4});
+	REQUIRE(c == wala::bounded_stack<P>{{1, 1}, {2, 2}, {3, 3}, {4, 4}});
+	wala::bounded_stack<P> c2(2, {});
+	REQUIRE(c2 == wala::bounded_stack<P>{{0, 0}, {0, 0}});
+
+	wala::growable_vec<P> g(1, {1, 1});
+	g.grow_by(2, {2, 2});
+	g.grow_to(5, {});
+	g.insert_n(0, 1, {3, 3});
+	g.push_front({4, 4});
+	REQUIRE(g == wala::growable_vec<P>{{4, 4}, {3, 3}, {1, 1}, {2, 2}, {2, 2}, {0, 0}, {0, 0}});
+}
+
 // Only the kinds of construction that make sense for T are accepted
 static_assert(std::constructible_from<wala::vec<int>, int, wala::uninit_t>);
 static_assert(!std::constructible_from<wala::vec<std::string>, int, wala::uninit_t>);
