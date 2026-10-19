@@ -150,6 +150,7 @@ private:
 public:
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	explicit vec(size_type n, const A&... a) : vec(alloc_only{n}) { detail::uninitialized_construct(base, base + n, a...); }
+	explicit vec(size_type n, const T& v) requires std::copy_constructible<T> : vec(alloc_only{n}) { detail::uninitialized_construct(base, base + n, v); }
 
 	template <std::ranges::sized_range R> requires std::constructible_from<T, std::ranges::range_reference_t<R>>
 	vec(std::from_range_t, R&& r) : vec(alloc_only{size_type(std::ranges::size(r))}) {
@@ -241,6 +242,10 @@ struct insert_ops {
 		auto [first, last] = self.grow_by(n, a...);
 		std::rotate(self.begin() + i, first, last);
 	}
+	template <typename Self>
+	void insert_n(this Self& self, Self::size_type i, Self::size_type n, const Self::value_type& v) requires std::copy_constructible<typename Self::value_type> {
+		self.template insert_n<Self, typename Self::value_type>(i, n, v);
+	}
 	template <typename Self, std::ranges::input_range R>
 	requires std::constructible_from<typename Self::value_type, std::ranges::range_reference_t<R>>
 	void insert_range(this Self& self, Self::size_type i, R&& r) {
@@ -305,6 +310,8 @@ template <typename T> struct bounded_vec : detail::insert_ops {
 	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	explicit bounded_vec(size_type n, const A&... a) : bounded_vec(with_capacity{n}, n, a...) {}
+	explicit bounded_vec(with_capacity c, size_type n, const T& v) requires std::copy_constructible<T> : bounded_vec(c) { grow_by<T>(n, v); }
+	explicit bounded_vec(size_type n, const T& v) requires std::copy_constructible<T> : bounded_vec(with_capacity{n}, n, v) {}
 	template <std::ranges::input_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
 	bounded_vec(with_capacity c, std::from_range_t, R&& r) : bounded_vec(c) {
@@ -394,6 +401,7 @@ template <typename T> struct bounded_vec : detail::insert_ops {
 		sz += n;
 		return {old_end, end()};
 	}
+	std::ranges::subrange<iterator> grow_by(size_type n, const T& v) requires std::copy_constructible<T> { return grow_by<T>(n, v); }
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	std::ranges::subrange<iterator> grow_to(size_type n, const A&... a) {
 		debug_assert(sz <= n, "growing container with size {} to smaller target {}", sz, n);
@@ -403,6 +411,7 @@ template <typename T> struct bounded_vec : detail::insert_ops {
 		sz = n;
 		return {old_end, end()};
 	}
+	std::ranges::subrange<iterator> grow_to(size_type n, const T& v) requires std::copy_constructible<T> { return grow_to<T>(n, v); }
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	std::ranges::subrange<iterator> grow_to(iterator it, const A&... a) {
 		debug_assert(base + sz <= it.p, "growing container with size {} to smaller target {}", sz, it.p - base);
@@ -412,6 +421,7 @@ template <typename T> struct bounded_vec : detail::insert_ops {
 		sz = size_type(it.p - base);
 		return {old_end, end()};
 	}
+	std::ranges::subrange<iterator> grow_to(iterator it, const T& v) requires std::copy_constructible<T> { return grow_to<T>(it, v); }
 
 	// Remove from the back
 	void pop_back() { assert_nonempty(); std::destroy_at(base + --sz); }
@@ -469,6 +479,8 @@ template <typename T> struct bounded_stack : detail::insert_ops {
 	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	explicit bounded_stack(size_type n, const A&... a) : bounded_stack(with_capacity{n}, n, a...) {}
+	explicit bounded_stack(with_capacity c, size_type n, const T& v) requires std::copy_constructible<T> : bounded_stack(c) { grow_by<T>(n, v); }
+	explicit bounded_stack(size_type n, const T& v) requires std::copy_constructible<T> : bounded_stack(with_capacity{n}, n, v) {}
 	template <std::ranges::input_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
 	bounded_stack(with_capacity c, std::from_range_t, R&& r) : bounded_stack(c) {
@@ -557,6 +569,7 @@ template <typename T> struct bounded_stack : detail::insert_ops {
 		top += n;
 		return {old_end, end()};
 	}
+	std::ranges::subrange<iterator> grow_by(size_type n, const T& v) requires std::copy_constructible<T> { return grow_by<T>(n, v); }
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	std::ranges::subrange<iterator> grow_to(size_type n, const A&... a) {
 		debug_assert(top <= base + n, "growing container with size {} to smaller target {}", top - base, n);
@@ -566,6 +579,7 @@ template <typename T> struct bounded_stack : detail::insert_ops {
 		top = base + n;
 		return {old_end, end()};
 	}
+	std::ranges::subrange<iterator> grow_to(size_type n, const T& v) requires std::copy_constructible<T> { return grow_to<T>(n, v); }
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	std::ranges::subrange<iterator> grow_to(iterator it, const A&... a) {
 		debug_assert(top <= it.p, "growing container with size {} to smaller target {}", top - base, it.p - base);
@@ -575,6 +589,7 @@ template <typename T> struct bounded_stack : detail::insert_ops {
 		top = it.p;
 		return {old_end, end()};
 	}
+	std::ranges::subrange<iterator> grow_to(iterator it, const T& v) requires std::copy_constructible<T> { return grow_to<T>(it, v); }
 
 	// Remove from the back
 	void pop_back() { assert_nonempty(); std::destroy_at(--top); }
@@ -666,11 +681,13 @@ template <typename T> struct growable_vec : private bounded_vec<T> {
 		reserve_for(size() + n);
 		return std::apply([&](const A&... x) { return base::grow_by(n, x...); }, c);
 	}
+	std::ranges::subrange<iterator> grow_by(size_type n, const T& v) requires std::copy_constructible<T> { return grow_by<T>(n, v); }
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
 	std::ranges::subrange<iterator> grow_to(size_type n, const A&... a) {
 		debug_assert(size() <= n, "growing container with size {} to smaller target {}", size(), n);
 		return grow_by(n - size(), a...);
 	}
+	std::ranges::subrange<iterator> grow_to(size_type n, const T& v) requires std::copy_constructible<T> { return grow_to<T>(n, v); }
 
 	friend bool operator == (const growable_vec& a, const growable_vec& b) { return std::ranges::equal(a, b); }
 	friend auto operator <=> (const growable_vec& a, const growable_vec& b) {

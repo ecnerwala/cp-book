@@ -76,17 +76,25 @@ protected:
 	std::array<int, NDIMS> strides{};
 	vec<T> v;
 
-public:
-	tensor() = default;
-
-	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	explicit tensor(std::array<int, NDIMS> shape_, const A&... a) : shape(shape_) {
+	// Fills strides from shape (row-major) and returns the total length
+	int init_strides() {
 		int len = 1;
 		for (int i = NDIMS-1; i >= 0; i--) {
 			strides[i] = len;
 			len *= shape[i];
 		}
-		v = vec<T>(len, a...);
+		return len;
+	}
+
+public:
+	tensor() = default;
+
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	explicit tensor(std::array<int, NDIMS> shape_, const A&... a) : shape(shape_) {
+		v = vec<T>(init_strides(), a...);
+	}
+	explicit tensor(std::array<int, NDIMS> shape_, const T& t) requires std::copy_constructible<T> : shape(shape_) {
+		v = vec<T>(init_strides(), t);
 	}
 
 	friend void swap(tensor& a, tensor& b) noexcept {
