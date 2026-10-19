@@ -11,6 +11,9 @@ namespace wala {
 
 struct csr_index {
 	vec<int> bounds;
+	csr_index() = default;
+	explicit csr_index(int num_rows) : bounds(num_rows + 1) {}
+	explicit csr_index(vec<int> bounds_) : bounds(std::move(bounds_)) {}
 	[[nodiscard]] std::ranges::iota_view<int, int> indices(int i) const { return std::views::iota(bounds[i], bounds[i+1]); }
 	template <std::ranges::contiguous_range R> [[nodiscard]] auto slice(int i, R&& base) const {
 		return std::span(base).subspan(bounds[i], bounds[i+1] - bounds[i]);
@@ -21,6 +24,11 @@ struct csr_index {
 
 template <typename T> struct csr : csr_index {
 	vec<T> dat;
+	csr() = default;
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	explicit csr(int num_rows, int num_entries, const A&... a) : csr_index(num_rows), dat(num_entries, a...) {}
+	explicit csr(int num_rows, int num_entries, const T& v) requires std::copy_constructible<T> : csr_index(num_rows), dat(num_entries, v) {}
+	explicit csr(csr_index idx, vec<T> dat_) : csr_index(std::move(idx)), dat(std::move(dat_)) {}
 	std::span<T> operator [](int i) { return slice(i, dat); }
 	std::span<const T> operator [](int i) const { return slice(i, dat); }
 };
@@ -34,7 +42,7 @@ struct csr_index_builder {
 		for (int i = 1; i < int(bounds.size()); i++) {
 			bounds[i] += bounds[i-1];
 		}
-		return {std::move(bounds)};
+		return csr_index(std::move(bounds));
 	}
 };
 
@@ -50,7 +58,7 @@ template <typename T> struct csr_builder {
 		}
 		if (dat.size() != l) dat = vec<T>(l, uninit);
 	}
-	explicit csr_builder(csr_index_builder&& idx_builder, vec<T>&& dat_buf = {}) : idx{std::move(idx_builder.bounds)}, dat(std::move(dat_buf)) {
+	explicit csr_builder(csr_index_builder&& idx_builder, vec<T>&& dat_buf = {}) : idx(std::move(idx_builder.bounds)), dat(std::move(dat_buf)) {
 		int l = 0;
 		for (int i = 1; i < int(idx.bounds.size()); i++) {
 			idx.bounds[i] = std::exchange(l, l + idx.bounds[i]);
@@ -58,7 +66,7 @@ template <typename T> struct csr_builder {
 		if (dat.size() != l) dat = vec<T>(l, uninit);
 	}
 	[[nodiscard]] T& push(int k) { return dat[idx.bounds[k+1]++]; }
-	[[nodiscard]] csr<T> finalize() && { return { std::move(idx), std::move(dat) }; }
+	[[nodiscard]] csr<T> finalize() && { return csr<T>(std::move(idx), std::move(dat)); }
 };
 
 } // namespace wala

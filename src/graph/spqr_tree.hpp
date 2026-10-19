@@ -1102,19 +1102,19 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		std::vector<node_type> types(tot_items, node_type::F);
 		std::vector<int> orig_id(tot_items, -1);
 
-		csr<int> ch{{vec<int>(tot_items + 1)}, vec<int>(tot_items - 1)};
+		csr<int> ch(tot_items, tot_items - 1);
 
 		// Each node is a child, and additionally most non-block node has 2 cap verts; blocks have 1, and O nodes have 1
 		int tot_node_verts = NV + (tot_items - 1 - NV) * 2 - tot_blocks - tot_self_loops;
 		std::vector<node_vert_t> node_verts(tot_node_verts);
-		csr_index node_nvs{vec<int>(tot_items + 1)};
+		csr_index node_nvs(tot_items);
 		std::vector<int> vert_par_nv(tot_items, -1);
 
 		int tot_node_edges = (tot_items - 1 - NV - tot_blocks) * 2;
 		std::vector<node_edge_t> node_edges(tot_node_edges);
-		csr_index node_nes{vec<int>(tot_items + 1)};
+		csr_index node_nes(tot_items);
 
-		csr<node_adj_t> node_adj{{vec<int>(tot_node_verts * 2 + 1)}, vec<node_adj_t>(tot_node_edges * 2)};
+		csr<node_adj_t> node_adj(tot_node_verts * 2, tot_node_edges * 2);
 
 		std::vector<bool> node_planar(with_planarity ? tot_items : 0);
 		std::vector<int> ne_rot_adj(with_planarity ? 4 * tot_node_edges : 0, -1);
