@@ -1,8 +1,10 @@
 #pragma once
 
-#include <vector>
+#include <span>
 #include <array>
 #include <cassert>
+
+#include "containers/vec.hpp"
 
 namespace wala {
 
@@ -23,20 +25,20 @@ public:
 		int l, r, lo, hi;
 	};
 
-	std::vector<Node> nodes;
+	vec<Node> nodes;
 	int root = -1;
 
 	PermTree() {}
 	Node& operator [] (int idx) { return nodes[idx]; }
 	const Node& operator [] (int idx) const { return nodes[idx]; }
 
-	int size() const { return int(nodes.size()); }
+	int size() const { return nodes.size(); }
 
-	PermTree(const std::vector<int>& A) : nodes(A.empty() ? 0 : int(A.size())*2-1) {
+	PermTree(std::span<const int> A) : nodes(A.empty() ? 0 : int(A.size())*2-1) {
 		if (A.empty()) { root = -1; return; }
 		int N = int(A.size());
-		std::vector<int> nxt_earlier(N);
-		std::vector<int> prv_earlier(N);
+		vec<int> nxt_earlier(N);
+		vec<int> prv_earlier(N);
 		for (int i = 0; i < N; i++) {
 			nxt_earlier[i] = i+1;
 			prv_earlier[i] = i-1;
@@ -58,7 +60,7 @@ public:
 			int node;
 		};
 
-		std::vector<cnd_t> stk; stk.reserve(N);
+		bounded_vec<cnd_t> stk(with_capacity{N});
 
 		for (int i = 0; i < N; i++) {
 			int a = A[i];

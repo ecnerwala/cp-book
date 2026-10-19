@@ -1,18 +1,21 @@
 #pragma once
 
-#include <vector>
 #include <array>
 #include <cassert>
+#include <ranges>
+#include <span>
+
+#include "containers/vec.hpp"
 
 namespace wala {
 
 // Finds an optimal alphabetic (binary) Huffman code, i.e. one that preserves the ordering of the original weights
 // Implements the Garsia-Wachs algorithm: https://en.wikipedia.org/wiki/Garsia%E2%80%93Wachs_algorithm
 // Returns the code specified as a sequence of depths for each input weight
-template <typename T, typename T_sum = T> std::vector<int> alphabetic_huffman_code(std::vector<T> weights) {
-	int N = int(weights.size());
+template <std::ranges::random_access_range R, typename T_sum = std::ranges::range_value_t<R>> vec<int> alphabetic_huffman_code(const R& weights) {
+	int N = int(std::ranges::size(weights));
 	if (N == 0) return {};
-	std::vector<std::array<int, 2>> ch; ch.reserve(N-1);
+	bounded_vec<std::array<int, 2>> ch(with_capacity{N-1});
 
 	{
 		struct splay_node {
@@ -60,7 +63,7 @@ template <typename T, typename T_sum = T> std::vector<int> alphabetic_huffman_co
 				}
 			}
 		};
-		std::vector<splay_node> nodes(N+1);
+		vec<splay_node> nodes(N+1);
 		for (int i = 0; i < N; i++) {
 			nodes[i].p = &nodes[i+1];
 			nodes[i+1].c[0] = &nodes[i];
@@ -113,7 +116,7 @@ template <typename T, typename T_sum = T> std::vector<int> alphabetic_huffman_co
 
 			// Otherwise, merge a and a->c[1]
 			{
-				int n_idx = N + int(ch.size());
+				int n_idx = N + ch.size();
 				ch.push_back({a->idx, a->c[1]->idx});
 				a->idx = n_idx;
 			}
@@ -157,24 +160,23 @@ template <typename T, typename T_sum = T> std::vector<int> alphabetic_huffman_co
 	}
 
 	// Reconstruct depths
-	assert(int(ch.size()) == N-1);
-	std::vector<int> res(2*N-1, -1);
-	res[2*N-2] = 0;
+	assert(ch.size() == N-1);
+	vec<int> depth(2*N-1, -1);
+	depth[2*N-2] = 0;
 	for (int i = 2*N-2; i >= N; i--) {
-		assert(res[i] != -1);
-		res[ch[i-N][0]] = res[i] + 1;
-		res[ch[i-N][1]] = res[i] + 1;
+		assert(depth[i] != -1);
+		depth[ch[i-N][0]] = depth[i] + 1;
+		depth[ch[i-N][1]] = depth[i] + 1;
 	}
-	res.resize(N);
-	return res;
+	return vec<int>(std::from_range, std::span(depth).first(N));
 }
 
 // Returns the lca array of length N - 1, suitable for building a Cartesian tree
-inline std::vector<int> binary_code_depths_to_lca_depths(std::vector<int> depths) {
+inline vec<int> binary_code_depths_to_lca_depths(std::span<const int> depths) {
 	int N = int(depths.size());
 	if (N == 0) return {};
-	std::vector<int> res; res.reserve(N-1);
-	std::vector<int> stk; stk.reserve(N);
+	bounded_vec<int> res(with_capacity{N-1});
+	bounded_vec<int> stk(with_capacity{N});
 	for (int v : depths) {
 		while (!stk.empty() && stk.back() == v) {
 			stk.pop_back();
@@ -184,8 +186,8 @@ inline std::vector<int> binary_code_depths_to_lca_depths(std::vector<int> depths
 		if (v != 0) res.push_back(v-1);
 		stk.push_back(v);
 	}
-	assert(int(stk.size()) == 1 && stk.back() == 0);
-	return res;
+	assert(stk.size() == 1 && stk.back() == 0);
+	return std::move(res).into_vec();
 }
 
 } // namespace wala
