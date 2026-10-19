@@ -1,16 +1,18 @@
 #pragma once
 
 #include <algorithm>
-#include <vector>
 #include <array>
-#include <span>
-#include <utility>
 #include <cassert>
-#include <ranges>
-#include <ostream>
 #include <expected>
+#include <functional>
+#include <optional>
+#include <ostream>
+#include <ranges>
+#include <span>
 #include <type_traits>
+#include <utility>
 #include <variant>
+#include <vector>
 
 #include "containers/csr.hpp"
 
