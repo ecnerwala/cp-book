@@ -13,7 +13,7 @@
 #include <variant>
 #include <memory>
 
-#include "vec.hpp"
+#include "containers/vec.hpp"
 
 namespace wala {
 
