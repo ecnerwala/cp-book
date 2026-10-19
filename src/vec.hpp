@@ -114,8 +114,7 @@ template <typename T> void deallocate(T* p, int n) {
 }
 
 // Ownership of an existing allocation of cap items, the first sz of which are live.
-// Passed between the containers by release() and the adopt_t constructors.
-struct adopt_t{}; inline constexpr adopt_t adopt{};
+// Passed between the containers by release() and the allocation constructors.
 template <typename T> struct allocation { T* p; int sz; int cap; };
 
 template <typename T> void uninitialized_construct(T* first, T* last) { std::uninitialized_value_construct(first, last); }
@@ -162,7 +161,7 @@ public:
 	vec& operator=(const vec& o) requires std::copy_constructible<T> { *this = vec(o); return *this; }
 
 	// Conversions, transferring the allocation
-	explicit vec(detail::adopt_t, detail::allocation<T> a) : sz(a.sz), base(a.p) {
+	explicit vec(detail::allocation<T> a) : sz(a.sz), base(a.p) {
 		debug_assert(a.sz == a.cap, "adopting allocation with size {} not equal to capacity {}", a.sz, a.cap);
 	}
 	detail::allocation<T> release() {
@@ -171,9 +170,9 @@ public:
 		sz = 0;
 		return a;
 	}
-	bounded_vec<T> into_bounded() && { return bounded_vec<T>(detail::adopt, release()); }
-	bounded_stack<T> into_stack() && { return bounded_stack<T>(detail::adopt, release()); }
-	growable_vec<T> into_growable() && { return growable_vec<T>(detail::adopt, release()); }
+	bounded_vec<T> into_bounded() && { return bounded_vec<T>(release()); }
+	bounded_stack<T> into_stack() && { return bounded_stack<T>(release()); }
+	growable_vec<T> into_growable() && { return growable_vec<T>(release()); }
 
 	[[nodiscard]] bool empty() const { return !sz; }
 	[[nodiscard]] size_type size() const { return sz; }
@@ -323,7 +322,7 @@ template <typename T> struct bounded_vec : detail::insert_ops {
 	bounded_vec& operator=(const bounded_vec& o) requires std::copy_constructible<T> { *this = bounded_vec(o); return *this; }
 
 	// Conversions, transferring the allocation
-	explicit bounded_vec(detail::adopt_t, detail::allocation<T> a) : sz(a.sz), cap(a.cap), base(a.p) {
+	explicit bounded_vec(detail::allocation<T> a) : sz(a.sz), cap(a.cap), base(a.p) {
 		debug_assert(0 <= a.sz && a.sz <= a.cap, "adopting allocation with size {} out of range [0, {}]", a.sz, a.cap);
 	}
 	detail::allocation<T> release() {
@@ -334,10 +333,10 @@ template <typename T> struct bounded_vec : detail::insert_ops {
 	}
 	vec<T> into_vec() && {
 		debug_assert(sz == cap, "converting container with size {} and capacity {} to vec", sz, cap);
-		return vec<T>(detail::adopt, release());
+		return vec<T>(release());
 	}
-	bounded_stack<T> into_stack() && { return bounded_stack<T>(detail::adopt, release()); }
-	growable_vec<T> into_growable() && { return growable_vec<T>(detail::adopt, release()); }
+	bounded_stack<T> into_stack() && { return bounded_stack<T>(release()); }
+	growable_vec<T> into_growable() && { return growable_vec<T>(release()); }
 
 	[[nodiscard]] bool empty() const { return !sz; }
 	[[nodiscard]] size_type size() const { return sz; }
@@ -487,7 +486,7 @@ template <typename T> struct bounded_stack : detail::insert_ops {
 	bounded_stack& operator=(const bounded_stack& o) requires std::copy_constructible<T> { *this = bounded_stack(o); return *this; }
 
 	// Conversions, transferring the allocation
-	explicit bounded_stack(detail::adopt_t, detail::allocation<T> a) : base(a.p), top(a.p + a.sz), lim(a.p + a.cap) {
+	explicit bounded_stack(detail::allocation<T> a) : base(a.p), top(a.p + a.sz), lim(a.p + a.cap) {
 		debug_assert(0 <= a.sz && a.sz <= a.cap, "adopting allocation with size {} out of range [0, {}]", a.sz, a.cap);
 	}
 	detail::allocation<T> release() {
@@ -497,10 +496,10 @@ template <typename T> struct bounded_stack : detail::insert_ops {
 	}
 	vec<T> into_vec() && {
 		debug_assert(top == lim, "converting container with size {} and capacity {} to vec", top - base, lim - base);
-		return vec<T>(detail::adopt, release());
+		return vec<T>(release());
 	}
-	bounded_vec<T> into_bounded() && { return bounded_vec<T>(detail::adopt, release()); }
-	growable_vec<T> into_growable() && { return growable_vec<T>(detail::adopt, release()); }
+	bounded_vec<T> into_bounded() && { return bounded_vec<T>(release()); }
+	growable_vec<T> into_growable() && { return growable_vec<T>(release()); }
 
 	[[nodiscard]] bool empty() const { return top == base; }
 	[[nodiscard]] size_type size() const { return size_type(top - base); }
