@@ -1,51 +1,65 @@
 #pragma once
 
-#include <bits/stdc++.h>
-// #include<bits/extc++.h>
+#include <algorithm>
+#include <cassert>
+#include <cstdint>
+#include <limits>
+#include <utility>
 #include <ext/pb_ds/priority_queue.hpp>
+
+#include "containers/csr.hpp"
+#include "containers/vec.hpp"
 
 namespace wala {
 
 // NOTE: This doesn't support negative-cost edges; you can adjust edge weights
 // (e.g. by precomputing a potential function) to make them positive.
+//
+// Usage: construct with (N, max_edges), add_edge up to max_edges times, then
+// build() once before any query.
 
 template <typename flow_t = int, typename cost_t = int64_t>
 struct MCMF_SSPA {
 	int N;
-	std::vector<std::vector<int>> adj;
 	struct edge_t {
 		int dest;
 		flow_t cap;
 		cost_t cost;
 	};
-	std::vector<edge_t> edges;
+	bounded_vec<edge_t> edges;
+	csr_index_builder adj_builder;
+	csr<int> adj;
 
-	std::vector<char> seen;
-	std::vector<cost_t> pi;
-	std::vector<int> prv;
+	vec<cost_t> pi;
+	vec<int> prv;
 
-	explicit MCMF_SSPA(int N_) : N(N_), adj(N), pi(N, 0), prv(N) {}
+	explicit MCMF_SSPA(int N_, int max_edges) : N(N_), edges(with_capacity{2 * max_edges}), adj_builder(N), pi(N, 0), prv(N), dist(N), its(N) {}
 
 	void add_edge(int from, int to, flow_t cap, cost_t cost) {
 		assert(cap >= 0);
 		assert(cost + pi[from] - pi[to] >= 0); // TODO: Remove this restriction
-		int e = int(edges.size());
-		edges.emplace_back(edge_t{to, cap, cost});
-		edges.emplace_back(edge_t{from, 0, -cost});
-		adj[from].push_back(e);
-		adj[to].push_back(e+1);
+		edges.push_back(edge_t{to, cap, cost});
+		edges.push_back(edge_t{from, 0, -cost});
+		adj_builder.count(from);
+		adj_builder.count(to);
+	}
+
+	void build() {
+		csr_builder<int> builder(std::move(adj_builder));
+		for (int e = 0; e < int(edges.size()); e++) builder.push(edges[e^1].dest) = e;
+		adj = std::move(builder).finalize();
 	}
 
 	static constexpr cost_t INF_COST = std::numeric_limits<cost_t>::max() / 4;
 	static constexpr flow_t INF_FLOW = std::numeric_limits<flow_t>::max() / 4;
-	std::vector<cost_t> dist;
+	vec<cost_t> dist;
 	__gnu_pbds::priority_queue<std::pair<cost_t, int>> q;
-	std::vector<typename decltype(q)::point_iterator> its;
+	vec<typename decltype(q)::point_iterator> its;
 	cost_t dijkstra(int s, int t) {
-		dist.assign(N, INF_COST);
+		std::ranges::fill(dist, INF_COST);
 		dist[s] = 0;
 
-		its.assign(N, q.end());
+		std::ranges::fill(its, q.end());
 		its[s] = q.push({-(dist[s] - pi[s]), s});
 
 		while (!q.empty()) {
@@ -68,7 +82,7 @@ struct MCMF_SSPA {
 			}
 		}
 
-		swap(pi, dist);
+		std::swap(pi, dist);
 		return pi[t];
 	}
 
@@ -90,9 +104,9 @@ struct MCMF_SSPA {
 		return cur_flow;
 	}
 
-	std::vector<std::pair<flow_t, cost_t>> all_flows(int s, int t, cost_t max_cost = INF_COST - 1) {
+	growable_vec<std::pair<flow_t, cost_t>> all_flows(int s, int t, cost_t max_cost = INF_COST - 1) {
 		assert(s != t);
-		std::vector<std::pair<flow_t, cost_t>> res;
+		growable_vec<std::pair<flow_t, cost_t>> res;
 		while (dijkstra(s, t) <= max_cost) {
 			assert(res.empty() || pi[t] >= res.back().second);
 			flow_t f = path(s, t);
@@ -116,39 +130,44 @@ struct MCMF_SSPA {
 template <typename flow_t = int, typename cost_t = int64_t>
 struct MCMF_Dinic {
 	int N;
-	std::vector<std::vector<int>> adj;
 	struct edge_t {
 		int dest;
 		flow_t cap;
 		cost_t cost;
 	};
-	std::vector<edge_t> edges;
+	bounded_vec<edge_t> edges;
+	csr_index_builder adj_builder;
+	csr<int> adj;
 
-	std::vector<char> seen;
-	std::vector<cost_t> pi;
+	vec<cost_t> pi;
 
-	explicit MCMF_Dinic(int N_) : N(N_), adj(N), pi(N, 0) {}
+	explicit MCMF_Dinic(int N_, int max_edges) : N(N_), edges(with_capacity{2 * max_edges}), adj_builder(N), pi(N, 0), dist(N), its(N), buf(with_capacity{N}), level(N) {}
 
 	void add_edge(int from, int to, flow_t cap, cost_t cost) {
 		assert(cap >= 0);
 		assert(cost + pi[from] - pi[to] >= 0); // TODO: Remove this restriction
-		int e = int(edges.size());
-		edges.emplace_back(edge_t{to, cap, cost});
-		edges.emplace_back(edge_t{from, 0, -cost});
-		adj[from].push_back(e);
-		adj[to].push_back(e+1);
+		edges.push_back(edge_t{to, cap, cost});
+		edges.push_back(edge_t{from, 0, -cost});
+		adj_builder.count(from);
+		adj_builder.count(to);
+	}
+
+	void build() {
+		csr_builder<int> builder(std::move(adj_builder));
+		for (int e = 0; e < int(edges.size()); e++) builder.push(edges[e^1].dest) = e;
+		adj = std::move(builder).finalize();
 	}
 
 	static constexpr cost_t INF_COST = std::numeric_limits<cost_t>::max() / 4;
 	static constexpr flow_t INF_FLOW = std::numeric_limits<flow_t>::max() / 4;
-	std::vector<cost_t> dist;
+	vec<cost_t> dist;
 	__gnu_pbds::priority_queue<std::pair<cost_t, int>> q;
-	std::vector<typename decltype(q)::point_iterator> its;
+	vec<typename decltype(q)::point_iterator> its;
 	cost_t dijkstra(int s, int t) {
-		dist.assign(N, INF_COST);
+		std::ranges::fill(dist, INF_COST);
 		dist[s] = 0;
 
-		its.assign(N, q.end());
+		std::ranges::fill(its, q.end());
 		its[s] = q.push({-(dist[s] - pi[s]), s});
 
 		while (!q.empty()) {
@@ -174,8 +193,8 @@ struct MCMF_Dinic {
 		return pi[t];
 	}
 
-	std::vector<int> buf;
-	std::vector<int> level;
+	bounded_vec<int> buf;
+	vec<int> level;
 	flow_t dinic_dfs(int cur, int t, flow_t f) {
 		if (cur == t) return f;
 		flow_t cur_f = 0;
@@ -198,8 +217,7 @@ struct MCMF_Dinic {
 		flow_t tot_flow = 0;
 		while (true) {
 			buf.clear();
-			buf.reserve(N);
-			level.assign(N, -1);
+			std::ranges::fill(level, -1);
 			buf.push_back(s);
 			level[s] = 0;
 			for (int z = 0; z < int(buf.size()); z++) {
@@ -213,15 +231,16 @@ struct MCMF_Dinic {
 				}
 			}
 			if (level[t] == -1) break;
-			buf.assign(N, 0);
+			buf.clear();
+			buf.grow_to(N, 0);
 			tot_flow += dinic_dfs(s, t, INF_FLOW);
 		}
 		return tot_flow;
 	}
 
-	std::vector<std::pair<flow_t, cost_t>> all_flows(int s, int t, cost_t max_cost = INF_COST - 1) {
+	growable_vec<std::pair<flow_t, cost_t>> all_flows(int s, int t, cost_t max_cost = INF_COST - 1) {
 		assert(s != t);
-		std::vector<std::pair<flow_t, cost_t>> res;
+		growable_vec<std::pair<flow_t, cost_t>> res;
 		while (dijkstra(s, t) <= max_cost) {
 			assert(res.empty() || pi[t] > res.back().second);
 			flow_t f = dinic(s, t);
@@ -245,16 +264,15 @@ struct MCMF_Dinic {
 template <typename flow_t = int, typename tot_flow_t = flow_t>
 struct Dinic {
 	int N;
-	std::vector<std::vector<int>> adj;
 	struct edge_t {
 		int dest;
 		flow_t cap;
 	};
-	std::vector<edge_t> edges;
+	bounded_vec<edge_t> edges;
+	csr_index_builder adj_builder;
+	csr<int> adj;
 
-	std::vector<char> seen;
-
-	explicit Dinic(int N_) : N(N_), adj(N) {}
+	explicit Dinic(int N_, int max_edges) : N(N_), edges(with_capacity{2 * max_edges}), adj_builder(N), buf(with_capacity{N}), level(N) {}
 
 	void add_edge(int from, int to, flow_t cap) {
 		return add_bi_edge(from, to, cap, 0);
@@ -263,16 +281,21 @@ struct Dinic {
 	void add_bi_edge(int from, int to, flow_t cap, flow_t rev_cap) {
 		assert(cap >= 0);
 		assert(rev_cap >= 0);
-		int e = int(edges.size());
-		edges.emplace_back(edge_t{to, cap});
-		edges.emplace_back(edge_t{from, rev_cap});
-		adj[from].push_back(e);
-		adj[to].push_back(e+1);
+		edges.push_back(edge_t{to, cap});
+		edges.push_back(edge_t{from, rev_cap});
+		adj_builder.count(from);
+		adj_builder.count(to);
+	}
+
+	void build() {
+		csr_builder<int> builder(std::move(adj_builder));
+		for (int e = 0; e < int(edges.size()); e++) builder.push(edges[e^1].dest) = e;
+		adj = std::move(builder).finalize();
 	}
 
 	static constexpr tot_flow_t INF_FLOW = std::numeric_limits<tot_flow_t>::max() / 4;
-	std::vector<int> buf;
-	std::vector<int> level;
+	bounded_vec<int> buf;
+	vec<int> level;
 	tot_flow_t dinic_dfs(int cur, int t, tot_flow_t f) {
 		if (cur == t) return f;
 		tot_flow_t cur_f = 0;
@@ -295,8 +318,7 @@ struct Dinic {
 		tot_flow_t tot_flow = 0;
 		while (true) {
 			buf.clear();
-			buf.reserve(N);
-			level.assign(N, -1);
+			std::ranges::fill(level, -1);
 			buf.push_back(s);
 			level[s] = 0;
 			for (int z = 0; z < int(buf.size()); z++) {
@@ -310,7 +332,8 @@ struct Dinic {
 				}
 			}
 			if (level[t] == -1) break;
-			buf.assign(N, 0);
+			buf.clear();
+			buf.grow_to(N, 0);
 			tot_flow += dinic_dfs(s, t, INF_FLOW);
 		}
 		return tot_flow;
