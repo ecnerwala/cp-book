@@ -5,15 +5,21 @@
  */
 
 #include <algorithm>
-#include <vector>
-#include <string>
 #include <cassert>
+#include <concepts>
 #include <cstring>
+#include <iterator>
+#include <ranges>
 #include <type_traits>
+
+#include "containers/vec.hpp"
 
 #include "ds/rmq.hpp"
 
 namespace wala {
+
+template <typename S> concept text = std::ranges::random_access_range<S> && std::ranges::sized_range<S>;
+template <typename S> concept integer_text = text<S> && std::integral<std::ranges::range_value_t<S>>;
 
 // Layered suffix array: SuffixArrayBase computes just sa/rank, each further
 // layer statically opts into one more derived structure. Use the leaf classes
@@ -23,72 +29,71 @@ template <typename Self> class SuffixArrayBase {
 public:
 	using index_t = int;
 	int N;
-	std::vector<index_t> sa;
-	std::vector<index_t> rank;
+	vec<index_t> sa;
+	vec<index_t> rank;
 
 	SuffixArrayBase() : N(0) {}
 
-	template <typename String> static Self construct_raw(const String& S, index_t sigma) {
+	template <integer_text String> static Self construct_raw(const String& S, index_t sigma) {
 		Self res;
 		res.build(S, sigma);
 		return res;
 	}
 
 	// Pass a function which returns a value in [0, sigma)
-	template <typename String, typename F> static Self map_and_construct(const String& S, const F& f, int sigma) {
-		std::vector<decltype((f(S[0])))> mapped(int(std::size(S)));
-		for (int i = 0; i < int(std::size(S)); i++) {
-			mapped[i] = f(S[i]);
+	template <text String, std::regular_invocable<std::ranges::range_reference_t<const String>> F> static Self map_and_construct(const String& S, const F& f, int sigma) {
+		auto s = std::ranges::begin(S);
+		vec<std::invoke_result_t<const F&, std::ranges::range_reference_t<const String>>> mapped(int(std::ranges::size(S)), uninit);
+		for (int i = 0; i < int(std::ranges::size(S)); i++) {
+			mapped[i] = f(s[i]);
 			assert(0 <= int(mapped[i]) && int(mapped[i]) < sigma);
 		}
 		return construct_raw(mapped, sigma);
 	}
 
 	// Sorts the elements of S and then runs suffix array. This takes O(N log N) time with no dependence on sigma.
-	template <typename String> static Self sort_and_construct(const String& S) {
-		using std::begin;
-		using std::end;
-		using value_type = typename std::iterator_traits<decltype(begin(S))>::value_type;
+	template <text String> static Self sort_and_construct(const String& S) requires std::totally_ordered<std::ranges::range_value_t<String>> {
+		auto s = std::ranges::begin(S);
+		using value_type = std::ranges::range_value_t<String>;
 		using compressed_value_type = typename std::conditional<
 			sizeof(value_type) < sizeof(index_t),
 			value_type,
 			index_t
 		>::type;
 
-		std::vector<compressed_value_type> compressed_s(int(std::size(S)));
+		vec<compressed_value_type> compressed_s(int(std::ranges::size(S)), uninit);
 		int sigma = 0;
 
 		{
-			std::vector<value_type> vals(begin(S), end(S));
+			vec<value_type> vals(std::from_range, S);
 			std::sort(vals.begin(), vals.end());
-			vals.resize(unique(vals.begin(), vals.end()) - vals.begin());
-			for (int i = 0; i < int(std::size(S)); i++) {
-				compressed_s[i] = compressed_value_type(index_t(std::lower_bound(vals.begin(), vals.end(), S[i]) - vals.begin()));
+			auto vals_end = std::unique(vals.begin(), vals.end());
+			for (int i = 0; i < int(std::ranges::size(S)); i++) {
+				compressed_s[i] = compressed_value_type(index_t(std::lower_bound(vals.begin(), vals_end, s[i]) - vals.begin()));
 			}
-			sigma = int(vals.size());
+			sigma = int(vals_end - vals.begin());
 		}
 
 		return construct_raw(compressed_s, sigma);
 	}
 
 	// Shifts the elements so that sigma = max(S) - min(S) + 1
-	template <typename String> static Self shift_and_construct(const String& S) {
-		using std::begin;
-		using std::end;
-		using value_type = typename std::iterator_traits<decltype(begin(S))>::value_type;
+	template <integer_text String> static Self shift_and_construct(const String& S) {
+		auto s = std::ranges::begin(S);
+		using value_type = std::ranges::range_value_t<String>;
 
-		std::vector<value_type> compressed_s(int(std::size(S)));
+		vec<value_type> compressed_s(int(std::ranges::size(S)), uninit);
 		int sigma = 0;
 
-		if (int(std::size(S)) > 0) {
-			value_type lo = *begin(S), hi = *begin(S);
+		if (int(std::ranges::size(S)) > 0) {
+			value_type lo = s[0], hi = s[0];
 			for (const auto& x : S) {
 				if (x < lo) lo = x;
 				if (x > hi) hi = x;
 			}
 
-			for (int i = 0; i < int(std::size(S)); i++) {
-				compressed_s[i] = value_type(S[i] - lo);
+			for (int i = 0; i < int(std::ranges::size(S)); i++) {
+				compressed_s[i] = value_type(s[i] - lo);
 			}
 			sigma = int(hi - lo + 1);
 		}
@@ -98,27 +103,26 @@ public:
 
 	// Renumber/filter to only the used elements with bucket sorting. Still takes O(max(S) - min(S) + 1) memory/time,
 	// but should be less memory than `shift_and_construct` when sigma ~ N and max(S) - min(S) + 1 > N.
-	template <typename String> static Self bucket_and_construct(const String& S) {
-		using std::begin;
-		using std::end;
-		using value_type = typename std::iterator_traits<decltype(begin(S))>::value_type;
+	template <integer_text String> static Self bucket_and_construct(const String& S) {
+		auto s = std::ranges::begin(S);
+		using value_type = std::ranges::range_value_t<String>;
 		using compressed_value_type = typename std::conditional<
 			sizeof(value_type) < sizeof(index_t),
 			value_type,
 			index_t
 		>::type;
 
-		std::vector<compressed_value_type> compressed_s(int(std::size(S)));
+		vec<compressed_value_type> compressed_s(int(std::ranges::size(S)), uninit);
 		int sigma = 0;
 
-		if (int(std::size(S)) > 0) {
-			value_type lo = *begin(S), hi = *begin(S);
+		if (int(std::ranges::size(S)) > 0) {
+			value_type lo = s[0], hi = s[0];
 			for (const auto& x : S) {
 				if (x < lo) lo = x;
 				if (x > hi) hi = x;
 			}
 
-			std::vector<compressed_value_type> buckets(hi - lo + 1, 0);
+			vec<compressed_value_type> buckets(hi - lo + 1, 0);
 			for (const auto& x : S) {
 				buckets[x - lo] = 1;
 			}
@@ -126,8 +130,8 @@ public:
 				if (buckets[v]) buckets[v] = compressed_value_type(sigma++);
 			}
 
-			for (int i = 0; i < int(std::size(S)); i++) {
-				compressed_s[i] = buckets[S[i] - lo];
+			for (int i = 0; i < int(std::ranges::size(S)); i++) {
+				compressed_s[i] = buckets[s[i] - lo];
 			}
 		}
 
@@ -135,22 +139,23 @@ public:
 	}
 
 protected:
-	template <typename String> void build(const String& S, index_t sigma) {
-		N = int(std::size(S));
+	template <integer_text String> void build(const String& S, index_t sigma) {
+		N = int(std::ranges::size(S));
 		build_sa(S, sigma);
 		build_rank();
 	}
 
 private:
-	template <typename String> void build_sa(const String& S, index_t sigma) {
-		sa = std::vector<index_t>(N+1);
+	template <integer_text String> void build_sa(const String& S, index_t sigma) {
+		sa = vec<index_t>(N+1);
 		assert(sigma >= 0);
 		for (auto s : S) assert(0 <= index_t(s) && index_t(s) < sigma);
-		std::vector<index_t> tmp(sigma + std::max(N, sigma));
-		SuffixArrayBase::sais<String>(N, S, sa.data(), sigma, tmp.data());
+		vec<index_t> tmp(sigma + std::max(N, sigma));
+		SuffixArrayBase::sais(N, std::ranges::begin(S), sa.data(), sigma, tmp.data());
 	}
 
-	template <typename String> static void sais(int N, const String& S, index_t* sa, int sigma, index_t* tmp) {
+	template <std::random_access_iterator It> requires std::integral<std::iter_value_t<It>>
+	static void sais(int N, It S, index_t* sa, int sigma, index_t* tmp) {
 		if (N == 0) {
 			sa[0] = 0;
 			return;
@@ -319,7 +324,7 @@ private:
 				}
 
 				memset(sa, 0, sizeof(*sa) * (num_pieces+1));
-				sais<const index_t*>(num_pieces, next_S, sa, next_sigma, tmp);
+				sais(num_pieces, next_S, sa, next_sigma, tmp);
 
 				{ // Compute the piece start points again and use those to map up the suffix array
 					next_S = sa_end;
@@ -388,7 +393,7 @@ private:
 	}
 
 	void build_rank() {
-		rank = std::vector<index_t>(N+1);
+		rank = vec<index_t>(N+1, uninit);
 		for (int i = 0; i <= N; i++) rank[sa[i]] = i;
 	}
 };
@@ -399,25 +404,26 @@ template <typename Self> class SuffixArrayLCPBase : public SuffixArrayBase<Self>
 public:
 	using index_t = typename SuffixArrayBase<Self>::index_t;
 	// lcp[i] = lcp(sa[i], sa[i+1])
-	std::vector<index_t> lcp;
+	vec<index_t> lcp;
 
 protected:
 	friend SuffixArrayBase<Self>;
-	template <typename String> void build(const String& S, index_t sigma) {
+	template <integer_text String> void build(const String& S, index_t sigma) {
 		SuffixArrayBase<Self>::build(S, sigma);
 		build_lcp(S);
 	}
 
 private:
-	template <typename String> void build_lcp(const String& S) {
+	template <integer_text String> void build_lcp(const String& S) {
+		auto s = std::ranges::begin(S);
 		int N = this->N;
 		const auto& sa = this->sa;
 		const auto& rank = this->rank;
-		assert(int(std::size(S)) == N);
-		lcp = std::vector<index_t>(N);
+		assert(int(std::ranges::size(S)) == N);
+		lcp = vec<index_t>(N);
 		for (int i = 0, k = 0; i < N - 1; i++) {
 			int j = sa[rank[i]-1];
-			while (k < N - std::max(i, j) && S[i+k] == S[j+k]) k++;
+			while (k < N - std::max(i, j) && s[i+k] == s[j+k]) k++;
 			lcp[rank[i]-1] = k;
 			if (k) --k;
 		}
@@ -447,7 +453,7 @@ public:
 
 protected:
 	friend SuffixArrayBase<Self>;
-	template <typename String> void build(const String& S, index_t sigma) {
+	template <integer_text String> void build(const String& S, index_t sigma) {
 		SuffixArrayLCPBase<Self>::build(S, sigma);
 		build_rmq();
 	}
@@ -456,7 +462,7 @@ private:
 	void build_rmq() {
 		int N = this->N;
 		const auto& lcp = this->lcp;
-		std::vector<std::pair<index_t, index_t>> lcp_idx(N);
+		vec<std::pair<index_t, index_t>> lcp_idx(N);
 		for (int i = 0; i < N; i++) {
 			lcp_idx[i] = {lcp[i], i+1};
 		}
@@ -472,8 +478,8 @@ class PrefixArrayRMQ : private SuffixArrayRMQ {
 
 public:
 	PrefixArrayRMQ() {}
-	template <typename String> static PrefixArrayRMQ construct_raw(const String& S, int sigma) {
-		return PrefixArrayRMQ(SuffixArrayRMQ::construct_raw(String(S.rbegin(), S.rend()), sigma));
+	template <integer_text String> static PrefixArrayRMQ construct_raw(const String& S, int sigma) {
+		return PrefixArrayRMQ(SuffixArrayRMQ::construct_raw(vec<std::ranges::range_value_t<String>>(std::from_range, std::views::reverse(S)), sigma));
 	}
 
 	// TODO: Fill in other constructors

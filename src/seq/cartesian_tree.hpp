@@ -1,8 +1,9 @@
 #pragma once
 
-#include <vector>
+#include <ranges>
 #include <array>
 
+#include "containers/vec.hpp"
 #include "reverse_comparator.hpp"
 
 namespace wala {
@@ -14,7 +15,7 @@ public:
 		std::array<int, 2> c;
 		int p;
 	};
-	std::vector<Node> nodes;
+	vec<Node> nodes;
 	int root = -1;
 
 	CartesianTree() {}
@@ -22,32 +23,33 @@ public:
 	Node& operator [] (int idx) { return nodes[idx]; }
 	const Node& operator [] (int idx) const { return nodes[idx]; }
 
-	int size() const { return int(nodes.size()); }
+	int size() const { return nodes.size(); }
 
 private:
-	CartesianTree(std::vector<Node>&& nodes_, int root_) : nodes(std::move(nodes_)), root(root_) {}
+	CartesianTree(vec<Node>&& nodes_, int root_) : nodes(std::move(nodes_)), root(root_) {}
 
 public:
 	// min-cartesian-tree, with earlier cells tiebroken earlier
-	template <typename T, typename Comp = std::less<T>>
-	static CartesianTree build_min_tree(const std::vector<T>& v, Comp comp = Comp()) {
-		std::vector<Node> nodes(v.size()*2+1);
-		std::vector<int> stk; stk.reserve(v.size());
+	template <std::ranges::random_access_range R, typename Comp = std::ranges::less>
+	static CartesianTree build_min_tree(const R& v, Comp comp = Comp()) {
+		int N = int(std::ranges::size(v));
+		vec<Node> nodes(2*N+1);
+		bounded_vec<int> stk(with_capacity{N});
 		int root = -1;
-		for (int i = 0; i <= int(v.size()); i++) {
+		for (int i = 0; i <= N; i++) {
 			int cur = 2*i;
 			nodes[cur].l = i;
 			nodes[cur].r = i-1;
 			nodes[cur].m = i-1;
 			nodes[cur].c = {-1, -1};
-			while (!stk.empty() && (i == int(v.size()) || comp(v[i], v[nodes[stk.back()].m]))) {
+			while (!stk.empty() && (i == N || comp(v[i], v[nodes[stk.back()].m]))) {
 				int nxt = stk.back(); stk.pop_back();
 				nodes[cur].p = nxt;
 				nodes[nxt].c[1] = cur;
 				nodes[nxt].r = nodes[cur].r;
 				cur = nxt;
 			}
-			if (i == int(v.size())) {
+			if (i == N) {
 				root = cur;
 				break;
 			}
@@ -62,8 +64,8 @@ public:
 	}
 
 	// max-cartesian-tree, with earlier cells tiebroken earlier
-	template <typename T, typename Comp = std::less<T>>
-	static CartesianTree build_max_tree(const std::vector<T>& v, Comp comp = Comp()) {
+	template <std::ranges::random_access_range R, typename Comp = std::ranges::less>
+	static CartesianTree build_max_tree(const R& v, Comp comp = Comp()) {
 		return build_min_tree(v, reverse_comparator(comp));
 	}
 };
