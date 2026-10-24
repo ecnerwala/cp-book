@@ -11,9 +11,9 @@ int main() {
 
 	int N; std::cin >> N;
 	using num = wala::modnum<998244353>;
-	std::vector<std::vector<num>> M(N, std::vector<num>(N));
+	wala::vec<wala::vec<num>> M(N, wala::vec<num>(N));
 	for (auto& r : M) for (auto& v : r) std::cin >> v;
-	auto res = wala::charPoly(M);
+	auto res = wala::charPoly(std::move(M));
 	for (int i = 0; i <= N; i++) {
 		std::cout << res[i] << " \n"[i==N];
 	}

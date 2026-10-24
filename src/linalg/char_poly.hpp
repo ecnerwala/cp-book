@@ -1,6 +1,5 @@
 #pragma once
 
-#include <vector>
 #include <bitset>
 #include <cassert>
 
@@ -11,7 +10,7 @@ namespace wala {
 // Compute the characteristic polynomial of a square matrix A over some field.
 // Not numerically stable at all.
 // Takes argument by value, use std::move if you can.
-template <typename num> vec<num> charPoly(std::vector<std::vector<num>> A) {
+template <typename num> vec<num> charPoly(vec<vec<num>> A) {
 	int N = int(A.size());
 	bounded_vec<num> res(with_capacity{N+1});
 	res.push_back(num(1));
@@ -78,7 +77,7 @@ template <typename num> vec<num> charPoly(std::vector<std::vector<num>> A) {
 // Compute the characteristic polynomial of a square matrix A over F2.
 // Takes argument by value, use std::move if you can.
 // Note that MAXS must be at least N+1
-template <std::size_t MAXS> std::bitset<MAXS> charPoly(std::vector<std::bitset<MAXS>> A) {
+template <std::size_t MAXS> std::bitset<MAXS> charPoly(vec<std::bitset<MAXS>> A) {
 	using bs = std::bitset<MAXS>;
 	int N = int(A.size());
 	assert(MAXS >= N+1);
