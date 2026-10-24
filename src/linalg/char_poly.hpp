@@ -1,9 +1,11 @@
 #pragma once
 
-#include <vector>
+#include <algorithm>
 #include <bitset>
 #include <cassert>
+#include <span>
 
+#include "containers/tensor.hpp"
 #include "containers/vec.hpp"
 
 namespace wala {
@@ -11,12 +13,14 @@ namespace wala {
 // Compute the characteristic polynomial of a square matrix A over some field.
 // Not numerically stable at all.
 // Takes argument by value, use std::move if you can.
-template <typename num> vec<num> charPoly(std::vector<std::vector<num>> A) {
-	int N = int(A.size());
+template <typename num> vec<num> charPoly(tensor<num, 2> A) {
+	assert(A.extent(0) == A.extent(1));
+	int N = A.extent(0);
+	auto row = [&](int i) { return std::span<num>(&A[{i, 0}], N); };
 	bounded_vec<num> res(with_capacity{N+1});
 	res.push_back(num(1));
 	for (int i = 0, deg = 0; i < N; i++) {
-		auto& Ai = A[i];
+		auto Ai = row(i);
 
 		int c = i+1;
 		while (c < N && Ai[c] == num(0)) c++;
@@ -38,14 +42,14 @@ template <typename num> vec<num> charPoly(std::vector<std::vector<num>> A) {
 		Ai[c] = Ai[i+1];
 		Ai[i+1] = 0;
 
-		std::swap(A[i+1], A[c]);
-		auto& Ai1 = A[i+1];
+		auto Ai1 = row(i+1);
+		std::swap_ranges(Ai1.begin(), Ai1.end(), row(c).begin());
 		for (int k = deg; k < N; k++) {
 			Ai1[k] *= vc;
 		}
 
 		for (int k = i+1; k < N; k++) {
-			auto& Ak = A[k];
+			auto Ak = row(k);
 			{
 				auto& x = Ak[i+1];
 				auto& y = Ak[c];
@@ -78,7 +82,7 @@ template <typename num> vec<num> charPoly(std::vector<std::vector<num>> A) {
 // Compute the characteristic polynomial of a square matrix A over F2.
 // Takes argument by value, use std::move if you can.
 // Note that MAXS must be at least N+1
-template <std::size_t MAXS> std::bitset<MAXS> charPoly(std::vector<std::bitset<MAXS>> A) {
+template <std::size_t MAXS> std::bitset<MAXS> charPoly(vec<std::bitset<MAXS>> A) {
 	using bs = std::bitset<MAXS>;
 	int N = int(A.size());
 	assert(MAXS >= N+1);
