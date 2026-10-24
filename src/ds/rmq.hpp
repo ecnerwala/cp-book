@@ -1,9 +1,11 @@
 #pragma once
 
 #include <functional>
-#include <vector>
 #include <cassert>
 #include <cstdint>
+#include <ranges>
+
+#include "containers/vec.hpp"
 
 namespace wala {
 
@@ -13,11 +15,11 @@ template <typename T, class Compare = std::less<T>> class RangeMinQuery : privat
 	static_assert(BUCKET_SIZE == (1 << BUCKET_SIZE_LOG), "BUCKET_SIZE should be a power of 2");
 	static const int CACHE_LINE_ALIGNMENT = 64;
 	int n = 0;
-	std::vector<T> data;
-	std::vector<T> pref_data;
-	std::vector<T> suff_data;
-	std::vector<T> sparse_table;
-	std::vector<uint32_t> range_mask;
+	vec<T> data;
+	vec<T> pref_data;
+	vec<T> suff_data;
+	vec<T> sparse_table;
+	vec<uint32_t> range_mask;
 
 private:
 	int num_buckets() const {
@@ -38,20 +40,19 @@ private:
 		if (Compare::operator()(b, a)) a = b;
 	}
 
-	template <typename Vec> static int get_size(const Vec& v) { using std::size; return int(size(v)); }
 
 public:
 	RangeMinQuery() {}
-	template <typename Vec> explicit RangeMinQuery(const Vec& data_, const Compare& comp_ = Compare())
+	template <std::ranges::sized_range R> requires std::constructible_from<T, std::ranges::range_reference_t<R>>
+	explicit RangeMinQuery(const R& data_, const Compare& comp_ = Compare())
 		: Compare(comp_)
-		, n(get_size(data_))
-		, data(n)
+		, n(int(std::ranges::size(data_)))
+		, data(std::from_range, data_)
 		, pref_data(n)
 		, suff_data(n)
 		, sparse_table(sparse_table_size())
-		, range_mask(n)
+		, range_mask(n, uninit)
 	{
-		for (int i = 0; i < n; i++) data[i] = data_[i];
 		for (int i = 0; i < n; i++) {
 			if (i & (BUCKET_SIZE-1)) {
 				uint32_t m = range_mask[i-1];

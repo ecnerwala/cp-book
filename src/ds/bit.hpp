@@ -1,7 +1,8 @@
 #pragma once
 
-#include <vector>
 #include <cassert>
+
+#include "containers/vec.hpp"
 
 namespace wala {
 
@@ -29,16 +30,16 @@ namespace wala {
  */
 template <typename T> class binary_indexed_tree {
 private:
-	std::vector<T> dat;
+	vec<T> dat;
 
 public:
 	binary_indexed_tree() {}
-	explicit binary_indexed_tree(size_t N) : dat(N) {}
-	binary_indexed_tree(size_t N, const T& t) : dat(N, t) {}
+	explicit binary_indexed_tree(int N) : dat(N) {}
+	binary_indexed_tree(int N, const T& t) : dat(N, t) {}
 
-	size_t size() const { return dat.size(); }
-	const std::vector<T>& data() const { return dat; }
-	std::vector<T>& data() { return dat; }
+	int size() const { return dat.size(); }
+	const vec<T>& data() const { return dat; }
+	vec<T>& data() { return dat; }
 
 private:
 	template <typename I, typename S = I> struct iterator_range {
@@ -77,8 +78,8 @@ public:
 	};
 	using const_suffix_range = iterator_range<const_suffix_iterator>;
 	const_suffix_range suffix(int a) const {
-		assert(0 <= a && a <= int(dat.size()));
-		return const_suffix_range{const_suffix_iterator{dat.data(), a}, const_suffix_iterator{nullptr, int(dat.size())}};
+		assert(0 <= a && a <= dat.size());
+		return const_suffix_range{const_suffix_iterator{dat.data(), a}, const_suffix_iterator{nullptr, dat.size()}};
 	}
 
 	class suffix_iterator {
@@ -103,8 +104,8 @@ public:
 	};
 	using suffix_range = iterator_range<suffix_iterator>;
 	suffix_range suffix(int a) {
-		assert(0 <= a && a <= int(dat.size()));
-		return suffix_range{suffix_iterator{dat.data(), a}, suffix_iterator{nullptr, int(dat.size())}};
+		assert(0 <= a && a <= dat.size());
+		return suffix_range{suffix_iterator{dat.data(), a}, suffix_iterator{nullptr, dat.size()}};
 	}
 
 	class const_prefix_iterator {
