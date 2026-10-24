@@ -1,8 +1,11 @@
 #pragma once
 
 #include <algorithm>
-#include <vector>
 #include <cassert>
+#include <span>
+
+#include "containers/csr.hpp"
+#include "containers/vec.hpp"
 
 #include "yc.hpp"
 
@@ -12,17 +15,22 @@ using std::swap;
 
 struct level_ancestor {
 	int N;
-	std::vector<int> preorder;
-	std::vector<int> idx;
-	std::vector<std::pair<int, int>> heavyPar; // heavy parent, distance
+	vec<int> preorder;
+	vec<int> idx;
+	vec<std::pair<int, int>> heavyPar; // heavy parent, distance
 	level_ancestor() : N(0) {}
 
-	level_ancestor(const std::vector<int>& par) : N(int(par.size())), preorder(N), idx(N), heavyPar(N) {
-		std::vector<std::vector<int>> ch(N);
+	level_ancestor(std::span<const int> par) : N(int(par.size())), preorder(N, uninit), idx(N, uninit), heavyPar(N) {
+		csr_index_builder ch_idx_builder(N);
 		for (int i = 0; i < N; i++) {
-			if (par[i] != -1) ch[par[i]].push_back(i);
+			if (par[i] != -1) ch_idx_builder.count(par[i]);
 		}
-		std::vector<int> sz(N);
+		csr_builder<int> ch_builder(std::move(ch_idx_builder));
+		for (int i = 0; i < N; i++) {
+			if (par[i] != -1) ch_builder.push(par[i]) = i;
+		}
+		csr<int> ch = std::move(ch_builder).finalize();
+		vec<int> sz(N, uninit);
 		int nxt_idx = 0;
 		for (int i = 0; i < N; i++) {
 			if (par[i] == -1) {
@@ -34,7 +42,7 @@ struct level_ancestor {
 					}
 					if (!ch[cur].empty()) {
 						auto mit = std::max_element(ch[cur].begin(), ch[cur].end(), [&](int a, int b) { return sz[a] < sz[b]; });
-						swap(*ch[cur].begin(), *mit);
+						std::swap(ch[cur].front(), *mit);
 					}
 				})(i);
 				std::y_combinator([&](auto self, int cur, int isRoot = true) -> void {
