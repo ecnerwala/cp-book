@@ -13,13 +13,19 @@ int main() {
 	P[0] = -1;
 	for (auto& v : P | std::views::drop(1)) std::cin >> v;
 
-	std::vector<std::vector<int>> adj(N);
+	wala::csr_index_builder adj_idx_builder(N);
 	for (int i = 1; i < N; i++) {
-		adj[P[i]].push_back(i);
-		adj[i].push_back(P[i]);
+		adj_idx_builder.count(P[i]);
+		adj_idx_builder.count(i);
 	}
+	wala::csr_builder<int> adj_builder(std::move(adj_idx_builder));
+	for (int i = 1; i < N; i++) {
+		adj_builder.push(P[i]) = i;
+		adj_builder.push(i) = P[i];
+	}
+	wala::csr<int> adj = std::move(adj_builder).finalize();
 
-	wala::static_forest_t tree(adj, {0});
+	wala::static_forest_t tree(adj, std::array{0});
 
 	for (int q = 0; q < Q; q++) {
 		int u, v; std::cin >> u >> v;
