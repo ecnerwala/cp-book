@@ -5,13 +5,15 @@
 #include <utility>
 #include <cassert>
 
+#include "containers/vec.hpp"
+
 namespace wala {
 
 // Direct a graph into a DAG so that given source and sink are the unique sources/sinks.
 // If there are any biconnected components not on the path from the source to
 // the sink, they will not be output, modify the code if necessary.
 // Returns a topological sort. Back out the edge directions yourself.
-inline std::vector<int> make_st_dag(const std::vector<std::vector<int>>& adj, int source = -1, int sink = -1) {
+inline bounded_vec<int> make_st_dag(const std::vector<std::vector<int>>& adj, int source = -1, int sink = -1) {
 	int N = int(adj.size());
 
 	// What's even going on lol
@@ -22,14 +24,14 @@ inline std::vector<int> make_st_dag(const std::vector<std::vector<int>>& adj, in
 	if (source == -1) source = adj[sink].empty() ? sink : adj[sink][0];
 	if (sink == -1) sink = adj[source].empty() ? source : adj[source][0];
 
-	std::vector<int> depth(N, -1);
-	std::vector<int> lowval(N);
-	std::vector<bool> has_sink(N);
-	std::vector<std::vector<int>> ch(N);
+	vec<int> depth(N, -1);
+	vec<int> lowval(N);
+	vec<bool> has_sink(N);
+	vec<bounded_vec<int>> ch(N);
 	[&](this auto&& self, int cur, int prv) -> void {
 		depth[cur] = prv != -1 ? depth[prv] + 1 : 0;
 		lowval[cur] = depth[cur];
-		ch[cur].reserve(adj[cur].size());
+		ch[cur] = bounded_vec<int>(with_capacity{int(adj[cur].size())});
 		has_sink[cur] = (cur == sink);
 		for (int nxt : adj[cur]) {
 			if (nxt == prv) continue;
@@ -47,8 +49,8 @@ inline std::vector<int> make_st_dag(const std::vector<std::vector<int>>& adj, in
 	}(source, -1);
 
 	// true is after, false is before
-	std::vector<bool> edge_dir(N, false);
-	std::vector<int> lst_nxt(N, -1);
+	vec<bool> edge_dir(N);
+	vec<int> lst_nxt(N, -1);
 	auto lst = [&](this auto&& self, int cur) -> std::array<int, 2> {
 		std::array<int, 2> res{cur, cur};
 		for (int nxt : ch[cur]) {
@@ -69,12 +71,8 @@ inline std::vector<int> make_st_dag(const std::vector<std::vector<int>>& adj, in
 		return res;
 	}(source);
 
-	std::vector<int> res; res.reserve(N);
-	int cur = lst[0];
-	while (cur != -1) {
-		res.push_back(cur);
-		cur = lst_nxt[cur];
-	}
+	bounded_vec<int> res(with_capacity{N});
+	for (int cur = lst[0]; cur != -1; cur = lst_nxt[cur]) res.push_back(cur);
 	return res;
 }
 
