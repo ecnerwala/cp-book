@@ -18,6 +18,7 @@ protected:
 
 public:
 	tensor_view() : shape{0}, strides{0}, data(nullptr) {}
+	int extent(int i) const { return shape[i]; }
 
 protected:
 	int flatten_index(std::array<int, NDIMS> idx) const {
@@ -124,6 +125,7 @@ public:
 		return view();
 	}
 
+	int extent(int i) const { return shape[i]; }
 	T& operator[] (std::array<int, NDIMS> idx) { return view()[idx]; }
 	T& at(std::array<int, NDIMS> idx) { return view().at(idx); }
 	const T& operator[] (std::array<int, NDIMS> idx) const { return view()[idx]; }
