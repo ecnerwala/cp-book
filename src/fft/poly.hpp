@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "containers/vec.hpp"
 #include "fft/series_core.hpp"
 
 namespace wala::poly {
@@ -310,7 +311,7 @@ struct subproduct_tree {
 	// Computes, for each i, f(product_{j != i} (1 - a[j] x)). Requires f.len() == N.
 	std::vector<T> pushdown(form<E> f) const {
 		assert(f.len() == N);
-		std::vector<form<E>> down(size_t(2) * N);
+		wala::vec<form<E>> down(2 * N);
 		down[1] = std::move(f);
 		for (int i = 1; i < N; i++) {
 			// the form's kernel transform serves both children's middle products
@@ -326,7 +327,7 @@ struct subproduct_tree {
 	// Compute sum_i leaf_vals[i] prod_{j!=i} (x - a[j]) (transpose of pushdown)
 	cached<E> combine_up(std::span<const T> leaf_vals) const {
 		assert(sz(leaf_vals) == N);
-		std::vector<cached<E>> up(size_t(2) * N);
+		wala::vec<cached<E>> up(2 * N);
 		for (int i = 0; i < N; i++) {
 			up[N + i] = vec<E>{leaf_vals[i]};
 		}
