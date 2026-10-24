@@ -1,9 +1,10 @@
 #pragma once
 
-#include <vector>
 #include <cassert>
 #include <optional>
 #include <concepts>
+
+#include "containers/vec.hpp"
 
 namespace wala::smawk {
 
@@ -29,16 +30,16 @@ public:
 	int L;
 	int num_rows;
 
-	std::vector<std::vector<value_t<T>>> stk;
-	std::vector<std::pair<value_t<T>, int>> bests;
+	vec<bounded_vec<value_t<T>>> stk;
+	vec<std::pair<value_t<T>, int>> bests;
 	LARSCH() {}
 	LARSCH(int N_, Get&& get_, Select&& select_) : N(N_), get(std::forward<Get>(get_)), select(std::forward<Select>(select_)) {
 		L = N ? 31 - __builtin_clz(N) : 0;
-		stk.resize(L);
-		bests.resize(L);
+		stk = vec<bounded_vec<value_t<T>>>(L);
+		bests = vec<std::pair<value_t<T>, int>>(L);
 		// N >> L == 1, unless N == 0
 		for (int i = 0; i < L; i++) {
-			stk[i].reserve(N >> (i+1));
+			stk[i] = bounded_vec<value_t<T>>(with_capacity{N >> (i+1)});
 		}
 		num_rows = 0;
 	}
@@ -81,14 +82,14 @@ public:
 			}
 			if (bests[l].second == r) {
 				// We've committed to the new column being the best, so let's prune the stack and propagate to ensure consistency.
-				assert(int(stk[l].size()) >= (r+1)/2);
-				stk[l].resize((r+1)/2);
+				assert(stk[l].size() >= (r+1)/2);
+				stk[l].shrink_to((r+1)/2);
 				// We can just set .second only, since the only time it's read is the r&1 case, which will override bests[l].first
 				if (l+1 < L) bests[l+1].second = (r+1)/2;
 			}
 			std::optional<value_t<T>> to_push;
-			while (int(stk[l].size()) > (r+1)/2) {
-				int row = (int(stk[l].size()) << (l+1)) - 1;
+			while (stk[l].size() > (r+1)/2) {
+				int row = (stk[l].size() << (l+1)) - 1;
 				value_t<T> nv{get(row, col), col};
 				if (select(row, stk[l].back(), nv)) {
 					stk[l].pop_back();
@@ -100,7 +101,7 @@ public:
 			if (to_push) {
 				stk[l].emplace_back(std::move(*to_push));
 			} else {
-				int row = (int(stk[l].size()+1) << (l+1)) - 1;
+				int row = ((stk[l].size()+1) << (l+1)) - 1;
 				if (row < N) stk[l].emplace_back(get(row, col), col);
 			}
 			if (r & 1) {
@@ -147,13 +148,13 @@ public:
 
 template <typename Get, typename Select, typename T = std::invoke_result_t<Get&&, int, int>>
 requires totally_monotone_matrix_oracle<T, Get&&, Select&&>
-std::vector<value_t<T>> smawk(int N, int M, Get&& get, Select&& select) {
+vec<value_t<T>> smawk(int N, int M, Get&& get, Select&& select) {
 	// TODO: If M >> N, then we should do an extra layer of column filter on the outside. The cutoff should be M > 2N or so.
-	std::vector<value_t<T>> res(N);
+	vec<value_t<T>> res(N);
 	for (int i = 0; i < N; i++) res[i].col = -1;
-	std::vector<int> stks(N);
+	vec<int> stks(N, uninit);
 	int L = N ? 31 - __builtin_clz(N) : 0;
-	std::vector<int> stk_ends(L+1);
+	vec<int> stk_ends(L+1, uninit);
 	stk_ends[0] = 0;
 	for (int l = 0; l < L; l++) {
 		int sz = 0;
