@@ -11,12 +11,19 @@ int main() {
 	int N_CASES; std::cin >> N_CASES;
 	while (N_CASES--) {
 		int N, M, S, T; std::cin >> N >> M >> S >> T;
-		std::vector<std::vector<int>> adj(N);
-		for (int e = 0; e < M; e++) {
-			int u, v; std::cin >> u >> v;
-			adj[u].push_back(v);
-			adj[v].push_back(u);
+		std::vector<std::array<int, 2>> edges(M);
+		wala::csr_index_builder adj_idx_builder(N);
+		for (auto& [u, v] : edges) {
+			std::cin >> u >> v;
+			adj_idx_builder.count(u);
+			adj_idx_builder.count(v);
 		}
+		wala::csr_builder<int> adj_builder(std::move(adj_idx_builder));
+		for (auto [u, v] : edges) {
+			adj_builder.push(u) = v;
+			adj_builder.push(v) = u;
+		}
+		wala::csr<int> adj = std::move(adj_builder).finalize();
 
 		auto res = wala::make_st_dag(adj, S, T);
 		if (int(res.size()) == N) {

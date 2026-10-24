@@ -1,10 +1,10 @@
 #pragma once
 
-#include <vector>
 #include <array>
-#include <utility>
 #include <cassert>
+#include <utility>
 
+#include "containers/csr.hpp"
 #include "containers/vec.hpp"
 
 namespace wala {
@@ -13,8 +13,8 @@ namespace wala {
 // If there are any biconnected components not on the path from the source to
 // the sink, they will not be output, modify the code if necessary.
 // Returns a topological sort. Back out the edge directions yourself.
-inline bounded_vec<int> make_st_dag(const std::vector<std::vector<int>>& adj, int source = -1, int sink = -1) {
-	int N = int(adj.size());
+inline bounded_vec<int> make_st_dag(const csr<int>& adj, int source = -1, int sink = -1) {
+	int N = adj.num_rows();
 
 	// What's even going on lol
 	if (N == 0) return {};
