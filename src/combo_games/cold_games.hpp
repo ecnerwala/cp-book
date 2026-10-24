@@ -1,7 +1,8 @@
 #pragma once
 
 #include <ostream>
-#include <vector>
+#include <ranges>
+#include <concepts>
 #include <optional>
 #include <array>
 #include <cassert>
@@ -65,7 +66,8 @@ struct cold_ish {
 
 // 0 are moves for l
 // TODO: Could optimize
-inline std::optional<cold_ish> cold_ish_game(std::array<std::vector<cold_ish>, 2> moves) {
+template <std::ranges::input_range R> requires std::same_as<std::ranges::range_value_t<R>, cold_ish>
+std::optional<cold_ish> cold_ish_game(const std::array<R, 2>& moves) {
 	std::array<std::optional<cold_ish>, 2> best;
 	for (int z = 0; z < 2; z++) {
 		std::optional<cold_ish> v;
