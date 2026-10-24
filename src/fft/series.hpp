@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "containers/vec.hpp"
 #include "fft/series_core.hpp"
 
 // ==== analytic ops ====
@@ -212,7 +213,7 @@ template <trunc_like S>
 trunc<typename S::engine_t> euler_transform(const S& a) {
 	using E = typename S::engine_t;
 	trunc<E> r = deriv_shift(a);
-	std::vector<bool> is_prime(size_t(r.len()), true);
+	wala::vec<bool> is_prime(r.len(), true);
 	for (int p = 2; p < r.len(); p++) {
 		if (!is_prime[p]) continue;
 		for (int i = 1; i*p < r.len(); i++) {
@@ -226,7 +227,7 @@ template <trunc_like S>
 trunc<typename S::engine_t> inverse_euler_transform(const S& a) {
 	using E = typename S::engine_t;
 	trunc<E> r = deriv_shift(ps_log(a));
-	std::vector<bool> is_prime(size_t(r.len()), true);
+	wala::vec<bool> is_prime(r.len(), true);
 	for (int p = 2; p < r.len(); p++) {
 		if (!is_prime[p]) continue;
 		for (int i = (r.len()-1)/p; i >= 1; i--) {
@@ -374,9 +375,9 @@ P::engine_t::value_type kth_term_of_rational_function(
 	if (auto cq = detail::cache_of(q)) { E::extend_to(cq->get(), n, q); tq = cq->get(); }
 	if (auto cp = detail::cache_of(p)) { E::extend_to(cp->get(), n, p); tp = cp->get(); }
 
-	std::vector<T> p_buf(d-1, T(0));
+	wala::vec<T> p_buf(d-1, T(0));
 	std::ranges::copy(std::span<const T>(p), p_buf.begin());
-	std::vector<T> q_buf(d, T(0));
+	wala::vec<T> q_buf(d, T(0));
 	std::ranges::copy(std::span<const T>(q), q_buf.begin());
 
 	while (k > 0) {

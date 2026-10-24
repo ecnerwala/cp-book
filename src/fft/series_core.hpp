@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "containers/vec.hpp"
 #include "fft/multiply.hpp"
 
 // ==== value types ====
@@ -377,7 +378,7 @@ trunc<typename S::engine_t> ps_inv(const S& a) {
 	trunc<E> r(size_t(N), T{});
 	if (N == 0) return r;
 	int s = nextPow2(N);
-	std::vector<T> b(size_t(s), T{});
+	wala::vec<T> b(s, T{});
 	b[0] = inv(a[0]);
 	for (int n = 1; n < N; n *= 2) {
 		int m = 2 * n;
