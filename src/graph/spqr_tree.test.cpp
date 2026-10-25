@@ -1,3 +1,4 @@
+#include "containers/vec.hpp"
 #include "graph/spqr_tree.hpp"
 
 #include <random>
@@ -15,7 +16,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 		for (int seed = 0; seed < 50; seed++) {
 			std::seed_seq seq{NE, seed};
 			std::mt19937 mt(seq);
-			std::vector<std::array<int, 2>> edges(NE);
+			wala::vec<std::array<int, 2>> edges(NE);
 			for (auto& e : edges) {
 				for (auto& v : e) {
 					v = std::uniform_int_distribution<int>(0, NV-1)(mt);
@@ -24,7 +25,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 
 			// order_mode 0: default order, 1: random full permutations, 2: random prefixes of permutations
 			int order_mode = seed % 3;
-			std::vector<int> vert_order(NV), edge_order(NE);
+			wala::bounded_vec<int> vert_order(NV), edge_order(NE);
 			std::ranges::iota(vert_order, 0);
 			std::ranges::iota(edge_order, 0);
 			if (order_mode == 0) {
@@ -34,21 +35,21 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 				std::ranges::shuffle(vert_order, mt);
 				std::ranges::shuffle(edge_order, mt);
 				if (order_mode == 2) {
-					vert_order.resize(std::uniform_int_distribution<int>(0, NV)(mt));
-					edge_order.resize(std::uniform_int_distribution<int>(0, NE)(mt));
+					vert_order.shrink_to(std::uniform_int_distribution<int>(0, NV)(mt));
+					edge_order.shrink_to(std::uniform_int_distribution<int>(0, NE)(mt));
 				}
 			}
 			// The effective orders: listed ids first, then the rest in id order
-			auto complete_order = [](std::vector<int> order, int n) -> std::vector<int> {
-				std::vector<bool> listed(n);
+			auto complete_order = [](wala::bounded_vec<int> order, int n) -> wala::vec<int> {
+				wala::vec<bool> listed(n);
 				for (int i : order) listed[i] = true;
 				for (int i = 0; i < n; i++) {
 					if (!listed[i]) order.push_back(i);
 				}
-				return order;
+				return std::move(order).into_vec();
 			};
-			std::vector<int> full_vert_order = complete_order(vert_order, NV);
-			std::vector<int> full_edge_order = complete_order(edge_order, NE);
+			wala::vec<int> full_vert_order = complete_order(vert_order, NV);
+			wala::vec<int> full_edge_order = complete_order(edge_order, NE);
 
 			CAPTURE(NV, NE, seed, edges, vert_order, edge_order);
 
@@ -221,7 +222,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						}
 						// Roots follow vert_order, and each root's first incident edge in edge_order roots its block
 						{
-							std::vector<bool> seen(NV);
+							wala::vec<bool> seen(NV);
 							int z = 0;
 							for (int r : full_vert_order) {
 								if (seen[r]) continue;
@@ -386,7 +387,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 
 				// Now, check planarity guarantees.
 				{
-					auto check_planar_embedding = [](const wala::planar_embedding& pe, int V, const std::vector<std::array<int, 2>>& ends, const std::vector<bool>& is_embedded) {
+					auto check_planar_embedding = [](const wala::planar_embedding& pe, int V, const wala::vec<std::array<int, 2>>& ends, const wala::vec<bool>& is_embedded) {
 						CAPTURE(pe.rot_adj);
 						int E = int(ends.size());
 						assert(int(is_embedded.size()) == E);
@@ -412,8 +413,8 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						int expected_face_cycles = 0;
 						{
 							// Union find to identify components
-							std::vector<bool> has_edge(V, false);
-							std::vector<int> par(V, -1);
+							wala::vec<bool> has_edge(V, false);
+							wala::vec<int> par(V, -1);
 							auto get_par = [&](int a) -> int {
 								while (par[a] >= 0) {
 									if (par[par[a]] >= 0) par[a] = par[par[a]];
@@ -448,7 +449,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						// Verify all edges around a vertex form a single cycle
 						int num_vert_cycles = 0;
 						{
-							std::vector<bool> vert_vis(pe.rot_adj.size());
+							wala::vec<bool> vert_vis(pe.rot_adj.size());
 							for (int a = 0; a < 4 * E; a++) {
 								if (!is_embedded[a >> 2]) continue;
 								if (vert_vis[a]) continue;
@@ -469,7 +470,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						// Verify the euler characteristic
 						int num_face_cycles = 0;
 						{
-							std::vector<bool> face_vis(pe.rot_adj.size());
+							wala::vec<bool> face_vis(pe.rot_adj.size());
 							for (int a = 0; a < 4 * E; a++) {
 								if (!is_embedded[a >> 2]) continue;
 								if (face_vis[a]) continue;
@@ -489,7 +490,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 
 						// Final thing: check to make sure that all parallel edges are grouped together correctly;
 						// even though it's combinatorially valid, it would be impossible to form a straight-line drawing.
-						std::vector<std::pair<std::array<int, 2>, int>> darts; darts.reserve(2 * E);
+						wala::bounded_vec<std::pair<std::array<int, 2>, int>> darts(wala::with_capacity{2 * E});
 						for (int i = 0; i < E; i++) {
 							for (int z = 0; z < 2; z++) {
 								darts.push_back({{ends[i][z], ends[i][!z]}, 2 * i + z});
@@ -517,8 +518,8 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 					{
 						INFO("Checking partial embeddings");
 
-						std::vector<std::array<int, 2>> ends(spqr.node_edges.size());
-						std::vector<bool> is_embedded(spqr.node_edges.size());
+						wala::vec<std::array<int, 2>> ends(spqr.node_edges.size());
+						wala::vec<bool> is_embedded(spqr.node_edges.size());
 						for (int i = 0; i < num_items; i++) {
 							if (spqr.node_planar[i]) {
 								for (int a : spqr.node_nes.indices(i)) {
@@ -540,7 +541,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						auto full_embedding = planar_embed(spqr);
 						REQUIRE_FAST(bool(full_embedding) == std::ranges::all_of(spqr.node_planar, std::identity{}));
 						if (full_embedding) {
-							std::vector<bool> is_embedded(edges.size(), true);
+							wala::vec<bool> is_embedded(edges.size(), true);
 							check_planar_embedding(*full_embedding, NV, edges, is_embedded);
 						}
 					}
@@ -549,7 +550,7 @@ TEST_CASE("SPQR Tree", "[spqr_tree]") {
 						auto fast_embedding = wala::planar_embed(NV, edges, vert_order, edge_order);
 						REQUIRE_FAST(bool(fast_embedding) == std::ranges::all_of(spqr.node_planar, std::identity{}));
 						if (fast_embedding) {
-							std::vector<bool> is_embedded(edges.size(), true);
+							wala::vec<bool> is_embedded(edges.size(), true);
 							check_planar_embedding(*fast_embedding, NV, edges, is_embedded);
 						}
 					}

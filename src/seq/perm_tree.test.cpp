@@ -1,11 +1,14 @@
+#include "containers/vec.hpp"
 #include "seq/perm_tree.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <bits/stdc++.h>
 
-void check_tree(std::vector<int> A) {
+void check_tree(wala::vec<int> A) {
 	int N = int(A.size());
-	std::vector<std::pair<std::array<int, 2>, std::array<int, 2>>> actual_ranges;
+	wala::bounded_vec<std::pair<std::array<int, 2>, std::array<int, 2>>> actual_ranges(
+		wala::with_capacity{N * (N + 1) / 2}
+	);
 	for (int i = 0; i < N; i++) {
 		int lo = A[i], hi = A[i];
 		for (int j = i; j < N; j++) {
@@ -19,7 +22,9 @@ void check_tree(std::vector<int> A) {
 	}
 
 	wala::PermTree tree(A);
-	std::vector<std::pair<std::array<int, 2>, std::array<int, 2>>> computed_ranges;
+	wala::bounded_vec<std::pair<std::array<int, 2>, std::array<int, 2>>> computed_ranges(
+		wala::with_capacity{N * (N + 1) / 2}
+	);
 	for (int n = 0; n < tree.size(); n++) {
 		const auto& node = tree[n];
 		if (node.type != wala::PermTree::NodeType::PARTIAL) {
@@ -73,10 +78,10 @@ void check_tree(std::vector<int> A) {
 
 TEST_CASE("Permutation Tree", "[perm_tree]") {
 	for (int N = 1; N <= 7; N++) {
-		std::vector<int> A(N);
+		wala::vec<int> A(N);
 		std::iota(A.begin(), A.end(), 0);
 		do {
 			check_tree(A);
-		} while (next_permutation(A.begin(), A.end()));
+		} while (std::next_permutation(A.begin(), A.end()));
 	}
 }
