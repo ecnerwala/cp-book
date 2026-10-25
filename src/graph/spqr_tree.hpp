@@ -12,9 +12,9 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
-#include <vector>
 
 #include "containers/csr.hpp"
+#include "containers/vec.hpp"
 
 namespace wala {
 
@@ -77,24 +77,24 @@ struct spqr_tree {
 	};
 	friend std::ostream& operator<<(std::ostream& o, node_type t) { return o << char(t); }
 
-	std::vector<int> vert_index;
-	std::vector<int> edge_index;
-	std::vector<bool> edge_flipped;
+	vec<int> vert_index;
+	vec<int> edge_index;
+	vec<bool> edge_flipped;
 
-	std::vector<int> par;
-	std::vector<int> subtree_end;
-	std::vector<node_type> types;
-	std::vector<int> orig_id;
+	vec<int> par;
+	vec<int> subtree_end;
+	vec<node_type> types;
+	vec<int> orig_id;
 
 	csr<int> ch;
 	struct node_vert_t {
 		int node;
 		int vert;
 	};
-	std::vector<node_vert_t> node_verts;
+	vec<node_vert_t> node_verts;
 	csr_index node_nvs;
 	// The nv index of a vertex within its parent node
-	std::vector<int> vert_par_nv;
+	vec<int> vert_par_nv;
 	// TODO: Should we store a vert_nodes CSR?
 
 	struct node_edge_t {
@@ -104,7 +104,7 @@ struct spqr_tree {
 
 		std::array<int, 2> nvs;
 	};
-	std::vector<node_edge_t> node_edges;
+	vec<node_edge_t> node_edges;
 	csr_index node_nes;
 
 	struct node_adj_t {
@@ -121,7 +121,7 @@ struct spqr_tree {
 	// Use planar_spqr_tree::build to also compute the planar embeddings.
 	static spqr_tree build(
 		int NV,
-		const std::vector<std::array<int, 2>>& edges,
+		std::span<const std::array<int, 2>> edges,
 		bool ternarize = false,
 		std::span<const int> vert_order = {},
 		std::span<const int> edge_order = {}
@@ -133,7 +133,7 @@ protected:
 	template <bool with_planarity>
 	static std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> build_impl(
 		int NV,
-		const std::vector<std::array<int, 2>>& edges,
+		std::span<const std::array<int, 2>> edges,
 		bool ternarize,
 		std::span<const int> vert_order,
 		std::span<const int> edge_order
@@ -156,11 +156,11 @@ struct planar_embedding {
 	//
 	// Partial embeddings are represented with -1's in the rot_adj array.
 	// NB: Helpers do not support -1's. It is up to the user to not access these entries!
-	std::vector<int> rot_adj;
+	vec<int> rot_adj;
 };
 
 struct planar_spqr_tree : spqr_tree {
-	std::vector<bool> node_planar;
+	vec<bool> node_planar;
 	// Planarity adjacencies: ne_rot_adj is an involution of facing quarter-edges, indexed according to:
 	// ne_rot_adj[4 * node_edge + 2 * side + dir]
 	// Nonplanar nodes have all entries -1.
@@ -168,7 +168,7 @@ struct planar_spqr_tree : spqr_tree {
 
 	static planar_spqr_tree build(
 		int NV,
-		const std::vector<std::array<int, 2>>& edges,
+		std::span<const std::array<int, 2>> edges,
 		bool ternarize = false,
 		std::span<const int> vert_order = {},
 		std::span<const int> edge_order = {}
@@ -179,7 +179,7 @@ struct planar_spqr_tree : spqr_tree {
 
 // Phase 1: build a DFS skeleton with outedges sorted by lowval
 struct lowval_storted_skeleton_t {
-	std::vector<int> roots;
+	bounded_vec<int> roots;
 	struct key_t { int lowval; bool is_tree; bool is_type_1; };
 	struct packed_key_t {
 		int v;
@@ -199,7 +199,7 @@ struct lowval_storted_skeleton_t {
 
 	static lowval_storted_skeleton_t build(
 		int NV,
-		const std::vector<std::array<int, 2>>& edges,
+		std::span<const std::array<int, 2>> edges,
 		std::span<const int> vert_order,
 		std::span<const int> edge_order
 	) {
@@ -221,7 +221,7 @@ struct lowval_storted_skeleton_t {
 					if (i != order[0]) f(i);
 				}
 			} else {
-				std::vector<bool> listed(n);
+				vec<bool> listed(n, false);
 				for (int i : order) listed[i] = true;
 				for (int i = 0; i < n; i++) {
 					if (!listed[i]) f(i);
@@ -229,10 +229,10 @@ struct lowval_storted_skeleton_t {
 			}
 		};
 
-		std::vector<int> roots; roots.reserve(NV);
+		bounded_vec<int> roots(with_capacity{NV});
 		csr<outedge_t> outedges;
 		{
-			std::vector<int> depth(NV, -1);
+			vec<int> depth(NV, -1);
 			// 1a: build a normal adjacency list for the initial lowval dfs
 			struct edge_t { int dest; int e; };
 			csr_index_builder adj_idx_builder(NV);
@@ -257,7 +257,7 @@ struct lowval_storted_skeleton_t {
 				int ch_idx;
 				int ch_end;
 			};
-			std::vector<dfs_stack_t> stk; stk.reserve(NV);
+			bounded_stack<dfs_stack_t> stk(with_capacity{NV});
 			auto push_vert = [&] [[gnu::always_inline]] (int cur, int prv_e) -> void {
 				int d = int(stk.size());
 				depth[cur] = d;
@@ -345,7 +345,7 @@ struct lowval_storted_skeleton_t {
 template <bool with_planarity>
 std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build_impl(
 	int NV,
-	const std::vector<std::array<int, 2>>& edges,
+	std::span<const std::array<int, 2>> edges,
 	bool ternarize,
 	std::span<const int> vert_order,
 	std::span<const int> edge_order
@@ -385,7 +385,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 
 		[[nodiscard]] bool empty() const { return v[0] < 0; }
 	};
-	std::vector<int> ch_nxt; ch_nxt.reserve(1 + NV + NE + NE); ch_nxt.assign(1 + NV + NE, -1);
+	bounded_vec<int> ch_nxt(with_capacity{1 + NV + NE + NE}, 1 + NV + NE, -1);
 	auto concat = [&] [[gnu::always_inline]] (item_list a, item_list b) -> item_list {
 		if (b.empty()) return a;
 		if (a.empty()) return b;
@@ -396,20 +396,19 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		return {{item << 1, item << 1}};
 	};
 
-	std::vector<std::array<int, 2>> item_vs; item_vs.reserve(1 + NV + 2 * NE); item_vs.resize(1 + NV + NE, {-1, -1});
-	std::vector<item_list> item_ch; item_ch.reserve(1 + NV + 2 * NE); item_ch.resize(1 + NV + NE, item_list{});
-	std::vector<node_type> item_types; item_types.reserve(1 + NV + 2 * NE);
-	item_types.resize(1, node_type::F);
-	item_types.resize(1 + NV, node_type::V);
-	item_types.resize(1 + NV + NE, node_type::Q);
+	bounded_vec<std::array<int, 2>> item_vs(with_capacity{1 + NV + 2 * NE}, 1 + NV + NE, {-1, -1});
+	bounded_vec<item_list> item_ch(with_capacity{1 + NV + 2 * NE}, 1 + NV + NE, item_list{});
+	bounded_vec<node_type> item_types(with_capacity{1 + NV + 2 * NE});
+	item_types.grow_by(1, node_type::F);
+	item_types.grow_by(NV, node_type::V);
+	item_types.grow_by(NE, node_type::Q);
 
 	// Quarter edges for planar embedding building.
 	// Each vedge has 4 entries by 4 * vedge_id + 2 * source_vert + is_cw (is_cw is arbitrary)
 	// vedges are identified with what item they cap, numbered by (item - 1 - NV)
-	std::vector<int> quarter_edge_matches(with_planarity ? 8 * NE + 4 : 0, -1);
+	vec<int> quarter_edge_matches(with_planarity ? 8 * NE + 4 : 0, -1);
 	struct nonplanarity_certficate_t {};
-	std::vector<std::expected<std::array<int, 4>, nonplanarity_certficate_t>> node_planarity;
-	if constexpr (with_planarity) node_planarity.reserve(NE);
+	bounded_vec<std::expected<std::array<int, 4>, nonplanarity_certficate_t>> node_planarity(with_capacity{with_planarity ? NE : 0});
 
 	int tot_blocks = 0;
 	int tot_self_loops = 0;
@@ -426,17 +425,17 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 		};
 
 		// Declare these here: most of our code will be in terms of v_start / top_depth, so we'll want to read these out
-		std::vector<int> stack_verts(NV);
-		std::vector<int8_t> stack_dir(NV); // really bool, but I don't want vector<bool>
+		vec<int> stack_verts(NV);
+		vec<bool> stack_dir(NV);
 
 		auto make_vs = [&] [[gnu::always_inline]] (int v_start, int top_depth) -> std::array<int, 2> {
 			return set_sides(stack_dir[top_depth], stack_verts[top_depth], v_start);
 		};
 
 		int nxt_edge_idx = 0; // Counts backedges only
-		std::vector<int> first_occurrence(NV); // First backedge to this depth
+		vec<int> first_occurrence(NV); // First backedge to this depth
 
-		std::vector<int> edge_top_depths(with_planarity ? 2 * NE : 0, -1);
+		vec<int> edge_top_depths(with_planarity ? 2 * NE : 0, -1);
 
 		struct tstack_planarity_side_t {
 			// For each side, store pointers to the "linked lists" of the edges inside.
@@ -518,7 +517,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			std::array<item_list, 2> spans;
 			[[no_unique_address]] tstack_maybe_planarity_t planarity;
 		};
-		std::vector<tstack_t> tstack; tstack.reserve(NV + NE);
+		bounded_stack<tstack_t> tstack(with_capacity{NV + NE});
 		auto cur_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-1]; };
 		auto nxt_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-2]; };
 
@@ -637,7 +636,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			int ch_end;
 			int orig_tstack;
 		};
-		std::vector<dfs_stack_t> stk; stk.reserve(NV);
+		bounded_stack<dfs_stack_t> stk(with_capacity{NV});
 		for (auto rt : roots) {
 			auto push_vert = [&] [[gnu::always_inline]] (int cur) -> void {
 				// stack_dir[cur_depth] must already be set for the lowval, so that we can push the vert tstack
@@ -1093,40 +1092,40 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 	// Phase 3: relabel the full tree in preorder
 	int tot_items = int(item_types.size());
 	{
-		std::vector<int> vert_index(NV, -1);
-		std::vector<int> edge_index(NE, -1);
-		std::vector<bool> edge_flipped(NE);
+		vec<int> vert_index(NV, -1);
+		vec<int> edge_index(NE, -1);
+		vec<bool> edge_flipped(NE, false);
 
-		std::vector<int> par(tot_items, -1);
-		std::vector<int> subtree_end(tot_items, -1);
-		std::vector<node_type> types(tot_items, node_type::F);
-		std::vector<int> orig_id(tot_items, -1);
+		vec<int> par(tot_items, -1);
+		vec<int> subtree_end(tot_items, -1);
+		vec<node_type> types(tot_items, node_type::F);
+		vec<int> orig_id(tot_items, -1);
 
 		csr<int> ch(tot_items, tot_items - 1);
 
 		// Each node is a child, and additionally most non-block node has 2 cap verts; blocks have 1, and O nodes have 1
 		int tot_node_verts = NV + (tot_items - 1 - NV) * 2 - tot_blocks - tot_self_loops;
-		std::vector<node_vert_t> node_verts(tot_node_verts);
+		vec<node_vert_t> node_verts(tot_node_verts);
 		csr_index node_nvs(tot_items);
-		std::vector<int> vert_par_nv(tot_items, -1);
+		vec<int> vert_par_nv(tot_items, -1);
 
 		int tot_node_edges = (tot_items - 1 - NV - tot_blocks) * 2;
-		std::vector<node_edge_t> node_edges(tot_node_edges);
+		vec<node_edge_t> node_edges(tot_node_edges);
 		csr_index node_nes(tot_items);
 
 		csr<node_adj_t> node_adj(tot_node_verts * 2, tot_node_edges * 2);
 
-		std::vector<bool> node_planar(with_planarity ? tot_items : 0);
-		std::vector<int> ne_rot_adj(with_planarity ? 4 * tot_node_edges : 0, -1);
+		vec<bool> node_planar(with_planarity ? tot_items : 0);
+		vec<int> ne_rot_adj(with_planarity ? 4 * tot_node_edges : 0, -1);
 
-		std::vector<int> vert_pos_buf(NV, -1);
-		std::vector<int> cnts_buf(2 * NV, -1);
+		vec<int> vert_pos_buf(NV, -1);
+		bounded_vec<int> cnts_buf(with_capacity{2 * NV});
 		struct ch_buf_t {
 			int loc;
 			int item_id;
 		};
-		std::vector<ch_buf_t> ch_buf(tot_items);
-		std::vector<int> rot_edge_ne(with_planarity ? 2 * NE + 1 : 0);
+		bounded_vec<ch_buf_t> ch_buf(with_capacity{tot_items});
+		vec<int> rot_edge_ne(with_planarity ? 2 * NE + 1 : 0);
 
 		int nxt_unassigned_idx = 0;
 
@@ -1137,7 +1136,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 			int cur_nv;
 			int cur_ne;
 		};
-		std::vector<dfs_stack_t> stk; stk.reserve(tot_items);
+		bounded_stack<dfs_stack_t> stk(with_capacity{tot_items});
 		auto push_item = [&] [[gnu::always_inline]] (int cur_item) -> void {
 			int cur_idx = nxt_unassigned_idx++;
 			node_type cur_type = types[cur_idx] = item_types[cur_item];
@@ -1303,7 +1302,7 @@ std::conditional_t<with_planarity, planar_spqr_tree, spqr_tree> spqr_tree::build
 				for (int nv = nv_st; nv < nv_en; nv++) {
 					vert_pos_buf[node_verts[nv].vert] = nv;
 				}
-				cnts_buf.assign(n_verts * 2 - 1, 0);
+				cnts_buf.clear(); cnts_buf.grow_to(n_verts * 2 - 1, 0);
 				ch_buf.clear();
 
 				assert(has_cap);
@@ -1483,7 +1482,7 @@ inline std::optional<planar_embedding> planar_embed(const planar_spqr_tree& tree
 	}
 
 	int NE = int(tree.edge_index.size());
-	std::vector<int> rot_adj(4 * NE, -1);
+	vec<int> rot_adj(4 * NE, -1);
 	auto link = [&] [[gnu::always_inline]] (int a, int b) -> void {
 		assert(a != -1 && b != -1);
 		assert(rot_adj[a] == -1 && rot_adj[b] == -1);
@@ -1492,7 +1491,7 @@ inline std::optional<planar_embedding> planar_embed(const planar_spqr_tree& tree
 		rot_adj[b] = a;
 	};
 
-	std::vector<std::array<std::array<int, 2>, 2>> outer_e(tree.size(), {{{-1, -1}, {-1, -1}}});
+	vec<std::array<std::array<int, 2>, 2>> outer_e(tree.size(), {{{-1, -1}, {-1, -1}}});
 	for (int i = tree.size() - 1; i >= 0; i--) {
 		auto type = tree.types[i];
 		if (type == node_type::F) {
@@ -1584,7 +1583,7 @@ inline std::optional<planar_embedding> planar_embed(const planar_spqr_tree& tree
 
 inline std::optional<planar_embedding> planar_embed(
 	int NV,
-	const std::vector<std::array<int, 2>>& edges,
+	std::span<const std::array<int, 2>> edges,
 	std::span<const int> vert_order,
 	std::span<const int> edge_order
 ) {
@@ -1601,16 +1600,16 @@ inline std::optional<planar_embedding> planar_embed(
 
 	// Quarter edges for planar embedding building.
 	// Each edge has 4 entries by 4 * edge_id + 2 * source_vert + is_cw (is_cw is arbitrary)
-	std::vector<int> quarter_edge_matches(4 * NE, -1);
+	vec<int> quarter_edge_matches(4 * NE, -1);
 
 	{
 		int nxt_edge_idx = 0; // Counts backedges only
-		std::vector<int> postorder_edges; postorder_edges.reserve(NE);
-		std::vector<bool> postorder_flip(NE+1, false);
+		bounded_vec<int> postorder_edges(with_capacity{NE});
+		vec<bool> postorder_flip(NE+1, false);
 
-		std::vector<int> first_occurrence(NV); // First backedge to this depth
+		vec<int> first_occurrence(NV); // First backedge to this depth
 
-		std::vector<int> edge_top_depths(NE, -1);
+		vec<int> edge_top_depths(NE, -1);
 
 		struct tstack_planarity_side_t {
 			// For each side, store pointers to the "linked lists" of the edges inside.
@@ -1678,7 +1677,7 @@ inline std::optional<planar_embedding> planar_embed(
 			int first_idx = -1;
 			tstack_planarity_t planarity;
 		};
-		std::vector<tstack_t> tstack; tstack.reserve(NV + NE);
+		bounded_stack<tstack_t> tstack(with_capacity{NV + NE});
 		auto cur_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-1]; };
 		auto nxt_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-2]; };
 
@@ -1695,8 +1694,8 @@ inline std::optional<planar_embedding> planar_embed(
 		};
 		auto flip_tstack_planarity = [&] [[gnu::always_inline]] (int i) -> void {
 			tstack_t& a = tstack[i];
-			postorder_flip[a.first_idx].flip();
-			postorder_flip[(i+1==int(tstack.size())) ? nxt_edge_idx : tstack[i+1].first_idx].flip();
+			postorder_flip[a.first_idx] ^= 1;
+			postorder_flip[(i+1==int(tstack.size())) ? nxt_edge_idx : tstack[i+1].first_idx] ^= 1;
 			std::swap(a.planarity.sides[0], a.planarity.sides[1]);
 		};
 		auto merge_tstack_tops = [&] [[gnu::always_inline]] () -> void {
@@ -1713,7 +1712,7 @@ inline std::optional<planar_embedding> planar_embed(
 			int ch_end;
 			int orig_tstack;
 		};
-		std::vector<dfs_stack_t> stk; stk.reserve(NV);
+		bounded_stack<dfs_stack_t> stk(with_capacity{NV});
 		for (auto rt : roots) {
 			auto push_vert = [&] [[gnu::always_inline]] (int cur) -> void {
 				int cur_depth = int(stk.size());
@@ -2009,7 +2008,7 @@ inline std::optional<planar_embedding> planar_embed(
 		}
 		assert(nxt_edge_idx == NE);
 		{
-			std::vector<bool> edge_flip(NE);
+			vec<bool> edge_flip(NE, false);
 			{
 				bool planarity_flip = false;
 				for (int e = 0; e < NE; e++) {
@@ -2035,7 +2034,7 @@ inline std::optional<planar_embedding> planar_embed(
 
 inline bool can_planar_embed(
 	int NV,
-	const std::vector<std::array<int, 2>>& edges,
+	std::span<const std::array<int, 2>> edges,
 	std::span<const int> vert_order,
 	std::span<const int> edge_order
 ) {
@@ -2054,7 +2053,7 @@ inline bool can_planar_embed(
 	{
 		int nxt_edge_idx = 0; // Counts backedges only
 
-		std::vector<int> first_occurrence(NV); // First backedge to this depth
+		vec<int> first_occurrence(NV); // First backedge to this depth
 
 		struct tstack_planarity_side_t {
 			// For each side, store pointers to the "linked lists" of the edges inside.
@@ -2072,7 +2071,7 @@ inline bool can_planar_embed(
 			// The convention is that sides[0].tops[0].depth == top_depth, i.e. at least one minimal return lives on side 0
 			std::array<tstack_planarity_side_t, 2> sides;
 		};
-		std::vector<tstack_planarity_side_t::top_t> prev_edge(NE, {-1, -1});
+		vec<tstack_planarity_side_t::top_t> prev_edge(NE, {-1, -1});
 		auto merge_planarity_side = [&] [[gnu::always_inline]] (tstack_planarity_side_t& as, const tstack_planarity_side_t& bs) -> void {
 			// If there's no bottom edges, then we must be an isolated vertex, so we can end early.
 			// Caller must check that we're planar
@@ -2092,7 +2091,7 @@ inline bool can_planar_embed(
 			int first_idx = -1;
 			tstack_planarity_t planarity;
 		};
-		std::vector<tstack_t> tstack; tstack.reserve(NV + NE);
+		bounded_stack<tstack_t> tstack(with_capacity{NV + NE});
 		auto cur_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-1]; };
 		auto nxt_tstack = [&] [[gnu::always_inline]] () -> tstack_t& { return tstack.end()[-2]; };
 
@@ -2113,7 +2112,7 @@ inline bool can_planar_embed(
 			int ch_end;
 			int orig_tstack;
 		};
-		std::vector<dfs_stack_t> stk; stk.reserve(NV);
+		bounded_stack<dfs_stack_t> stk(with_capacity{NV});
 		for (auto rt : roots) {
 			auto push_vert = [&] [[gnu::always_inline]] (int cur) -> void {
 				int cur_depth = int(stk.size());
@@ -2319,7 +2318,7 @@ inline bool can_planar_embed(
 							assert(int(tstack.size()) == orig_tstack + 3);
 						}
 						tstack[orig_tstack] = tstack[orig_tstack+1];
-						tstack.resize(orig_tstack + 1);
+						tstack.shrink_to(orig_tstack + 1);
 						assert(cur_tstack().top_depth == lowval);
 					}
 				} else {
