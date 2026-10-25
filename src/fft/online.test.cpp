@@ -16,12 +16,11 @@ TEMPLATE_TEST_CASE("online multiplier", "[fft]", MOD_ENGINES) {
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {1, 2, 3, 17, 64, 100}) {
-		vector<num> f(n), g(n);
+		vec<num> f(n), g(n);
 		fill_rnd(f, mt);
 		fill_rnd(g, mt);
 		CAPTURE(n, f, g);
-		auto slow = multiply_slow(f, g);
-		slow.resize(2*n, num(0));
+		auto slow = resized(multiply_slow(f, g), 2*n, num(0));
 		online_multiplier<E> om(n);
 		for (int i = 0; i < n; i++) {
 			om.push(f[i], g[i]);
@@ -41,11 +40,10 @@ TEMPLATE_TEST_CASE("online squarer", "[fft]", MOD_ENGINES) {
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {1, 2, 3, 17, 64, 100}) {
-		vector<num> f(n);
+		vec<num> f(n);
 		fill_rnd(f, mt);
 		CAPTURE(n, f);
-		auto slow = multiply_slow(f, f);
-		slow.resize(2*n, num(0));
+		auto slow = resized(multiply_slow(f, f), 2*n, num(0));
 		online_squarer<E> os(n);
 		for (int i = 0; i < n; i++) {
 			os.push(f[i]);
@@ -70,11 +68,10 @@ TEST_CASE("online squarer non-commutative fallback", "[fft]") {
 	using num = modnum<998244353>;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {1, 2, 3, 17, 64, 100}) {
-		vector<num> f(n);
+		vec<num> f(n);
 		fill_rnd(f, mt);
 		CAPTURE(n, f);
-		auto slow = multiply_slow(f, f);
-		slow.resize(2*n, num(0));
+		auto slow = resized(multiply_slow(f, f), 2*n, num(0));
 		online_squarer<nc_engine> os(n);
 		for (int i = 0; i < n; i++) {
 			os.push(f[i]);

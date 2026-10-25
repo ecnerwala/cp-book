@@ -75,9 +75,8 @@ TEMPLATE_TEST_CASE("FFT Inverse", "[fft]", MOD_ENGINES) {
 	fill_rnd(a, mt);
 	if (a[0] == 0) a[0] = 1;
 	auto i = ps_inv(a);
-	auto r = multiply_slow(a, i);
-	r.resize(a.size());
-	vector<num> tgt(a.size());
+	auto r = resized(multiply_slow(a, i), a.len(), num(0));
+	vec<num> tgt(a.len());
 	tgt[0] = 1;
 	REQUIRE(r == tgt);
 }
@@ -87,14 +86,14 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_rational_function", "[fft]", MOD_ENG
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int d : {1, 2, 3, 8, 20}) {
-		vector<num> p(d - 1), q(d);
+		vec<num> p(d - 1), q(d);
 		fill_rnd(p, mt);
 		fill_rnd(q, mt);
 		if (q[0] == 0) q[0] = 1;
 		CAPTURE(d, p, q);
 		// reference: power series division to many terms
 		int terms = 300;
-		vector<num> ser(terms);
+		vec<num> ser(terms);
 		num iq0 = inv(q[0]);
 		for (int i = 0; i < terms; i++) {
 			num v = i < int(p.size()) ? p[i] : num(0);
@@ -104,7 +103,7 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_rational_function", "[fft]", MOD_ENG
 		series::exact<E> xp(std::from_range, p), xq(std::from_range, q);
 		for (uint64_t k : {uint64_t(0), uint64_t(1), uint64_t(7), uint64_t(100), uint64_t(299)}) {
 			CAPTURE(k);
-			REQUIRE(kth_term_of_rational_function(xp, xq, k) == ser[k]);
+			REQUIRE(kth_term_of_rational_function(xp, xq, k) == ser[int(k)]);
 		}
 	}
 }
@@ -114,7 +113,7 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_linear_recurrence", "[fft]", MOD_ENG
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int d : {1, 2, 3, 8, 20}) {
-		vector<num> p(d - 1), q(d);
+		vec<num> p(d - 1), q(d);
 		fill_rnd(p, mt);
 		fill_rnd(q, mt);
 		if (q[0] == 0) q[0] = 1;
@@ -122,7 +121,7 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_linear_recurrence", "[fft]", MOD_ENG
 		CAPTURE(d, p, q);
 
 		int terms = 300;
-		vector<num> ser(terms);
+		vec<num> ser(terms);
 		num iq0 = inv(q[0]);
 		for (int i = 0; i < terms; i++) {
 			if (i < int(p.size())) {
@@ -136,7 +135,7 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_linear_recurrence", "[fft]", MOD_ENG
 		series::trunc<E> xp(std::from_range, p); series::exact<E> xq(std::from_range, q);
 		for (uint64_t k : {uint64_t(0), uint64_t(1), uint64_t(7), uint64_t(100), uint64_t(299)}) {
 			CAPTURE(k);
-			REQUIRE(kth_term_of_linear_recurrence(xp, xq, k) == ser[k]);
+			REQUIRE(kth_term_of_linear_recurrence(xp, xq, k) == ser[int(k)]);
 		}
 	}
 }

@@ -15,15 +15,23 @@ namespace wala::fft {
 
 template <std::ranges::random_access_range A, std::ranges::random_access_range B>
 	requires std::same_as<std::ranges::range_value_t<A>, std::ranges::range_value_t<B>>
-std::vector<std::ranges::range_value_t<A>> multiply_slow(const A& a, const B& b) {
+vec<std::ranges::range_value_t<A>> multiply_slow(const A& a, const B& b) {
 	using T = std::ranges::range_value_t<A>;
 	if (std::ranges::empty(a) || std::ranges::empty(b)) return {};
-	std::vector<T> res(std::ranges::size(a) + std::ranges::size(b) - 1);
+	vec<T> res(int(std::ranges::size(a) + std::ranges::size(b)) - 1);
 	for (int i = 0; i < int(std::ranges::size(a)); i++) {
 		for (int j = 0; j < int(std::ranges::size(b)); j++) {
 			res[i+j] += a[i] * b[j];
 		}
 	}
+	return res;
+}
+
+// r's first n elements, zero-extended (with fill) or truncated to length n.
+template <std::ranges::random_access_range R>
+vec<std::ranges::range_value_t<R>> resized(const R& r, int n, std::ranges::range_value_t<R> fill) {
+	vec<std::ranges::range_value_t<R>> res(n, fill);
+	std::copy(std::ranges::begin(r), std::ranges::begin(r) + std::min(n, int(std::ranges::size(r))), res.begin());
 	return res;
 }
 
