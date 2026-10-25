@@ -3,6 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "containers/vec.hpp"
 #include "ds/seg_tree.hpp"
 
 int main() {
@@ -10,7 +11,7 @@ int main() {
 
 	int N, Q; std::cin >> N >> Q;
 	wala::seg_tree::in_order_layout layout(N);
-	std::vector<int64_t> seg(2*N);
+	wala::vec<int64_t> seg(2*N);
 	for (int i = 0; i < N; i++) {
 		int64_t x; std::cin >> x;
 		seg[layout.get_point(i)] = x;

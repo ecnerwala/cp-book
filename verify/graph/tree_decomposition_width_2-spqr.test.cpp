@@ -3,6 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "containers/vec.hpp"
 #include "graph/spqr_tree.hpp"
 
 int main() {
@@ -12,7 +13,7 @@ int main() {
 	int N, M; std::cin >> lit_p >> lit_tw >> N >> M;
 	assert(lit_p == "p");
 	assert(lit_tw == "tw");
-	std::vector<std::array<int, 2>> edges(M);
+	wala::vec<std::array<int, 2>> edges(M);
 	for (auto& [x, y] : edges) { std::cin >> x >> y; x--, y--; }
 
 	auto spqr = wala::spqr_tree::build(N, edges, true);

@@ -3,6 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "containers/vec.hpp"
 #include "tree/top_tree.hpp"
 
 namespace {
@@ -49,15 +50,15 @@ int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
 	int N, M; std::cin >> N >> M;
-	std::vector<mst_top_tree_node> verts(N);
+	wala::vec<mst_top_tree_node> verts(N);
 	for (int i = 0; i < N; i++) {
 		verts[i].is_vert = verts[i].is_path = true;
 		verts[i].update();
 	}
-	// NB: Important to reserve() here so we pointers stay stable.
-	std::vector<mst_top_tree_node> edges; edges.reserve(N-1);
-	std::vector<int> edge_ids; edge_ids.reserve(N-1);
-	std::vector<int> ans; ans.reserve(M);
+	// NB: The capacity is fixed here so pointers into edges stay stable.
+	wala::bounded_vec<mst_top_tree_node> edges(wala::with_capacity{N-1});
+	wala::bounded_vec<int> edge_ids(wala::with_capacity{N-1});
+	wala::bounded_vec<int> ans(wala::with_capacity{M});
 	for (int q = 0; q < M; q++) {
 		int u, v, w; std::cin >> u >> v >> w;
 		if (u == v) {

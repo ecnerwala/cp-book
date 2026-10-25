@@ -3,6 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "containers/vec.hpp"
 #include "ds/seg_tree.hpp"
 #include "num/linear_fn.hpp"
 #include "num/modnum.hpp"
@@ -13,7 +14,7 @@ int main() {
 	using num = wala::modnum<998244353>;
 
 	int N, Q; std::cin >> N >> Q;
-	std::vector<num> A(N); for (auto& a : A) std::cin >> a;
+	wala::vec<num> A(N); for (auto& a : A) std::cin >> a;
 	using linear_fn = wala::linear_fn<num>;
 	struct seg_node {
 		linear_fn lazy;
@@ -21,7 +22,7 @@ int main() {
 		num cnt;
 	};
 	wala::seg_tree::in_order_layout layout(N);
-	std::vector<seg_node> seg(2*layout.N);
+	wala::vec<seg_node> seg(2*layout.N);
 	auto apply_lazy = [&](wala::seg_tree::point a, linear_fn f) -> void {
 		seg[a].lazy = f * seg[a].lazy;
 		seg[a].tot = seg[a].tot * f.a + seg[a].cnt * f.b;

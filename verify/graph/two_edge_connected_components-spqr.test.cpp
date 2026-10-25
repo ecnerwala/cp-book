@@ -3,21 +3,22 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "containers/vec.hpp"
 #include "graph/spqr_tree.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
 	int N, M; std::cin >> N >> M;
-	std::vector<std::array<int, 2>> edges(M);
+	wala::vec<std::array<int, 2>> edges(M);
 	for (auto& [x, y] : edges) std::cin >> x >> y;
 
 	auto spqr = wala::spqr_tree::build(N, edges);
 	using node_type = wala::spqr_tree::node_type;
-	std::vector<std::pair<int, int>> stk; stk.reserve(N);
+	wala::bounded_vec<std::pair<int, int>> stk(wala::with_capacity{N});
 
-	std::vector<int> comp_verts(N, -1);
-	std::vector<int> comp_bounds; comp_bounds.reserve(N+1); comp_bounds.push_back(0);
+	wala::vec<int> comp_verts(N, -1);
+	wala::bounded_vec<int> comp_bounds(wala::with_capacity{N+1}); comp_bounds.push_back(0);
 
 	for (int i = int(spqr.size()) - 1; i >= 0; i--) {
 		int comp_end = -1;
