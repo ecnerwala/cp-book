@@ -228,7 +228,7 @@ struct form {
 	form composed_with(const S& s) const {
 		if constexpr (!S::exact_v) assert(s.len() >= len());
 		series::vec<E, S::exact_v> r = c * s;
-		r.shrink(len());
+		r.resize(len());
 		return from_rev_series(series::exact<E>(std::move(r)));
 	}
 };
