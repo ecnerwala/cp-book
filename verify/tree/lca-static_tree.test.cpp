@@ -3,13 +3,14 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "containers/vec.hpp"
 #include "tree/static_tree.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false); std::cin.tie(nullptr);
 
 	int N, Q; std::cin >> N >> Q;
-	std::vector<int> P(N);
+	wala::vec<int> P(N);
 	P[0] = -1;
 	for (auto& v : P | std::views::drop(1)) std::cin >> v;
 

@@ -3,6 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "containers/vec.hpp"
 #include "ds/seg_tree.hpp"
 #include "num/linear_fn.hpp"
 #include "num/modnum.hpp"
@@ -15,7 +16,7 @@ int main() {
 	int N, Q; std::cin >> N >> Q;
 	using linear_fn = wala::linear_fn<num>;
 	wala::seg_tree::in_order_layout layout(N);
-	std::vector<linear_fn> seg(2*N);
+	wala::vec<linear_fn> seg(2*N);
 	auto update_node = [&](wala::seg_tree::point a) -> void {
 		seg[a] = seg[a.c(1)] * seg[a.c(0)];
 	};

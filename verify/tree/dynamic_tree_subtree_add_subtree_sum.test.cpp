@@ -3,6 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "containers/vec.hpp"
 #include "tree/top_tree.hpp"
 
 namespace {
@@ -65,13 +66,13 @@ int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
 	int N, Q; std::cin >> N >> Q;
-	std::vector<subtree_add_subtree_sum_top_tree_node> verts(N);
+	wala::vec<subtree_add_subtree_sum_top_tree_node> verts(N);
 	for (int i = 0; i < N; i++) {
 		std::cin >> verts[i].val;
 		verts[i].is_vert = verts[i].is_path = true;
 		verts[i].update();
 	}
-	std::vector<subtree_add_subtree_sum_top_tree_node> edges(N-1);
+	wala::vec<subtree_add_subtree_sum_top_tree_node> edges(N-1);
 	for (int e = 0; e < N-1; e++) {
 		int u, v; std::cin >> u >> v;
 		link(&edges[e], &verts[u], &verts[v]);

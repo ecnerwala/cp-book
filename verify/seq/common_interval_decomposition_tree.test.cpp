@@ -3,16 +3,17 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "containers/vec.hpp"
 #include "seq/perm_tree.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
 	int N; std::cin >> N;
-	std::vector<int> P(N); for (auto& p : P) std::cin >> p;
+	wala::vec<int> P(N); for (auto& p : P) std::cin >> p;
 	wala::PermTree perm(P);
 	int nxt_idx = 0;
-	std::vector<std::tuple<int, std::array<int, 2>, bool>> res; res.reserve(2*N);
+	wala::bounded_vec<std::tuple<int, std::array<int, 2>, bool>> res(wala::with_capacity{2*N});
 	[&](this auto&& self, int cur, int prv_idx, wala::PermTree::NodeType par_type) -> void {
 		if (perm[cur].type == wala::PermTree::NodeType::PARTIAL || perm[cur].type == par_type) {
 			self(perm[cur].c[0], prv_idx, par_type);

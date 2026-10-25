@@ -3,13 +3,14 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "containers/vec.hpp"
 #include "ds/rmq.hpp"
 
 int main() {
 	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
 
 	int N, Q; std::cin >> N >> Q;
-	std::vector<int> A(N); for (auto& x : A) std::cin >> x;
+	wala::vec<int> A(N); for (auto& x : A) std::cin >> x;
 	wala::RangeMinQuery<int> rmq(A);
 	for (int q = 0; q < Q; q++) {
 		int l, r; std::cin >> l >> r;

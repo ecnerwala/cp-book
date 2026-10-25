@@ -103,7 +103,7 @@ Match the existing code exactly. In particular:
   would make this natural (a sized constructor, mutable iteration), add it to
   the header rather than working around it.
 - Compact declare-and-read style: `int N, Q; std::cin >> N >> Q;` on one
-  line; `std::vector<int> A(N); for (auto& x : A) std::cin >> x;`.
+  line; `wala::vec<int> A(N); for (auto& x : A) std::cin >> x;`.
 - Output with `" \n"[i+1==N]` for space-separated lines.
 - Dispatch on ops explicitly: `if (op == 0) { ... } else if (op == 1) { ... }
   else assert(false);`.
@@ -122,7 +122,7 @@ Match the existing code exactly. In particular:
 
   ```cpp
   template <fft::engine E>
-  std::vector<typename E::value_type> multipoint(
+  wala::vec<typename E::value_type> multipoint(
   	const poly::vec<E>& p,
   	std::span<const typename E::value_type> pts
   ) {

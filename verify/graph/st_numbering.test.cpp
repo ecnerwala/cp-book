@@ -3,6 +3,7 @@
 #include <bits/stdc++.h>
 #include <cassert>
 
+#include "containers/vec.hpp"
 #include "graph/make_st_dag.hpp"
 
 int main() {
@@ -11,7 +12,7 @@ int main() {
 	int N_CASES; std::cin >> N_CASES;
 	while (N_CASES--) {
 		int N, M, S, T; std::cin >> N >> M >> S >> T;
-		std::vector<std::array<int, 2>> edges(M);
+		wala::vec<std::array<int, 2>> edges(M);
 		wala::csr_index_builder adj_idx_builder(N);
 		for (auto& [u, v] : edges) {
 			std::cin >> u >> v;
@@ -29,7 +30,7 @@ int main() {
 		if (int(res.size()) == N) {
 			std::cout << "Yes" << '\n';
 
-			std::vector<int> pos(N);
+			wala::vec<int> pos(N);
 			for (int i = 0; i < N; i++) {
 				pos[res[i]] = i;
 			}
