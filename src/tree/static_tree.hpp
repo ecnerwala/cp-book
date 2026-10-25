@@ -1,7 +1,8 @@
 #pragma once
 
-#include <vector>
+#include <span>
 
+#include "containers/csr.hpp"
 #include "containers/vec.hpp"
 #include "ds/rmq.hpp"
 #include "yc.hpp"
@@ -28,8 +29,8 @@ private:
 
 public:
 	static_forest_t() : N(0) {}
-	static_forest_t(const std::vector<std::vector<int>>& adj, const std::vector<int>& roots = {}) :
-		N(int(adj.size())),
+	static_forest_t(const csr<int>& adj, std::span<const int> roots = {}) :
+		N(adj.num_rows()),
 		idx(N, -1),
 		preorder(N, -1),
 		depth(N, -1),
