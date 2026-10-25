@@ -16,8 +16,6 @@ namespace wala {
 template <typename T> struct bounded_stack : detail::bounded_ops {
 	static_assert(!std::is_const_v<T>);
 	using value_type = T;
-	using size_type = int;
-	using difference_type = int;
 	using iterator = detail::contiguous_iterator_impl<bounded_stack, false>;
 	using const_iterator = detail::contiguous_iterator_impl<bounded_stack, true>;
 
@@ -35,17 +33,17 @@ template <typename T> struct bounded_stack : detail::bounded_ops {
 
 	explicit bounded_stack(with_capacity c) : base(detail::allocate<T>(c.n)), top(base), lim(base + c.n) {}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	explicit bounded_stack(with_capacity c, size_type n, const A&... a) : bounded_stack(c) { grow_to(n, a...); }
+	explicit bounded_stack(with_capacity c, int n, const A&... a) : bounded_stack(c) { grow_to(n, a...); }
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	explicit bounded_stack(size_type n, const A&... a) : bounded_stack(with_capacity{n}, n, a...) {}
-	explicit bounded_stack(with_capacity c, size_type n, const T& v) requires std::copy_constructible<T> : bounded_stack(c) { grow_to(n, v); }
-	explicit bounded_stack(size_type n, const T& v) requires std::copy_constructible<T> : bounded_stack(with_capacity{n}, n, v) {}
+	explicit bounded_stack(int n, const A&... a) : bounded_stack(with_capacity{n}, n, a...) {}
+	explicit bounded_stack(with_capacity c, int n, const T& v) requires std::copy_constructible<T> : bounded_stack(c) { grow_to(n, v); }
+	explicit bounded_stack(int n, const T& v) requires std::copy_constructible<T> : bounded_stack(with_capacity{n}, n, v) {}
 	template <std::ranges::input_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
 	bounded_stack(with_capacity c, std::from_range_t, R&& r) : bounded_stack(c) { append_range(std::forward<R>(r)); }
 	template <std::ranges::sized_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	bounded_stack(std::from_range_t f, R&& r) : bounded_stack(with_capacity{size_type(std::ranges::size(r))}, f, r) {}
+	bounded_stack(std::from_range_t f, R&& r) : bounded_stack(with_capacity{int(std::ranges::size(r))}, f, r) {}
 	bounded_stack(std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_stack(std::from_range, list) {}
 	bounded_stack(with_capacity c, std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_stack(c, std::from_range, list) {}
 	bounded_stack(const bounded_stack& o) requires std::copy_constructible<T> : bounded_stack(with_capacity{o.capacity()}, std::from_range, o) {}
@@ -64,11 +62,6 @@ template <typename T> struct bounded_stack : detail::bounded_ops {
 	T* cap_ptr() const { return lim; }
 	void set_end(T* p) { top = p; }
 	const bounded_stack* owner() const { return this; }
-
-	friend bool operator == (const bounded_stack& a, const bounded_stack& b) { return std::ranges::equal(a, b); }
-	friend auto operator <=> (const bounded_stack& a, const bounded_stack& b) {
-		return std::lexicographical_compare_three_way(a.begin(), a.end(), b.begin(), b.end());
-	}
 };
 
 } // namespace wala
