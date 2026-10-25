@@ -41,7 +41,7 @@ void test_matrix_engine(mt19937& mt) {
 			for (M& m : a) m = rnd_mat();
 			for (M& m : b) m = rnd_mat();
 			CAPTURE(la, a, lb, b);
-			REQUIRE(multiply<E>(a, b) == multiply_slow(a, b));
+			REQUIRE(std::ranges::equal(multiply<E>(a, b), multiply_slow(a, b)));
 		}
 	}
 	// square of a matrix sequence must keep both cross orders
@@ -91,7 +91,7 @@ void test_trunc_series_engine(mt19937& mt) {
 			for (P& p : a) p = rnd_p();
 			for (P& p : b) p = rnd_p();
 			CAPTURE(la, a, lb, b);
-			REQUIRE(multiply<E>(a, b) == multiply_slow(a, b));
+			REQUIRE(std::ranges::equal(multiply<E>(a, b), multiply_slow(a, b)));
 		}
 	}
 }

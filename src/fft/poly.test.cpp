@@ -33,7 +33,7 @@ TEST_CASE("poly::form evaluation and transposed multiplication", "[fft]") {
 	REQUIRE(fq(s2) == (s2 * q)(z));
 	// composing with a power series (living in 1/x) multiplies the storages,
 	// prefix-truncated back to length n
-	series::trunc<E> t(size_t(n), num{});
+	series::trunc<E> t(n, num{});
 	fill_rnd(t, mt);
 	auto ft = f.composed_with(t);
 	REQUIRE(ft.len() == n);
@@ -43,7 +43,7 @@ TEST_CASE("poly::form evaluation and transposed multiplication", "[fft]") {
 		REQUIRE(ft.rev_series()[j] == want);
 	}
 	// an exact series may be any length; the tail beyond it is zero
-	series::exact<E> e(t.begin(), t.begin() + 11);
+	series::exact<E> e(t.first(11));
 	auto fe = f.composed_with(e);
 	REQUIRE(fe.len() == n);
 	for (int j = 0; j < n; j++) {
@@ -91,13 +91,13 @@ TEST_CASE("poly::vec reversed storage and series interop", "[fft]") {
 	for (int i = 0; i < 37; i++) REQUIRE(ra[i] == pa[36 - i]);
 	REQUIRE(poly::vec<E>::from_rev_series(ra) == a);
 	// a poly::vec's natural-order coefficients as an exact series (for series products)
-	series::exact<E> xa(a.begin(), a.end());
+	series::exact<E> xa(std::from_range, a);
 	REQUIRE(equal(xa.begin(), xa.end(), pa.begin(), pa.end()));
-	REQUIRE(a.unrev_series(10) == series::trunc<E>(pa.begin(), pa.begin() + 10));
+	REQUIRE(a.unrev_series(10) == series::trunc<E>(std::from_range, std::span<const num>(pa).first(10)));
 	// the storage transform serves transposed products: middle product against rev_series()
 	std::vector<num> vals(60);
 	fill_rnd(vals, mt);
-	series::cached_exact<E> cv(series::exact<E>(vals.begin(), vals.end()));
+	series::cached_exact<E> cv(series::exact<E>(std::from_range, vals));
 	series::cached_exact<E> ca(a.rev_series());
 	auto mp = middle_product(cv, ca);
 	auto naive = [&](int j) {

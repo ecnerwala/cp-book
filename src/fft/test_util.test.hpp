@@ -13,11 +13,14 @@
 
 namespace wala::fft {
 
-template <typename T> std::vector<T> multiply_slow(const std::vector<T>& a, const std::vector<T>& b) {
-	if (a.empty() || b.empty()) return {};
-	std::vector<T> res(a.size() + b.size() - 1);
-	for (int i = 0; i < int(a.size()); i++) {
-		for (int j = 0; j < int(b.size()); j++) {
+template <std::ranges::random_access_range A, std::ranges::random_access_range B>
+	requires std::same_as<std::ranges::range_value_t<A>, std::ranges::range_value_t<B>>
+std::vector<std::ranges::range_value_t<A>> multiply_slow(const A& a, const B& b) {
+	using T = std::ranges::range_value_t<A>;
+	if (std::ranges::empty(a) || std::ranges::empty(b)) return {};
+	std::vector<T> res(std::ranges::size(a) + std::ranges::size(b) - 1);
+	for (int i = 0; i < int(std::ranges::size(a)); i++) {
+		for (int j = 0; j < int(std::ranges::size(b)); j++) {
 			res[i+j] += a[i] * b[j];
 		}
 	}
@@ -29,18 +32,21 @@ template <typename T> T rnd_val(std::mt19937& mt) {
 	if constexpr (std::is_floating_point_v<T>) return T(int(mt() % 1024));
 	else return T(mt());
 }
-template <typename T> void fill_rnd(std::vector<T>& v, std::mt19937& mt) {
-	for (T& x : v) x = rnd_val<T>(mt);
+template <std::ranges::range V> void fill_rnd(V& v, std::mt19937& mt) {
+	for (auto& x : v) x = rnd_val<std::ranges::range_value_t<V>>(mt);
 }
-template <typename T> void check_eq(const std::vector<T>& got, const std::vector<T>& want) {
+template <std::ranges::random_access_range A, std::ranges::random_access_range B>
+	requires std::same_as<std::ranges::range_value_t<A>, std::ranges::range_value_t<B>>
+void check_eq(const A& got, const B& want) {
+	using T = std::ranges::range_value_t<A>;
 	if constexpr (std::is_floating_point_v<T>) {
-		REQUIRE(got.size() == want.size());
-		for (int i = 0; i < int(got.size()); i++) {
+		REQUIRE(int(std::ranges::size(got)) == int(std::ranges::size(want)));
+		for (int i = 0; i < int(std::ranges::size(got)); i++) {
 			CAPTURE(i);
 			REQUIRE(llround(got[i]) == llround(want[i]));
 		}
 	} else {
-		REQUIRE(got == want);
+		REQUIRE(std::ranges::equal(got, want));
 	}
 }
 

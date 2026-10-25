@@ -4,7 +4,6 @@
 #include <cassert>
 #include <span>
 #include <utility>
-#include <vector>
 
 #include "fft/core.hpp"
 #include "fft/engine.hpp"
@@ -21,7 +20,7 @@ template <typename dbl = double> struct real {
 	using cnum = cplx<dbl>;
 	using core = fft_core<cnum>;
 	struct transformed {
-		vector<cnum> v;
+		vec<cnum> v;
 		int size() const { return 2 * sz(v); }
 	};
 	using product = transformed;
@@ -51,8 +50,7 @@ template <typename dbl = double> struct real {
 
 	static transformed transform(std::span<const dbl> a, int n) {
 		assert(sz(a) <= 2 * n);
-		transformed r;
-		r.v.assign(packed_size(n), cnum(0));
+		transformed r{vec<cnum>(packed_size(n), cnum(0))};
 		for (int i = 0; i < sz(a); i++) {
 			int j = i < n ? i : i - n;
 			((j & 1) ? r.v[j/2].y : r.v[j/2].x) += a[i];
@@ -69,7 +67,9 @@ template <typename dbl = double> struct real {
 		pack(coeffs, buf.span());
 		while (t.size() < m) {
 			int s = sz(t.v);
-			t.v.resize(2 * s);
+			vec<cnum> nv(2 * s);
+			std::copy(t.v.begin(), t.v.end(), nv.begin());
+			t.v = std::move(nv);
 			// packed coeffs past 2s are zero: they didn't fit in the transform we're a prefix of
 			core::extend(
 				std::span<cnum>(t.v),
@@ -84,7 +84,7 @@ template <typename dbl = double> struct real {
 	static transformed negate_arg(const transformed& t, int n) {
 		int m = packed_size(n);
 		assert(n >= 2 && sz(t.v) >= m);
-		transformed r; r.v.resize(m);
+		transformed r{vec<cnum>(m)};
 		for (int j = 0; j < m; j++) r.v[j] = conj(t.v[core::conj_index(j)]);
 		return r;
 	}
@@ -93,7 +93,7 @@ template <typename dbl = double> struct real {
 	static transformed of_reverse(const transformed& t, int n) {
 		int m = packed_size(n);
 		assert(sz(t.v) >= m);
-		transformed r; r.v.resize(m);
+		transformed r{vec<cnum>(m)};
 		if (m == 1) { r.v[0] = t.v[0]; return r; }
 		core::init(m);
 		for (int j = 0; j < m; j++) {
@@ -109,7 +109,7 @@ template <typename dbl = double> struct real {
 		assert(n >= 2 && f.size() >= 2 * n);
 		int mo = n / 2;
 		core::init(2 * mo);
-		transformed r; r.v.resize(mo);
+		transformed r{vec<cnum>(mo)};
 		for (int u = 0; u < mo; u++) {
 			r.v[u] = retangle(part(f, 2*u, odd), part(f, 2*u+1, odd), mo, core::brev(u, mo));
 		}
@@ -119,7 +119,7 @@ template <typename dbl = double> struct real {
 	static transformed unhalf(const transformed& f, int n, bool odd) {
 		assert(n >= 2 && 2 * f.size() >= n);
 		int mo = packed_size(n);
-		transformed r; r.v.resize(mo);
+		transformed r{vec<cnum>(mo)};
 		if (mo == 1) {
 			r.v[0] = part(f, 0, false);
 		} else {
@@ -143,7 +143,7 @@ template <typename dbl = double> struct real {
 		int m = packed_size(n);
 		assert(a.size() >= n && b.size() >= n);
 		core::init(2 * m);
-		product p; p.v.resize(m);
+		product p{vec<cnum>(m)};
 		for (int t = 0; t < m; t++) {
 			int k = core::brev(t, m);
 			cnum w = core::rt[m + k];
@@ -165,7 +165,7 @@ template <typename dbl = double> struct real {
 		int m = packed_size(n);
 		assert(a1.size() >= n && b1.size() >= n && a2.size() >= n && b2.size() >= n);
 		core::init(2 * m);
-		product p; p.v.resize(m);
+		product p{vec<cnum>(m)};
 		for (int t = 0; t < m; t++) {
 			int k = core::brev(t, m);
 			cnum w = core::rt[m + k];

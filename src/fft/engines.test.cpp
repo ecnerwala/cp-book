@@ -237,7 +237,7 @@ TEMPLATE_TEST_CASE("FFT cached multiply", "[fft]", ALL_ENGINES) {
 	{
 		// multiply_cached: coefficients match, and the seeded (or lazily built)
 		// transform is directly usable in further products, including after extend
-		vector<num> ab;
+		vec<num> ab;
 		fft::transformed<E> cab;
 		multiply_cached<E>(span<const num>(a), ca, span<const num>(b), cb, ab, cab);
 		check_eq(ab, multiply_slow(a, b));
@@ -265,7 +265,7 @@ TEMPLATE_TEST_CASE("FFT cached multiply", "[fft]", ALL_ENGINES) {
 		fill_rnd(d, mt);
 		fill_rnd(e, mt);
 		fft::transformed<E> cd, ce;
-		vector<num> de;
+		vec<num> de;
 		fft::transformed<E> cde;
 		multiply_cached<E>(span<const num>(d), cd, span<const num>(e), ce, de, cde);
 		check_eq(de, multiply_slow(d, e));
