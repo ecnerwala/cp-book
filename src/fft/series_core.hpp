@@ -8,7 +8,6 @@
 #include <optional>
 #include <span>
 #include <utility>
-#include <vector>
 
 #include "containers/vec.hpp"
 #include "fft/multiply.hpp"
@@ -57,11 +56,11 @@ private:
 //
 // Operators here are typically permissive: they will accept combinations of unequal types and lengths.
 template <fft::engine E, bool exact_>
-struct vec : public std::vector<typename E::value_type> {
+struct vec : public growable_vec<typename E::value_type> {
 	using T = typename E::value_type;
 	using engine_t = E;
 	static constexpr bool exact_v = exact_;
-	using std::vector<T>::vector;
+	using growable_vec<T>::growable_vec;
 
 	// a free const borrow of the coefficients: implicit
 	operator span<E, exact_>() const {
@@ -70,15 +69,15 @@ struct vec : public std::vector<typename E::value_type> {
 
 	// exact -> trunc is implicit, trunc -> exact is explicit
 	template <bool oe> requires (oe != exact_)
-	explicit(oe < exact_) vec(const vec<E, oe>& p) : std::vector<T>(p) {}
+	explicit(oe < exact_) vec(const vec<E, oe>& p) : growable_vec<T>(p) {}
 	template <bool oe> requires (oe != exact_)
-	explicit(oe < exact_) vec(vec<E, oe>&& p) : std::vector<T>(std::move(p)) {}
+	explicit(oe < exact_) vec(vec<E, oe>&& p) : growable_vec<T>(std::move(p)) {}
 
 	// adopt a plain coefficient vector
-	explicit vec(std::vector<T> v) : std::vector<T>(std::move(v)) {}
+	explicit vec(wala::vec<T> v) : growable_vec<T>(std::move(v).into_growable()) {}
 	// materialize an owned copy of any borrowed series, of either exactness
-	explicit vec(span<E, exact_> s) : std::vector<T>(s.begin(), s.end()) {}
-	explicit vec(span<E, !exact_> s) : std::vector<T>(s.begin(), s.end()) {}
+	explicit vec(span<E, exact_> s) : growable_vec<T>(std::from_range, s.coeffs()) {}
+	explicit vec(span<E, !exact_> s) : growable_vec<T>(std::from_range, s.coeffs()) {}
 
 	span<E, exact_> first(int n) const { return span<E, exact_>(*this).first(n); }
 
@@ -90,11 +89,16 @@ struct vec : public std::vector<typename E::value_type> {
 	}
 	void extend(int sz) {
 		assert(sz >= len());
-		this->resize(sz);
+		this->grow_to(sz);
 	}
 	void shrink(int sz) {
 		assert(sz <= len());
-		this->resize(sz);
+		this->shrink_to(sz);
+	}
+	// extend or shrink to sz
+	void resize(int sz) {
+		if (sz > len()) extend(sz);
+		else shrink(sz);
 	}
 	// multiply by x^n within the fixed precision window
 	void shift_trunc(int n = 1) requires (!exact_) {
@@ -112,8 +116,8 @@ struct vec : public std::vector<typename E::value_type> {
 	// in-place forms require that the result's exactness/length must equal this operand's
 	template <bool oe> requires (exact_ <= oe)
 	vec& operator += (const vec<E, oe>& o) {
-		if constexpr (exact_) { if (o.len() > len()) this->resize(o.len()); }
-		else if constexpr (!oe) { if (o.len() < len()) this->resize(o.len()); }
+		if constexpr (exact_) { if (o.len() > len()) this->grow_to(o.len()); }
+		else if constexpr (!oe) { if (o.len() < len()) this->shrink_to(o.len()); }
 		for (int i = 0; i < std::min(len(), o.len()); i++) {
 			(*this)[i] += o[i];
 		}
@@ -121,8 +125,8 @@ struct vec : public std::vector<typename E::value_type> {
 	}
 	template <bool oe> requires (exact_ <= oe)
 	vec& operator -= (const vec<E, oe>& o) {
-		if constexpr (exact_) { if (o.len() > len()) this->resize(o.len()); }
-		else if constexpr (!oe) { if (o.len() < len()) this->resize(o.len()); }
+		if constexpr (exact_) { if (o.len() > len()) this->grow_to(o.len()); }
+		else if constexpr (!oe) { if (o.len() < len()) this->shrink_to(o.len()); }
 		for (int i = 0; i < std::min(len(), o.len()); i++) {
 			(*this)[i] -= o[i];
 		}
@@ -276,7 +280,7 @@ struct resized {
 	std::optional<std::reference_wrapper<fft::transformed<E>>> f;
 
 	int len() const { return s.len(); }
-	const T& operator[](int i) const { return s[size_t(i)]; }
+	const T& operator[](int i) const { return s[i]; }
 	operator std::span<const T>() const { return std::span<const T>(s); }
 	operator span<E, false>() const { return s; }
 	maybe_cached<E, false> first(int n) const {
@@ -294,7 +298,7 @@ resized<typename S::engine_t> with_len(const S& s, int n) {
 	using T = typename E::value_type;
 	auto p = s.first(std::min(n, s.len()));
 	resized<E> r;
-	r.s.assign(size_t(n), T{});
+	r.s = trunc<E>(n, T{});
 	std::span<const T> pc(p);
 	std::copy(pc.begin(), pc.end(), r.s.begin());
 	r.f = detail::cache_of(p);
@@ -329,8 +333,8 @@ struct cached {
 	// unwrap to the owned coefficients
 	const vec<E, exact_>& uncached() const { return s; }
 	const T& operator[](int i) const { return s[size_t(i)]; }
-	auto begin() const { return s.cbegin(); }
-	auto end() const { return s.cend(); }
+	auto begin() const { return s.begin(); }
+	auto end() const { return s.end(); }
 	operator span<E, exact_>() const { return s; }
 	maybe_cached<E, exact_> first(int n) const {
 		return n == len() ? maybe_cached<E, exact_>(s, f) : maybe_cached<E, exact_>(s.first(n));
@@ -375,7 +379,7 @@ trunc<typename S::engine_t> ps_inv(const S& a) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
 	int N = a.len();
-	trunc<E> r(size_t(N), T{});
+	trunc<E> r(N, T{});
 	if (N == 0) return r;
 	int s = nextPow2(N);
 	wala::vec<T> b(s, T{});
@@ -411,14 +415,14 @@ auto square(const A& a) {
 	if constexpr (A::exact_v) {
 		// like operator*, an exact square returns has_cache, adopting the
 		// pointwise product as the result's transform when the engine supports it
-		std::vector<T> coeffs;
+		wala::vec<T> coeffs;
 		fft::transformed<E> f;
 		fft::square_cached<E>(av, av.cache(), coeffs, f);
 		cached<E, true> w(exact<E>(std::move(coeffs)));
 		w.cache() = std::move(f);
 		return w;
 	} else {
-		trunc<E> r(size_t(a.len()), T{});
+		trunc<E> r(a.len(), T{});
 		fft::square<E>(av, av.cache(), std::span<T>(r));
 		return r;
 	}
@@ -437,7 +441,7 @@ cached<typename A::engine_t, true> multiply_add2(
 	fft::transformed<E> ta_, tb_, tc_, td_;
 	auto av = detail::as_cached_span(a, ta_), bv = detail::as_cached_span(b, tb_);
 	auto cv = detail::as_cached_span(c, tc_), dv = detail::as_cached_span(d, td_);
-	std::vector<T> coeffs;
+	wala::vec<T> coeffs;
 	fft::transformed<E> f;
 	fft::multiply_add2_cached<E>(
 		av, av.cache(),
@@ -534,13 +538,13 @@ auto operator * (const A& a, const B& b) {
 	int prec = detail::product_prec<ea, eb>(a.len(), b.len());
 	if (prec == 0 || a.len() == 0 || b.len() == 0) {
 		if constexpr (ea && eb) return cached<E, true>{};
-		else return trunc<E>(size_t(prec), T(0));
+		else return trunc<E>(prec, T(0));
 	}
 	fft::transformed<E> ta_, tb_;
 	auto va = detail::product_operand(a, prec, ta_);
 	auto vb = detail::product_operand(b, prec, tb_);
 	if constexpr (ea && eb) {
-		std::vector<T> coeffs;
+		wala::vec<T> coeffs;
 		fft::transformed<E> f;
 		auto ca = detail::as_cached_span(va, ta_), cb = detail::as_cached_span(vb, tb_);
 		fft::multiply_cached<E>(
@@ -552,7 +556,7 @@ auto operator * (const A& a, const B& b) {
 		w.cache() = std::move(f);
 		return w;
 	} else {
-		trunc<E> r(size_t(prec), T(0));
+		trunc<E> r(prec, T(0));
 		auto ca = detail::as_cached_span(va, ta_), cb = detail::as_cached_span(vb, tb_);
 		fft::multiply<E>(
 			ca, ca.cache(),
@@ -582,14 +586,14 @@ struct prefix_cached {
 	int len() const { return s.len(); }
 	// unwrap to the owned coefficients
 	const trunc<E>& uncached() const { return s; }
-	const T& operator[](int i) const { return s[size_t(i)]; }
-	auto begin() const { return s.cbegin(); }
-	auto end() const { return s.cend(); }
+	const T& operator[](int i) const { return s[i]; }
+	auto begin() const { return s.begin(); }
+	auto end() const { return s.end(); }
 	operator span<E, false>() const { return s; }
 
 	// extend precision: appends coefficients, keeping all covering caches valid
 	void append(std::span<const T> tail) {
-		s.insert(s.end(), tail.begin(), tail.end());
+		s.append_range(tail);
 	}
 
 	// The first k coefficients, with the covering prefix cache when one lines
@@ -607,7 +611,7 @@ struct prefix_cached {
 	fft::transformed<E>& prefix_cache(int n) const {
 		assert(n > 0 && !(n & (n-1)));
 		int k = __builtin_ctz(unsigned(n));
-		if (k >= sz(caches)) caches.resize(size_t(k) + 1);
+		if (k >= sz(caches)) caches.grow_to(k + 1);
 		auto& c = caches[k];
 		int e = std::min(n, len());
 		if (c.len != e) {
@@ -621,7 +625,7 @@ private:
 	trunc<E> s;
 	// memoized transforms: logically const; len tracks how much of s each covers
 	struct entry { fft::transformed<E> t; int len = 0; };
-	mutable std::vector<entry> caches;
+	mutable growable_vec<entry> caches;
 };
 
 } // namespace wala::series

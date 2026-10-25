@@ -4,7 +4,8 @@
 #include <iterator>
 #include <span>
 #include <utility>
-#include <vector>
+
+#include "containers/vec.hpp"
 
 /**
  * Author: Andrew He
@@ -44,7 +45,6 @@ inline int nextPow2(int s) { return 1 << (s > 1 ? 32 - __builtin_clz(s-1) : 0); 
 namespace wala::fft {
 
 using std::swap;
-using std::vector;
 using std::min;
 using std::max;
 
@@ -55,15 +55,17 @@ using std::max;
 #define ECNERWALA_FFT_POOL_STORAGE
 #endif
 template <typename T> struct buffer_pool {
-	static inline ECNERWALA_FFT_POOL_STORAGE std::vector<std::vector<T>> free_list;
+	static inline ECNERWALA_FFT_POOL_STORAGE growable_vec<bounded_vec<T>> free_list;
 	struct handle {
-		std::vector<T> v;
+		bounded_vec<T> v;
 		explicit handle(int n) {
 			if (!free_list.empty()) {
 				v = std::move(free_list.back());
 				free_list.pop_back();
 			}
-			v.assign(n, T());
+			if (v.capacity() < n) v = bounded_vec<T>(with_capacity{n});
+			v.clear();
+			v.grow_to(n, T());
 		}
 		handle(const handle&) = delete;
 		handle& operator=(const handle&) = delete;
