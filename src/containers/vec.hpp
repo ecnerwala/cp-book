@@ -122,37 +122,37 @@ template <typename T> void uninitialized_construct(T*, T*, uninit_t) requires st
 template <typename T> void uninitialized_construct(T* first, T* last, const std::type_identity_t<T>& v) { std::uninitialized_fill(first, last, v); }
 template <typename T, typename... A> concept uninitialized_constructor = requires (T* p, const A&... a) { detail::uninitialized_construct(p, p, a...); };
 
-// Members shared by the containers through deducing this.
-// Self stores base (the first element) and provides end_ptr() (one past the last live element),
-// cap_ptr() (one past the allocation) and owner() (the container that iterators are checked against).
+// Members shared by vec and bounded_vec, which both store (sz, base).
+// Self also provides owner(), the container pointer that debug iterators are checked against.
 template <typename S> concept moved = !std::is_lvalue_reference_v<S>;
-template <typename S> concept copyable = std::copy_constructible<typename S::value_type>;
+template <typename S> using pointer_t = std::conditional_t<std::is_const_v<S>, const typename S::value_type*, typename S::value_type*>;
 struct contiguous_ops {
-	template <typename Self> [[nodiscard]] int size(this const Self& self) { return int(self.end_ptr() - self.base); }
-	template <typename Self> [[nodiscard]] int capacity(this const Self& self) { return int(self.cap_ptr() - self.base); }
-	template <typename Self> [[nodiscard]] bool empty(this const Self& self) { return self.end_ptr() == self.base; }
+	template <typename Self> [[nodiscard]] bool empty(this const Self& self) { return !self.sz; }
+	template <typename Self> [[nodiscard]] Self::size_type size(this const Self& self) { return self.sz; }
 
 	template <typename Self> void assert_valid_deref(this const Self& self, const Self::value_type* p) {
-		debug_assert(self.base <= p && p < self.end_ptr(), "iterator position {} out of range [0, {})", p - self.base, self.size());
+		debug_assert(self.base <= p && p < self.base + self.sz, "iterator position {} out of range [0, {})", p - self.base, self.sz);
 	}
-	template <typename Self> void assert_valid_index(this const Self& self, int i) {
-		debug_assert(0 <= i && i < self.size(), "index {} out of range [0, {})", i, self.size());
+	template <typename Self> void assert_valid_index(this const Self& self, Self::size_type i) {
+		debug_assert(0 <= i && i < self.sz, "index {} out of range [0, {})", i, self.sz);
 	}
-	template <typename Self> void assert_valid_insert(this const Self& self, int i) {
-		debug_assert(0 <= i && i <= self.size(), "index {} out of range [0, {}]", i, self.size());
+	template <typename Self> void assert_valid_insert(this const Self& self, Self::size_type i) {
+		debug_assert(0 <= i && i <= self.sz, "index {} out of range [0, {}]", i, self.sz);
 	}
 	template <typename Self> void assert_nonempty(this const Self& self) {
-		debug_assert(self.end_ptr() > self.base, "container is empty");
+		debug_assert(self.sz > 0, "container is empty");
 	}
 
+	template <typename Self> pointer_t<Self> data(this Self& self) { return self.base; }
 	template <typename Self> auto begin(this Self& self) {
 		return std::conditional_t<std::is_const_v<Self>, typename Self::const_iterator, typename Self::iterator>(self.base, self.owner());
 	}
-	template <typename Self> auto end(this Self& self) { return self.begin() + self.size(); }
-	template <typename Self> auto data(this Self& self) { return std::to_address(self.begin()); }
-	template <typename Self> auto& operator [] (this Self& self, int i) { self.assert_valid_index(i); return self.data()[i]; }
+	template <typename Self> auto end(this Self& self) {
+		return std::conditional_t<std::is_const_v<Self>, typename Self::const_iterator, typename Self::iterator>(self.base + self.sz, self.owner());
+	}
+	template <typename Self> auto& operator [] (this Self& self, Self::size_type i) { self.assert_valid_index(i); return self.data()[i]; }
 	template <typename Self> auto& front(this Self& self) { self.assert_nonempty(); return self.data()[0]; }
-	template <typename Self> auto& back(this Self& self) { self.assert_nonempty(); return self.data()[self.size() - 1]; }
+	template <typename Self> auto& back(this Self& self) { self.assert_nonempty(); return self.data()[self.sz-1]; }
 
 	template <typename Self> bool operator == (this const Self& a, const Self& b) { return std::ranges::equal(a, b); }
 	template <typename Self> auto operator <=> (this const Self& a, const Self& b) {
@@ -160,18 +160,15 @@ struct contiguous_ops {
 	}
 
 	// Conversions, transferring the allocation
-	template <moved Self> auto into_vec(this Self&& self) {
-		debug_assert(self.size() == self.capacity(), "converting container with size {} and capacity {} to vec", self.size(), self.capacity());
-		return vec<typename Self::value_type>(self.release());
-	}
 	template <moved Self> auto into_bounded(this Self&& self) { return bounded_vec<typename Self::value_type>(self.release()); }
 	template <moved Self> auto into_stack(this Self&& self) { return bounded_stack<typename Self::value_type>(self.release()); }
 	template <moved Self> auto into_growable(this Self&& self) { return growable_vec<typename Self::value_type>(self.release()); }
 };
 
+
 struct insert_ops {
 	template <typename Self>
-	void push_back(this Self& self, const Self::value_type& v) requires copyable<Self> {
+	void push_back(this Self& self, const Self::value_type& v) requires std::copy_constructible<typename Self::value_type> {
 		self.emplace_back(v);
 	}
 	template <typename Self>
@@ -182,46 +179,46 @@ struct insert_ops {
 	// Add/remove to the middle
 	template <typename Self, typename... Args>
 	requires std::constructible_from<typename Self::value_type, Args&&...>
-	Self::value_type& emplace(this Self& self, int i, Args&&... args) {
+	Self::value_type& emplace(this Self& self, Self::size_type i, Args&&... args) {
 		self.assert_valid_insert(i);
 		self.emplace_back(std::forward<Args>(args)...);
 		std::rotate(self.begin() + i, self.end() - 1, self.end());
 		return self[i];
 	}
 	template <typename Self>
-	void insert(this Self& self, int i, const Self::value_type& v) requires copyable<Self> {
+	void insert(this Self& self, Self::size_type i, const Self::value_type& v) requires std::copy_constructible<typename Self::value_type> {
 		self.emplace(i, v);
 	}
 	template <typename Self>
-	void insert(this Self& self, int i, Self::value_type&& v) {
+	void insert(this Self& self, Self::size_type i, Self::value_type&& v) {
 		self.emplace(i, std::move(v));
 	}
 	template <typename Self, typename... A> requires detail::uninitialized_constructor<typename Self::value_type, A...>
-	void insert_n(this Self& self, int i, int n, const A&... a) {
+	void insert_n(this Self& self, Self::size_type i, Self::size_type n, const A&... a) {
 		self.assert_valid_insert(i);
 		auto [first, last] = self.grow_by(n, a...);
 		std::rotate(self.begin() + i, first, last);
 	}
 	template <typename Self>
-	void insert_n(this Self& self, int i, int n, const Self::value_type& v) requires copyable<Self> {
+	void insert_n(this Self& self, Self::size_type i, Self::size_type n, const Self::value_type& v) requires std::copy_constructible<typename Self::value_type> {
 		self.template insert_n<Self, typename Self::value_type>(i, n, v);
 	}
 	template <typename Self, std::ranges::input_range R>
 	requires std::constructible_from<typename Self::value_type, std::ranges::range_reference_t<R>>
-	void insert_range(this Self& self, int i, R&& r) {
+	void insert_range(this Self& self, Self::size_type i, R&& r) {
 		self.assert_valid_insert(i);
 		auto [first, last] = self.append_range(std::forward<R>(r));
 		std::rotate(self.begin() + i, first, last);
 	}
 
 	template <typename Self>
-	void erase(this Self& self, int i) {
+	void erase(this Self& self, Self::size_type i) {
 		self.assert_valid_index(i);
 		std::shift_left(self.begin() + i, self.end(), 1);
 		self.pop_back();
 	}
 	template <typename Self>
-	void erase_n(this Self& self, int i, int n) {
+	void erase_n(this Self& self, Self::size_type i, Self::size_type n) {
 		self.assert_valid_insert(i);
 		self.assert_valid_insert(i + n);
 		std::shift_left(self.begin() + i, self.end(), n);
@@ -233,71 +230,9 @@ struct insert_ops {
 	Self::value_type& emplace_front(this Self& self, Args&&... args) {
 		return self.emplace(0, std::forward<Args>(args)...);
 	}
-	template <typename Self> void push_front(this Self& self, const Self::value_type& v) requires copyable<Self> { self.emplace_front(v); }
+	template <typename Self> void push_front(this Self& self, const Self::value_type& v) requires std::copy_constructible<typename Self::value_type> { self.emplace_front(v); }
 	template <typename Self> void push_front(this Self& self, Self::value_type&& v) { self.emplace_front(std::move(v)); }
 	template <typename Self> void pop_front(this Self& self) { self.erase(0); }
-};
-
-// Resizing within a fixed capacity; Self additionally provides set_end(p).
-// grow_until/shrink_until are the primitives everything else routes through,
-// so a derived container (growable_vec) can override the public ops without the shared ones calling back into it.
-struct bounded_ops : contiguous_ops, insert_ops {
-	template <typename Self, typename... A>
-	auto grow_until(this Self& self, Self::value_type* p, const A&... a) {
-		debug_assert(self.end_ptr() <= p, "growing container with size {} to smaller target {}", self.size(), p - self.base);
-		debug_assert(p <= self.cap_ptr(), "growing container to {} exceeds capacity {}", p - self.base, self.capacity());
-		auto old_end = self.end();
-		detail::uninitialized_construct(self.end_ptr(), p, a...);
-		self.set_end(p);
-		return std::ranges::subrange(old_end, self.end());
-	}
-	template <typename Self> void shrink_until(this Self& self, Self::value_type* p) {
-		debug_assert(self.base <= p && p <= self.end_ptr(), "shrinking container with size {} to {}", self.size(), p - self.base);
-		std::destroy(p, self.end_ptr());
-		self.set_end(p);
-	}
-
-	template <typename Self, typename... Args> requires std::constructible_from<typename Self::value_type, Args&&...>
-	auto& emplace_back(this Self& self, Args&&... args) {
-		debug_assert(self.end_ptr() < self.cap_ptr(), "pushing into full container (capacity {})", self.capacity());
-		auto& x = *std::construct_at(self.end_ptr(), std::forward<Args>(args)...);
-		self.set_end(self.end_ptr() + 1);
-		return x;
-	}
-	template <typename Self, std::ranges::input_range R>
-	requires std::constructible_from<typename Self::value_type, std::ranges::range_reference_t<R>>
-	auto append_range(this Self& self, R&& r) {
-		auto old_end = self.end();
-		// Use raw pointers since the memory is uninitialized
-		auto [in, out] = std::ranges::uninitialized_copy(r, std::ranges::subrange(self.end_ptr(), self.cap_ptr()));
-		// Must have drained all of r
-		debug_assert(in == std::ranges::end(r), "range size exceeds capacity {}", self.capacity());
-		self.set_end(out);
-		return std::ranges::subrange(old_end, self.end());
-	}
-	template <typename Self, typename... A> requires detail::uninitialized_constructor<typename Self::value_type, A...>
-	auto grow_by(this Self& self, int n, const A&... a) {
-		debug_assert(0 <= n, "growing container by negative {}", n);
-		debug_assert(self.size() + n <= self.capacity(), "growing container with size {} by {} exceeds capacity {}", self.size(), n, self.capacity());
-		return self.grow_until(self.end_ptr() + n, a...);
-	}
-	template <typename Self> auto grow_by(this Self& self, int n, const Self::value_type& v) requires copyable<Self> { return self.grow_until(self.end_ptr() + n, v); }
-	template <typename Self, typename... A> requires detail::uninitialized_constructor<typename Self::value_type, A...>
-	auto grow_to(this Self& self, int n, const A&... a) { return self.grow_until(self.base + n, a...); }
-	template <typename Self> auto grow_to(this Self& self, int n, const Self::value_type& v) requires copyable<Self> { return self.grow_until(self.base + n, v); }
-	template <typename Self, typename... A> requires detail::uninitialized_constructor<typename Self::value_type, A...>
-	auto grow_to(this Self& self, Self::iterator it, const A&... a) { return self.grow_until(it.p, a...); }
-	template <typename Self> auto grow_to(this Self& self, Self::iterator it, const Self::value_type& v) requires copyable<Self> { return self.grow_until(it.p, v); }
-
-	// Remove from the back
-	template <typename Self> void pop_back(this Self& self) { self.assert_nonempty(); self.shrink_until(self.end_ptr() - 1); }
-	template <typename Self> void shrink_by(this Self& self, int n) {
-		debug_assert(0 <= n && n <= self.size(), "shrinking container with size {} by {}", self.size(), n);
-		self.shrink_until(self.end_ptr() - n);
-	}
-	template <typename Self> void shrink_to(this Self& self, int n) { self.shrink_until(self.base + n); }
-	template <typename Self> void shrink_to(this Self& self, Self::iterator it) { self.shrink_until(it.p); }
-	template <typename Self> void clear(this Self& self) { self.shrink_until(self.base); }
 };
 
 } // namespace detail
@@ -305,10 +240,11 @@ struct bounded_ops : contiguous_ops, insert_ops {
 template <typename T> struct vec : detail::contiguous_ops {
 	static_assert(!std::is_const_v<T>);
 	using value_type = T;
+	using size_type = int;
 	using iterator = detail::contiguous_iterator_impl<vec, false>;
 	using const_iterator = detail::contiguous_iterator_impl<vec, true>;
 
-	int sz = 0;
+	size_type sz = 0;
 	T* base = nullptr;
 
 	vec() = default;
@@ -316,20 +252,28 @@ template <typename T> struct vec : detail::contiguous_ops {
 	friend void swap(vec& a, vec& b) noexcept { std::swap(a.sz, b.sz); std::swap(a.base, b.base); }
 	vec(vec&& o) noexcept : vec() { swap(*this, o); }
 	vec& operator=(vec&& o) noexcept { swap(*this, o); return *this; }
+	vec(const vec&) = delete;
+	vec& operator=(const vec&) = delete;
 
 	~vec() { std::destroy_n(base, sz); detail::deallocate(base, sz); }
-
+private:
+	struct alloc_only { size_type n; };
+	explicit vec(alloc_only a) : sz(a.n), base(detail::allocate<T>(a.n)) {}
+public:
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	explicit vec(int n, const A&... a) : sz(n), base(detail::allocate<T>(n)) { detail::uninitialized_construct(base, base + n, a...); }
-	explicit vec(int n, const T& v) requires std::copy_constructible<T> : sz(n), base(detail::allocate<T>(n)) { detail::uninitialized_construct(base, base + n, v); }
+	explicit vec(size_type n, const A&... a) : vec(alloc_only{n}) { detail::uninitialized_construct(base, base + n, a...); }
+	explicit vec(size_type n, const T& v) requires std::copy_constructible<T> : vec(alloc_only{n}) { detail::uninitialized_construct(base, base + n, v); }
+
 	template <std::ranges::sized_range R> requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	vec(std::from_range_t, R&& r) : sz(int(std::ranges::size(r))), base(detail::allocate<T>(sz)) {
-		std::ranges::uninitialized_copy(r, std::ranges::subrange(base, base + sz));
+	vec(std::from_range_t, R&& r) : vec(alloc_only{size_type(std::ranges::size(r))}) {
+		std::ranges::uninitialized_copy(r, std::span(base, sz));
 	}
 	vec(std::initializer_list<T> list) requires std::copy_constructible<T> : vec(std::from_range, list) {}
+
 	vec(const vec& o) requires std::copy_constructible<T> : vec(std::from_range, o) {}
 	vec& operator=(const vec& o) requires std::copy_constructible<T> { *this = vec(o); return *this; }
 
+	// Conversions, transferring the allocation
 	explicit vec(detail::allocation<T> a) : sz(a.sz), base(a.p) {
 		debug_assert(a.sz == a.cap, "adopting allocation with size {} not equal to capacity {}", a.sz, a.cap);
 	}
@@ -339,20 +283,18 @@ template <typename T> struct vec : detail::contiguous_ops {
 		sz = 0;
 		return a;
 	}
-
-	T* end_ptr() const { return base + sz; }
-	T* cap_ptr() const { return base + sz; }
 	const vec* owner() const { return this; }
 };
 
-template <typename T> struct bounded_vec : detail::bounded_ops {
+template <typename T> struct bounded_vec : detail::contiguous_ops, detail::insert_ops {
 	static_assert(!std::is_const_v<T>);
 	using value_type = T;
+	using size_type = int;
 	using iterator = detail::contiguous_iterator_impl<bounded_vec, false>;
 	using const_iterator = detail::contiguous_iterator_impl<bounded_vec, true>;
 
-	int sz = 0;
-	int cap = 0;
+	size_type sz = 0;
+	size_type cap = 0;
 	T* base = nullptr;
 
 	bounded_vec() = default;
@@ -361,26 +303,37 @@ template <typename T> struct bounded_vec : detail::bounded_ops {
 	bounded_vec(bounded_vec&& o) noexcept : bounded_vec() { swap(*this, o); }
 	bounded_vec& operator=(bounded_vec&& o) noexcept { swap(*this, o); return *this; }
 
+	// Destruction
 	~bounded_vec() { std::destroy_n(base, sz); detail::deallocate(base, cap); }
 
+	// Construction
 	explicit bounded_vec(with_capacity c) : cap(c.n), base(detail::allocate<T>(c.n)) {}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	explicit bounded_vec(with_capacity c, int n, const A&... a) : bounded_vec(c) { grow_to(n, a...); }
+	explicit bounded_vec(with_capacity c, size_type n, const A&... a) : bounded_vec(c) {
+		debug_assert(n <= c.n, "size {} exceeds capacity {}", n, c.n);
+		detail::uninitialized_construct(base, base + n, a...); sz = n;
+	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	explicit bounded_vec(int n, const A&... a) : bounded_vec(with_capacity{n}, n, a...) {}
-	explicit bounded_vec(with_capacity c, int n, const T& v) requires std::copy_constructible<T> : bounded_vec(c) { grow_to(n, v); }
-	explicit bounded_vec(int n, const T& v) requires std::copy_constructible<T> : bounded_vec(with_capacity{n}, n, v) {}
+	explicit bounded_vec(size_type n, const A&... a) : bounded_vec(with_capacity{n}, n, a...) {}
+	explicit bounded_vec(with_capacity c, size_type n, const T& v) requires std::copy_constructible<T> : bounded_vec(c) { grow_by<T>(n, v); }
+	explicit bounded_vec(size_type n, const T& v) requires std::copy_constructible<T> : bounded_vec(with_capacity{n}, n, v) {}
 	template <std::ranges::input_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	bounded_vec(with_capacity c, std::from_range_t, R&& r) : bounded_vec(c) { append_range(std::forward<R>(r)); }
+	bounded_vec(with_capacity c, std::from_range_t, R&& r) : bounded_vec(c) {
+		auto [in, out] = std::ranges::uninitialized_copy(r, std::ranges::subrange(base, base + cap));
+		// Must have drained all of r
+		debug_assert(in == std::ranges::end(r), "range size exceeds capacity {}", c.n);
+		sz = size_type(out - base);
+	}
 	template <std::ranges::sized_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	bounded_vec(std::from_range_t f, R&& r) : bounded_vec(with_capacity{int(std::ranges::size(r))}, f, r) {}
+	bounded_vec(std::from_range_t f, R&& r) : bounded_vec(with_capacity{size_type(std::ranges::size(r))}, f, r) {}
 	bounded_vec(std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_vec(std::from_range, list) {}
 	bounded_vec(with_capacity c, std::initializer_list<T> list) requires std::copy_constructible<T> : bounded_vec(c, std::from_range, list) {}
 	bounded_vec(const bounded_vec& o) requires std::copy_constructible<T> : bounded_vec(with_capacity{o.cap}, std::from_range, o) {}
 	bounded_vec& operator=(const bounded_vec& o) requires std::copy_constructible<T> { *this = bounded_vec(o); return *this; }
 
+	// Conversions, transferring the allocation
 	explicit bounded_vec(detail::allocation<T> a) : sz(a.sz), cap(a.cap), base(a.p) {
 		debug_assert(0 <= a.sz && a.sz <= a.cap, "adopting allocation with size {} out of range [0, {}]", a.sz, a.cap);
 	}
@@ -390,36 +343,108 @@ template <typename T> struct bounded_vec : detail::bounded_ops {
 		sz = cap = 0;
 		return a;
 	}
-
-	T* end_ptr() const { return base + sz; }
-	T* cap_ptr() const { return base + cap; }
-	void set_end(T* p) { sz = int(p - base); }
 	const bounded_vec* owner() const { return this; }
+	vec<T> into_vec() && {
+		debug_assert(sz == cap, "converting container with size {} and capacity {} to vec", sz, cap);
+		return vec<T>(release());
+	}
+
+	[[nodiscard]] size_type capacity() const { return cap; }
+
+	// Resizing ops
+	template <typename... Args> requires std::constructible_from<T, Args&&...>
+	T& emplace_back(Args&&... args) {
+		debug_assert(sz < cap, "pushing into full container (capacity {})", cap);
+		return *std::construct_at(base + sz++, std::forward<Args>(args)...);
+	}
+	template <std::ranges::input_range R>
+	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
+	std::ranges::subrange<iterator> append_range(R&& r) {
+		auto old_end = end();
+		// Use raw pointers since the memory is uninitialized
+		auto [in, out] = std::ranges::uninitialized_copy(r, std::ranges::subrange(base + sz, base + cap));
+		// Must have drained all of r
+		debug_assert(in == std::ranges::end(r), "range size exceeds capacity {}", cap);
+		sz = size_type(out - base);
+		return {old_end, end()};
+	}
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	std::ranges::subrange<iterator> grow_by(size_type n, const A&... a) {
+		debug_assert(0 <= n, "growing container by negative {}", n);
+		debug_assert(sz + n <= cap, "growing container with size {} by {} exceeds capacity {}", sz, n, cap);
+		auto old_end = end();
+		detail::uninitialized_construct(base + sz, base + sz + n, a...);
+		sz += n;
+		return {old_end, end()};
+	}
+	std::ranges::subrange<iterator> grow_by(size_type n, const T& v) requires std::copy_constructible<T> { return grow_by<T>(n, v); }
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	std::ranges::subrange<iterator> grow_to(size_type n, const A&... a) {
+		debug_assert(sz <= n, "growing container with size {} to smaller target {}", sz, n);
+		debug_assert(n <= cap, "growing container to {} exceeds capacity {}", n, cap);
+		auto old_end = end();
+		detail::uninitialized_construct(base + sz, base + n, a...);
+		sz = n;
+		return {old_end, end()};
+	}
+	std::ranges::subrange<iterator> grow_to(size_type n, const T& v) requires std::copy_constructible<T> { return grow_to<T>(n, v); }
+	template <typename... A> requires detail::uninitialized_constructor<T, A...>
+	std::ranges::subrange<iterator> grow_to(iterator it, const A&... a) {
+		debug_assert(base + sz <= it.p, "growing container with size {} to smaller target {}", sz, it.p - base);
+		debug_assert(it.p <= base + cap, "growing container to {} exceeds capacity {}", it.p - base, cap);
+		auto old_end = end();
+		detail::uninitialized_construct(base + sz, it.p, a...);
+		sz = size_type(it.p - base);
+		return {old_end, end()};
+	}
+	std::ranges::subrange<iterator> grow_to(iterator it, const T& v) requires std::copy_constructible<T> { return grow_to<T>(it, v); }
+
+	// Remove from the back
+	void pop_back() { assert_nonempty(); std::destroy_at(base + --sz); }
+	void shrink_by(size_type n) {
+		debug_assert(0 <= n && n <= sz, "shrinking container with size {} by {}", sz, n);
+		std::destroy(base + sz - n, base + sz);
+		sz -= n;
+	}
+	void shrink_to(size_type n) {
+		debug_assert(0 <= n && n <= sz, "shrinking container with size {} to {}", sz, n);
+		std::destroy(base + n, base + sz);
+		sz = n;
+	}
+	void shrink_to(iterator it) {
+		debug_assert(base <= it.p && it.p <= base + sz, "shrinking container with size {} to {}", sz, it.p - base);
+		std::destroy(it.p, base + sz);
+		sz = size_type(it.p - base);
+	}
+
+	void clear() { shrink_to(0); }
 };
 
 template <typename T> struct growable_vec : private bounded_vec<T> {
 	using bounded = bounded_vec<T>;
-	using typename bounded::value_type, typename bounded::iterator, typename bounded::const_iterator;
+	using typename bounded::value_type, typename bounded::size_type, typename bounded::iterator, typename bounded::const_iterator;
 	// Inherit constructors
 	using bounded::bounded_vec;
-	// The representation, for the shared ops in detail::bounded_ops
-	using bounded::base, bounded::end_ptr, bounded::cap_ptr, bounded::set_end, bounded::owner, bounded::grow_until, bounded::shrink_until, bounded::release;
 	using bounded::empty, bounded::size, bounded::capacity, bounded::data, bounded::begin, bounded::end, bounded::operator[], bounded::front, bounded::back;
+	// Needed for insert_ops and other consumers
 	using bounded::assert_valid_deref, bounded::assert_valid_index, bounded::assert_valid_insert, bounded::assert_nonempty;
 	using bounded::pop_back, bounded::shrink_by, bounded::shrink_to, bounded::clear;
-	using bounded::into_bounded, bounded::into_stack, bounded::into_growable, bounded::operator==, bounded::operator<=>;
 	// From insert_ops
 	using bounded::push_back, bounded::emplace, bounded::insert, bounded::insert_n, bounded::insert_range, bounded::erase, bounded::erase_n, bounded::emplace_front, bounded::push_front, bounded::pop_front;
 
 	friend void swap(growable_vec& a, growable_vec& b) noexcept { swap(static_cast<bounded&>(a), static_cast<bounded&>(b)); }
 
+	// Conversions, transferring the allocation
+	using bounded::release, bounded::sz, bounded::base, bounded::owner, bounded::operator==, bounded::operator<=>;
 	vec<T> into_vec() && {
 		shrink_to_fit();
-		return vec<T>(release());
+		return std::move(static_cast<bounded&>(*this)).into_vec();
 	}
+	bounded_vec<T> into_bounded() && { return std::move(static_cast<bounded&>(*this)); }
+	bounded_stack<T> into_stack() && { return std::move(static_cast<bounded&>(*this)).into_stack(); }
 
 	// Update capacity when running growing ops
-	void set_capacity(int n) {
+	void set_capacity(size_type n) {
 		debug_assert(n >= size(), "reserving less capacity {} than size {}", n, size());
 		bounded::operator=(bounded(with_capacity{n}, std::from_range, *this | std::views::as_rvalue));
 	}
@@ -441,31 +466,31 @@ template <typename T> struct growable_vec : private bounded_vec<T> {
 	}
 	template <std::ranges::input_range R>
 	requires std::constructible_from<T, std::ranges::range_reference_t<R>>
-	auto append_range(R&& r) {
+	std::ranges::subrange<iterator> append_range(R&& r) {
 		if constexpr (std::ranges::sized_range<R>) {
-			reserve_for(size() + int(std::ranges::size(r)));
+			reserve_for(size() + size_type(std::ranges::size(r)));
 			return bounded::append_range(std::forward<R>(r));
 		} else {
-			int old_sz = size();
+			size_type old_sz = size();
 			for (auto&& x : r) emplace_back(std::forward<decltype(x)>(x));
-			return std::ranges::subrange(begin() + old_sz, end());
+			return {begin() + old_sz, end()};
 		}
 	}
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	auto grow_by(int n, const A&... a) {
+	std::ranges::subrange<iterator> grow_by(size_type n, const A&... a) {
 		if (size() + n <= capacity()) return bounded::grow_by(n, a...);
 		// a may refer to our own elements, so copy before reallocating
 		std::tuple<A...> c(a...);
 		reserve_for(size() + n);
 		return std::apply([&](const A&... x) { return bounded::grow_by(n, x...); }, c);
 	}
-	auto grow_by(int n, const T& v) requires std::copy_constructible<T> { return grow_by<T>(n, v); }
+	std::ranges::subrange<iterator> grow_by(size_type n, const T& v) requires std::copy_constructible<T> { return grow_by<T>(n, v); }
 	template <typename... A> requires detail::uninitialized_constructor<T, A...>
-	auto grow_to(int n, const A&... a) {
+	std::ranges::subrange<iterator> grow_to(size_type n, const A&... a) {
 		debug_assert(size() <= n, "growing container with size {} to smaller target {}", size(), n);
 		return grow_by(n - size(), a...);
 	}
-	auto grow_to(int n, const T& v) requires std::copy_constructible<T> { return grow_to<T>(n, v); }
+	std::ranges::subrange<iterator> grow_to(size_type n, const T& v) requires std::copy_constructible<T> { return grow_to<T>(n, v); }
 };
 
 } // namespace wala
