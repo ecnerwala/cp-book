@@ -34,7 +34,7 @@ template <int L> constexpr std::array<int, size_t(L) + 1> componentwise_iota = [
 
 template <engine E, typename V, int L, std::array<int, size_t(L) + 1> Ofs = componentwise_iota<L>>
 struct componentwise {
-	using S = typename E::value_type;
+	using S = E::value_type;
 	using value_type = V;
 	static constexpr int P = Ofs[size_t(L)];  // total product components
 	static constexpr int unit_scale = E::unit_scale;
@@ -44,7 +44,7 @@ struct componentwise {
 		transformed_t() = default;
 		template <int A2> requires (A2 != A) explicit(A2 > A) transformed_t(transformed_t<A2>&& o) {
 			for (int c = 0; c < L; c++)
-				t[c] = typename E::template transformed_t<A>(std::move(o.t[c]));
+				t[c] = E::template transformed_t<A>(std::move(o.t[c]));
 		}
 	};
 	using transformed = transformed_t<>;
@@ -55,7 +55,7 @@ struct componentwise {
 		product_t() = default;
 		template <int K2> requires (K2 != K) explicit(K2 > K) product_t(product_t<K2>&& o) {
 			for (int c = 0; c < P; c++)
-				t[c] = typename E::template product_t<K>(std::move(o.t[c]));
+				t[c] = E::template product_t<K>(std::move(o.t[c]));
 		}
 	};
 
@@ -144,9 +144,9 @@ struct matrix : componentwise<E, mat<typename E::value_type, N>, N * N> {
 	using base = componentwise<E, mat<typename E::value_type, N>, N * N>;
 	static constexpr bool commutative = false;
 	static constexpr int unit_scale = base::unit_scale;
-	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
-	template <int K> using product_t = typename base::template product_t<K * N>;
-	using transformed = typename base::transformed;
+	template <int A = unit_scale> using transformed_t = base::template transformed_t<A>;
+	template <int K> using product_t = base::template product_t<K * N>;
+	using transformed = base::transformed;
 	using product = product_t<unit_scale * unit_scale>;
 
 	// right fold over k so a tracked inner engine's per-addend types line up
@@ -197,9 +197,9 @@ struct trunc : componentwise<E, trunc_series<typename E::value_type, N>, N> {
 	using base = componentwise<E, trunc_series<typename E::value_type, N>, N>;
 	static constexpr bool commutative = E::commutative;
 	static constexpr int unit_scale = base::unit_scale;
-	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
-	template <int K> using product_t = typename base::template product_t<K * N>;
-	using transformed = typename base::transformed;
+	template <int A = unit_scale> using transformed_t = base::template transformed_t<A>;
+	template <int K> using product_t = base::template product_t<K * N>;
+	using transformed = base::transformed;
 	using product = product_t<unit_scale * unit_scale>;
 
 	template <int A, int B, int s, int i = 0>
@@ -256,9 +256,9 @@ struct matrix_stable
 	using base = componentwise<E, mat<typename E::value_type, N>, N * N, matrix_stable_ofs<N>>;
 	static constexpr bool commutative = false;
 	static constexpr int unit_scale = base::unit_scale;
-	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
-	template <int K> using product_t = typename base::template product_t<K>;
-	using transformed = typename base::transformed;
+	template <int A = unit_scale> using transformed_t = base::template transformed_t<A>;
+	template <int K> using product_t = base::template product_t<K>;
+	using transformed = base::transformed;
 	using product = product_t<unit_scale * unit_scale>;
 
 	template <int A, int B>
@@ -299,9 +299,9 @@ struct trunc_stable
 	using base = componentwise<E, trunc_series<typename E::value_type, N>, N, trunc_series_stable_ofs<N>>;
 	static constexpr bool commutative = E::commutative;
 	static constexpr int unit_scale = base::unit_scale;
-	template <int A = unit_scale> using transformed_t = typename base::template transformed_t<A>;
-	template <int K> using product_t = typename base::template product_t<K>;
-	using transformed = typename base::transformed;
+	template <int A = unit_scale> using transformed_t = base::template transformed_t<A>;
+	template <int K> using product_t = base::template product_t<K>;
+	using transformed = base::transformed;
 	using product = product_t<unit_scale * unit_scale>;
 
 	template <int A, int B>

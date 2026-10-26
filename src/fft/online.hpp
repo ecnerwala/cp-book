@@ -13,7 +13,7 @@ namespace wala {
 
 // Online (relaxed) multiplication: computes the first N terms of f*g given the terms one at a time.
 template <fft::engine E> struct online_multiplier {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	int N; int i;
 	std::vector<T> f, g;
 	std::vector<T> res;
@@ -64,7 +64,7 @@ template <fft::engine E> struct online_multiplier {
 };
 
 template <fft::engine E> struct online_squarer {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	int N; int i;
 	std::vector<T> f;
 	std::vector<T> res;
