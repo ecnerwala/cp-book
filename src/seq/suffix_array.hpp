@@ -55,7 +55,7 @@ public:
 	template <text String> static Self sort_and_construct(const String& S) requires std::totally_ordered<std::ranges::range_value_t<String>> {
 		auto s = std::ranges::begin(S);
 		using value_type = std::ranges::range_value_t<String>;
-		using compressed_value_type = typename std::conditional<
+		using compressed_value_type = std::conditional<
 			sizeof(value_type) < sizeof(index_t),
 			value_type,
 			index_t
@@ -106,7 +106,7 @@ public:
 	template <integer_text String> static Self bucket_and_construct(const String& S) {
 		auto s = std::ranges::begin(S);
 		using value_type = std::ranges::range_value_t<String>;
-		using compressed_value_type = typename std::conditional<
+		using compressed_value_type = std::conditional<
 			sizeof(value_type) < sizeof(index_t),
 			value_type,
 			index_t
@@ -402,7 +402,7 @@ class SuffixArray : public SuffixArrayBase<SuffixArray> {};
 
 template <typename Self> class SuffixArrayLCPBase : public SuffixArrayBase<Self> {
 public:
-	using index_t = typename SuffixArrayBase<Self>::index_t;
+	using index_t = SuffixArrayBase<Self>::index_t;
 	// lcp[i] = lcp(sa[i], sa[i+1])
 	vec<index_t> lcp;
 
@@ -434,7 +434,7 @@ class SuffixArrayLCP : public SuffixArrayLCPBase<SuffixArrayLCP> {};
 
 template <typename Self> class SuffixArrayRMQBase : public SuffixArrayLCPBase<Self> {
 public:
-	using index_t = typename SuffixArrayLCPBase<Self>::index_t;
+	using index_t = SuffixArrayLCPBase<Self>::index_t;
 	RangeMinQuery<std::pair<index_t, index_t>> rmq;
 
 	index_t get_lcp(index_t a, index_t b) const {

@@ -72,10 +72,10 @@ template <typename E>
 concept engine = requires(
 	std::span<const typename E::value_type> in,
 	std::span<typename E::value_type> out,
-	typename E::transformed& t,
-	const typename E::transformed& ct,
-	typename E::product& p,
-	const typename E::product& cp,
+	E::transformed& t,
+	const E::transformed& ct,
+	E::product& p,
+	const E::product& cp,
 	int n
 ) {
 	typename E::value_type;
@@ -105,6 +105,6 @@ template <typename A, typename B>
 concept same_engine = std::same_as<typename A::engine_t, typename B::engine_t>;
 
 // short spelling for E::transformed at use sites
-template <engine E> using transformed = typename E::transformed;
+template <engine E> using transformed = E::transformed;
 
 } // namespace wala::fft
