@@ -106,8 +106,11 @@ $(PCH_DIR)/%.gch: $(PCH_DIR)/%
 %: %.cpp # Cancel the builtin rule
 
 %: %.cpp $(PCH_FILES)
-	mkdir -p archive
-	cp $< archive/$*-$$(date +%Y-%m-%d-%H%M%S).cpp
+	@if root=$$(git rev-parse --show-toplevel 2>/dev/null) && [ -e "$$root/.autocommit" ]; then \
+		git add -- $< && git diff --cached --quiet -- $< || git commit -q -m "[autocommit] compile $$(git rev-parse --show-prefix)$<" -- $< || true; \
+	else \
+		mkdir -p archive && cp $< archive/$*-$$(date +%Y-%m-%d-%H%M%S).cpp; \
+	fi
 	$(LINK.cpp) $(PCH_CXXFLAGS) $< $(LOADLIBES) $(LDLIBS) -o $@
 .PRECIOUS: %
 
