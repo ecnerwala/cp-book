@@ -71,13 +71,12 @@ TEMPLATE_TEST_CASE("FFT Inverse", "[fft]", MOD_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
-	series::trunc<E> a(size_t(298));
+	series::trunc<E> a(298);
 	fill_rnd(a, mt);
 	if (a[0] == 0) a[0] = 1;
 	auto i = ps_inv(a);
-	auto r = multiply_slow<num>(a, i);
-	r.resize(a.size());
-	vector<num> tgt(a.size());
+	auto r = resized(multiply_slow(a, i), a.len(), num(0));
+	vec<num> tgt(a.len());
 	tgt[0] = 1;
 	REQUIRE(r == tgt);
 }
@@ -87,24 +86,24 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_rational_function", "[fft]", MOD_ENG
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int d : {1, 2, 3, 8, 20}) {
-		vector<num> p(d - 1), q(d);
+		vec<num> p(d - 1), q(d);
 		fill_rnd(p, mt);
 		fill_rnd(q, mt);
 		if (q[0] == 0) q[0] = 1;
 		CAPTURE(d, p, q);
 		// reference: power series division to many terms
 		int terms = 300;
-		vector<num> ser(terms);
+		vec<num> ser(terms);
 		num iq0 = inv(q[0]);
 		for (int i = 0; i < terms; i++) {
 			num v = i < int(p.size()) ? p[i] : num(0);
 			for (int j = 1; j <= min<int>(i, d - 1); j++) v -= q[j] * ser[i-j];
 			ser[i] = v * iq0;
 		}
-		series::exact<E> xp(p.begin(), p.end()), xq(q.begin(), q.end());
+		series::exact<E> xp(std::from_range, p), xq(std::from_range, q);
 		for (uint64_t k : {uint64_t(0), uint64_t(1), uint64_t(7), uint64_t(100), uint64_t(299)}) {
 			CAPTURE(k);
-			REQUIRE(kth_term_of_rational_function(xp, xq, k) == ser[k]);
+			REQUIRE(kth_term_of_rational_function(xp, xq, k) == ser[int(k)]);
 		}
 	}
 }
@@ -114,7 +113,7 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_linear_recurrence", "[fft]", MOD_ENG
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int d : {1, 2, 3, 8, 20}) {
-		vector<num> p(d - 1), q(d);
+		vec<num> p(d - 1), q(d);
 		fill_rnd(p, mt);
 		fill_rnd(q, mt);
 		if (q[0] == 0) q[0] = 1;
@@ -122,7 +121,7 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_linear_recurrence", "[fft]", MOD_ENG
 		CAPTURE(d, p, q);
 
 		int terms = 300;
-		vector<num> ser(terms);
+		vec<num> ser(terms);
 		num iq0 = inv(q[0]);
 		for (int i = 0; i < terms; i++) {
 			if (i < int(p.size())) {
@@ -133,10 +132,10 @@ TEMPLATE_TEST_CASE("Bostan-Mori kth_term_of_linear_recurrence", "[fft]", MOD_ENG
 				ser[i] = v * iq0;
 			}
 		}
-		series::trunc<E> xp(p.begin(), p.end()); series::exact<E> xq(q.begin(), q.end());
+		series::trunc<E> xp(std::from_range, p); series::exact<E> xq(std::from_range, q);
 		for (uint64_t k : {uint64_t(0), uint64_t(1), uint64_t(7), uint64_t(100), uint64_t(299)}) {
 			CAPTURE(k);
-			REQUIRE(kth_term_of_linear_recurrence(xp, xq, k) == ser[k]);
+			REQUIRE(kth_term_of_linear_recurrence(xp, xq, k) == ser[int(k)]);
 		}
 	}
 }
@@ -150,16 +149,16 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	fill_rnd(a, mt);
 	fill_rnd(b, mt);
 	series::cached_exact<E> ca(a), cb(b);
-	series::exact<E> got(size_t(a.len() + b.len() - 1));
+	series::exact<E> got(a.len() + b.len() - 1);
 	fft::multiply<E>(span<const num>(ca), ca.cache(),
 			span<const num>(cb), cb.cache(), span<num>(got));
 	REQUIRE(got == a * b);
 	REQUIRE((ca * cb) == (a * b));
-	REQUIRE(middle_product(ca, cb) == fft::middle_product<E>(a, b));
+	REQUIRE(std::ranges::equal(middle_product(ca, cb), fft::middle_product<E>(a, b)));
 	REQUIRE(square(ca) == square(a));
 	// the same transform serves multiply and square of the same coefficients
 	fft::transformed<E> fa, fb;
-	series::exact<E> got2(size_t(a.len() + b.len() - 1));
+	series::exact<E> got2(a.len() + b.len() - 1);
 	fft::multiply<E>(span<const num>(a), fa, span<const num>(b), fb, span<num>(got2));
 	REQUIRE(got2 == a * b);
 	fft::square<E>(span<const num>(a), fa, span<num>(got2));
@@ -180,7 +179,7 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	fill_rnd(tail, mt);
 	qa.append(span<const num>(tail));
 	series::trunc<E> pa2 = pa;
-	pa2.insert(pa2.end(), tail.begin(), tail.end());
+	pa2.append_range(tail);
 	for (int p : {8, 16, 32}) {
 		auto pv = qa.first(min(p, qa.len()));
 		REQUIRE(pv.len() == min(p, qa.len()));
@@ -189,7 +188,7 @@ TEST_CASE("series::vec cached wrappers", "[fft]") {
 	REQUIRE((qa * qb) == (pa2 * pb));
 	// products against many smaller operands reuse per-scale prefix caches
 	for (int k : {1, 2, 3, 5, 17, 33, 100}) {
-		series::trunc<E> small(size_t(k), num{});
+		series::trunc<E> small(k, num{});
 		fill_rnd(small, mt);
 		REQUIRE((qa * small) == (pa2 * small));
 		REQUIRE((small * qa) == (small * pa2));
@@ -215,7 +214,7 @@ TEST_CASE("series::vec mixed exactness operators", "[fft]") {
 	fill_rnd(b, mt);
 	// exact * exact is the full product
 	xps p = a * b;
-	check_eq(std::vector<num>(p), multiply_slow(a, b));
+	check_eq(p, multiply_slow(a, b));
 	REQUIRE(square(a) == a * a);
 	// exact +/- extend to the max length
 	xps s = a + b, d = a - b;
@@ -223,7 +222,7 @@ TEST_CASE("series::vec mixed exactness operators", "[fft]") {
 	for (int i = 0; i < 37; i++) REQUIRE(s[i] == a[i] + (i < 23 ? b[i] : num(0)));
 	for (int i = 0; i < 37; i++) REQUIRE(d[i] == a[i] - (i < 23 ? b[i] : num(0)));
 	// an exact operand doesn't lower a truncated result's precision
-	ps t(b.begin(), b.end());
+	ps t(std::from_range, b);
 	ps m = a * t;
 	REQUIRE(m.len() == 23);
 	for (int i = 0; i < 23; i++) REQUIRE(m[i] == p[i]);
@@ -233,7 +232,7 @@ TEST_CASE("series::vec mixed exactness operators", "[fft]") {
 	for (int i = 0; i < 23; i++) REQUIRE(st[i] == a[i] + t[i]);
 	for (int i = 0; i < 23; i++) REQUIRE(dt[i] == t[i] - a[i]);
 	// truncated * truncated is the min precision
-	ps u(a.begin(), a.end());
+	ps u(std::from_range, a);
 	REQUIRE((u * t).len() == 23);
 	REQUIRE(u * t == m);
 	REQUIRE((u + t).len() == 23);

@@ -2,8 +2,8 @@
 
 #include <cassert>
 #include <span>
-#include <vector>
 
+#include "containers/vec.hpp"
 #include "fft/multiply.hpp"
 
 namespace wala {
@@ -12,9 +12,9 @@ namespace wala {
 // TODO: The AP is always assumed to be 0..length-1; store an explicit offset/gap instead?
 // Maybe not, this is just more convenient.
 template <fft::engine E>
-struct ap_sampled_poly : public std::vector<typename E::value_type> {
+struct ap_sampled_poly : public growable_vec<typename E::value_type> {
 	using T = typename E::value_type;
-	using std::vector<T>::vector;
+	using growable_vec<T>::growable_vec;
 
 	int len() const {
 		return int(this->size());
@@ -59,7 +59,7 @@ struct ap_sampled_poly : public std::vector<typename E::value_type> {
 			return (*this)[int(k)];
 		} else {
 			// Just do the lagrange interpolation
-			std::vector<T> terms(*this);
+			vec<T> terms(std::from_range, *this);
 			{
 				// Inverse factorial terms
 				T v = 1;
@@ -107,23 +107,23 @@ struct ap_sampled_poly : public std::vector<typename E::value_type> {
 		for (int i = -(len() - 1); i <= osz - 1; i++) {
 			if (k+i == T(0)) {
 				// everything from [i,i+len()-1) of the output is a match
-				ap_sampled_poly res; res.reserve(osz);
+				ap_sampled_poly res(with_capacity{osz});
 				int lo = std::max(0, i);
 				int hi = std::min(i+len(), osz);
 				{
 					auto pref = eval_range(k, lo);
-					res.insert(res.end(), pref.begin(), pref.end());
+					res.append_range(pref);
 				}
-				res.insert(res.end(), this->begin() + (lo - i), this->begin() + (hi - i));
+				res.append_range(std::span<const T>(*this).subspan(lo - i, hi - lo));
 				{
 					auto suff = eval_range(k + hi, osz - hi);
-					res.insert(res.end(), suff.begin(), suff.end());
+					res.append_range(suff);
 				}
 				return res;
 			}
 		}
 
-		std::vector<T> inps(*this);
+		vec<T> inps(std::from_range, *this);
 		{
 			// Inverse factorial terms
 			T v = 1;
@@ -135,7 +135,7 @@ struct ap_sampled_poly : public std::vector<typename E::value_type> {
 				inps[len()-1-i] *= (i & 1) ? -v : v;
 			}
 		}
-		std::vector<T> inv_offsets(len() + osz - 1);
+		vec<T> inv_offsets(len() + osz - 1);
 		ap_sampled_poly results(osz);
 		{
 			T v = 1;
@@ -155,7 +155,7 @@ struct ap_sampled_poly : public std::vector<typename E::value_type> {
 				}
 			}
 		}
-		std::vector<T> prod = fft::middle_product<E>(inv_offsets, inps);
+		vec<T> prod = fft::middle_product<E>(inv_offsets, inps);
 		assert(int(prod.size()) == osz);
 		for (int i = 0; i < osz; i++) results[i] *= prod[i];
 		return results;
@@ -165,7 +165,7 @@ struct ap_sampled_poly : public std::vector<typename E::value_type> {
 		this->push_back(eval_at(T(len())));
 	}
 	void extend_left() {
-		this->insert(this->begin(), eval_at(T(-1)));
+		this->push_front(eval_at(T(-1)));
 	}
 
 	[[nodiscard]] ap_sampled_poly prefix_sum_inclusive() const {

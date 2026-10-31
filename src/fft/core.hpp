@@ -4,7 +4,6 @@
 #include <cassert>
 #include <cmath>
 #include <span>
-#include <vector>
 
 #include "fft/common.hpp"
 #include "num/modnum.hpp"
@@ -83,21 +82,21 @@ template <> struct getRoot<mod_goldilocks> {
 // Their length is allowed to be bigger than 2^k mostly to perform ops on sequences of size n+1 with only transforms of size n.
 // The upper bound of 2^{k+1} is arbitrary: we could tighten it to 2^k + 1 or loosen it to infinity, this is just a "defensive" choice.
 template <typename num> struct fft_core {
-	static inline vector<int> rev;
+	static inline vec<int> rev;
 	// rt[2^k + i] = 1^{i / 2^(k+1)}
 	// TODO: can we get rid of inv_rt; alternatively, should we store inv_rt in bit-reverse order?
-	static inline vector<num> rt, inv_rt;
+	static inline growable_vec<num> rt, inv_rt;
 
 	static void init(int n) {
 		if (n <= sz(rt)) return;
-		rev.resize(n);
+		rev = vec<int>(n);
 		for (int i = 0; i < n; i++) {
 			rev[i] = (rev[i>>1] | ((i&1)*n)) >> 1;
 		}
-		rt.reserve(n); inv_rt.reserve(n);
+		rt.reserve_for(n); inv_rt.reserve_for(n);
 		while (sz(rt) < 2 && sz(rt) < n) { rt.push_back(num(1)); inv_rt.push_back(num(1)); }
 		for (int k = sz(rt); k < n; k *= 2) {
-			rt.resize(2*k); inv_rt.resize(2*k);
+			rt.grow_to(2*k); inv_rt.grow_to(2*k);
 			num z = getRoot<num>::f(2*k);
 			num iz = inv(z);
 			for (int i = k/2; i < k; i++) {

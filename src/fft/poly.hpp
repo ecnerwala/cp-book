@@ -5,11 +5,12 @@
 #include <concepts>
 #include <cstddef>
 #include <initializer_list>
+#include <ranges>
 #include <span>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
+#include "containers/vec.hpp"
 #include "fft/series_core.hpp"
 
 namespace wala::poly {
@@ -26,10 +27,10 @@ template <fft::engine E> struct vec {
 
 	vec() = default;
 	// zero polynomial with `len` coefficient slots
-	explicit vec(int len) : c(size_t(len), T{}) {}
+	explicit vec(int len) : c(len, T{}) {}
 	// coefficient (x^0-first) order
-	vec(std::initializer_list<T> coeffs) : c(std::rbegin(coeffs), std::rend(coeffs)) {}
-	explicit vec(std::span<const T> coeffs) : c(coeffs.rbegin(), coeffs.rend()) {}
+	vec(std::initializer_list<T> coeffs) : c(std::from_range, std::views::reverse(coeffs)) {}
+	explicit vec(std::span<const T> coeffs) : c(std::from_range, std::views::reverse(coeffs)) {}
 
 	const series::exact<E>& rev_series() const { return c; }
 	static vec from_rev_series(series::exact<E> s) {
@@ -40,16 +41,16 @@ template <fft::engine E> struct vec {
 
 	// This should rarely be used
 	series::trunc<E> unrev_series(int n) const {
-		series::trunc<E> r(size_t(n), T{});
+		series::trunc<E> r(n, T{});
 		std::copy(begin(), begin() + std::min(n, len()), r.begin());
 		return r;
 	}
 
 	// logical (coefficient) order
-	auto begin() { return c.rbegin(); }
-	auto end() { return c.rend(); }
-	auto begin() const { return c.rbegin(); }
-	auto end() const { return c.rend(); }
+	auto begin() { return std::ranges::rbegin(c); }
+	auto end() { return std::ranges::rend(c); }
+	auto begin() const { return std::ranges::rbegin(c); }
+	auto end() const { return std::ranges::rend(c); }
 
 	int len() const { return c.len(); }
 	int degree() const { return len() - 1; }
@@ -58,12 +59,12 @@ template <fft::engine E> struct vec {
 	T leading() const { return c.front(); }
 	// multiply by x^k: appends the new zero constant terms to the storage
 	void shift(int k = 1) {
-		if (len() > 0) c.insert(c.end(), size_t(k), T(0));
+		if (len() > 0) c.grow_by(k, T(0));
 	}
 	// grow (zero-filled leading coefficients) or shrink to n coefficients
 	void resize(int n) {
-		if (n >= len()) c.insert(c.begin(), size_t(n - len()), T(0));
-		else c.erase(c.begin(), c.begin() + (len() - n));
+		if (n >= len()) c.insert_n(0, n - len(), T(0));
+		else c.erase_n(0, len() - n);
 	}
 
 	T operator()(const T& x) const {
@@ -178,7 +179,7 @@ struct form {
 	series::cached_exact<E> c;
 
 	form() = default;
-	explicit form(int len) : c(series::exact<E>(size_t(len), T{})) {}
+	explicit form(int len) : c(series::exact<E>(len, T{})) {}
 	// We don't provide coefficient-list constructors, to avoid ordering confusion.
 
 	const series::cached_exact<E>& rev_series() const { return c; }
@@ -194,14 +195,14 @@ struct form {
 	// Restrict the form's domain: only valid against exact series of length n
 	form for_length(int n) const {
 		auto r = series::exact<E>(c);
-		if (n >= len()) r.insert(r.begin(), size_t(n - len()), T(0));
-		else r.erase(r.begin(), r.begin() + (len() - n));
+		if (n >= len()) r.insert_n(0, n - len(), T(0));
+		else r.erase_n(0, len() - n);
 		return from_rev_series(std::move(r));
 	}
 
 	// the functional p -> p(z) on polynomials of length up to len (weight z^i on [x^i])
 	static form polynomial_evaluation(T z, int len) {
-		series::exact<E> k(size_t(len), T{});
+		series::exact<E> k(len, T{});
 		T p = T(1);
 		for (int i = 0; i < len; i++) { k[i] = p; p *= z; }
 		return from_rev_series(std::move(k));
@@ -227,7 +228,7 @@ struct form {
 	form composed_with(const S& s) const {
 		if constexpr (!S::exact_v) assert(s.len() >= len());
 		series::vec<E, S::exact_v> r = c * s;
-		r.resize(size_t(len()));
+		r.resize(len());
 		return from_rev_series(series::exact<E>(std::move(r)));
 	}
 };
@@ -269,7 +270,7 @@ vec<E> taylor_shift(vec<E> p, typename E::value_type c) {
 	using T = typename E::value_type;
 	int n = p.len();
 	// e^{cx} mod x^n: [x^i] = c^i / i!
-	series::trunc<E> e(size_t(n), T{});
+	series::trunc<E> e(n, T{});
 	if (n > 0) e[0] = T(1);
 	for (int i = 1; i < n; i++) e[i] = e[i-1] * c;
 	T f = 1;
@@ -290,9 +291,9 @@ template <fft::engine E>
 struct subproduct_tree {
 	using T = typename E::value_type;
 	int N;
-	std::vector<cached<E>> nodes;
+	wala::vec<cached<E>> nodes;
 
-	explicit subproduct_tree(std::span<const T> pts) : N(sz(pts)), nodes(size_t(2) * N) {
+	explicit subproduct_tree(std::span<const T> pts) : N(sz(pts)), nodes(2 * N) {
 		assert(N > 0);
 		for (int i = 0; i < N; i++) {
 			nodes[N + i] = vec<E>{-pts[i], T(1)};
@@ -308,9 +309,9 @@ struct subproduct_tree {
 	const cached<E>& prod(int i) const { return nodes[i]; }
 
 	// Computes, for each i, f(product_{j != i} (1 - a[j] x)). Requires f.len() == N.
-	std::vector<T> pushdown(form<E> f) const {
+	wala::vec<T> pushdown(form<E> f) const {
 		assert(f.len() == N);
-		std::vector<form<E>> down(size_t(2) * N);
+		wala::vec<form<E>> down(2 * N);
 		down[1] = std::move(f);
 		for (int i = 1; i < N; i++) {
 			// the form's kernel transform serves both children's middle products
@@ -318,7 +319,7 @@ struct subproduct_tree {
 			down[2*i+1] = down[i].composed_with(nodes[2*i+0]);
 			down[i] = form<E>{}; // done with the parent; free it early
 		}
-		std::vector<T> out(size_t(N), T{});
+		wala::vec<T> out(N, T{});
 		for (int i = 0; i < N; i++) out[i] = down[N + i].rev_series()[0];
 		return out;
 	}
@@ -326,7 +327,7 @@ struct subproduct_tree {
 	// Compute sum_i leaf_vals[i] prod_{j!=i} (x - a[j]) (transpose of pushdown)
 	cached<E> combine_up(std::span<const T> leaf_vals) const {
 		assert(sz(leaf_vals) == N);
-		std::vector<cached<E>> up(size_t(2) * N);
+		wala::vec<cached<E>> up(2 * N);
 		for (int i = 0; i < N; i++) {
 			up[N + i] = vec<E>{leaf_vals[i]};
 		}
@@ -340,7 +341,7 @@ struct subproduct_tree {
 };
 
 template <fft::engine E>
-std::vector<typename E::value_type> multipoint(
+wala::vec<typename E::value_type> multipoint(
 	const vec<E>& p,
 	std::span<const typename E::value_type> pts
 ) {
@@ -372,11 +373,11 @@ vec<E> interpolate(
 	for (int i = 0; i < N; i++) {
 		deriv_root[i] *= T(N - i);
 	}
-	std::vector<T> denoms = tree.pushdown(
+	wala::vec<T> denoms = tree.pushdown(
 		form<E>::from_rev_series(series::exact<E>(ps_inv(root) * deriv_root))
 	);
 
-	std::vector<T> leaf_vals(size_t(N), T{});
+	wala::vec<T> leaf_vals(N, T{});
 	for (int i = 0; i < N; i++) leaf_vals[i] = vals[i] / denoms[i];
 	return tree.combine_up(std::span<const T>(leaf_vals));
 }

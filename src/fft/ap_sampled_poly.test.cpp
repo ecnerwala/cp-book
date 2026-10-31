@@ -15,7 +15,7 @@ TEST_CASE("ap_sampled_poly eval", "[fft,ap_sampled_poly]") {
 	using poly_vals = ap_sampled_poly<engines::ntt<num>>;
 	mt19937 mt(Catch::getSeed());
 	for (int len : {0, 1, 2, 3, 5, 8, 13, 21}) {
-		std::vector<num> coeffs(len);
+		vec<num> coeffs(len);
 		for (int i = 0; i < len; i++) coeffs[i] = num(mt());
 		CAPTURE(len, coeffs);
 		auto eval_at = [&](num v) {

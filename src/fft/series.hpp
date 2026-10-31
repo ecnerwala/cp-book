@@ -5,8 +5,8 @@
 #include <cstdint>
 #include <span>
 #include <utility>
-#include <vector>
 
+#include "containers/vec.hpp"
 #include "fft/series_core.hpp"
 
 // ==== analytic ops ====
@@ -20,7 +20,7 @@ template <like S>
 vec<typename S::engine_t, S::exact_v> stretch(const S& a_, int n) {
 	using E = typename S::engine_t;
 	span<E, S::exact_v> a = a_;
-	vec<E, S::exact_v> r(size_t(a.len()));
+	vec<E, S::exact_v> r(a.len());
 	for (int i = 0; i*n < a.len(); i++) {
 		r[i*n] = a[i];
 	}
@@ -30,7 +30,7 @@ template <like S>
 vec<typename S::engine_t, S::exact_v> deriv_shift(const S& a_) {
 	using E = typename S::engine_t;
 	span<E, S::exact_v> a = a_;
-	vec<E, S::exact_v> r(a.begin(), a.end());
+	vec<E, S::exact_v> r(a);
 	for (int i = 0; i < r.len(); i++) {
 		r[i] *= i;
 	}
@@ -42,7 +42,7 @@ vec<typename S::engine_t, S::exact_v> integ_shift(const S& a_) {
 	using T = typename E::value_type;
 	span<E, S::exact_v> a = a_;
 	assert(a[0] == 0);
-	vec<E, S::exact_v> r(a.begin(), a.end());
+	vec<E, S::exact_v> r(a);
 	T f = 1;
 	for (int i = 1; i < r.len(); i++) {
 		r[i] *= f;
@@ -60,7 +60,7 @@ vec<typename S::engine_t, S::exact_v> integ_shift_offset(const S& a_, int offset
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
 	span<E, S::exact_v> a = a_;
-	vec<E, S::exact_v> r(a.begin(), a.end());
+	vec<E, S::exact_v> r(a);
 	T f = 1;
 	for (int i = 0; i < r.len(); i++) {
 		r[i] *= f;
@@ -81,7 +81,7 @@ vec<typename S::engine_t, S::exact_v> ogf_to_egf(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
 	span<E, S::exact_v> a = a_;
-	vec<E, S::exact_v> r(a.begin(), a.end());
+	vec<E, S::exact_v> r(a);
 	T f = 1;
 	for (int i = 1; i < r.len(); i++) f *= i;
 	f = inv(f);
@@ -96,7 +96,7 @@ vec<typename S::engine_t, S::exact_v> egf_to_ogf(const S& a_) {
 	using E = typename S::engine_t;
 	using T = typename E::value_type;
 	span<E, S::exact_v> a = a_;
-	vec<E, S::exact_v> r(a.begin(), a.end());
+	vec<E, S::exact_v> r(a);
 	T f = 1;
 	for (int i = 1; i < r.len(); i++) {
 		f *= i;
@@ -121,30 +121,30 @@ trunc<typename S::engine_t> ps_exp(const S& a_) {
 	span<E, false> a = a_;
 	assert(a.len() >= 1);
 	assert(a[0] == 0);
-	trunc<E> r(1, T(1)); r.reserve(size_t(a.len()));
-	trunc<E> invR(1, T(1)); invR.reserve(size_t(a.len()));
+	trunc<E> r(1, T(1)); r.reserve_for(a.len());
+	trunc<E> invR(1, T(1)); invR.reserve_for(a.len());
 	while (r.len() < a.len()) {
 		int o_sz = r.len();
 		int n_sz = std::min(o_sz * 2, a.len());
-		trunc<E> t = deriv_shift(trunc<E>(a.begin(), a.begin() + o_sz));
+		trunc<E> t = deriv_shift(a.first(o_sz));
 		fft::multiply_circular<E>(std::span<const T>(t), std::span<const T>(r).first(o_sz), std::span<T>(t), o_sz);
 		t = deriv_shift(r) - t;
 		t *= invR;
-		t.resize(size_t(n_sz - o_sz));
-		trunc<E> v(a.begin() + o_sz, a.begin() + n_sz);
+		t.shrink(n_sz - o_sz);
+		trunc<E> v(std::from_range, a.coeffs().subspan(o_sz, n_sz - o_sz));
 		v -= integ_shift_offset(t, o_sz);
 		v *= r;
-		r.resize(size_t(n_sz));
+		r.extend(n_sz);
 		std::copy(v.begin(), v.end(), r.begin() + o_sz);
 		if (r.len() < a.len()) {
 			// double invR via a Newton step
 			assert(r.len() == 2 * invR.len());
 			int n = invR.len();
 			int nn = r.len();
-			trunc<E> tmp(size_t(4) * n);
+			trunc<E> tmp(4 * n);
 			fft::square<E>(std::span<const T>(invR).first(n), std::span<T>(tmp));
 			fft::multiply<E>(std::span<const T>(tmp).first(nn), std::span<const T>(r).first(nn), std::span<T>(tmp));
-			invR.resize(size_t(nn));
+			invR.extend(nn);
 			for (int i = n; i < nn; i++) invR[i] = -tmp[i];
 		}
 	}
@@ -167,7 +167,7 @@ trunc<typename S::engine_t> ps_pow(const S& a_, int64_t k) {
 	span<E, false> a = a_;
 	assert(k >= 0);
 	if (k == 0) {
-		trunc<E> r(size_t(a.len()), T(0));
+		trunc<E> r(a.len(), T(0));
 		if (r.len() > 0) r[0] = T(1);
 		return r;
 	}
@@ -176,15 +176,15 @@ trunc<typename S::engine_t> ps_pow(const S& a_, int64_t k) {
 	while (st < a.len() && a[st] == 0) st++;
 
 	if (st > 0 && k > (a.len() - 1) / st) {
-		return trunc<E>(size_t(a.len()), T(0));
+		return trunc<E>(a.len(), T(0));
 	}
 
-	trunc<E> r(a.begin() + st, a.end() - (st * (k-1)));
+	trunc<E> r(std::from_range, a.coeffs().subspan(st, a.len() - st * k));
 	T leading_coeff = r[0];
 	r *= inv(leading_coeff);
 	r = ps_pow_monic(r, T(k));
 	r *= power(leading_coeff, k);
-	r.insert(r.begin(), size_t(st * k), T(0));
+	r.insert_n(0, int(st * k), T(0));
 	assert(r.len() == a.len());
 	return r;
 }
@@ -201,7 +201,7 @@ trunc<typename S::engine_t> from_newton_sums(const S& s_, int deg) {
 	using E = typename S::engine_t;
 	span<E, false> s = s_;
 	assert(s[0] == deg);
-	trunc<E> r(s.begin(), s.end());
+	trunc<E> r(s);
 	r[0] = 0;
 	for (int i = 1; i < r.len(); i++) r[i] = -r[i];
 	return ps_exp(integ_shift(std::move(r)));
@@ -212,7 +212,7 @@ template <trunc_like S>
 trunc<typename S::engine_t> euler_transform(const S& a) {
 	using E = typename S::engine_t;
 	trunc<E> r = deriv_shift(a);
-	std::vector<bool> is_prime(size_t(r.len()), true);
+	wala::vec<bool> is_prime(r.len(), true);
 	for (int p = 2; p < r.len(); p++) {
 		if (!is_prime[p]) continue;
 		for (int i = 1; i*p < r.len(); i++) {
@@ -226,7 +226,7 @@ template <trunc_like S>
 trunc<typename S::engine_t> inverse_euler_transform(const S& a) {
 	using E = typename S::engine_t;
 	trunc<E> r = deriv_shift(ps_log(a));
-	std::vector<bool> is_prime(size_t(r.len()), true);
+	wala::vec<bool> is_prime(r.len(), true);
 	for (int p = 2; p < r.len(); p++) {
 		if (!is_prime[p]) continue;
 		for (int i = (r.len()-1)/p; i >= 1; i--) {
@@ -252,10 +252,10 @@ trunc<typename S::engine_t> inverse_euler_transform(const S& a) {
 template <fft::engine E> struct packed_bivariate {
 	using T = typename E::value_type;
 	int L, l;
-	std::vector<T> c;
+	wala::vec<T> c;
 
 	// Q_0 = 1 - y g(x), deg g < n <= 2^L
-	packed_bivariate(int L_, std::span<const T> g) : L(L_), l(0), c(size_t(4) << L) {
+	packed_bivariate(int L_, std::span<const T> g) : L(L_), l(0), c(4 << L) {
 		c[0] = T(1);
 		for (int i = 0; i < sz(g); i++) c[(2 << L) + i] = -g[i];
 	}
@@ -312,23 +312,22 @@ trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
 	int B = 4 << L;
 	packed_bivariate<E> Q(L, g.coeffs());
 	// tneg[l] is the transform of Q_l(-x, y), reused by the pushdown pass below
-	std::vector<fft::transformed<E>> tneg;
-	tneg.reserve(L);
+	bounded_vec<fft::transformed<E>> tneg(with_capacity{L});
 	for (int l = 1; l <= L; l++) tneg.push_back(Q.advance());
 	trunc<E> P;
 	{
-		P = trunc<E>(f.begin(), f.end());
+		P = trunc<E>(f);
 		std::reverse(P.begin(), P.end());
 		trunc<E> QL((1 << L) + 1);
 		for (int i = 0; i <= (1 << L); i++) {
 			QL[i] = Q.c[2 * i];
 		}
-		QL.resize(size_t(m), T(0));
+		QL.resize(m);
 		P *= ps_inv(QL);
 		std::reverse(P.begin(), P.end());
-		P.resize(size_t(1) << L, T(0));
+		P.resize(1 << L);
 		std::reverse(P.begin(), P.end());
-		P.resize(size_t(B), T(0));
+		P.extend(B);
 		for (int i = (1 << L) - 1; i > 0; i--) {
 			P[2*i] = P[i];
 			P[i] = T(0);
@@ -345,7 +344,7 @@ trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
 			P[(2 << L) + i] = T(0);
 		}
 	}
-	return trunc<E>(P.begin(), P.begin() + n);
+	return trunc<E>(P.first(n));
 }
 
 // [x^k] p(x)/q(x) (Bostan-Mori) for an exact rational function.
@@ -374,9 +373,9 @@ P::engine_t::value_type kth_term_of_rational_function(
 	if (auto cq = detail::cache_of(q)) { E::extend_to(cq->get(), n, q); tq = cq->get(); }
 	if (auto cp = detail::cache_of(p)) { E::extend_to(cp->get(), n, p); tp = cp->get(); }
 
-	std::vector<T> p_buf(d-1, T(0));
+	wala::vec<T> p_buf(d-1, T(0));
 	std::ranges::copy(std::span<const T>(p), p_buf.begin());
-	std::vector<T> q_buf(d, T(0));
+	wala::vec<T> q_buf(d, T(0));
 	std::ranges::copy(std::span<const T>(q), q_buf.begin());
 
 	while (k > 0) {

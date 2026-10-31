@@ -18,12 +18,12 @@ TEST_CASE("poly::form evaluation and transposed multiplication", "[fft]") {
 	int n = 40;
 	num z = num(mt());
 	auto f = poly::form<E>::polynomial_evaluation(z, n);
-	vector<num> sv(30);
+	vec<num> sv(30);
 	fill_rnd(sv, mt);
 	poly::vec<E> s((span<const num>(sv)));
 	REQUIRE(f(s) == s(z));
 	// f(S * q) == composed_with(q)(S)
-	vector<num> qv(11), s2v(n - 11);
+	vec<num> qv(11), s2v(n - 11);
 	fill_rnd(qv, mt);
 	fill_rnd(s2v, mt);
 	poly::vec<E> q((span<const num>(qv))), s2((span<const num>(s2v)));
@@ -33,7 +33,7 @@ TEST_CASE("poly::form evaluation and transposed multiplication", "[fft]") {
 	REQUIRE(fq(s2) == (s2 * q)(z));
 	// composing with a power series (living in 1/x) multiplies the storages,
 	// prefix-truncated back to length n
-	series::trunc<E> t(size_t(n), num{});
+	series::trunc<E> t(n, num{});
 	fill_rnd(t, mt);
 	auto ft = f.composed_with(t);
 	REQUIRE(ft.len() == n);
@@ -43,7 +43,7 @@ TEST_CASE("poly::form evaluation and transposed multiplication", "[fft]") {
 		REQUIRE(ft.rev_series()[j] == want);
 	}
 	// an exact series may be any length; the tail beyond it is zero
-	series::exact<E> e(t.begin(), t.begin() + 11);
+	series::exact<E> e(t.first(11));
 	auto fe = f.composed_with(e);
 	REQUIRE(fe.len() == n);
 	for (int j = 0; j < n; j++) {
@@ -57,7 +57,7 @@ TEST_CASE("poly::vec reversed storage and series interop", "[fft]") {
 	using num = modnum<998244353>;
 	using E = engines::ntt<num>;
 	mt19937 mt(Catch::getSeed());
-	vector<num> pa(37), pb(23);
+	vec<num> pa(37), pb(23);
 	fill_rnd(pa, mt);
 	fill_rnd(pb, mt);
 	poly::vec<E> a((span<const num>(pa))), b((span<const num>(pb)));
@@ -68,7 +68,7 @@ TEST_CASE("poly::vec reversed storage and series interop", "[fft]") {
 	REQUIRE(a.rev_series()[36] == pa[0]);
 	// products convolve the storage directly
 	poly::vec<E> p = a * b;
-	check_eq(vector<num>(p.begin(), p.end()), multiply_slow(pa, pb));
+	check_eq(vec<num>(std::from_range, std::ranges::subrange(p.begin(), p.end())), multiply_slow(pa, pb));
 	REQUIRE(square(a) == a * a);
 	num x = num(mt());
 	REQUIRE(p(x) == a(x) * b(x));
@@ -91,13 +91,13 @@ TEST_CASE("poly::vec reversed storage and series interop", "[fft]") {
 	for (int i = 0; i < 37; i++) REQUIRE(ra[i] == pa[36 - i]);
 	REQUIRE(poly::vec<E>::from_rev_series(ra) == a);
 	// a poly::vec's natural-order coefficients as an exact series (for series products)
-	series::exact<E> xa(a.begin(), a.end());
+	series::exact<E> xa(std::from_range, a);
 	REQUIRE(equal(xa.begin(), xa.end(), pa.begin(), pa.end()));
-	REQUIRE(a.unrev_series(10) == series::trunc<E>(pa.begin(), pa.begin() + 10));
+	REQUIRE(a.unrev_series(10) == series::trunc<E>(std::from_range, std::span<const num>(pa).first(10)));
 	// the storage transform serves transposed products: middle product against rev_series()
-	std::vector<num> vals(60);
+	vec<num> vals(60);
 	fill_rnd(vals, mt);
-	series::cached_exact<E> cv(series::exact<E>(vals.begin(), vals.end()));
+	series::cached_exact<E> cv(series::exact<E>(std::from_range, vals));
 	series::cached_exact<E> ca(a.rev_series());
 	auto mp = middle_product(cv, ca);
 	auto naive = [&](int j) {
@@ -112,7 +112,7 @@ TEST_CASE("poly::cached products", "[fft]") {
 	using num = modnum<998244353>;
 	using E = engines::ntt<num>;
 	mt19937 mt(Catch::getSeed());
-	vector<num> pa(37), pb(23);
+	vec<num> pa(37), pb(23);
 	fill_rnd(pa, mt);
 	fill_rnd(pb, mt);
 	poly::vec<E> a((span<const num>(pa))), b((span<const num>(pb)));
@@ -121,7 +121,7 @@ TEST_CASE("poly::cached products", "[fft]") {
 	static_assert(std::is_same_v<decltype(p), poly::cached<E>>);
 	REQUIRE(p.rev_series().cache().size() > 0);
 	poly::vec<E> pp = a * b; // naming the plain type moves out and drops the transform
-	check_eq(vector<num>(pp.begin(), pp.end()), multiply_slow(pa, pb));
+	check_eq(vec<num>(std::from_range, std::ranges::subrange(pp.begin(), pp.end())), multiply_slow(pa, pb));
 	// cached operands reuse and chain; results compare across representations
 	poly::cached<E> ca(a), cb(b);
 	REQUIRE(ca == a);
@@ -142,7 +142,7 @@ TEST_CASE("poly::taylor_shift and the D basis", "[fft]") {
 	using E = engines::ntt<num>;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {0, 1, 2, 3, 8, 37}) {
-		vector<num> pa(n);
+		vec<num> pa(n);
 		fill_rnd(pa, mt);
 		CAPTURE(n, pa);
 		poly::vec<E> a((span<const num>(pa)));
@@ -163,11 +163,11 @@ TEST_CASE("poly::taylor_shift and the D basis", "[fft]") {
 		REQUIRE(poly::taylor_shift(s, -c) == a);
 	}
 	// binomial inversion: g[k] = sum_l C(l, k) f[l] is f(x + 1)
-	vector<num> fv(20);
+	vec<num> fv(20);
 	fill_rnd(fv, mt);
 	poly::vec<E> f((span<const num>(fv)));
 	poly::vec<E> g = poly::taylor_shift(f, num(1));
-	vector<vector<num>> binom(20, vector<num>(20));
+	vec<vec<num>> binom(20, vec<num>(20));
 	for (int l = 0; l < 20; l++) {
 		binom[l][0] = 1;
 		for (int k = 1; k <= l; k++) binom[l][k] = binom[l-1][k-1] + binom[l-1][k];
@@ -184,11 +184,11 @@ TEST_CASE("poly::multipoint and poly::interpolate", "[fft]") {
 	using num = modnum<998244353>;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {1, 2, 3, 8, 17, 40}) {
-		vector<num> coeffs(n);
+		vec<num> coeffs(n);
 		for (num& x : coeffs) { x = num(mt()); }
 		CAPTURE(n, coeffs);
 		poly::vec<engines::ntt<num>> p((span<const num>(coeffs)));
-		vector<num> pts(n);
+		vec<num> pts(n);
 		for (int i = 0; i < n; i++) pts[i] = num(1000 + i);
 		auto vals = poly::multipoint<engines::ntt<num>>(p, pts);
 		for (int i = 0; i < n; i++) {

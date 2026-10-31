@@ -37,22 +37,21 @@ void test_matrix_engine(mt19937& mt) {
 	};
 	for (int la : {1, 2, 3, 17, 33}) {
 		for (int lb : {1, 2, 16, 17}) {
-			vector<M> a(la), b(lb);
+			vec<M> a(la), b(lb);
 			for (M& m : a) m = rnd_mat();
 			for (M& m : b) m = rnd_mat();
 			CAPTURE(la, a, lb, b);
-			REQUIRE(multiply<E>(a, b) == multiply_slow(a, b));
+			REQUIRE(std::ranges::equal(multiply<E>(a, b), multiply_slow(a, b)));
 		}
 	}
 	// square of a matrix sequence must keep both cross orders
 	int n = 33;
-	vector<M> f(n);
+	vec<M> f(n);
 	for (M& m : f) m = rnd_mat();
-	auto slow = multiply_slow(f, f);
-	slow.resize(2*n, M{});
-	vector<M> got(2*n - 1);
+	auto slow = resized(multiply_slow(f, f), 2*n, M{});
+	vec<M> got(2*n - 1);
 	square<E>(span<const M>(f), span<M>(got));
-	REQUIRE(got == vector<M>(slow.begin(), slow.begin() + 2*n - 1));
+	REQUIRE(got == resized(slow, 2*n - 1, M{}));
 	if constexpr (online) {
 		online_squarer<E> os(n);
 		for (int i = 0; i < n; i++) {
@@ -87,11 +86,11 @@ void test_trunc_series_engine(mt19937& mt) {
 	};
 	for (int la : {1, 2, 3, 17, 33}) {
 		for (int lb : {1, 2, 16, 17}) {
-			vector<P> a(la), b(lb);
+			vec<P> a(la), b(lb);
 			for (P& p : a) p = rnd_p();
 			for (P& p : b) p = rnd_p();
 			CAPTURE(la, a, lb, b);
-			REQUIRE(multiply<E>(a, b) == multiply_slow(a, b));
+			REQUIRE(std::ranges::equal(multiply<E>(a, b), multiply_slow(a, b)));
 		}
 	}
 }

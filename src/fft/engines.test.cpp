@@ -29,7 +29,7 @@ TEMPLATE_TEST_CASE("FFT multiply sizes", "[fft]", ALL_ENGINES) {
 	mt19937 mt(Catch::getSeed());
 	for (int la : {1, 2, 3, 17, 100}) {
 		for (int lb : {1, 2, 16, 17, 168}) {
-			vector<num> a(la), b(lb);
+			vec<num> a(la), b(lb);
 			fill_rnd(a, mt);
 			fill_rnd(b, mt);
 			CAPTURE(la, a, lb, b);
@@ -45,18 +45,18 @@ TEMPLATE_TEST_CASE("transform add", "[fft]", MOD_ENGINES) {
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {2, 16, 64}) {
-		vector<num> a(n), b(n), c(n);
+		vec<num> a(n), b(n), c(n);
 		fill_rnd(a, mt); fill_rnd(b, mt); fill_rnd(c, mt);
 		auto tab = E::add(E::transform(span<const num>(a), n), E::transform(span<const num>(b), n));
 		auto tc = E::transform(span<const num>(c), n);
-		vector<num> got(n);
+		vec<num> got(n);
 		E::finish(E::mul(tab, tc, n), span<num>(got));
-		vector<num> ab(n);
+		vec<num> ab(n);
 		for (int i = 0; i < n; i++) ab[i] = a[i] + b[i];
 		auto want = multiply_slow(ab, c);
 		// compare mod x^n - 1 (circular)
 		for (int i = n; i < sz(want); i++) want[i - n] += want[i];
-		want.resize(n);
+		want = resized(want, n, num(0));
 		check_eq(got, want);
 	}
 	// scale conversions: widening is implicit, narrowing is an explicit downcast
@@ -78,19 +78,19 @@ TEST_CASE("FFT double engine downsample", "[fft]") {
 	using E = engines::real<double>;
 	mt19937 mt(Catch::getSeed());
 	int n = 64;
-	vector<double> a(2*n), evens(n), odds(n);
+	vec<double> a(2*n), evens(n), odds(n);
 	for (int i = 0; i < 2*n; i++) {
 		a[i] = rnd_val<double>(mt);
 		(i & 1 ? odds : evens)[i/2] = a[i];
 	}
 	auto t = E::transform(span<const double>(a), 2*n);
-	vector<double> b(n);
+	vec<double> b(n);
 	fill_rnd(b, mt);
 	auto tb = E::transform(span<const double>(b), n);
 	for (bool odd : {false, true}) {
 		auto th = E::downsample(t, n, odd);
 		auto& h = odd ? odds : evens;
-		vector<double> got(n), want(n);
+		vec<double> got(n), want(n);
 		E::finish(E::mul(th, tb, n), span<double>(got));
 		multiply_circular<E>(span<const double>(h), span<const double>(b), span<double>(want), n);
 		check_eq(got, want);
@@ -102,17 +102,17 @@ TEMPLATE_TEST_CASE("product downsample", "[fft]", ALL_ENGINES) {
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {2, 16, 64}) {
-		vector<num> a(2*n), b(2*n);
+		vec<num> a(2*n), b(2*n);
 		fill_rnd(a, mt);
 		fill_rnd(b, mt);
 		auto p = E::mul(E::transform(span<const num>(a), 2*n), E::transform(span<const num>(b), 2*n), 2*n);
-		vector<num> full(2*n);
+		vec<num> full(2*n);
 		E::finish(auto(p), span<num>(full));
 		for (bool odd : {false, true}) {
 			auto ph = E::downsample(p, n, odd);
-			vector<num> got(n);
+			vec<num> got(n);
 			E::finish(std::move(ph), span<num>(got));
-			vector<num> want(n);
+			vec<num> want(n);
 			for (int i = 0; i < n; i++) want[i] = full[2*i + odd];
 			check_eq(got, want);
 		}
@@ -124,7 +124,7 @@ TEMPLATE_TEST_CASE("transform upsample", "[fft]", ALL_ENGINES) {
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {2, 16, 64}) {
-		vector<num> a(n), b(2*n);
+		vec<num> a(n), b(2*n);
 		fill_rnd(a, mt);
 		fill_rnd(b, mt);
 		auto ta = E::transform(span<const num>(a), n);
@@ -132,17 +132,17 @@ TEMPLATE_TEST_CASE("transform upsample", "[fft]", ALL_ENGINES) {
 		for (bool odd : {false, true}) {
 			// multiplying the upsampled transform recovers the product with the spread input
 			auto tu = E::upsample(ta, 2*n, odd);
-			vector<num> spread(2*n);
+			vec<num> spread(2*n);
 			for (int i = 0; i < n; i++) spread[2*i + odd] = a[i];
-			vector<num> got(2*n), want(2*n);
+			vec<num> got(2*n), want(2*n);
 			E::finish(E::mul(tu, tb, 2*n), span<num>(got));
 			multiply_circular<E>(span<const num>(spread), span<const num>(b), span<num>(want), 2*n);
 			check_eq(got, want);
 			// round trip: downsample recovers the input transform, the other parity is zero
 			// (tb's size-n prefix is the transform of b wrapped mod x^n - 1)
-			vector<num> bw(n);
+			vec<num> bw(n);
 			for (int i = 0; i < n; i++) bw[i] = b[i] + b[n + i];
-			vector<num> rt_got(n), rt_want(n), zero(n);
+			vec<num> rt_got(n), rt_want(n), zero(n);
 			E::finish(E::mul(E::downsample(tu, n, odd), tb, n), span<num>(rt_got));
 			multiply_circular<E>(span<const num>(a), span<const num>(bw), span<num>(rt_want), n);
 			check_eq(rt_got, rt_want);
@@ -157,17 +157,17 @@ TEMPLATE_TEST_CASE("product upsample", "[fft]", ALL_ENGINES) {
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {2, 16, 64}) {
-		vector<num> a(n), b(n);
+		vec<num> a(n), b(n);
 		fill_rnd(a, mt);
 		fill_rnd(b, mt);
 		auto p = E::mul(E::transform(span<const num>(a), n), E::transform(span<const num>(b), n), n);
-		vector<num> full(n);
+		vec<num> full(n);
 		E::finish(auto(p), span<num>(full));
 		for (bool odd : {false, true}) {
 			auto pu = E::upsample(p, 2*n, odd);
-			vector<num> got(2*n);
+			vec<num> got(2*n);
 			E::finish(std::move(pu), span<num>(got));
-			vector<num> want(2*n);
+			vec<num> want(2*n);
 			for (int i = 0; i < n; i++) want[2*i + odd] = full[i];
 			check_eq(got, want);
 		}
@@ -179,7 +179,7 @@ TEMPLATE_TEST_CASE("FFT Square", "[fft]", ALL_ENGINES) {
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int la : {1, 3, 17, 100}) {
-		vector<num> a(la);
+		vec<num> a(la);
 		fill_rnd(a, mt);
 		CAPTURE(la, a);
 		check_eq(square<E>(a), multiply_slow(a, a));
@@ -190,12 +190,12 @@ TEMPLATE_TEST_CASE("FFT multiply with add-into op", "[fft]", ALL_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
-	vector<num> a(37), b(23);
+	vec<num> a(37), b(23);
 	fill_rnd(a, mt);
 	fill_rnd(b, mt);
-	vector<num> out(a.size() + b.size() - 1);
+	vec<num> out(a.size() + b.size() - 1);
 	fill_rnd(out, mt);
-	vector<num> expected = out;
+	vec<num> expected = out;
 	auto slow = multiply_slow(a, b);
 	for (int i = 0; i < int(slow.size()); i++) expected[i] += slow[i];
 	multiply<E>(span<const num>(a), span<const num>(b), span<num>(out), add_op{});
@@ -206,70 +206,70 @@ TEMPLATE_TEST_CASE("FFT cached multiply", "[fft]", ALL_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
-	vector<num> a(37), b(23), c(100);
+	vec<num> a(37), b(23), c(100);
 	fill_rnd(a, mt);
 	fill_rnd(b, mt);
 	fill_rnd(c, mt);
 	// caller-owned coefficients + lazily built transforms
 	fft::transformed<E> ca, cb, cc;
 	{
-		vector<num> out(a.size() + b.size() - 1);
+		vec<num> out(a.size() + b.size() - 1);
 		multiply<E>(span<const num>(a), ca, span<const num>(b), cb, span<num>(out));
 		check_eq(out, multiply_slow(a, b));
 	}
 	{
 		// reuse of a's transform at a larger size exercises extend
-		vector<num> out(a.size() + c.size() - 1);
+		vec<num> out(a.size() + c.size() - 1);
 		multiply<E>(span<const num>(a), ca, span<const num>(c), cc, span<num>(out));
 		check_eq(out, multiply_slow(a, c));
 	}
 	{
 		// and shrink back down (prefix use)
-		vector<num> out(a.size() + b.size() - 1);
+		vec<num> out(a.size() + b.size() - 1);
 		multiply<E>(span<const num>(a), ca, span<const num>(b), cb, span<num>(out));
 		check_eq(out, multiply_slow(a, b));
 	}
 	{
-		vector<num> out(2 * a.size() - 1);
+		vec<num> out(2 * a.size() - 1);
 		square<E>(span<const num>(a), ca, span<num>(out));
 		check_eq(out, multiply_slow(a, a));
 	}
 	{
 		// multiply_cached: coefficients match, and the seeded (or lazily built)
 		// transform is directly usable in further products, including after extend
-		vector<num> ab;
+		vec<num> ab;
 		fft::transformed<E> cab;
 		multiply_cached<E>(span<const num>(a), ca, span<const num>(b), cb, ab, cab);
 		check_eq(ab, multiply_slow(a, b));
-		vector<num> out(ab.size() + c.size() - 1);
+		vec<num> out(ab.size() + c.size() - 1);
 		multiply<E>(span<const num>(ab), cab, span<const num>(c), cc, span<num>(out));
 		check_eq(out, multiply_slow(ab, c));
 	}
 	{
 		// 2^k+1 by 1: the cut fires with the long operand's folded size-2^k transform
-		vector<num> d(33), e(1);
+		vec<num> d(33), e(1);
 		fill_rnd(d, mt);
 		fill_rnd(e, mt);
 		fft::transformed<E> cd, ce;
-		vector<num> out(33);
+		vec<num> out(33);
 		multiply<E>(span<const num>(d), cd, span<const num>(e), ce, span<num>(out));
 		check_eq(out, multiply_slow(d, e));
 		// the folded transform must still extend correctly for a bigger product
-		vector<num> out2(d.size() + c.size() - 1);
+		vec<num> out2(d.size() + c.size() - 1);
 		multiply<E>(span<const num>(d), cd, span<const num>(c), cc, span<num>(out2));
 		check_eq(out2, multiply_slow(d, c));
 	}
 	{
 		// 2^k+1 shapes hit the cut, seeding a folded transform; extending it must fold
-		vector<num> d(33), e(33);
+		vec<num> d(33), e(33);
 		fill_rnd(d, mt);
 		fill_rnd(e, mt);
 		fft::transformed<E> cd, ce;
-		vector<num> de;
+		vec<num> de;
 		fft::transformed<E> cde;
 		multiply_cached<E>(span<const num>(d), cd, span<const num>(e), ce, de, cde);
 		check_eq(de, multiply_slow(d, e));
-		vector<num> out(de.size() + c.size() - 1);
+		vec<num> out(de.size() + c.size() - 1);
 		multiply<E>(span<const num>(de), cde, span<const num>(c), cc, span<num>(out));
 		check_eq(out, multiply_slow(de, c));
 	}
@@ -280,20 +280,20 @@ TEMPLATE_TEST_CASE("FFT multiply_add2", "[fft]", ALL_ENGINES) {
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	// pairs share a linear length; includes 2^k+1 cut shapes and length-1 operands
-	vector<array<int, 4>> cases = {
+	vec<array<int, 4>> cases = {
 		{1, 2, 2, 1}, {2, 2, 2, 2}, {3, 3, 3, 3}, {1, 5, 3, 3},
 		{4, 5, 8, 1}, {17, 16, 32, 1}, {65, 65, 129, 1}, {100, 29, 64, 65},
 	};
 	for (auto [la1, lb1, la2, lb2] : cases) {
-		vector<num> a1(la1), b1(lb1), a2(la2), b2(lb2);
+		vec<num> a1(la1), b1(lb1), a2(la2), b2(lb2);
 		fill_rnd(a1, mt); fill_rnd(b1, mt); fill_rnd(a2, mt); fill_rnd(b2, mt);
 		CAPTURE(la1, lb1, la2, lb2);
 		CAPTURE(a1, b1, a2, b2);
-		vector<num> want = multiply_slow(a1, b1);
-		vector<num> p2 = multiply_slow(a2, b2);
+		vec<num> want = multiply_slow(a1, b1);
+		vec<num> p2 = multiply_slow(a2, b2);
 		for (int i = 0; i < sz(p2); i++) want[i] += p2[i];
 		fft::transformed<E> ca1, cb1, ca2, cb2;
-		vector<num> got(want.size());
+		vec<num> got(want.size());
 		multiply_add2<E>(span<const num>(a1), ca1, span<const num>(b1), cb1,
 				span<const num>(a2), ca2, span<const num>(b2), cb2, span<num>(got));
 		check_eq(got, want);
@@ -307,40 +307,40 @@ TEMPLATE_TEST_CASE("FFT middle product", "[fft]", ALL_ENGINES) {
 	for (int la : {5, 16, 17, 33, 100}) {
 		for (int lb : {1, 3, 5}) {
 			if (lb > la) continue;
-			vector<num> a(la), b(lb);
+			vec<num> a(la), b(lb);
 			fill_rnd(a, mt);
 			fill_rnd(b, mt);
 			auto full = multiply_slow(a, b);
-			vector<num> expected(full.begin() + (lb - 1), full.begin() + la);
+			vec<num> expected(std::from_range, span<const num>(full).subspan(lb - 1, la - lb + 1));
 			CAPTURE(la, a, lb, b);
 			check_eq(middle_product<E>(a, b), expected);
 			// out-span form accumulates through the op
-			vector<num> acc(expected.size(), num(1));
+			vec<num> acc(expected.size(), num(1));
 			middle_product<E>(span<const num>(a), span<const num>(b), span<num>(acc), fft::add_op{});
 			for (auto& v : acc) v -= num(1);
 			check_eq(acc, expected);
 		}
 	}
 	// equal lengths: a single dot product
-	vector<num> a(9), b(9);
+	vec<num> a(9), b(9);
 	fill_rnd(a, mt);
 	fill_rnd(b, mt);
 	auto full = multiply_slow(a, b);
-	check_eq(middle_product<E>(a, b), vector<num>(1, full[8]));
+	check_eq(middle_product<E>(a, b), vec<num>(1, full[8]));
 }
 
 TEMPLATE_TEST_CASE("negate_arg transforms", "[fft]", ALL_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
-	vector<num> delta(1, num(1));
+	vec<num> delta(1, num(1));
 	for (int n : {2, 4, 16, 64}) {
-		vector<num> a(n);
+		vec<num> a(n);
 		fill_rnd(a, mt);
 		auto ta = E::transform(span<const num>(a), n);
 		auto td = E::transform(span<const num>(delta), n);
 		// negate_arg: multiplying by delta's transform recovers coefficients of a(-x)
-		vector<num> got(n), want = a;
+		vec<num> got(n), want = a;
 		E::finish(E::mul(E::negate_arg(ta, n), td, n), span<num>(got));
 		for (int i = 1; i < n; i += 2) want[i] = -want[i];
 		check_eq(got, want);
@@ -351,16 +351,16 @@ TEMPLATE_TEST_CASE("of_reverse transforms", "[fft]", ALL_ENGINES) {
 	using E = TestType;
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
-	vector<num> delta(1, num(1));
+	vec<num> delta(1, num(1));
 	for (int n : {1, 2, 4, 16, 64}) {
 		// inputs longer than n wrap, and the reversal is of the wrapped sequence
 		for (int la : {n, n + 1, 2 * n}) {
-			vector<num> a(la);
+			vec<num> a(la);
 			fill_rnd(a, mt);
 			CAPTURE(n, la);
 			auto ta = E::transform(span<const num>(a), n);
 			auto td = E::transform(span<const num>(delta), n);
-			vector<num> got(n), want(n);
+			vec<num> got(n), want(n);
 			E::finish(E::mul(E::of_reverse(ta, n), td, n), span<num>(got));
 			for (int i = 0; i < la; i++) want[(n - i % n) % n] += a[i];
 			check_eq(got, want);
@@ -373,16 +373,16 @@ TEMPLATE_TEST_CASE("dot of product and transform", "[fft]", engines::ntt<modnum<
 	using num = typename E::value_type;
 	mt19937 mt(Catch::getSeed());
 	for (int n : {1, 2, 4, 16, 64}) {
-		vector<num> a(n), b(n), w(n + 1);
+		vec<num> a(n), b(n), w(n + 1);
 		fill_rnd(a, mt); fill_rnd(b, mt); fill_rnd(w, mt);
 		auto p = E::mul(E::transform(span<const num>(a), n), E::transform(span<const num>(b), n), n);
 		auto tw = E::transform(span<const num>(w), n);
 		num got = E::dot(p, tw, n);
-		vector<num> c(n);
+		vec<num> c(n);
 		E::finish(std::move(p), span<num>(c));
 		num want = 0;
 		for (int k = 0; k < n; k++) want += c[k] * (w[k] + (k == 0 ? w[n] : num(0)));
-		check_eq(vector<num>{got}, vector<num>{want});
+		check_eq(vec<num>{got}, vec<num>{want});
 	}
 }
 

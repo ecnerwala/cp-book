@@ -6,7 +6,6 @@
 #include <cstddef>
 #include <span>
 #include <utility>
-#include <vector>
 
 #include "fft/engine.hpp"
 
@@ -151,12 +150,12 @@ void multiply_add2_cached(
 		std::span<const typename E::value_type> b1, transformed<E>& tb1,
 		std::span<const typename E::value_type> a2, transformed<E>& ta2,
 		std::span<const typename E::value_type> b2, transformed<E>& tb2,
-		std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
+		vec<typename E::value_type>& coeffs, transformed<E>& t) {
 	using T = typename E::value_type;
 	assert(sz(a1) > 0 && sz(b1) > 0 && sz(a2) > 0 && sz(b2) > 0);
 	int s = sz(a1) + sz(b1) - 1;
 	assert(sz(a2) + sz(b2) - 1 == s);
-	coeffs.assign(size_t(s), T{});
+	coeffs = vec<T>(s, T{});
 	t = transformed<E>{};
 	if constexpr (std::same_as<typename E::product, transformed<E>>) {
 		auto [n, cut] = detail::conv_size_for(s);
@@ -176,9 +175,9 @@ void multiply_add2_cached(
 template <engine E>
 void multiply_cached(std::span<const typename E::value_type> a, transformed<E>& ta,
 		std::span<const typename E::value_type> b, transformed<E>& tb,
-		std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
+		vec<typename E::value_type>& coeffs, transformed<E>& t) {
 	using T = typename E::value_type;
-	coeffs.assign(size_t(sz(a) && sz(b) ? sz(a) + sz(b) - 1 : 0), T{});
+	coeffs = vec<T>(sz(a) && sz(b) ? sz(a) + sz(b) - 1 : 0, T{});
 	t = transformed<E>{};
 	if (coeffs.empty()) return;
 	int s = sz(coeffs);
@@ -224,9 +223,9 @@ void square(std::span<const typename E::value_type> a, transformed<E>& ta,
 // the result (empty when the engine's product isn't a transform).
 template <engine E>
 void square_cached(std::span<const typename E::value_type> a, transformed<E>& ta,
-		std::vector<typename E::value_type>& coeffs, transformed<E>& t) {
+		vec<typename E::value_type>& coeffs, transformed<E>& t) {
 	using T = typename E::value_type;
-	coeffs.assign(size_t(sz(a) ? 2 * sz(a) - 1 : 0), T{});
+	coeffs = vec<T>(sz(a) ? 2 * sz(a) - 1 : 0, T{});
 	t = transformed<E>{};
 	if (coeffs.empty()) return;
 	int s = sz(coeffs);
@@ -243,20 +242,20 @@ void square_cached(std::span<const typename E::value_type> a, transformed<E>& ta
 	}
 }
 
-template <engine E> vector<typename E::value_type> multiply(
-		const vector<typename E::value_type>& a, const vector<typename E::value_type>& b) {
+template <engine E> vec<typename E::value_type> multiply(
+		std::span<const typename E::value_type> a, std::span<const typename E::value_type> b) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return {};
-	vector<T> r(sz(a) + sz(b) - 1);
-	multiply<E>(std::span<const T>(a), std::span<const T>(b), std::span<T>(r));
+	vec<T> r(sz(a) + sz(b) - 1);
+	multiply<E>(a, b, std::span<T>(r));
 	return r;
 }
 
-template <engine E> vector<typename E::value_type> square(const vector<typename E::value_type>& a) {
+template <engine E> vec<typename E::value_type> square(std::span<const typename E::value_type> a) {
 	using T = typename E::value_type;
 	if (sz(a) == 0) return {};
-	vector<T> r(2 * sz(a) - 1);
-	square<E>(std::span<const T>(a), std::span<T>(r));
+	vec<T> r(2 * sz(a) - 1);
+	square<E>(a, std::span<T>(r));
 	return r;
 }
 
@@ -299,15 +298,15 @@ void middle_product(std::span<const typename E::value_type> a, std::span<const t
 			a[0] * b[0], a[sz(a) - 1] * b[sz(b) - 1], out, op);
 }
 
-// TODO: Let's decide whether to keep vector<> returning forms or not; this
+// TODO: Let's decide whether to keep vec<> returning forms or not; this
 // largely depends on whether we think these functions are a public interface or
 // merely convenience for value type implementors.
-template <engine E> vector<typename E::value_type> middle_product(
+template <engine E> vec<typename E::value_type> middle_product(
 		std::span<const typename E::value_type> a, std::span<const typename E::value_type> b) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return {};
 	assert(sz(a) >= sz(b));
-	vector<T> r(size_t(sz(a) - sz(b) + 1));
+	vec<T> r(sz(a) - sz(b) + 1);
 	middle_product<E>(a, b, std::span<T>(r));
 	return r;
 }
@@ -337,12 +336,12 @@ void middle_product(std::span<const typename E::value_type> a, transformed<E>& t
 }
 
 template <engine E>
-vector<typename E::value_type> middle_product(std::span<const typename E::value_type> a, transformed<E>& ta,
+vec<typename E::value_type> middle_product(std::span<const typename E::value_type> a, transformed<E>& ta,
 		std::span<const typename E::value_type> b, transformed<E>& tb) {
 	using T = typename E::value_type;
 	if (sz(a) == 0 || sz(b) == 0) return {};
 	assert(sz(a) >= sz(b));
-	vector<T> r(size_t(sz(a) - sz(b) + 1));
+	vec<T> r(sz(a) - sz(b) + 1);
 	middle_product<E>(a, ta, b, tb, std::span<T>(r));
 	return r;
 }

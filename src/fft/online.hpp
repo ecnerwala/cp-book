@@ -1,10 +1,11 @@
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <cassert>
 #include <span>
-#include <vector>
 
+#include "containers/vec.hpp"
 #include "fft/multiply.hpp"
 
 namespace wala {
@@ -15,11 +16,12 @@ namespace wala {
 template <fft::engine E> struct online_multiplier {
 	using T = typename E::value_type;
 	int N; int i;
-	std::vector<T> f, g;
-	std::vector<T> res;
-	std::vector<fft::transformed<E>> f_blocks, g_blocks; // level k: block [2^k, 2^{k+1})
+	vec<T> f, g;
+	vec<T> res;
+	bounded_vec<fft::transformed<E>> f_blocks, g_blocks; // level k: block [2^k, 2^{k+1})
 
-	online_multiplier(int N_) : N(N_), i(0), f(N, T{}), g(N, T{}), res(2*N+1, T{}) {}
+	online_multiplier(int N_) : N(N_), i(0), f(N, T{}), g(N, T{}), res(2*N+1, T{}),
+		f_blocks(with_capacity{std::bit_width(unsigned(N))}), g_blocks(with_capacity{std::bit_width(unsigned(N))}) {}
 
 	T peek() {
 		return res[i];
@@ -66,11 +68,11 @@ template <fft::engine E> struct online_multiplier {
 template <fft::engine E> struct online_squarer {
 	using T = typename E::value_type;
 	int N; int i;
-	std::vector<T> f;
-	std::vector<T> res;
-	std::vector<fft::transformed<E>> f_blocks;
+	vec<T> f;
+	vec<T> res;
+	bounded_vec<fft::transformed<E>> f_blocks;
 
-	online_squarer(int N_) : N(N_), i(0), f(N, T{}), res(2*N+1, T{}) {}
+	online_squarer(int N_) : N(N_), i(0), f(N, T{}), res(2*N+1, T{}), f_blocks(with_capacity{std::bit_width(unsigned(N))}) {}
 
 	T peek() {
 		return res[i];
