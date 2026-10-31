@@ -1,0 +1,371 @@
+--- /tmp/spqr_tree_fast.rs.bak	2026-10-01 01:23:04.475092294 +0000
++++ src/spqr_tree_fast.rs	2026-10-01 01:24:55.819019319 +0000
+@@ -70,6 +70,37 @@
+ 		unsafe { self.0.get_unchecked_mut(i) }
+ 	}
+ }
++
++/// Copyable raw view of a `UVec`'s buffer. Taken once at the top of a hot method so the data pointer is a
++/// local SSA value instead of a field load that LLVM must redo after every store through it.
++/// Invariant: the source `UVec` is not resized while a `P` of it is live.
++#[derive(Clone, Copy)]
++struct P<T> {
++	p: *mut T,
++	n: usize,
++}
++impl<T> P<T> {
++	#[inline(always)]
++	fn of(v: &mut UVec<T>) -> Self {
++		P { p: v.0.as_mut_ptr(), n: v.0.len() }
++	}
++}
++impl<T> Index<usize> for P<T> {
++	type Output = T;
++	#[inline(always)]
++	fn index(&self, i: usize) -> &T {
++		debug_assert!(i < self.n);
++		unsafe { &*self.p.add(i) }
++	}
++}
++impl<T> IndexMut<usize> for P<T> {
++	#[inline(always)]
++	fn index_mut(&mut self, i: usize) -> &mut T {
++		debug_assert!(i < self.n);
++		unsafe { &mut *self.p.add(i) }
++	}
++}
++
+ impl<'a, T> IntoIterator for &'a UVec<T> {
+ 	type Item = &'a T;
+ 	type IntoIter = std::slice::Iter<'a, T>;
+@@ -1028,38 +1059,45 @@
+ 	stk: UVec<RelabelStack>,
+ }
+ 
+-impl<const WP: bool> Relabel<WP> {
+-	fn set_ne(&mut self, cur_idx: i32, ne: i32, nvs: [i32; 2], nds: [i32; 2], rot_adjs: [i32; 4]) {
+-		self.node_edges.dat[ne as usize].node = cur_idx;
+-		self.node_edges.dat[ne as usize].nvs = nvs;
+-		self.node_adj.dat[nds[0] as usize] = NodeAdj { ne, dest_nv: nvs[1] };
+-		self.node_adj.dat[nds[1] as usize] = NodeAdj { ne, dest_nv: nvs[0] };
+-		if WP {
+-			for z in 0..4 {
+-				self.ne_rot_adj[(4 * ne) as usize + z] = rot_adjs[z];
+-			}
++#[inline(always)]
++fn set_ne<const WP: bool>(mut ned: P<NodeEdge>, mut nad: P<NodeAdj>, mut nra: P<i32>, cur_idx: i32, ne: i32, nvs: [i32; 2], nds: [i32; 2], rot_adjs: [i32; 4]) {
++	ned[ne as usize].node = cur_idx;
++	ned[ne as usize].nvs = nvs;
++	nad[nds[0] as usize] = NodeAdj { ne, dest_nv: nvs[1] };
++	nad[nds[1] as usize] = NodeAdj { ne, dest_nv: nvs[0] };
++	if WP {
++		for z in 0..4 {
++			nra[(4 * ne) as usize + z] = rot_adjs[z];
+ 		}
+ 	}
++}
+ 
+-	fn map_rot_edge(&self, planar: bool, ve: i32) -> [i32; 4] {
+-		if !WP {
+-			return [-1, -1, -1, -1];
+-		}
+-		if !planar {
+-			return [-1, -1, -1, -1];
+-		}
+-		let mut res = [0; 4];
+-		for z in 0..4 {
+-			let o = self.b.quarter_edge_matches[(4 * ve) as usize + z];
+-			debug_assert!(o != -1);
+-			res[z] = (self.rot_edge_ne[(o >> 2) as usize] << 2) + (o & 2) + ((z & 1) == 0) as i32;
+-		}
+-		res
++#[inline(always)]
++fn map_rot_edge<const WP: bool>(qem: P<i32>, ren: P<i32>, planar: bool, ve: i32) -> [i32; 4] {
++	if !WP {
++		return [-1, -1, -1, -1];
+ 	}
++	if !planar {
++		return [-1, -1, -1, -1];
++	}
++	let mut res = [0; 4];
++	for z in 0..4 {
++		let o = qem[(4 * ve) as usize + z];
++		debug_assert!(o != -1);
++		res[z] = (ren[(o >> 2) as usize] << 2) + (o & 2) + ((z & 1) == 0) as i32;
++	}
++	res
++}
+ 
++impl<const WP: bool> Relabel<WP> {
+ 	fn push_item(&mut self, cur_item: i32) {
+ 		let nv = self.b.nv;
+ 		let ne = self.b.ne;
++		#[allow(unused_mut)]
++		let (mut chd, mut nvd, mut ch_nxt, mut vpb, mut item_vs, mut nab, ned, nad, nra, mut qem, mut ren) = (
++			P::of(&mut self.ch.dat), P::of(&mut self.node_verts.dat), P::of(&mut self.b.ch_nxt), P::of(&mut self.vert_pos_buf), P::of(&mut self.b.item_vs),
++			P::of(&mut self.node_adj.bounds), P::of(&mut self.node_edges.dat), P::of(&mut self.node_adj.dat), P::of(&mut self.ne_rot_adj),
++			P::of(&mut self.b.quarter_edge_matches), P::of(&mut self.rot_edge_ne));
+ 		let cur_idx = self.nxt_unassigned_idx;
+ 		self.nxt_unassigned_idx += 1;
+ 		let cur_type = self.b.item_types[cur_item as usize];
+@@ -1089,8 +1127,8 @@
+ 						for s in 0..4 {
+ 							let a = 8 * ne + s as i32;
+ 							let b = p[s];
+-							self.b.quarter_edge_matches[a as usize] = b;
+-							self.b.quarter_edge_matches[b as usize] = a;
++							qem[a as usize] = b;
++							qem[b as usize] = a;
+ 						}
+ 					} else {
+ 						// TODO: Any certificate stuff
+@@ -1112,9 +1150,9 @@
+ 		let nv_st = self.node_verts.bounds[cur_idx as usize];
+ 		let mut nv_en = nv_st;
+ 		let mut n_edges = 0;
+-		let cur_item_vs = self.b.item_vs[cur_item as usize];
++		let cur_item_vs = item_vs[cur_item as usize];
+ 		if cur_item_vs[0] != -1 {
+-			self.node_verts.dat[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[0] };
++			nvd[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[0] };
+ 			nv_en += 1;
+ 		}
+ 		let cur_item_ch = self.b.item_ch[cur_item as usize];
+@@ -1122,11 +1160,11 @@
+ 			let mut planarity_flip = (cur_item_ch.v[0] & 1) != 0;
+ 			let mut ch_item = cur_item_ch.v[0] >> 1;
+ 			loop {
+-				self.ch.dat[ch_en as usize] = ch_item;
++				chd[ch_en as usize] = ch_item;
+ 				ch_en += 1;
+ 				debug_assert!(ch_item >= 1);
+ 				if ch_item < 1 + nv {
+-					self.node_verts.dat[nv_en as usize] = NodeVert { node: cur_idx, vert: ch_item - 1 };
++					nvd[nv_en as usize] = NodeVert { node: cur_idx, vert: ch_item - 1 };
+ 					nv_en += 1;
+ 				} else {
+ 					if WP {
+@@ -1137,7 +1175,7 @@
+ 							// this breaks the involution property, but from here on we'll never read the low bits anyways.
+ 							let ve = (ch_item - (1 + nv)) as usize;
+ 							if planarity_flip {
+-								let q = &mut self.b.quarter_edge_matches;
++								let mut q = qem;
+ 								(q[4 * ve + 0], q[4 * ve + 1]) = (q[4 * ve + 1], q[4 * ve + 0]);
+ 								(q[4 * ve + 2], q[4 * ve + 3]) = (q[4 * ve + 3], q[4 * ve + 2]);
+ 							}
+@@ -1146,10 +1184,10 @@
+ 					n_edges += 1;
+ 				}
+ 				if ch_item == (cur_item_ch.v[1] >> 1) {
+-					debug_assert!(self.b.ch_nxt[ch_item as usize] == -1);
++					debug_assert!(ch_nxt[ch_item as usize] == -1);
+ 					break;
+ 				}
+-				let nxt = self.b.ch_nxt[ch_item as usize];
++				let nxt = ch_nxt[ch_item as usize];
+ 				planarity_flip ^= (nxt & 1) != 0;
+ 				ch_item = nxt >> 1;
+ 			}
+@@ -1157,7 +1195,7 @@
+ 			debug_assert!(!planarity_flip);
+ 		}
+ 		if cur_item_vs[1] != -1 {
+-			self.node_verts.dat[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[1] };
++			nvd[nv_en as usize] = NodeVert { node: cur_idx, vert: cur_item_vs[1] };
+ 			nv_en += 1;
+ 		}
+ 		self.ch.bounds[cur_idx as usize + 1] = ch_en;
+@@ -1182,48 +1220,48 @@
+ 		if cur_type == NodeType::F {
+ 			// Just set node_adj bounds and we're good
+ 			for i in 2 * nv_st + 1..=2 * nv_en {
+-				self.node_adj.bounds[i as usize] = 2 * ne_st;
++				nab[i as usize] = 2 * ne_st;
+ 			}
+ 		} else if cur_type == NodeType::V {
+ 			// Nothing to do
+ 		} else if n_verts == 1 {
+ 			debug_assert!(cur_type == NodeType::Q || cur_type == NodeType::O);
+ 			debug_assert!(n_edges == 1);
+-			self.node_adj.bounds[(2 * nv_st + 1) as usize] = 2 * ne_st + 1 * n_edges;
+-			self.node_adj.bounds[(2 * nv_st + 2) as usize] = 2 * ne_st + 2 * n_edges;
+-			self.set_ne(cur_idx, ne_st, [nv_st, nv_st], [2 * ne_st + 1, 2 * ne_st], [4 * ne_st + 3, 4 * ne_st + 2, 4 * ne_st + 1, 4 * ne_st + 0]);
++			nab[(2 * nv_st + 1) as usize] = 2 * ne_st + 1 * n_edges;
++			nab[(2 * nv_st + 2) as usize] = 2 * ne_st + 2 * n_edges;
++			set_ne::<WP>(ned, nad, nra, cur_idx, ne_st, [nv_st, nv_st], [2 * ne_st + 1, 2 * ne_st], [4 * ne_st + 3, 4 * ne_st + 2, 4 * ne_st + 1, 4 * ne_st + 0]);
+ 		} else if cur_type == NodeType::Q || cur_type == NodeType::I {
+ 			debug_assert!(n_verts == 2);
+ 			debug_assert!(n_edges == 1);
+-			self.node_adj.bounds[(2 * nv_st + 1) as usize] = 2 * ne_st + 0 * n_edges;
+-			self.node_adj.bounds[(2 * nv_st + 2) as usize] = 2 * ne_st + 1 * n_edges;
+-			self.node_adj.bounds[(2 * nv_st + 3) as usize] = 2 * ne_st + 2 * n_edges;
+-			self.node_adj.bounds[(2 * nv_st + 4) as usize] = 2 * ne_st + 2 * n_edges;
+-			self.set_ne(cur_idx, ne_st, [nv_st, nv_st + 1], [2 * ne_st, 2 * ne_st + 1], [4 * ne_st + 1, 4 * ne_st + 0, 4 * ne_st + 3, 4 * ne_st + 2]);
++			nab[(2 * nv_st + 1) as usize] = 2 * ne_st + 0 * n_edges;
++			nab[(2 * nv_st + 2) as usize] = 2 * ne_st + 1 * n_edges;
++			nab[(2 * nv_st + 3) as usize] = 2 * ne_st + 2 * n_edges;
++			nab[(2 * nv_st + 4) as usize] = 2 * ne_st + 2 * n_edges;
++			set_ne::<WP>(ned, nad, nra, cur_idx, ne_st, [nv_st, nv_st + 1], [2 * ne_st, 2 * ne_st + 1], [4 * ne_st + 1, 4 * ne_st + 0, 4 * ne_st + 3, 4 * ne_st + 2]);
+ 		} else if cur_type == NodeType::P {
+ 			// Special case: tiebreak the parallel edges so they're reversed
+ 			debug_assert!(n_verts == 2);
+ 			debug_assert!(n_edges >= 3);
+-			self.node_adj.bounds[(2 * nv_st + 1) as usize] = 2 * ne_st + 0 * n_edges;
+-			self.node_adj.bounds[(2 * nv_st + 2) as usize] = 2 * ne_st + 1 * n_edges;
+-			self.node_adj.bounds[(2 * nv_st + 3) as usize] = 2 * ne_st + 2 * n_edges;
+-			self.node_adj.bounds[(2 * nv_st + 4) as usize] = 2 * ne_st + 2 * n_edges;
++			nab[(2 * nv_st + 1) as usize] = 2 * ne_st + 0 * n_edges;
++			nab[(2 * nv_st + 2) as usize] = 2 * ne_st + 1 * n_edges;
++			nab[(2 * nv_st + 3) as usize] = 2 * ne_st + 2 * n_edges;
++			nab[(2 * nv_st + 4) as usize] = 2 * ne_st + 2 * n_edges;
+ 			for ne in ne_st..ne_en {
+ 				let ne_prv = (if ne == ne_st { ne_en } else { ne }) - 1;
+ 				let ne_nxt = if ne + 1 == ne_en { ne_st } else { ne + 1 };
+ 				let rot_adjs = [4 * ne_prv + 1, 4 * ne_nxt + 0, 4 * ne_nxt + 3, 4 * ne_prv + 2];
+-				self.set_ne(cur_idx, ne, [nv_st, nv_st + 1], [2 * ne_st + (ne - ne_st), 2 * ne_en - 1 - (ne - ne_st)], rot_adjs);
++				set_ne::<WP>(ned, nad, nra, cur_idx, ne, [nv_st, nv_st + 1], [2 * ne_st + (ne - ne_st), 2 * ne_en - 1 - (ne - ne_st)], rot_adjs);
+ 			}
+ 		} else if cur_type == NodeType::S {
+ 			debug_assert!(n_verts == n_edges);
+ 			debug_assert!(n_verts >= 3);
+ 			for i in 2 * nv_st + 1..=2 * nv_en {
+-				self.node_adj.bounds[i as usize] = i + 2 * (ne_st - nv_st);
++				nab[i as usize] = i + 2 * (ne_st - nv_st);
+ 			}
+ 			// Fix bounds for the cap
+-			self.node_adj.bounds[(2 * nv_st + 1) as usize] -= 1;
+-			self.node_adj.bounds[(2 * nv_en - 1) as usize] += 1;
+-			self.set_ne(cur_idx, ne_st, [nv_st, nv_en - 1], [2 * ne_st, 2 * ne_en - 1], [4 * (ne_st + 1) + 1, 4 * (ne_st + 1) + 0, 4 * (ne_en - 1) + 3, 4 * (ne_en - 1) + 2]);
++			nab[(2 * nv_st + 1) as usize] -= 1;
++			nab[(2 * nv_en - 1) as usize] += 1;
++			set_ne::<WP>(ned, nad, nra, cur_idx, ne_st, [nv_st, nv_en - 1], [2 * ne_st, 2 * ne_en - 1], [4 * (ne_st + 1) + 1, 4 * (ne_st + 1) + 0, 4 * (ne_en - 1) + 3, 4 * (ne_en - 1) + 2]);
+ 			for i in 1..n_edges {
+ 				let ne = ne_st + i;
+ 				let mut rot_adjs = [4 * (ne - 1) + 3, 4 * (ne - 1) + 2, 4 * (ne + 1) + 1, 4 * (ne + 1) + 0];
+@@ -1235,12 +1273,12 @@
+ 					rot_adjs[2] = 4 * ne_st + 3;
+ 					rot_adjs[3] = 4 * ne_st + 2;
+ 				}
+-				self.set_ne(cur_idx, ne, [nv_st + i - 1, nv_st + i], [2 * ne - 1, 2 * ne], rot_adjs);
++				set_ne::<WP>(ned, nad, nra, cur_idx, ne, [nv_st + i - 1, nv_st + i], [2 * ne - 1, 2 * ne], rot_adjs);
+ 			}
+ 		} else if cur_type == NodeType::R {
+ 			// Bucketsort the children by the midpoint
+ 			for nv_ in nv_st..nv_en {
+-				self.vert_pos_buf[self.node_verts.dat[nv_ as usize].vert as usize] = nv_;
++				vpb[nvd[nv_ as usize].vert as usize] = nv_;
+ 			}
+ 			self.cnts_buf.clear();
+ 			self.cnts_buf.resize((n_verts * 2 - 1) as usize, 0);
+@@ -1249,21 +1287,21 @@
+ 			debug_assert!(has_cap);
+ 
+ 			// Cap node_adj bounds
+-			self.node_adj.bounds[(2 * nv_st + 2) as usize] += 1;
+-			self.node_adj.bounds[(2 * nv_en - 1) as usize] += 1;
++			nab[(2 * nv_st + 2) as usize] += 1;
++			nab[(2 * nv_en - 1) as usize] += 1;
+ 
+ 			for i in ch_st..ch_en {
+-				let item = self.ch.dat[i as usize];
++				let item = chd[i as usize];
+ 				debug_assert!(item >= 1);
+ 				let nvs: [i32; 2];
+ 				if item < 1 + nv {
+-					nvs = [self.vert_pos_buf[(item - 1) as usize], self.vert_pos_buf[(item - 1) as usize]];
++					nvs = [vpb[(item - 1) as usize], vpb[(item - 1) as usize]];
+ 				} else {
+-					let vs = self.b.item_vs[item as usize];
+-					nvs = [self.vert_pos_buf[vs[0] as usize], self.vert_pos_buf[vs[1] as usize]];
++					let vs = item_vs[item as usize];
++					nvs = [vpb[vs[0] as usize], vpb[vs[1] as usize]];
+ 					debug_assert!(nvs[0] < nvs[1]);
+-					self.node_adj.bounds[(2 * nvs[0] + 2) as usize] += 1;
+-					self.node_adj.bounds[(2 * nvs[1] + 1) as usize] += 1;
++					nab[(2 * nvs[0] + 2) as usize] += 1;
++					nab[(2 * nvs[1] + 1) as usize] += 1;
+ 				}
+ 				let loc = (nvs[0] - nv_st) + (nvs[1] - nv_st);
+ 				self.ch_buf.push(ChBuf { loc, item_id: item });
+@@ -1276,29 +1314,29 @@
+ 			}
+ 			for &ChBuf { loc, item_id: n } in self.ch_buf.iter().rev() {
+ 				self.cnts_buf[loc as usize] -= 1;
+-				self.ch.dat[self.cnts_buf[loc as usize] as usize] = n;
++				chd[self.cnts_buf[loc as usize] as usize] = n;
+ 			}
+ 
+ 			if WP {
+ 				// Set up the reverse mapping for ourselves
+ 				let mut nxt_ne = ne_en;
+ 				for i in (ch_st..ch_en).rev() {
+-					let item = self.ch.dat[i as usize];
++					let item = chd[i as usize];
+ 					debug_assert!(item >= 1);
+ 					if item < 1 + nv {
+ 						continue;
+ 					}
+ 					nxt_ne -= 1;
+-					self.rot_edge_ne[(item - (1 + nv)) as usize] = nxt_ne;
++					ren[(item - (1 + nv)) as usize] = nxt_ne;
+ 				}
+ 				debug_assert!(nxt_ne == ne_st + 1);
+-				self.rot_edge_ne[(2 * ne) as usize] = ne_st;
++				ren[(2 * ne) as usize] = ne_st;
+ 			}
+ 
+ 			{
+ 				let mut off = 2 * ne_st;
+ 				for i in 2 * nv_st + 1..=2 * nv_en {
+-					off += std::mem::replace(&mut self.node_adj.bounds[i as usize], off);
++					off += std::mem::replace(&mut nab[i as usize], off);
+ 				}
+ 				debug_assert!(off == 2 * ne_en);
+ 			}
+@@ -1307,32 +1345,32 @@
+ 			// Reverse order to get the adj in bracket ordering.
+ 			{
+ 				// Handle cap as special: it's first in the node_edges, which means it's in the wrong place for the left endpoint.
+-				self.node_adj.bounds[(2 * nv_st + 2) as usize] += 1;
++				nab[(2 * nv_st + 2) as usize] += 1;
+ 
+ 				let mut nxt_ne = ne_en;
+ 				for i in (ch_st..ch_en).rev() {
+-					let item = self.ch.dat[i as usize];
++					let item = chd[i as usize];
+ 					debug_assert!(item >= 1);
+ 					if item < 1 + nv {
+ 						continue;
+ 					}
+ 					nxt_ne -= 1;
+-					let [v0, v1] = self.b.item_vs[item as usize];
++					let [v0, v1] = item_vs[item as usize];
+ 					// TODO: Reuse this from the ch pass?
+-					let nvs = [self.vert_pos_buf[v0 as usize], self.vert_pos_buf[v1 as usize]];
+-					let nd0 = self.node_adj.bounds[(2 * nvs[0] + 2) as usize];
+-					self.node_adj.bounds[(2 * nvs[0] + 2) as usize] += 1;
+-					let nd1 = self.node_adj.bounds[(2 * nvs[1] + 1) as usize];
+-					self.node_adj.bounds[(2 * nvs[1] + 1) as usize] += 1;
+-					let rot_adjs = self.map_rot_edge(planar, item - (1 + nv));
+-					self.set_ne(cur_idx, nxt_ne, nvs, [nd0, nd1], rot_adjs);
++					let nvs = [vpb[v0 as usize], vpb[v1 as usize]];
++					let nd0 = nab[(2 * nvs[0] + 2) as usize];
++					nab[(2 * nvs[0] + 2) as usize] += 1;
++					let nd1 = nab[(2 * nvs[1] + 1) as usize];
++					nab[(2 * nvs[1] + 1) as usize] += 1;
++					let rot_adjs = map_rot_edge::<WP>(qem, ren, planar, item - (1 + nv));
++					set_ne::<WP>(ned, nad, nra, cur_idx, nxt_ne, nvs, [nd0, nd1], rot_adjs);
+ 				}
+ 				debug_assert!(nxt_ne == ne_st + 1);
+ 
+ 				// Insert the cap / bump its bound
+-				let rot_adjs = self.map_rot_edge(planar, 2 * ne);
+-				self.set_ne(cur_idx, ne_st, [nv_st, nv_en - 1], [2 * ne_st, 2 * ne_en - 1], rot_adjs);
+-				self.node_adj.bounds[(2 * nv_en - 1) as usize] += 1;
++				let rot_adjs = map_rot_edge::<WP>(qem, ren, planar, 2 * ne);
++				set_ne::<WP>(ned, nad, nra, cur_idx, ne_st, [nv_st, nv_en - 1], [2 * ne_st, 2 * ne_en - 1], rot_adjs);
++				nab[(2 * nv_en - 1) as usize] += 1;
+ 			}
+ 		} else {
+ 			debug_assert!(false);

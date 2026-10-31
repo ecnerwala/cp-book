@@ -1,0 +1,411 @@
+import Spqr.PlanarLayout
+import Spqr.PlanarWalk
+import Spqr.Proofs.PlanarUnion
+import Spqr.Proofs.PlanarOneSum
+
+/-!
+# Invariant P and the gluing lemmas
+
+`InvariantP` is the per-entry invariant of the planar walk (PROOF.md §8.2): the piece of a tstack
+entry is embedded in the plane with both terminals on the outer face, and the entry's two sides
+(`PlSide.bot`, `PlSide.top`) list exactly the exposed ends of the two outer-face boundary walks,
+split at the terminals. `StackInv` lifts it to a whole walk state; its preservation by the walk
+(`planarWalkOut_stackInv`) is admitted.
+
+`twoSum_planar` / `oneSum_planar` / `disjointUnion_planar` are the graph-level gluing facts used
+by `planarEmbed` (S/P/R nodes glue children through twin edges, V items glue blocks at a vertex,
+F items collect components). They are stated on `Planar` and admitted here; the explicit splicing
+construction with `f = f₁ + f₂ - 2` faces is developed in `Spqr.PlanarGlue`.
+-/
+
+namespace Spqr
+
+/-! ### Pieces -/
+
+/-- The piece of a tstack entry: the virtual edges `ves` of `E(t)` with endpoints `ends` in
+`[0, nVerts)`, where `top` is the contracted upper DFS stack `T` and `bot` is `vStart`. -/
+structure Piece where
+  ves : List Nat
+  ends : Nat → Nat × Nat
+  nVerts : Nat
+  bot : Nat
+  top : Nat
+
+namespace Piece
+
+variable (P : Piece)
+
+/-- The edge list of the piece, indexed by position in `ves`. -/
+def es : List (Nat × Nat) := P.ves.map P.ends
+
+/-- The global quarter-edge `q` (of virtual edge `QE.edge q`) belongs to the piece. -/
+def Mem (q : Nat) : Prop := QE.edge q ∈ P.ves
+
+/-- Local index of the global quarter-edge `q` in `P.es`. -/
+def loc (q : Nat) : Option Nat := (P.ves.findIdx? (· == QE.edge q)).map fun k => 4 * k + q % 4
+
+end Piece
+
+/-- The exposed ends listed by one side, in boundary order: the outer and inner tree-side ends,
+then the outermost and innermost back-edge ends at `T`. -/
+def PlSide.ends (s : PlSide) : List Nat :=
+  (s.bot.map fun b => [b.1, b.2]).getD [] ++ (s.top.map fun t => [t.ends.1, t.ends.2]).getD []
+
+/-- Side `sd` of the planarity data (`false` = side 0). -/
+def Planarity.side (p : Planarity) (sd : Bool) : PlSide := if sd then p.sides.2 else p.sides.1
+
+/-- All exposed ends of both sides. -/
+def Planarity.ends (p : Planarity) : List Nat := p.sides.1.ends ++ p.sides.2.ends
+
+/-- Span items of side `sd` of a tstack entry. -/
+def spanOf (e : TEntry) (sd : Bool) : List ItemId := if sd then e.spans.2 else e.spans.1
+
+/-- Flip bits of side `sd` of a planar entry (parallel to `spanOf`). -/
+def flipsOf (pe : PlEntry) (sd : Bool) : List Bool := if sd then pe.flips.2 else pe.flips.1
+
+/-- The first `k` corners of the face walk of `rs` starting at `q`. -/
+def RotationSystem.faceWalk (rs : RotationSystem) (q k : Nat) : List Nat :=
+  (List.range k).map fun j => (stepFn rs.faceStep)^[j] q
+
+/-- The side-`sd` boundary walk `w` (a face walk of the piece's embedding) of an entry: it visits
+the side's listed ends in order and no other exposed end, and the cap edge of every span item of
+the side lies on it, with the side bit of the corner given by the item's flip. -/
+structure SideWalk (nv : Nat) (e : TEntry) (pe : PlEntry) (p : Planarity) (P : Piece) (sd : Bool)
+    (w : List Nat) : Prop where
+  ends_sub : ((p.side sd).ends.filterMap P.loc).Sublist w
+  ends_only : ∀ q ∈ p.ends, ∀ l, P.loc q = some l → l ∈ w → q ∈ (p.side sd).ends
+  spans : ∀ x ∈ (spanOf e sd).zip (flipsOf pe sd), ∃ l ∈ w, ∃ q, P.loc q = some l ∧
+    QE.edge q = x.1 - (1 + nv) ∧ QE.side q = (xor sd x.2).toNat
+
+/-- **Invariant P** (PROOF.md §8.2) for the tstack entry `e` with planarity payload `pe`, data
+`p`, piece `P`, embedding `ρ` and outer-face corner `f`, in a walk over `nv` vertices with
+quarter-edge matches `qem`:
+
+* *(embedded)* `ρ` is a planar embedding of the piece (with `T` contracted), `qem` on the piece's
+  quarter-edges is the restriction of `ρ` to the non-exposed corners, and the unmatched corners
+  are exactly the ends listed by the two sides;
+* *(outer face)* the face of `f` contains a corner at `vStart` and a corner at `T`, and every
+  listed end lies on it; `bot` ends sit at `vStart` and `top` ends at `T`;
+* *(boundary, split at the terminals)* the face walk from the first end of each side is that
+  side's boundary walk (`SideWalk`);
+* *(nesting)* on each side the depths increase inwards and are at least `topDepth`; side 0
+  holds a minimal return whenever any back edge is open;
+* *(spans)* the span items' caps belong to the piece and the flip lists are parallel to the
+  spans. -/
+structure InvariantP (nv : Nat) (qem : Qem) (e : TEntry) (pe : PlEntry) (p : Planarity)
+    (P : Piece) (ρ : RotationSystem) (f : Nat) : Prop where
+  pl : pe.pl = some p
+  embedded : IsPlanarEmbedding P.es P.nVerts ρ
+  agree : ∀ q r, P.Mem q → qem[q]? = some (some r) →
+    ∃ lq lr, P.loc q = some lq ∧ P.loc r = some lr ∧ ρ.get lq = some lr
+  exposed : ∀ q, P.Mem q → (qem[q]? = some none ↔ q ∈ p.ends)
+  outer_bot : QE.vert P.es f = some P.bot
+  outer_top : ∃ q, ρ.SameFaceOrbit f q ∧ QE.vert P.es q = some P.top
+  ends_outer : ∀ q ∈ p.ends, ∃ l, P.loc q = some l ∧ ρ.SameFaceOrbit f l
+  bot_at : ∀ sd : Bool, ∀ b ∈ (p.side sd).bot, ∃ l, P.loc b.1 = some l ∧ QE.vert P.es l = some P.bot
+  top_at : ∀ sd : Bool, ∀ t ∈ (p.side sd).top, ∀ q ∈ [t.ends.1, t.ends.2],
+    ∃ l, P.loc q = some l ∧ QE.vert P.es l = some P.top
+  side_walk : ∀ sd : Bool, ∀ q₀ ∈ (p.side sd).ends.head?,
+    ∃ l₀ k, P.loc q₀ = some l₀ ∧ SideWalk nv e pe p P sd (ρ.faceWalk l₀ k)
+  nested : ∀ sd : Bool, ∀ t ∈ (p.side sd).top, e.topDepth ≤ t.depths.1 ∧ t.depths.1 ≤ t.depths.2
+  minimal : (p.sides.1.top.isSome ∨ p.sides.2.top.isSome) →
+    ∃ t ∈ p.sides.1.top, t.depths.1 = e.topDepth
+  spans_mem : ∀ it ∈ e.spans.1 ++ e.spans.2, it - (1 + nv) ∈ P.ves
+  flips_len : pe.flips.1.length = e.spans.1.length ∧ pe.flips.2.length = e.spans.2.length
+
+/-- Every tstack entry of a planar walk state that is still flagged planar and has an exposed end
+(i.e. a nonempty piece; a fresh vertex entry has none) satisfies Invariant P for some piece,
+embedding and outer face. -/
+def StackInv (s : PlanarWalkState) : Prop :=
+  ∀ x ∈ s.base.tstack.zip s.aux.plStack, ∀ p, x.2.pl = some p → p.ends ≠ [] →
+    ∃ P ρ f, InvariantP s.base.g.nv s.aux.qem x.1 x.2 p P ρ f
+
+/-! ### Gluing two embedded graphs -/
+
+/-- Vertex map used to glue a second graph onto a first one on `n₁` vertices: a vertex `w` of
+the second graph listed in `ids` as `(v₁, w)` becomes `v₁`, every other vertex is appended after
+the first graph (keeping the order of the remaining vertices). -/
+def glueVert (n₁ : Nat) (ids : List (Nat × Nat)) (w : Nat) : Nat :=
+  match ids.find? (·.2 == w) with
+  | some p => p.1
+  | none => n₁ + w - (ids.filter (·.2 < w)).length
+
+/-- The union of `es₁` and `es₂` with the vertices of `es₂` mapped through `glueVert`. -/
+def glueEdges (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) (ids : List (Nat × Nat)) : List (Nat × Nat) :=
+  es₁ ++ es₂.map fun p => (glueVert n₁ ids p.1, glueVert n₁ ids p.2)
+
+/-- The 2-sum of `es₁` and `es₂` along the twin edges `es₁[e₁] = (u₁, v₁)` and `es₂[e₂] = (u₂, v₂)`:
+both twins are deleted and `u₂ ↦ u₁`, `v₂ ↦ v₁`. -/
+def twoSumEdges (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) (e₁ e₂ : Nat) (u₁ v₁ u₂ v₂ : Nat) :
+    List (Nat × Nat) :=
+  glueEdges n₁ (es₁.eraseIdx e₁) (es₂.eraseIdx e₂) [(u₁, u₂), (v₁, v₂)]
+
+/-- The 1-sum of `es₁` and `es₂` identifying `v₂ ↦ v₁`. -/
+def oneSumEdges (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) (v₁ v₂ : Nat) : List (Nat × Nat) :=
+  glueEdges n₁ es₁ es₂ [(v₁, v₂)]
+
+/-- The disjoint union of `es₁` and `es₂`. -/
+def disjointUnionEdges (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) : List (Nat × Nat) :=
+  glueEdges n₁ es₁ es₂ []
+
+/-- Delete the two vertices `a ≠ b`, shifting the vertices after them down. -/
+def collapse₂ (a b x : Nat) : Nat := x - (if a < x then 1 else 0) - (if b < x then 1 else 0)
+
+theorem twoSumEdges_eq (T : TwoSum) (hu₁ : T.u₁ < T.n₁) (hv₁ : T.v₁ < T.n₁)
+    (hes₁ : ∀ p ∈ T.es₁, p.1 < T.n₁ ∧ p.2 < T.n₁) :
+    twoSumEdges T.n₁ T.es₁ T.es₂ T.e₁ T.e₂ T.u₁ T.v₁ T.u₂ T.v₂ =
+      mapEdges (collapse₂ (T.n₁ + T.u₂) (T.n₁ + T.v₂)) T.edges := by
+  have hg : ∀ w, glueVert T.n₁ [(T.u₁, T.u₂), (T.v₁, T.v₂)] w =
+      collapse₂ (T.n₁ + T.u₂) (T.n₁ + T.v₂) (T.vert₂ w) := by
+    intro w
+    unfold glueVert collapse₂ TwoSum.vert₂
+    by_cases h1 : w = T.u₂
+    · subst h1
+      rw [List.find?_cons_of_pos (by simp)]
+      simp only [↓reduceIte]
+      split_ifs <;> omega
+    by_cases h2 : w = T.v₂
+    · subst h2
+      rw [List.find?_cons_of_neg (by simp [Ne.symm h1]), List.find?_cons_of_pos (by simp)]
+      simp only [h1, ↓reduceIte]
+      split_ifs <;> omega
+    rw [List.find?_cons_of_neg (by simp [Ne.symm h1]), List.find?_cons_of_neg (by simp [Ne.symm h2]),
+      List.find?_nil]
+    simp only [h1, h2, ↓reduceIte, List.filter_cons, List.filter_nil, decide_eq_true_eq]
+    split_ifs <;> simp_all <;> omega
+  have hl : ∀ x, x < T.n₁ → collapse₂ (T.n₁ + T.u₂) (T.n₁ + T.v₂) x = x := by
+    intro x hx
+    unfold collapse₂
+    split_ifs <;> omega
+  unfold twoSumEdges glueEdges TwoSum.edges mapEdges
+  rw [List.map_append]
+  congr 1
+  · refine ((List.map_congr_left fun p hp => ?_).trans (List.map_id _)).symm
+    obtain ⟨h1, h2⟩ := hes₁ p (List.mem_of_mem_eraseIdx hp)
+    simp [hl _ h1, hl _ h2]
+  · rw [List.map_map]
+    apply List.map_congr_left
+    intro p hp
+    simp [Function.comp, hg]
+
+/-- **2-sum gluing.** Two planar embedded graphs sharing a twin edge glue to a planar graph.
+Transport of `TwoSum.planar` (`Proofs/PlanarGlue.lean`): `twoSumEdges` is `TwoSum.edges` with the
+two unused vertices `n₁ + u₂`, `n₁ + v₂` deleted (`collapse₂`, `Planar.map`). The hypotheses are
+those of `TwoSum.WF`: `hdeg₁`/`hdeg₂` (the virtual edge is not its own rotation neighbour, i.e.
+its ends have degree `≥ 2`), `hface` (on one side the virtual edge separates two faces) and
+`hconn` (on one side it is not a bridge) — without them the explicit splice is not an
+embedding; the former statement without `hdeg`/`hface`/`hconn` is true but needs the degenerate
+cases (1-sums / relabellings) separately. -/
+theorem twoSum_planar (n₁ n₂ : Nat) (es₁ es₂ : List (Nat × Nat)) (rs₁ rs₂ : RotationSystem)
+    (h₁ : IsPlanarEmbedding es₁ n₁ rs₁) (h₂ : IsPlanarEmbedding es₂ n₂ rs₂) (e₁ e₂ u₁ v₁ u₂ v₂ : Nat)
+    (he₁ : es₁[e₁]? = some (u₁, v₁)) (he₂ : es₂[e₂]? = some (u₂, v₂)) (hu₁ : u₁ ≠ v₁) (hu₂ : u₂ ≠ v₂)
+    (hdeg₁ : ∀ k, k < 4 → ∀ s ∈ rs₁.get (4 * e₁ + k), s / 4 ≠ e₁)
+    (hdeg₂ : ∀ k, k < 4 → ∀ s ∈ rs₂.get (4 * e₂ + k), s / 4 ≠ e₂)
+    (hface : ¬rs₁.SameFaceOrbit (4 * e₁) (4 * e₁ + 2) ∨ ¬rs₂.SameFaceOrbit (4 * e₂) (4 * e₂ + 2))
+    (hconn : EdgesConn (es₁.eraseIdx e₁) u₁ v₁ ∨ EdgesConn (es₂.eraseIdx e₂) u₂ v₂) :
+    Planar (twoSumEdges n₁ es₁ es₂ e₁ e₂ u₁ v₁ u₂ v₂) (n₁ + n₂ - 2) := by
+  let T : TwoSum := ⟨es₁, n₁, e₁, u₁, v₁, es₂, n₂, e₂, u₂, v₂⟩
+  have W : T.WF rs₁ rs₂ := ⟨he₁, he₂, hu₁, hu₂, hdeg₁, hdeg₂, h₁, h₂, hface, hconn⟩
+  have hmem₁ : (u₁, v₁) ∈ es₁ := List.mem_of_getElem? he₁
+  have hmem₂ : (u₂, v₂) ∈ es₂ := List.mem_of_getElem? he₂
+  obtain ⟨hu₁n, hv₁n⟩ := h₁.verts _ hmem₁
+  obtain ⟨hu₂n, hv₂n⟩ := h₂.verts _ hmem₂
+  rw [twoSumEdges_eq T hu₁n hv₁n h₁.verts]
+  have hv := T.edges_verts W
+  have hne : ∀ p ∈ T.edges, (p.1 ≠ n₁ + u₂ ∧ p.1 ≠ n₁ + v₂) ∧ (p.2 ≠ n₁ + u₂ ∧ p.2 ≠ n₁ + v₂) := by
+    intro p hp
+    simp only [TwoSum.edges, List.mem_append, List.mem_map] at hp
+    rcases hp with hp | ⟨q, -, rfl⟩
+    · obtain ⟨h1, h2⟩ := h₁.verts _ (List.mem_of_mem_eraseIdx hp)
+      omega
+    · simp only [TwoSum.vert₂, T]
+      split_ifs <;> omega
+  have hcol : ∀ x, x ≠ n₁ + u₂ → x ≠ n₁ + v₂ → x < n₁ + n₂ →
+      collapse₂ (n₁ + u₂) (n₁ + v₂) x < n₁ + n₂ - 2 := by
+    intro x h1 h2 h3
+    unfold collapse₂
+    split_ifs <;> omega
+  have hinj : ∀ x y, x ≠ n₁ + u₂ → x ≠ n₁ + v₂ → y ≠ n₁ + u₂ → y ≠ n₁ + v₂ →
+      collapse₂ (n₁ + u₂) (n₁ + v₂) x = collapse₂ (n₁ + u₂) (n₁ + v₂) y → x = y := by
+    intro x y hx1 hx2 hy1 hy2 h
+    unfold collapse₂ at h
+    split_ifs at h <;> omega
+  refine Planar.map hv ?_ ?_ (T.planar W)
+  · intro p hp
+    obtain ⟨⟨a1, a2⟩, ⟨b1, b2⟩⟩ := hne p hp
+    obtain ⟨c1, c2⟩ := hv p hp
+    exact ⟨hcol _ a1 a2 c1, hcol _ b1 b2 c2⟩
+  · intro x y hx hy h
+    obtain ⟨px, hpx, hx'⟩ := hx
+    obtain ⟨py, hpy, hy'⟩ := hy
+    have nx := hne px hpx
+    have ny := hne py hpy
+    rcases hx' with rfl | rfl <;> rcases hy' with rfl | rfl <;>
+      exact hinj _ _ (by tauto) (by tauto) (by tauto) (by tauto) h
+
+/-- Delete the vertex `w`, shifting the vertices after it down by one. -/
+def collapse (w x : Nat) : Nat := if x < w then x else x - 1
+
+theorem oneSumEdges_eq (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) (v₁ v₂ : Nat) (hv₁ : v₁ < n₁)
+    (hes₁ : ∀ p ∈ es₁, p.1 < n₁ ∧ p.2 < n₁) :
+    oneSumEdges n₁ es₁ es₂ v₁ v₂ =
+      mapEdges (collapse (n₁ + v₂) ∘ ident v₁ (n₁ + v₂)) (es₁ ++ shiftEdges n₁ es₂) := by
+  have hg : ∀ w, glueVert n₁ [(v₁, v₂)] w = collapse (n₁ + v₂) (ident v₁ (n₁ + v₂) (n₁ + w)) := by
+    intro w
+    unfold glueVert collapse ident
+    by_cases h : w = v₂
+    · subst h
+      rw [List.find?_cons_of_pos (by simp)]
+      simp
+      omega
+    · rw [List.find?_cons_of_neg (by simp [Ne.symm h]), List.find?_nil]
+      simp only [List.filter_cons, List.filter_nil, decide_eq_true_eq]
+      split_ifs <;> simp_all <;> omega
+  have hl : ∀ x, x < n₁ → collapse (n₁ + v₂) (ident v₁ (n₁ + v₂) x) = x := by
+    intro x hx
+    unfold collapse ident
+    simp only [show ¬x = n₁ + v₂ by omega, ↓reduceIte]
+    split_ifs <;> omega
+  unfold oneSumEdges glueEdges mapEdges
+  rw [List.map_append]
+  congr 1
+  · refine ((List.map_congr_left fun p hp => ?_).trans (List.map_id es₁)).symm
+    obtain ⟨h1, h2⟩ := hes₁ p hp
+    simp [hl _ h1, hl _ h2]
+  · unfold shiftEdges
+    rw [List.map_map]
+    apply List.map_congr_left
+    intro p hp
+    simp [Function.comp, hg]
+
+/-- **1-sum gluing.** Identifying one vertex of two planar embedded graphs keeps planarity:
+`IsPlanarEmbedding.oneSum` (`Proofs/PlanarOneSum.lean`) splices the two rotations when both
+vertices have edges; otherwise the identification is a relabelling (`Planar.map`). -/
+theorem oneSum_planar (n₁ n₂ : Nat) (es₁ es₂ : List (Nat × Nat)) (rs₁ rs₂ : RotationSystem)
+    (h₁ : IsPlanarEmbedding es₁ n₁ rs₁) (h₂ : IsPlanarEmbedding es₂ n₂ rs₂) (v₁ v₂ : Nat)
+    (hv₁ : v₁ < n₁) (hv₂ : v₂ < n₂) :
+    Planar (oneSumEdges n₁ es₁ es₂ v₁ v₂) (n₁ + n₂ - 1) := by
+  rw [oneSumEdges_eq n₁ es₁ es₂ v₁ v₂ hv₁ h₁.verts]
+  set w := n₁ + v₂ with hwdef
+  set es := es₁ ++ shiftEdges n₁ es₂ with hes
+  have hU := union_verts h₁.verts h₂.verts
+  have hw : v₁ ≠ w := by omega
+  have hcol : ∀ x y, x ≠ w → y ≠ w → collapse w x = collapse w y → x = y := by
+    intro x y hx hy h
+    unfold collapse at h
+    split_ifs at h <;> omega
+  have hcol_lt : ∀ x, x ≠ w → x < n₁ + n₂ → collapse w x < n₁ + n₂ - 1 := by
+    intro x hx hlt
+    unfold collapse
+    split_ifs <;> omega
+  by_cases hboth : HasEdge es₁ v₁ ∧ HasEdge es₂ v₂
+  · have hP := h₁.oneSum h₂ hboth.1 hboth.2
+    have hmap : mapEdges (collapse w ∘ ident v₁ w) es =
+        mapEdges (collapse w) (identEdges v₁ w es) := by
+      simp [mapEdges, identEdges, List.map_map, Function.comp_def]
+    rw [hmap]
+    have hev : ∀ p ∈ identEdges v₁ w es, p.1 < n₁ + n₂ ∧ p.2 < n₁ + n₂ := by
+      intro p hp
+      obtain ⟨q, hq, rfl⟩ := mem_identEdges.1 hp
+      have := hU q hq
+      simp only [ident]
+      split_ifs <;> omega
+    refine Planar.map hev ?_ ?_ hP
+    · intro p hp
+      obtain ⟨q, hq, rfl⟩ := mem_identEdges.1 hp
+      have := hU q hq
+      exact ⟨hcol_lt _ (ident_ne_b hw _) (hev _ hp).1, hcol_lt _ (ident_ne_b hw _) (hev _ hp).2⟩
+    · intro u v hu hv h
+      exact hcol u v (fun h => not_hasEdge_ident_b hw (h ▸ hu))
+        (fun h => not_hasEdge_ident_b hw (h ▸ hv)) h
+  · refine Planar.map hU ?_ ?_ ⟨_, h₁.union h₂⟩
+    · intro p hp
+      have := hU p hp
+      exact ⟨hcol_lt _ (ident_ne_b hw _) (by simp only [ident]; split_ifs <;> omega),
+        hcol_lt _ (ident_ne_b hw _) (by simp only [ident]; split_ifs <;> omega)⟩
+    · intro u v hu hv h
+      have h' := hcol _ _ (ident_ne_b hw u) (ident_ne_b hw v) h
+      rcases (ident_eq_iff hw).1 h' with h' | ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+      · exact h'
+      · exfalso
+        apply hboth
+        refine ⟨?_, ?_⟩
+        · rcases hasEdge_union_iff.1 hu with h | ⟨v', hv', -⟩
+          · exact h
+          · omega
+        · rcases hasEdge_union_iff.1 hv with h | ⟨v', hv', h⟩
+          · have := h.lt_of h₁.verts; omega
+          · have : v' = v₂ := by omega
+            exact this ▸ h
+      · exfalso
+        apply hboth
+        refine ⟨?_, ?_⟩
+        · rcases hasEdge_union_iff.1 hv with h | ⟨v', hv', -⟩
+          · exact h
+          · omega
+        · rcases hasEdge_union_iff.1 hu with h | ⟨v', hv', h⟩
+          · have := h.lt_of h₁.verts; omega
+          · have : v' = v₂ := by omega
+            exact this ▸ h
+
+theorem disjointUnionEdges_eq (n₁ : Nat) (es₁ es₂ : List (Nat × Nat)) :
+    disjointUnionEdges n₁ es₁ es₂ = es₁ ++ shiftEdges n₁ es₂ := by
+  simp [disjointUnionEdges, glueEdges, glueVert, shiftEdges]
+
+/-- The disjoint union of two planar embedded graphs is planar (components are embedded
+separately in `EulerFormula`): `IsPlanarEmbedding.union` (`Proofs/PlanarUnion.lean`). -/
+theorem disjointUnion_planar (n₁ n₂ : Nat) (es₁ es₂ : List (Nat × Nat)) (rs₁ rs₂ : RotationSystem)
+    (h₁ : IsPlanarEmbedding es₁ n₁ rs₁) (h₂ : IsPlanarEmbedding es₂ n₂ rs₂) :
+    Planar (disjointUnionEdges n₁ es₁ es₂) (n₁ + n₂) := by
+  rw [disjointUnionEdges_eq]
+  exact ⟨_, h₁.union h₂⟩
+
+/-! ### Renumbering a laid-out node's edges from `0` -/
+
+theorem rotS_shift (n neSt ne r : Nat) (hn : 1 ≤ n) : rotS n neSt ne r = 4 * neSt + rotS n 0 ne r := by
+  have h : neSt + n - 1 = neSt + (n - 1) := by omega
+  simp only [rotS, h, Nat.zero_add]
+  split_ifs <;> omega
+
+theorem rotP_shift (k neSt ne r : Nat) : rotP k neSt ne r = 4 * neSt + rotP k 0 ne r := by
+  unfold rotP
+  dsimp only
+  split_ifs <;> omega
+
+/-- An S layout with its node-edges renumbered from `0` is the cycle layout. -/
+theorem layoutRot_S_shift (n neSt : Nat) (hn : 2 ≤ n) (ev : List Nat) (mr : Nat → Array (Option Nat)) (cv : Nat) :
+    (⟨(layoutRot .S n neSt (neSt + n) ev mr cv).map (·.map (· - 4 * neSt))⟩ : RotationSystem) = cycleRot n := by
+  unfold cycleRot
+  congr 1
+  have hs0 := layoutRot_S_size n 0 hn [] (fun _ => #[]) 0
+  rw [Nat.zero_add] at hs0
+  apply Array.ext
+  · rw [Array.size_map, layoutRot_S_size n neSt hn, hs0]
+  · intro i h1 h2
+    rw [Array.size_map, layoutRot_S_size n neSt hn] at h1
+    obtain ⟨ne, r, hr, rfl⟩ := exists_decomp i
+    have hg0 := layoutRot_S_get n 0 hn [] (fun _ => #[]) 0 ne r (by omega) hr
+    rw [Nat.zero_add] at hg0
+    rw [← Option.some_inj, ← Array.getElem?_eq_getElem, ← Array.getElem?_eq_getElem, Array.getElem?_map,
+      layoutRot_S_get n neSt hn ev mr cv ne r (by omega) hr, hg0]
+    simp only [Option.map_some, rotS_shift n neSt ne r (by omega), Nat.add_sub_cancel_left]
+
+/-- A P layout with its node-edges renumbered from `0` is the bond layout. -/
+theorem layoutRot_P_shift (k neSt : Nat) (ev : List Nat) (mr : Nat → Array (Option Nat)) (cv : Nat) :
+    (⟨(layoutRot .P 2 neSt (neSt + k) ev mr cv).map (·.map (· - 4 * neSt))⟩ : RotationSystem) = bondRot k := by
+  unfold bondRot
+  congr 1
+  have hs0 := layoutRot_P_size k 0 [] (fun _ => #[]) 0
+  rw [Nat.zero_add] at hs0
+  apply Array.ext
+  · rw [Array.size_map, layoutRot_P_size k neSt, hs0]
+  · intro i h1 h2
+    rw [Array.size_map, layoutRot_P_size k neSt] at h1
+    obtain ⟨ne, r, hr, rfl⟩ := exists_decomp i
+    have hg0 := layoutRot_P_get k 0 [] (fun _ => #[]) 0 ne r (by omega) hr
+    rw [Nat.zero_add] at hg0
+    rw [← Option.some_inj, ← Array.getElem?_eq_getElem, ← Array.getElem?_eq_getElem, Array.getElem?_map,
+      layoutRot_P_get k neSt ev mr cv ne r (by omega) hr, hg0]
+    simp only [Option.map_some, rotP_shift k neSt ne r, Nat.add_sub_cancel_left]
+
+end Spqr

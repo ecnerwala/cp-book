@@ -1,0 +1,11 @@
+rust/target*/
+lean/.lake/
+bench_in/
+*.tar.gz
+cpp/*
+!cpp/*.cpp
+!cpp/inl2/
+!cpp/fixed/
+!cpp/fixed_inl/
+zig/*
+!zig/*.zig
