@@ -5,4 +5,9 @@
 sed -i 's|^-include \(.*\)|cat \1 2>/dev/null|e' Makefile
 rm -f config.mk local.mk
 
+if root=$(git rev-parse --show-toplevel 2>/dev/null) && [ -e "$root/.autocommit" ]; then
+	prefix=$(git rev-parse --show-prefix)
+	git add -A . && git diff --cached --quiet -- . || git commit -q -m "[autocommit] setup ${prefix%/}" -- . || true
+fi
+
 bear -- make all
