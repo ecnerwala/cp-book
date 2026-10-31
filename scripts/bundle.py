@@ -6,6 +6,7 @@ Usage:
     scripts/bundle.py fft/series.hpp ds/seg_tree.hpp | xclip -selection clipboard  # or wl-copy
     scripts/bundle.py --minify fft/series.hpp > fft_series.min.cpp
     scripts/bundle.py --all -o dist/       # pregenerate all headers
+    scripts/bundle.py --at 12 ds/seg_tree.hpp  # to paste at line 12
 
 Any `#include "foo.hpp"` resolved from src/ (or relative to the including
 file) is expanded in place, like `oj-bundle -I src`. Header names relative
@@ -26,6 +27,10 @@ The output is wrapped in a single fold so the pasted block can be
 collapsed in an editor: an `#if 1` / `#endif` pair (treesitter and other
 syntax-aware folding) carrying `// region ...` / `// endregion` comments
 (IntelliJ region folding).
+
+--at LINE says the output will be pasted with its first line at line LINE of
+the main source file; the fold then ends with a `#line ... __BASE_FILE__`, so
+code after the pasted block keeps its own file and line numbers.
 
 Runs via `uv run` (or plain python3 with the competitive-verifier fork
 installed).
@@ -48,12 +53,20 @@ SRC = ROOT / "src"
 REPO_URL = "https://github.com/ecnerwala/cp-book"
 
 
-def wrap_fold(code: bytes, args: list[str] | None = None) -> bytes:
+def wrap_fold(
+    code: bytes,
+    args: list[str] | None = None,
+    at: int | None = None,
+) -> bytes:
     if args is None:
         args = sys.argv[1:]
     cmd = shlex.join(["scripts/bundle.py", *args])
     head = f"#if 1 // region {REPO_URL} (`{cmd}`)\n".encode()
     tail = b"#endif // endregion\n"
+    if at is not None:
+        # The #line directive itself is line `at + 1 + code lines`.
+        line = at + 2 + code.count(b"\n")
+        code += f"#line {line} __BASE_FILE__\n".encode()
     return head + code + tail
 
 
@@ -152,6 +165,13 @@ def main() -> None:
         "instead of the default // file comments (safe to copy-paste)",
     )
     parser.add_argument(
+        "--at",
+        type=int,
+        metavar="LINE",
+        help="the output will be pasted with its first line at LINE of the "
+        "main source file: end with a #line back to it",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="with --minify: verify (via clang's raw lexer) that minification "
@@ -162,6 +182,8 @@ def main() -> None:
     if args.all:
         if args.paths:
             parser.error("--all takes no positional paths")
+        if args.at:
+            parser.error("--all does not take --at")
         bundle_all(args.output or ROOT / "dist", check=args.check)
         return
     if not args.paths:
@@ -173,7 +195,8 @@ def main() -> None:
             level=level,
             line_markers=args.line_markers,
             check=args.check,
-        )
+        ),
+        at=args.at,
     )
     if args.output:
         args.output.write_bytes(code)
