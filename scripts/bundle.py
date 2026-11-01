@@ -7,6 +7,7 @@ Usage:
     scripts/bundle.py --minify fft/series.hpp > fft_series.min.cpp
     scripts/bundle.py --all -o dist/       # pregenerate all headers
     scripts/bundle.py --at 12 ds/seg_tree.hpp  # to paste at line 12
+    :'<,'>!scripts/bundle.py --at 12 -     # in vim, on lines 12 onwards
 
 Any `#include "foo.hpp"` resolved from src/ (or relative to the including
 file) is expanded in place, like `oj-bundle -I src`. Header names relative
@@ -32,12 +33,19 @@ syntax-aware folding) carrying `// region ...` / `// endregion` comments
 the main source file; the fold then ends with a `#line ... __BASE_FILE__`, so
 code after the pasted block keeps its own file and line numbers.
 
+A `-` input reads a selection from stdin, for use as an editor filter. The
+selection holds bundle regions written by this script (their recorded
+arguments are reused) and `#include "foo.hpp"` lines (added as inputs), so
+adding a header to an existing bundle is: write its `#include` next to the
+region, then filter both through `scripts/bundle.py -`.
+
 Runs via `uv run` (or plain python3 with the competitive-verifier fork
 installed).
 """
 
 import argparse
 import pathlib
+import re
 import shlex
 import sys
 from typing import Literal
@@ -53,13 +61,7 @@ SRC = ROOT / "src"
 REPO_URL = "https://github.com/ecnerwala/cp-book"
 
 
-def wrap_fold(
-    code: bytes,
-    args: list[str] | None = None,
-    at: int | None = None,
-) -> bytes:
-    if args is None:
-        args = sys.argv[1:]
+def wrap_fold(code: bytes, args: list[str], at: int | None = None) -> bytes:
     cmd = shlex.join(["scripts/bundle.py", *args])
     head = f"#if 1 // region {REPO_URL} (`{cmd}`)\n".encode()
     tail = b"#endif // endregion\n"
@@ -68,6 +70,32 @@ def wrap_fold(
         line = at + 2 + code.count(b"\n")
         code += f"#line {line} __BASE_FILE__\n".encode()
     return head + code + tail
+
+
+REGION_HEAD = re.compile(r"#if 1 // region \S+ \(`(.*)`\)")
+REGION_TAIL = "#endif // endregion"
+QUOTED_INCLUDE = re.compile(r'\s*#\s*include\s*"([^"]*)"\s*')
+
+
+def read_selection(text: str) -> list[str]:
+    args = []
+    in_region = False
+    for lineno, line in enumerate(text.splitlines(), 1):
+        if in_region:
+            in_region = line != REGION_TAIL
+        elif m := REGION_HEAD.fullmatch(line):
+            args += shlex.split(m.group(1))[1:]
+            in_region = True
+        elif m := QUOTED_INCLUDE.fullmatch(line):
+            args.append(m.group(1))
+        elif line.strip():
+            raise SystemExit(
+                f"error: stdin line {lineno}: expected a bundle region or "
+                f'#include "...", got: {line}'
+            )
+    if in_region:
+        raise SystemExit(f"error: stdin: unterminated region (no `{REGION_TAIL}`)")
+    return args
 
 
 def resolve_input(path: pathlib.Path) -> pathlib.Path:
@@ -177,7 +205,10 @@ def main() -> None:
         help="with --minify: verify (via clang's raw lexer) that minification "
         "preserves every token",
     )
-    args = parser.parse_args()
+    argv = sys.argv[1:]
+    if "-" in argv:
+        argv = read_selection(sys.stdin.read()) + [a for a in argv if a != "-"]
+    args = parser.parse_intermixed_args(argv)
 
     if args.all:
         if args.paths:
@@ -188,7 +219,15 @@ def main() -> None:
         return
     if not args.paths:
         parser.error("no input files")
+    args.paths = list(dict.fromkeys(args.paths))
     level = args.minify_level or ("medium" if args.minify else None)
+    if args.minify_level:
+        cmd = ["--minify-level", args.minify_level]
+    else:
+        cmd = ["-m"] if args.minify else []
+    if args.line_markers:
+        cmd.append("--line-markers")
+    cmd += map(str, args.paths)
     code = wrap_fold(
         bundle(
             args.paths,
@@ -196,6 +235,7 @@ def main() -> None:
             line_markers=args.line_markers,
             check=args.check,
         ),
+        cmd,
         at=args.at,
     )
     if args.output:
