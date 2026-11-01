@@ -13,6 +13,7 @@
 #include <utility>
 #include <variant>
 
+#include "containers/bounded_stack.hpp"
 #include "containers/csr.hpp"
 #include "containers/vec.hpp"
 
