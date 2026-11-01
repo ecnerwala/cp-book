@@ -3,16 +3,27 @@
 
 Usage: scripts/make_verify.py <[folder/]problem[-tag]>
 
-Creates verify/<arg>.test.cpp from contest/template/__PROBLEM_NAME__.cpp
-with the competitive-verifier PROBLEM header prepended. The last path
-component, minus an optional -tag suffix, is the yosupo problem name, e.g.
-series/inv_of_formal_power_series-crt -> problem inv_of_formal_power_series.
+Creates verify/<arg>.test.cpp with the competitive-verifier PROBLEM header.
+The last path component, minus an optional -tag suffix, is the yosupo problem
+name, e.g. series/inv_of_formal_power_series-crt -> problem
+inv_of_formal_power_series.
 """
 
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+TEMPLATE = """\
+#include <bits/stdc++.h>
+#include <cassert>
+
+int main() {
+	std::ios_base::sync_with_stdio(false), std::cin.tie(nullptr);
+
+	return 0;
+}
+"""
 
 
 def main():
@@ -23,10 +34,9 @@ def main():
     path = REPO / "verify" / f"{arg}.test.cpp"
     if path.exists():
         sys.exit(f"{path} already exists")
-    template = (REPO / "contest" / "template" / "__PROBLEM_NAME__.cpp").read_text()
     header = f"// competitive-verifier: PROBLEM https://judge.yosupo.jp/problem/{problem}\n\n"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(header + template)
+    path.write_text(header + TEMPLATE)
     print(path)
 
 
