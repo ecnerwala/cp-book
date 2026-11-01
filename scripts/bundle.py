@@ -11,7 +11,8 @@ Usage:
 
 Any `#include "foo.hpp"` resolved from src/ (or relative to the including
 file) is expanded in place, like `oj-bundle -I src`. Header names relative
-to src/ (e.g. `fft/series.hpp`) are looked up in src/. Multiple inputs are bundled into
+to src/ (e.g. `fft/series.hpp`) are looked up in src/, and inputs under src/
+are recorded by that name. Multiple inputs are bundled into
 one output with shared includes deduplicated and system includes hoisted
 into one block at the top.
 
@@ -104,6 +105,14 @@ def resolve_input(path: pathlib.Path) -> pathlib.Path:
     if not path.is_absolute() and (SRC / path).exists():
         return SRC / path
     raise SystemExit(f"error: no such file: {path}")
+
+
+def input_name(path: pathlib.Path) -> pathlib.Path:
+    """The name recorded in the region header: src/ headers by bare name."""
+    resolved = resolve_input(path).resolve()
+    if resolved.is_relative_to(SRC):
+        return resolved.relative_to(SRC)
+    return path
 
 
 MINIFY_PRELUDE = ["bits/stdc++.h", "cassert"]
@@ -219,7 +228,7 @@ def main() -> None:
         return
     if not args.paths:
         parser.error("no input files")
-    args.paths = list(dict.fromkeys(args.paths))
+    args.paths = list(dict.fromkeys(map(input_name, args.paths)))
     level = args.minify_level or ("medium" if args.minify else None)
     if args.minify_level:
         cmd = ["--minify-level", args.minify_level]
