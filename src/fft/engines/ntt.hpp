@@ -4,7 +4,6 @@
 #include <cassert>
 #include <span>
 #include <utility>
-#include <vector>
 
 #include "fft/core.hpp"
 #include "fft/engine.hpp"
@@ -16,7 +15,7 @@ template <typename num> struct ntt {
 	static constexpr bool commutative = true;
 	using core = fft_core<num>;
 	struct transformed {
-		vector<num> v;
+		vec<num> v;
 		int size() const { return sz(v); }
 	};
 	using product = transformed;
@@ -26,8 +25,7 @@ template <typename num> struct ntt {
 
 	static transformed transform(std::span<const num> a, int n) {
 		assert(sz(a) <= 2 * n);
-		transformed r;
-		r.v.assign(n, num(0));
+		transformed r{vec<num>(n, num(0))};
 		int lo = min(sz(a), n);
 		std::copy(a.begin(), a.begin() + lo, r.v.begin());
 		for (int i = n; i < sz(a); i++) r.v[i - n] += a[i];
@@ -40,37 +38,39 @@ template <typename num> struct ntt {
 		if (t.size() == 0) { t = transform(coeffs, m); return; }
 		while (t.size() < m) {
 			int s = t.size();
-			t.v.resize(2 * s);
+			vec<num> nv(2 * s);
+			std::copy(t.v.begin(), t.v.end(), nv.begin());
+			t.v = std::move(nv);
 			// coeffs past 2s are zero: they didn't fit in the transform we're a prefix of
 			core::extend(std::span<num>(t.v), coeffs.first(size_t(min(sz(coeffs), 2 * s))));
 		}
 	}
 	static transformed downsample(const transformed& t, int n, bool odd) {
-		transformed r; r.v.resize(n);
+		transformed r{vec<num>(n)};
 		core::downsample(std::span<const num>(t.v), std::span<num>(r.v), odd);
 		return r;
 	}
 	static transformed upsample(const transformed& t, int n, bool odd) {
-		transformed r; r.v.resize(n);
+		transformed r{vec<num>(n)};
 		core::upsample(std::span<const num>(t.v), std::span<num>(r.v), odd);
 		return r;
 	}
 	static transformed negate_arg(const transformed& t, int n) {
 		assert(n >= 2 && t.size() >= n);
-		transformed r; r.v.resize(n);
+		transformed r{vec<num>(n)};
 		for (int j = 0; j < n; j++) r.v[j] = t.v[j ^ 1];
 		return r;
 	}
 	// a[-k]: evaluation at w^{-brev(j)}, which is the conjugate index
 	static transformed of_reverse(const transformed& t, int n) {
 		assert(t.size() >= n);
-		transformed r; r.v.resize(n);
+		transformed r{vec<num>(n)};
 		for (int j = 0; j < n; j++) r.v[j] = t.v[core::conj_index(j)];
 		return r;
 	}
 	static product mul(const transformed& a, const transformed& b, int n) {
 		assert(a.size() >= n && b.size() >= n);
-		product p; p.v.resize(n);
+		product p{vec<num>(n)};
 		for (int i = 0; i < n; i++) p.v[i] = a.v[i] * b.v[i];
 		return p;
 	}
@@ -81,7 +81,7 @@ template <typename num> struct ntt {
 		int n
 	) {
 		assert(a1.size() >= n && b1.size() >= n && a2.size() >= n && b2.size() >= n);
-		product p; p.v.resize(n);
+		product p{vec<num>(n)};
 		for (int i = 0; i < n; i++) p.v[i] = a1.v[i] * b1.v[i] + a2.v[i] * b2.v[i];
 		return p;
 	}
