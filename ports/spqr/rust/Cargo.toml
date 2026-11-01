@@ -1,0 +1,24 @@
+[package]
+name = "spqr"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "dump_rs"
+path = "src/dump.rs"
+
+[profile.release]
+debug-assertions = false
+
+[[bin]]
+name = "bench_rs"
+path = "src/bench.rs"
+
+[profile.lto]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+panic = "abort"

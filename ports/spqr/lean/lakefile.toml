@@ -1,0 +1,60 @@
+name = "spqr"
+defaultTargets = ["Spqr"]
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "master"
+
+[[lean_lib]]
+name = "Spqr"
+
+[[lean_exe]]
+name = "dump_lean"
+root = "DumpLean"
+
+[[lean_exe]]
+name = "dump_planar_lean"
+root = "DumpPlanarLean"
+
+[[lean_exe]]
+name = "check_planar_lean"
+root = "CheckPlanarLean"
+
+[[lean_exe]]
+name = "prof_lean"
+root = "ProfLean"
+
+[[lean_exe]]
+name = "dump_stref"
+root = "DumpStRef"
+
+[[lean_exe]]
+name = "check_stref"
+root = "CheckStRef"
+
+[[lean_exe]]
+name = "check_repok"
+root = "CheckRepOK"
+
+[[lean_exe]]
+name = "check_ranges"
+root = "CheckRanges"
+
+[[lean_exe]]
+name = "check_piece_sep"
+root = "CheckPieceSep"
+
+[[lean_exe]]
+name = "check_stsim"
+root = "CheckStSim"
+
+[[lean_lib]]
+name = "WalkInvCheck"
+srcDir = "checks"
+roots = ["WalkInvCheck"]
+
+[[lean_exe]]
+name = "check_walkinv"
+root = "WalkInvCheck"
+srcDir = "checks"
