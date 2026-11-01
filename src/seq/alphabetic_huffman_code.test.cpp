@@ -1,3 +1,4 @@
+#include "containers/vec.hpp"
 #include "seq/alphabetic_huffman_code.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -5,11 +6,11 @@
 #include <cassert>
 #include <random>
 
-template <typename T> T alphabetic_huffman_code_naive(std::vector<T> weights) {
+template <typename T> T alphabetic_huffman_code_naive(wala::vec<T> weights) {
 	int N = int(weights.size());
 	if (N == 0) return 0;
 	assert(N > 0);
-	std::vector<T> dp(N * N);
+	wala::vec<T> dp(N * N);
 	for (int i = 0; i < N; i++) {
 		dp[i * N + i] = 0;
 		T pref = weights[i];
@@ -31,7 +32,7 @@ TEST_CASE("Alphabetic Huffman Code", "[wala::alphabetic_huffman_code]") {
 	for (int z = 0; z <= 1000; z++) {
 		int N = std::uniform_int_distribution(1, 60)(mt);
 		int MX = 1 << std::uniform_int_distribution(0, 15)(mt);
-		std::vector<int> weights(N);
+		wala::vec<int> weights(N);
 		for (auto& w : weights) w = std::uniform_int_distribution(0, MX-1)(mt);
 		auto naive_tot = alphabetic_huffman_code_naive(weights);
 

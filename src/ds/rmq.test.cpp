@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_get_random_seed.hpp>
 
+#include "containers/vec.hpp"
 #include "ds/rmq.hpp"
 
 #include <vector>
@@ -9,7 +10,7 @@
 TEST_CASE("wala::RangeMinQuery", "[rmq]") {
 	std::mt19937 mt(Catch::getSeed());
 	for (int N : {1, 2, 3, 5, 10, 20, 33, 48, 100, 163, 512}) {
-		std::vector<std::pair<int, int>> data(N);
+		wala::vec<std::pair<int, int>> data(N);
 		for (int i = 0; i < N; i++) {
 			data[i] = {mt(), i};
 		}
