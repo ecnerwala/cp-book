@@ -20,7 +20,7 @@ namespace wala::poly {
 // all accesses/constructors use the logical order though: P[k] = [x^k] P.
 // To use the representation, use rev_series() / from_rev_series()
 template <fft::engine E> struct vec {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	using engine_t = E;
 	series::exact<E> c;
 
@@ -106,7 +106,7 @@ concept like = requires(const P& p) {
 // immutable polynomial carrying the whole-sequence transform of its rev_series
 template <fft::engine E>
 struct cached {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	using engine_t = E;
 
 	cached() = default;
@@ -172,7 +172,7 @@ bool operator==(const A& a, const B& b) {
 // <P, e^{aD}> = P(a)
 template <fft::engine E>
 struct form {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	// coeffs of S in <*, S>; always whole-cached: the kernel transform is
 	// what repeated middle products against the same form reuse
 	series::cached_exact<E> c;
@@ -241,7 +241,7 @@ struct form {
 // so the shift operator e^{cD} is multiplication by e^{c/x}, i.e. by e^{cx} mod x^len on rev_series.
 template <fft::engine E>
 vec<E> to_D_basis(vec<E> p) {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	T f = 1;
 	for (int i = 1; i < p.len(); i++) {
 		f *= i;
@@ -251,7 +251,7 @@ vec<E> to_D_basis(vec<E> p) {
 }
 template <fft::engine E>
 vec<E> from_D_basis(vec<E> p) {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	T f = 1;
 	for (int i = 1; i < p.len(); i++) f *= i;
 	f = inv(f);
@@ -266,7 +266,7 @@ vec<E> from_D_basis(vec<E> p) {
 // Polynomials only: [x^k] P(x + c) depends on every higher coefficient of P, so there is no trunc version.
 template <fft::engine E>
 vec<E> taylor_shift(vec<E> p, typename E::value_type c) {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	int n = p.len();
 	// e^{cx} mod x^n: [x^i] = c^i / i!
 	series::trunc<E> e(size_t(n), T{});
@@ -288,7 +288,7 @@ vec<E> taylor_shift(vec<E> p, typename E::value_type c) {
 // BFS-order tree, each node holds prod (x - a[i]) as a cached vec.
 template <fft::engine E>
 struct subproduct_tree {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	int N;
 	std::vector<cached<E>> nodes;
 
@@ -358,7 +358,7 @@ vec<E> interpolate(
 	std::span<const typename E::value_type> pts,
 	std::span<const typename E::value_type> vals
 ) {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	assert(sz(pts) == sz(vals));
 	if (pts.empty()) return {};
 	int N = sz(pts);

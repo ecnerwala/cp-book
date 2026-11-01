@@ -18,7 +18,7 @@ namespace wala::series {
 
 template <like S>
 vec<typename S::engine_t, S::exact_v> stretch(const S& a_, int n) {
-	using E = typename S::engine_t;
+	using E = S::engine_t;
 	span<E, S::exact_v> a = a_;
 	vec<E, S::exact_v> r(size_t(a.len()));
 	for (int i = 0; i*n < a.len(); i++) {
@@ -28,7 +28,7 @@ vec<typename S::engine_t, S::exact_v> stretch(const S& a_, int n) {
 }
 template <like S>
 vec<typename S::engine_t, S::exact_v> deriv_shift(const S& a_) {
-	using E = typename S::engine_t;
+	using E = S::engine_t;
 	span<E, S::exact_v> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	for (int i = 0; i < r.len(); i++) {
@@ -38,8 +38,8 @@ vec<typename S::engine_t, S::exact_v> deriv_shift(const S& a_) {
 }
 template <like S>
 vec<typename S::engine_t, S::exact_v> integ_shift(const S& a_) {
-	using E = typename S::engine_t;
-	using T = typename E::value_type;
+	using E = S::engine_t;
+	using T = E::value_type;
 	span<E, S::exact_v> a = a_;
 	assert(a[0] == 0);
 	vec<E, S::exact_v> r(a.begin(), a.end());
@@ -57,8 +57,8 @@ vec<typename S::engine_t, S::exact_v> integ_shift(const S& a_) {
 }
 template <like S>
 vec<typename S::engine_t, S::exact_v> integ_shift_offset(const S& a_, int offset) {
-	using E = typename S::engine_t;
-	using T = typename E::value_type;
+	using E = S::engine_t;
+	using T = E::value_type;
 	span<E, S::exact_v> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	T f = 1;
@@ -78,8 +78,8 @@ vec<typename S::engine_t, S::exact_v> integ_shift_offset(const S& a_, int offset
 // Diagonal, so valid at any precision.
 template <like S>
 vec<typename S::engine_t, S::exact_v> ogf_to_egf(const S& a_) {
-	using E = typename S::engine_t;
-	using T = typename E::value_type;
+	using E = S::engine_t;
+	using T = E::value_type;
 	span<E, S::exact_v> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	T f = 1;
@@ -93,8 +93,8 @@ vec<typename S::engine_t, S::exact_v> ogf_to_egf(const S& a_) {
 }
 template <like S>
 vec<typename S::engine_t, S::exact_v> egf_to_ogf(const S& a_) {
-	using E = typename S::engine_t;
-	using T = typename E::value_type;
+	using E = S::engine_t;
+	using T = E::value_type;
 	span<E, S::exact_v> a = a_;
 	vec<E, S::exact_v> r(a.begin(), a.end());
 	T f = 1;
@@ -116,8 +116,8 @@ trunc<typename S::engine_t> ps_log(const S& a) {
 template <trunc_like S>
 trunc<typename S::engine_t> ps_exp(const S& a_) {
 	// See https://mathexp.eu/bostan/publications/BoSc09a.pdf for details
-	using E = typename S::engine_t;
-	using T = typename E::value_type;
+	using E = S::engine_t;
+	using T = E::value_type;
 	span<E, false> a = a_;
 	assert(a.len() >= 1);
 	assert(a[0] == 0);
@@ -152,7 +152,7 @@ trunc<typename S::engine_t> ps_exp(const S& a_) {
 }
 template <trunc_like S>
 trunc<typename S::engine_t> ps_pow_monic(const S& a_, typename S::engine_t::value_type k) {
-	using E = typename S::engine_t;
+	using E = S::engine_t;
 	span<E, false> a = a_;
 	if (a.len() == 0) return {};
 	assert(a[0] == 1);
@@ -162,8 +162,8 @@ trunc<typename S::engine_t> ps_pow_monic(const S& a_, typename S::engine_t::valu
 }
 template <trunc_like S>
 trunc<typename S::engine_t> ps_pow(const S& a_, int64_t k) {
-	using E = typename S::engine_t;
-	using T = typename E::value_type;
+	using E = S::engine_t;
+	using T = E::value_type;
 	span<E, false> a = a_;
 	assert(k >= 0);
 	if (k == 0) {
@@ -198,7 +198,7 @@ trunc<typename S::engine_t> to_newton_sums(const S& a, int deg) {
 }
 template <trunc_like S>
 trunc<typename S::engine_t> from_newton_sums(const S& s_, int deg) {
-	using E = typename S::engine_t;
+	using E = S::engine_t;
 	span<E, false> s = s_;
 	assert(s[0] == deg);
 	trunc<E> r(s.begin(), s.end());
@@ -210,7 +210,7 @@ trunc<typename S::engine_t> from_newton_sums(const S& s_, int deg) {
 // Calculates prod 1/(1-x^i)^{a[i]}
 template <trunc_like S>
 trunc<typename S::engine_t> euler_transform(const S& a) {
-	using E = typename S::engine_t;
+	using E = S::engine_t;
 	trunc<E> r = deriv_shift(a);
 	std::vector<bool> is_prime(size_t(r.len()), true);
 	for (int p = 2; p < r.len(); p++) {
@@ -224,7 +224,7 @@ trunc<typename S::engine_t> euler_transform(const S& a) {
 }
 template <trunc_like S>
 trunc<typename S::engine_t> inverse_euler_transform(const S& a) {
-	using E = typename S::engine_t;
+	using E = S::engine_t;
 	trunc<E> r = deriv_shift(ps_log(a));
 	std::vector<bool> is_prime(size_t(r.len()), true);
 	for (int p = 2; p < r.len(); p++) {
@@ -250,7 +250,7 @@ trunc<typename S::engine_t> inverse_euler_transform(const S& a) {
 // The inner span will be 2*deg(x), and the outer span will be 2*deg(y).
 // As we advance, we will also return the cached transform of Q_i(-x, y) for the caller to use in the numerator.
 template <fft::engine E> struct packed_bivariate {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	int L, l;
 	std::vector<T> c;
 
@@ -290,8 +290,8 @@ template <fft::engine E> struct packed_bivariate {
 // Calculates f(g(x)) mod x^n where deg(g) == n
 template <trunc_like SF, trunc_like SG> requires fft::same_engine<SF, SG>
 trunc<typename SF::engine_t> ps_compose(const SF& f_, const SG& g_) {
-	using E = typename SF::engine_t;
-	using T = typename E::value_type;
+	using E = SF::engine_t;
+	using T = E::value_type;
 	span<E, false> f = f_;
 	span<E, false> g = g_;
 	if (g.len() == 0) return {};

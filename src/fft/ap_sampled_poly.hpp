@@ -13,7 +13,7 @@ namespace wala {
 // Maybe not, this is just more convenient.
 template <fft::engine E>
 struct ap_sampled_poly : public std::vector<typename E::value_type> {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	using std::vector<T>::vector;
 
 	int len() const {

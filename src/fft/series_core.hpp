@@ -24,7 +24,7 @@ namespace wala::series {
 // window + series semantics), borrowed from an owning series-like type.
 template <fft::engine E, bool exact_>
 struct span {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	using engine_t = E;
 	static constexpr bool exact_v = exact_;
 
@@ -57,7 +57,7 @@ private:
 // Operators here are typically permissive: they will accept combinations of unequal types and lengths.
 template <fft::engine E, bool exact_>
 struct vec : public std::vector<typename E::value_type> {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	using engine_t = E;
 	static constexpr bool exact_v = exact_;
 	using std::vector<T>::vector;
@@ -204,7 +204,7 @@ struct cached_span {
 	explicit(oe < exact_) cached_span(cached_span<E, oe> o) : s(span<E, exact_>(o.s)), f(o.f) {}
 
 	int len() const { return s.len(); }
-	const typename E::value_type& operator[](int i) const { return s[i]; }
+	const E::value_type& operator[](int i) const { return s[i]; }
 	operator std::span<const typename E::value_type>() const { return s.coeffs(); }
 	operator span<E, exact_>() const { return s; }
 	maybe_cached<E, exact_> first(int n) const;
@@ -232,7 +232,7 @@ std::optional<std::reference_wrapper<fft::transformed<typename S::engine_t>>> ca
 // prefix_cached/cached -> maybe_cached/cached_span -> span.
 template <fft::engine E, bool exact_>
 struct maybe_cached {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	using engine_t = E;
 	static constexpr bool exact_v = exact_;
 
@@ -267,7 +267,7 @@ maybe_cached<E, exact_> cached_span<E, exact_>::first(int n) const {
 // must outlive the result.
 template <fft::engine E>
 struct resized {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	using engine_t = E;
 	static constexpr bool exact_v = false;
 
@@ -289,8 +289,8 @@ struct resized {
 // copy any operand to logical length n: extending zero-fills, shrinking truncates
 template <like S>
 resized<typename S::engine_t> with_len(const S& s, int n) {
-	using E = typename S::engine_t;
-	using T = typename E::value_type;
+	using E = S::engine_t;
+	using T = E::value_type;
 	auto p = s.first(std::min(n, s.len()));
 	resized<E> r;
 	r.s.assign(size_t(n), T{});
@@ -314,7 +314,7 @@ concept has_prefix_cache = like<S> && !S::exact_v && requires(const S& s, int n)
 // full-precision use.
 template <fft::engine E, bool exact_>
 struct cached {
-	using T = typename E::value_type;
+	using T = E::value_type;
 	using engine_t = E;
 	static constexpr bool exact_v = exact_;
 
@@ -371,8 +371,8 @@ cached_span<typename S::engine_t, S::exact_v> as_cached_span(const S& s, fft::tr
 // TODO: reuse/populate the operand's whole/prefix transform caches
 template <trunc_like S>
 trunc<typename S::engine_t> ps_inv(const S& a) {
-	using E = typename S::engine_t;
-	using T = typename E::value_type;
+	using E = S::engine_t;
+	using T = E::value_type;
 	int N = a.len();
 	trunc<E> r(size_t(N), T{});
 	if (N == 0) return r;
@@ -403,8 +403,8 @@ trunc<typename S::engine_t> ps_inv(const S& a) {
 // participates), so only whole caches apply, never prefix caches.
 template <like A>
 auto square(const A& a) {
-	using E = typename A::engine_t;
-	using T = typename E::value_type;
+	using E = A::engine_t;
+	using T = E::value_type;
 	fft::transformed<E> ta_;
 	auto av = detail::as_cached_span(a, ta_);
 	if constexpr (A::exact_v) {
@@ -431,8 +431,8 @@ template <like A, like B, like C, like D>
 		&& A::exact_v && B::exact_v && C::exact_v && D::exact_v
 cached<typename A::engine_t, true> multiply_add2(
 		const A& a, const B& b, const C& c, const D& d) {
-	using E = typename A::engine_t;
-	using T = typename E::value_type;
+	using E = A::engine_t;
+	using T = E::value_type;
 	fft::transformed<E> ta_, tb_, tc_, td_;
 	auto av = detail::as_cached_span(a, ta_), bv = detail::as_cached_span(b, tb_);
 	auto cv = detail::as_cached_span(c, tc_), dv = detail::as_cached_span(d, td_);
@@ -454,7 +454,7 @@ cached<typename A::engine_t, true> multiply_add2(
 // The kernel b participates whole, so it must be exact; the result mirrors a's kind.
 template <like A, exact_like B> requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v> middle_product(const A& a, const B& b) {
-	using E = typename A::engine_t;
+	using E = A::engine_t;
 	fft::transformed<E> ta_, tb_;
 	auto av = detail::as_cached_span(a, ta_);
 	auto bv = detail::as_cached_span(b, tb_);
@@ -480,7 +480,7 @@ template <bool ea, bool eb> int product_prec(int la, int lb) {
 // transform costs more than the saved forward transform.
 template <like S>
 auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t>& tmp) {
-	using E = typename S::engine_t;
+	using E = S::engine_t;
 	if constexpr (has_prefix_cache<S>) {
 		return s.first(std::min(s.len(), nextPow2(prec)));
 	} else {
@@ -499,7 +499,7 @@ auto product_operand(const S& s, int prec, fft::transformed<typename S::engine_t
 
 template <like A, like B> requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v && B::exact_v> operator + (const A& a, const B& b) {
-	using T = typename A::engine_t::value_type;
+	using T = A::engine_t::value_type;
 	int n = (A::exact_v && B::exact_v) ? std::max(a.len(), b.len())
 		: A::exact_v ? b.len() : B::exact_v ? a.len() : std::min(a.len(), b.len());
 	vec<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
@@ -510,7 +510,7 @@ vec<typename A::engine_t, A::exact_v && B::exact_v> operator + (const A& a, cons
 }
 template <like A, like B> requires fft::same_engine<A, B>
 vec<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A& a, const B& b) {
-	using T = typename A::engine_t::value_type;
+	using T = A::engine_t::value_type;
 	int n = (A::exact_v && B::exact_v) ? std::max(a.len(), b.len())
 		: A::exact_v ? b.len() : B::exact_v ? a.len() : std::min(a.len(), b.len());
 	vec<typename A::engine_t, A::exact_v && B::exact_v> r(size_t(n), T(0));
@@ -527,8 +527,8 @@ vec<typename A::engine_t, A::exact_v && B::exact_v> operator - (const A& a, cons
 // transform whenever the engine supports it.
 template <like A, like B> requires fft::same_engine<A, B>
 auto operator * (const A& a, const B& b) {
-	using E = typename A::engine_t;
-	using T = typename E::value_type;
+	using E = A::engine_t;
+	using T = E::value_type;
 	constexpr bool ea = A::exact_v, eb = B::exact_v;
 	int prec = detail::product_prec<ea, eb>(a.len(), b.len());
 	if (prec == 0 || a.len() == 0 || b.len() == 0) {
@@ -567,7 +567,7 @@ auto operator * (const A& a, const B& b) {
 // TODO: make ps_inv/exp populate these
 template <fft::engine E>
 struct prefix_cached {
-	using T = typename E::value_type;
+	using T = E::value_type;
 
 	using engine_t = E;
 	static constexpr bool exact_v = false;

@@ -23,22 +23,22 @@ struct crt {
 	using E1 = ntt<num1>;
 	using E2 = ntt<num2>;
 	template <int A = 1> struct transformed_t {
-		typename E1::transformed t1;
-		typename E2::transformed t2;
+		E1::transformed t1;
+		E2::transformed t2;
 		int size() const { return t1.size(); }
 		transformed_t() = default;
-		transformed_t(typename E1::transformed&& t1_, typename E2::transformed&& t2_)
+		transformed_t(E1::transformed&& t1_, E2::transformed&& t2_)
 			: t1(std::move(t1_)), t2(std::move(t2_)) {}
 		template <int A2> requires (A2 != A) explicit(A2 > A) transformed_t(transformed_t<A2>&& o)
 			: t1(std::move(o.t1)), t2(std::move(o.t2)) {}
 	};
 	using transformed = transformed_t<1>;
 	template <int K> struct product_t {
-		typename E1::product p1;
-		typename E2::product p2;
+		E1::product p1;
+		E2::product p2;
 		int size() const { return sz(p1); }
 		product_t() = default;
-		product_t(typename E1::product&& p1_, typename E2::product&& p2_)
+		product_t(E1::product&& p1_, E2::product&& p2_)
 			: p1(std::move(p1_)), p2(std::move(p2_)) {}
 		template <int K2> requires (K2 != K) explicit(K2 > K) product_t(product_t<K2>&& o)
 			: p1(std::move(o.p1)), p2(std::move(o.p2)) {}
